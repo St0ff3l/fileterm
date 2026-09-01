@@ -13,12 +13,12 @@
 ```
 renderer/
 ├── components/           # 核心通用组件
-│   └── TerminalView.tsx  # 终端视图组件
+│   └── terminal-view.tsx  # 终端视图组件
 └── features/
     └── common/           # 通用功能组件
-        ├── AppIcon.tsx           # 图标组件
-        ├── ContextMenu.tsx       # 右键菜单组件
-        ├── StatusIndicator.tsx    # 连接状态指示点
+        ├── app-icon.tsx           # 图标组件
+        ├── context-menu.tsx       # 右键菜单组件
+        ├── status-indicator.tsx    # 连接状态指示点
         └── horizontal-scroll.ts  # 水平滚动工具函数
 ```
 
@@ -26,7 +26,7 @@ renderer/
 
 #### TerminalView（终端组件）
 
-**文件路径**：`apps/desktop/src/renderer/components/TerminalView.tsx`
+**文件路径**：`apps/tauri/src/renderer/components/terminal-view.tsx`
 
 **功能特性**：
 
@@ -42,12 +42,12 @@ renderer/
 ```typescript
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { ContextMenu } from '../features/common/ContextMenu'
+import { ContextMenu } from '../features/common/context-menu'
 ```
 
 #### AppIcon（图标组件）
 
-**文件路径**：`apps/desktop/src/renderer/features/common/AppIcon.tsx`
+**文件路径**：`apps/tauri/src/renderer/features/common/app-icon.tsx`
 
 **支持的图标类型**：
 
@@ -79,7 +79,7 @@ import { ContextMenu } from '../features/common/ContextMenu'
 
 #### StatusIndicator（连接状态指示组件）
 
-**文件路径**：`apps/tauri/src/renderer/features/common/StatusIndicator.tsx`
+**文件路径**：`apps/tauri/src/renderer/features/common/status-indicator.tsx`
 
 **功能特性**：
 
@@ -99,7 +99,7 @@ import { ContextMenu } from '../features/common/ContextMenu'
 
 #### ContextMenu（右键菜单组件）
 
-**文件路径**：`apps/desktop/src/renderer/features/common/ContextMenu.tsx`
+**文件路径**：`apps/tauri/src/renderer/features/common/context-menu.tsx`
 
 **功能特性**：
 
@@ -137,7 +137,7 @@ type ContextMenuEntry = {
 
 #### handleHorizontalWheelScroll（水平滚动工具）
 
-**文件路径**：`apps/desktop/src/renderer/features/common/horizontal-scroll.ts`
+**文件路径**：`apps/tauri/src/renderer/features/common/horizontal-scroll.ts`
 
 **功能**：支持鼠标滚轮水平滚动容器
 
@@ -221,9 +221,9 @@ renderer/styles/
 **实现方式**：
 
 - 在 `html` 根元素上设置 `data-theme="default-dark|default-light"`
-- 通过 `apps/desktop/src/renderer/hooks/useThemeMode.ts` 同步 `dataset.theme` 与 `color-scheme`
-- 通过 `apps/desktop/src/renderer/App.tsx` 持久化 `theme` / `locale`
-- 通过 `apps/desktop/src/main/main.ts` 把 `theme` / `locale` 注入独立窗口 query，并设置 `BrowserWindow.backgroundColor`
+- 通过 `apps/tauri/src/renderer/hooks/use-theme-mode.ts` 同步 `dataset.theme` 与 `color-scheme`
+- 通过 `apps/tauri/src/renderer/app.tsx` 持久化 `theme` / `locale`
+- 通过 `apps/tauri/src/renderer/main.tsx` 在挂载前读取窗口 query 和 UI 偏好，并应用主题变量；原生窗口创建与生命周期由 Tauri backend 处理
 - 组件通过 CSS 变量获取颜色值，终端再从 CSS 变量映射到 xterm theme
 
 ### 2.3.1 启动阶段防闪色
@@ -232,15 +232,13 @@ renderer/styles/
 
 当前仓库的处理链路是：
 
-1. `apps/desktop/src/main/main.ts`
+1. `apps/tauri/src/renderer/main.tsx`
    - 读取持久化的 UI 偏好
-   - 创建 `BrowserWindow` 时按主题设置 `backgroundColor`
-   - 打开独立窗口时把 `theme`、`locale` 作为 query 传给 renderer
-2. `apps/desktop/index.html`
-   - 在脚本最早期读取 query / `localStorage`
-   - 提前设置 `data-theme`、`lang`、启动背景色和 `color-scheme`
-3. `apps/desktop/src/renderer/App.tsx`
-   - 用 query 作为首选初值，再回退到本地存储
+   - 在 React 挂载前按 query / 持久化偏好设置 `data-theme`、`lang` 和 `color-scheme`
+2. `apps/tauri/index.html`
+   - 提供 Tauri renderer 入口和启动骨架
+3. `apps/tauri/src/renderer/app.tsx`
+   - 接收已解析的 UI 偏好并初始化应用状态
 
 如果未来再加新独立窗口，必须沿用这条链路，否则很容易出现“窗口本体是亮色，但出生先黑一下”的问题。
 
@@ -306,7 +304,7 @@ renderer/styles/
 
 #### 主题变量定义
 
-主题颜色集中定义在 `apps/desktop/src/renderer/styles/themes/tokens.css` 中：
+主题颜色集中定义在 `apps/tauri/src/renderer/styles/themes/tokens.css` 中：
 
 ```css
 /* themes/tokens.css */
@@ -337,7 +335,7 @@ renderer/styles/
 在暗色主题中优先覆盖颜色变量和组件皮肤，无需复制布局结构：
 
 ```css
-/* apps/desktop/src/renderer/styles/themes/default-dark.css */
+/* apps/tauri/src/renderer/styles/themes/default-dark.css */
 :root[data-theme='default-dark'] {
   --primary-bg: #60a5fa;
   --primary-text: #0f172a;
@@ -359,8 +357,8 @@ renderer/styles/
 
 连接管理器、连接表单、命令管理器、命令编辑器、文件编辑器都存在 standalone 形态。处理这类窗口时，额外遵循：
 
-1. **窗口出生底色**：优先在 `main.ts` 设置 `BrowserWindow.backgroundColor`，不要只靠 renderer CSS。
-2. **入口预设主题**：如果窗口首屏可能是亮色，必须在 `apps/desktop/index.html` 挂载前预设 `data-theme`。
+1. **窗口出生底色**：由 Tauri backend 的窗口配置和 renderer 的主题变量共同决定，不要在业务组件里写死背景色。
+2. **入口预设主题**：如果窗口首屏可能是亮色，必须在 `apps/tauri/index.html` 挂载前预设 `data-theme`。
 3. **基础层不要写死 dark**：像 `.standalone-shell`、`.command-editor-window` 这类壳层不要直接写 `#1b1b1b`，优先用 `var(--bg-main)` 或透明，再交给主题层覆盖。
 4. **暗色专用类按需挂载**：类似 `file-editor-modal--dark` 只能在暗色主题下添加，不能在组件里永久写死。
 5. **终端主题要主动重刷**：`TerminalView` 这类非纯 CSS 组件要监听根节点主题变化并主动同步内部渲染主题。
@@ -401,7 +399,7 @@ CommandCenter
 
 1. `CPU` 条
    - 走风险阈值色，不是永久绿色
-   - 阈值函数在 `apps/desktop/src/renderer/features/system/SystemSidebar.tsx` 的 `getMetricTone()`
+   - 阈值函数在 `apps/tauri/src/renderer/features/system/system-sidebar.tsx` 的 `getMetricTone()`
    - 当前规则：
      - `< 60%` 绿色
      - `>= 60%` 黄色
@@ -418,7 +416,7 @@ CommandCenter
 
 ### 4.1 添加新图标
 
-在 `AppIcon.tsx` 中添加新的图标类型：
+在 `app-icon.tsx` 中添加新的图标类型：
 
 ```tsx
 {
@@ -430,8 +428,8 @@ CommandCenter
 
 1. 在 `themes/` 目录下创建新的主题文件
 2. 在 `themes/index.css` 中引入
-3. 在 `useThemeMode`、`App.tsx`、窗口 query 初始化与 main 进程 UI 偏好持久化中补齐新主题分支
-4. 如果新主题需要独立窗口支持，同时更新 `apps/desktop/index.html` 启动预设逻辑和 `main.ts` 的窗口背景色映射
+3. 在 `use-theme-mode.ts`、`app.tsx`、`main.tsx` 的窗口 query 初始化与 Tauri backend UI 偏好持久化中补齐新主题分支
+4. 如果新主题需要独立窗口支持，同时更新 `apps/tauri/index.html` 入口和 Tauri backend 的窗口配置
 
 ### 4.3 创建新通用组件
 

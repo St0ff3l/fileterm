@@ -1,6 +1,6 @@
 # 应用内更新发布与验收清单
 
-FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的运行时，历史 Electron 实现已彻底移除）。更新机制按平台不同：
+FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的运行时，历史桌面实现已彻底移除）。更新机制按平台不同：
 
 - **Windows**：Tauri 签名 NSIS 安装器 + 内置应用内更新（`tauri_plugin_updater`）。`services/updates.rs` 从 GitHub Release 的下载路径拉取 `latest.json`，校验 `.sig` 后再下载并替换安装。
 - **macOS**：当前发布配置（`tauri.release.macos.conf.json`）未配置应用内更新签名，更新入口回退为打开 GitHub Release 下载页，由用户手动下载新版 DMG。

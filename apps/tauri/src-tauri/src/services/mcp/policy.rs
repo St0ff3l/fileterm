@@ -545,4 +545,3 @@ async fn approval_details(
         requires_risk_acknowledgement: false,
     })
 }
-

@@ -2,37 +2,37 @@
 
 # FileTerm Rust 后端迁移计划
 
-| 项目       | 值                                                        |
-| ---------- | --------------------------------------------------------- |
-| 文档版本   | v1.2                                                      |
-| 更新日期   | 2026-07-15                                                |
-| 状态       | Phase 0–4 代码主体已完成；Phase 5 发布与外部验收进行中    |
-| 编写人     | 高见远（架构师）                                          |
-| 适用分支   | `tauri-rust-migration-roadmap`                            |
-| 仓库根目录 | `/Users/stoffel/CodeFile/fileterm`                        |
-| 关联文档   | `docs/plans/active/tauri-rust-migration.md`（高层路线图） |
+| 项目       | 值                                                           |
+| ---------- | ------------------------------------------------------------ |
+| 文档版本   | v1.2                                                         |
+| 更新日期   | 2026-07-15                                                   |
+| 状态       | Phase 0–4 代码主体已完成；Phase 5 发布与外部验收进行中       |
+| 编写人     | 高见远（架构师）                                             |
+| 适用分支   | `tauri-rust-migration-roadmap`                               |
+| 仓库根目录 | `/Users/stoffel/CodeFile/fileterm`                           |
+| 关联文档   | `docs/plans/completed/tauri-rust-migration.md`（高层路线图） |
 
 ---
 
 ## 当前执行状态
 
-实际 Rust/Tauri 工程位于 `apps/tauri/src-tauri`（不是早期草案中的 `apps/desktop-tauri`）。截至 2026-07-15：
+实际 Rust/Tauri 工程位于 `apps/tauri/src-tauri`。截至 2026-07-15：
 
-- Phase 0–2 已完成：Tauri bridge、桌面壳、Rust JSON 存储、Workspace snapshot、旧 Electron 数据兼容和 contract test 已落地。
+- Phase 0–2 已完成：Tauri bridge、桌面壳、Rust JSON 存储、Workspace snapshot、历史数据兼容和 contract test 已落地。
 - Phase 3 已完成 SSH 垂直切片：russh shell/SFTP、MFA/host verification、系统指标、CWD/远端用户跟随、Jump Host、重连、编码、递归 chmod、SOCKS5/HTTP CONNECT 代理和运行时 SSH `-L/-R/-D` 隧道。
 - Phase 3 代码主体已完成；尚缺真实 SSH/代理服务、三平台 socket 生命周期和发行候选手测。
 - Phase 4（FTP/FTPS、Telnet、Serial、Transfer、WebDAV、导入导出和日志等）代码主体已完成；真实服务/设备验收仍在进行。
 - Phase 5 已开始：macOS Tauri production DMG 和本机性能基线已完成；签名 updater、公证、Windows/Linux 包、迁移工具与正式切换未完成。
 
-本计划的模块设计和里程碑仍然有效，但实现状态以 `tauri-migration-progress.md`、ADR-0005 和实际 `apps/tauri/src-tauri/src/` 代码为准。本文下方未经改写的历史单运行时描述只作迁移背景，不再代表当前仓库结构。
+本计划的模块设计和里程碑仍然有效，但实现状态以 `tauri-migration-progress.md`、ADR-0005 和实际 `apps/tauri/src-tauri/src/` 代码为准。本文下方的迁移前结构只作历史背景，不再代表当前仓库路径。
 
 ---
 
 ## 1. 执行摘要
 
-FileTerm 的历史基线是 Electron 42.4.0 + React + TypeScript，支持 SSH/SFTP、FTP/FTPS、Telnet、Serial 四类协议。当前分支已切换到 Tauri v2 + Rust；历史 Electron 主进程约 50 个 TS 文件、总计约 8800 行核心代码仍保留作为对照，承载的协议会话、文件传输、workspace 运行时、系统指标采集和 JSON 存储已由 Rust backend 接管。
+FileTerm 的迁移前基线是 42.4.0 + React + TypeScript，支持 SSH/SFTP、FTP/FTPS、Telnet、Serial 四类协议。当前分支已切换到 Tauri v2 + Rust；迁移前主进程约 50 个 TS 文件、总计约 8800 行核心代码已由 Rust backend 接管，协议会话、文件传输、workspace 运行时、系统指标采集和 JSON 存储均以当前 Rust 实现为准。
 
-本计划描述将 Tauri 后端从 Node.js/Electron 基线**迁移到 Rust（Tauri v2 壳）**。Tauri 以自己的 React UI 和类型化 bridge 按领域垂直切片推进；Electron 作为独立兼容 runtime 并行保留，不与 Tauri 共享 UI 源文件。
+本计划描述将 Tauri 后端从 Node.js 基线**迁移到 Rust（Tauri v2 壳）**。Tauri 以自己的 React UI 和类型化 bridge 按领域垂直切片推进；迁移前实现仅作为历史对照，当前仓库只维护 Tauri。
 
 核心策略：
 
@@ -40,7 +40,7 @@ FileTerm 的历史基线是 Electron 42.4.0 + React + TypeScript，支持 SSH/SF
 2. **垂直切片**：按「平台壳 → 存储/Workspace → SSH 主链路 → 其他协议 + 传输」逐层迁移，每层可独立验证。
 3. **存储渐进**：第一阶段 Rust 仍用 JSON 文件（临时文件 + 原子 rename），与现有 `profiles.json` / `profile-secrets.json` / `transfer-journal.json` 完全兼容；SQLite 作为「可选增强」在协议稳定后再评估，不在主迁移路径上。
 4. **凭据策略不变**：明文 + `chmod 0600` 的有意决策保留，迁移期间不引入钥匙串/safeStorage。
-5. **双运行时**：Electron 与 Tauri 分别发布和验证；未迁移的 Tauri 能力必须明确返回 unsupported，不能偷偷回退调用 Electron。
+5. **运行时收口**：Tauri 是当前唯一发布和验证入口；未实现的能力必须明确返回 unsupported，不能通过历史实现暗中回退。
 6. **协议物理分离**：SSH/SFTP 与 FTP/Telnet/Serial 在 Rust 侧各为独立 crate 模块，不伪统一。
 
 预期收益：内存与启动时间显著下降、协议 I/O 走原生异步运行时、消除 V8 主进程开销、为未来移动/服务端形态留出空间。
@@ -49,83 +49,67 @@ FileTerm 的历史基线是 Electron 42.4.0 + React + TypeScript，支持 SSH/SF
 
 ## 2. 当前后端架构分析
 
-> 本节基于 Electron 基线代码（`apps/electron/src/main/`），不臆测。
+> 本节记录迁移前基线的职责划分；迁移前目录已移除，不应按下面的历史文件名查找当前代码。
 
-### 2.1 历史 Electron 技术栈（迁移前对照）
+### 2.1 迁移前技术栈（历史对照）
 
 | 维度       | 现状                                                                           |
 | ---------- | ------------------------------------------------------------------------------ |
-| 历史桌面壳 | Electron 42.4.0（迁移前 lockfile；当前 manifest 已移除 Electron 依赖）         |
+| 历史桌面壳 | 迁移前版本 42.4.0（仅作历史对照；当前 manifest 已移除相关依赖）                |
 | 当前桌面壳 | Tauri v2（Cargo.lock `tauri 2.11.5`；npm 脚本为 `tauri dev/build`）            |
 | 前端       | React + TypeScript + Vite + xterm.js + Monaco Editor                           |
 | SSH/SFTP   | `ssh2`（Node 原生绑定，依赖 `cpu-features`，见 `vendor/cpu-features-shim`）    |
 | FTP/FTPS   | `basic-ftp`                                                                    |
 | Serial     | `serialport`（原生绑定）                                                       |
 | Telnet     | 自研（基于 `node:net`，RFC 854）                                               |
-| 代理       | 自研 `proxy-socket-factory.ts`（SOCKS5 + HTTP CONNECT，基于 `node:net`）       |
+| 代理       | 迁移前自研 SOCKS5 + HTTP CONNECT（基于 `node:net`）                            |
 | 编码       | `iconv-lite`、`opencc-js`                                                      |
 | 存储       | JSON 文件（明文，`profiles.json` + `profile-secrets.json`，后者 `chmod 0600`） |
-| 历史打包   | electron-builder（仅用于 Electron 对照/历史发布资料）                          |
+| 历史打包   | 历史桌面打包器（仅用于 迁移前实现 对照/历史发布资料）                          |
 | 当前打包   | Tauri bundler                                                                  |
 
 ### 2.2 主进程代码结构（约 50 个 TS 文件）
 
 ```
-apps/electron/src/main/
-├── main.ts                          # Electron 主入口（1112 行）
-├── ipc/                             # IPC handler 按领域拆分（8 个模块）
-│   ├── index.ts                     # registerIpcHandlers：装配 WorkspaceService 等
-│   ├── types.ts
-│   ├── app-handlers.ts              # 窗口/剪贴板/UI preferences/应用更新/退出
-│   ├── local-files-handlers.ts      # 本地文件浏览
-│   ├── remote-files-handlers.ts     # 远程文件 list/stat/mkdir/rename/delete/upload/download
-│   ├── ssh-interaction-handlers.ts  # SSH 交互请求（MFA/密码输入）
-│   ├── terminal-handlers.ts         # 终端 write/resize/data/state 事件
-│   ├── transfer-handlers.ts         # 传输任务管理
-│   └── workspace-handlers.ts        # workspace snapshot/连接库/导入导出/SSH 隧道
+迁移前主进程目录（已移除，仅作职责结构记录；不提供当前路径）
+├── 主入口
+├── IPC handler 按领域拆分
+│   ├── 窗口/剪贴板/UI preferences/应用更新/退出
+│   ├── 本地文件浏览
+│   ├── 远程文件操作
+│   ├── SSH 交互请求（MFA/密码输入）
+│   ├── 终端 write/resize/data/state 事件
+│   ├── 传输任务管理
+│   └── workspace snapshot/连接库/导入导出/SSH 隧道
 ├── services/
-│   ├── workspace-service.ts         # façade（489 行），薄委托到 runtime/transfer/tabLifecycle
-│   ├── file-profile-repository.ts   # profile CRUD + group/parentId 自愈（914 行）
-│   ├── local-files-service.ts
-│   ├── app-logger.ts / app-ui-state-store.ts / app-update-service.ts
-│   ├── connection-config-codec.ts / text-encoding.ts / webdav-sync-service.ts
-│   ├── session-controllers.ts       # 旧聚合（已拆分）
-│   ├── network/proxy-socket-factory.ts   # SOCKS5/HTTP CONNECT
-│   ├── sessions/
-│   │   ├── base-file-session-controller.ts
-│   │   ├── ssh-session-controller.ts     # 3401 行，SSH/SFTP 主控制器
-│   │   ├── ftp-session-controller.ts / serial-session-controller.ts / telnet-session-controller.ts
-│   │   ├── session-file-utils.ts / shell-cwd-integration.ts（OSC 7 cwd 跟随）
-│   │   ├── ssh-debug-logger.ts / ssh-tunnel-service.ts（-L/-R/-D，295 行）
-│   │   └── system-metrics/              # 多平台指标采集（9 文件）
-│   ├── transfers/                        # 独立传输模块
-│   │   ├── transfer-service.ts（1404 行）/ transfer-journal.ts / transfer-manifest.ts
-│   │   └── transfer-file-utils.ts / transfer-runtime-utils.ts
-│   └── workspace/
-│       ├── workspace-session-runtime.ts（1208 行，全局事件分发 + 快照广播）
-│       ├── workspace-tabs.ts / workspace-tab-lifecycle.ts / workspace-transfers.ts
-│       ├── terminal-output-batcher.ts（16ms 终端输出合并）
-│       └── seed-data.ts
+│   ├── workspace service facade
+│   ├── profile repository
+│   ├── 本地文件、日志、UI 状态、更新、导入导出、编码与 WebDAV 服务
+│   ├── session controllers 与代理
+│   ├── SSH/SFTP、FTP、Serial、Telnet 会话
+│   ├── 多平台系统指标采集
+│   ├── 独立传输模块
+│   └── workspace runtime、tab 生命周期、终端输出合并与 seed 数据
 ```
 
 ### 2.3 关键架构特征（迁移必须保留的约束）
 
-| #   | 约束                     | 当前实现位置                                                                    | 迁移要求                                       |
-| --- | ------------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------- |
-| C1  | Renderer 零协议直连      | renderer 只通过 `window.fileterm`                                               | Rust 侧 renderer 仍不直连协议库                |
-| C2  | IPC 端到端类型安全       | preload.cts 映射 `ipcRenderer.invoke`                                           | Tauri command 走 serde 双向类型化              |
-| C3  | SSH/SFTP 与 FTP 物理分离 | `ssh-session-controller` vs `ftp-session-controller`                            | Rust 模块各自独立，不伪统一                    |
-| C4  | CWD 跟随（OSC 7）        | `shell-cwd-integration.ts` 解析 `\u001b]7;` + `1337;RemoteUser=`                | Rust 侧保留 OSC 解析器 + runtime 广播          |
-| C5  | POSIX 注入门控           | `platform-probe.ts`：仅 linux/busybox 返回 true，Windows 严禁注入               | Rust `SystemMetricsCollector` 保留门控         |
-| C6  | CRLF 归一化              | `system-metrics/parser.ts`：`replace(/\r\n?/g, '\n')`                           | Rust 解析前统一归一化                          |
-| C7  | 传输统一 + journal       | `transfers/transfer-service.ts` + `transfer-journal.json`（原子 rename + .bak） | Rust `TransferService` 保留 journal 与断点续传 |
-| C8  | 高频事件边界             | 终端 16ms batcher、传输 200ms 节流、snapshot 单飞尾随合并                       | Rust 侧对应节流/合并策略                       |
-| C9  | 凭据明文存储             | `profile-secrets.json` + `chmod 0600`，有意决策                                 | 迁移期间保留，不引入钥匙串                     |
-| C10 | 离线资源就地化           | 图标/字体打包进产物                                                             | Tauri 资源打包同样离线                         |
+| #   | 约束                     | 当前实现位置                                                 | 迁移要求                                       |
+| --- | ------------------------ | ------------------------------------------------------------ | ---------------------------------------------- |
+| C1  | Renderer 零协议直连      | renderer 只通过 `window.fileterm`                            | Rust 侧 renderer 仍不直连协议库                |
+| C2  | IPC 端到端类型安全       | `apps/tauri/src/bridge/tauri-api.ts`                         | Tauri command 走 serde 双向类型化              |
+| C3  | SSH/SFTP 与 FTP 物理分离 | `apps/tauri/src-tauri/src/sessions/ssh/` 与 `sessions/ftp/`  | Rust 模块各自独立，不伪统一                    |
+| C4  | CWD 跟随（OSC 7）        | `apps/tauri/src-tauri/src/sessions/ssh/shell/cwd.rs`         | Rust 侧保留 OSC 解析器 + runtime 广播          |
+| C5  | POSIX 注入门控           | `apps/tauri/src-tauri/src/sessions/system_metrics/`          | 仅 linux/busybox 允许注入，Windows 严禁注入    |
+| C6  | CRLF 归一化              | `apps/tauri/src-tauri/src/sessions/system_metrics/parser.rs` | 解析前统一归一化                               |
+| C7  | 传输统一 + journal       | `apps/tauri/src-tauri/src/services/transfers/`               | Rust `TransferService` 保留 journal 与断点续传 |
+| C8  | 高频事件边界             | 终端 16ms batcher、传输 200ms 节流、snapshot 单飞尾随合并    | Rust 侧对应节流/合并策略                       |
+| C9  | 凭据明文存储             | `profile-secrets.json` + `chmod 0600`，有意决策              | 迁移期间保留，不引入钥匙串                     |
+| C10 | 离线资源就地化           | 图标/字体打包进产物                                          | Tauri 资源打包同样离线                         |
 
 ### 2.4 前后端契约：FileTermDesktopApi
 
-renderer 通过 `window.fileterm`（类型 `FileTermDesktopApi`，定义于 `packages/core/src/index.ts:738`，约 160 个方法/字段）访问后端。`preload.cts` 把每个方法映射到 `ipcRenderer.invoke('xxx:yyy')`（命令）或 `ipcRenderer.on('xxx:yyy')`（事件）。
+renderer 通过 `window.fileterm`（类型 `FileTermDesktopApi`，定义于 `packages/core/src/index.ts:738`，约 160 个方法/字段）访问后端。`apps/tauri/src/bridge/tauri-api.ts` 把每个方法映射到 Tauri `invoke`（命令）或 `listen`（事件）。
 
 契约可分为 7 个领域（详见第 5 节）：
 
@@ -141,13 +125,13 @@ renderer 通过 `window.fileterm`（类型 `FileTermDesktopApi`，定义于 `pac
 
 ### 2.5 当前架构痛点（迁移动机）
 
-| 痛点                                        | 现状                            | 迁移收益                                              |
-| ------------------------------------------- | ------------------------------- | ----------------------------------------------------- |
-| `ssh2` 原生绑定跨平台脆弱                   | 依赖 `cpu-features`，需 shim    | Rust `russh` 纯 Rust，或 `ssh2` crate（libssh2 绑定） |
-| Electron 主进程内存占用高                   | V8 + Node 运行时常驻            | Rust 原生进程，内存大幅降低                           |
-| 终端输出经 Node 事件循环                    | 16ms batcher 缓解，仍有 V8 开销 | Rust tokio + channel 直发                             |
-| `ssh-session-controller.ts` 3401 行巨型文件 | 难维护                          | 按职责拆分为多个 Rust 模块                            |
-| JSON 全量读写                               | profile 增多后读写放大          | 后续可平滑引入 SQLite（见第 4 节）                    |
+| 痛点                                  | 现状                            | 迁移收益                                              |
+| ------------------------------------- | ------------------------------- | ----------------------------------------------------- |
+| `ssh2` 原生绑定跨平台脆弱             | 依赖 `cpu-features`，需 shim    | Rust `russh` 纯 Rust，或 `ssh2` crate（libssh2 绑定） |
+| 迁移前 Node 主进程内存占用高          | V8 + Node 运行时常驻            | Rust 原生进程，内存大幅降低                           |
+| 终端输出经 Node 事件循环              | 16ms batcher 缓解，仍有 V8 开销 | Rust tokio + channel 直发                             |
+| 迁移前 SSH 控制器曾是 3401 行巨型文件 | 难维护                          | 按职责拆分为多个 Rust 模块                            |
+| JSON 全量读写                         | profile 增多后读写放大          | 后续可平滑引入 SQLite（见第 4 节）                    |
 
 ---
 
@@ -165,7 +149,7 @@ graph TB
     TA["tauri-api.ts<br/>Tauri bridge"]
   end
   subgraph TauriShell["Tauri v2 壳"]
-    TPRE["preload/IPC 桥"]
+    TPRE["Tauri bridge/IPC 桥"]
     TCMD["#[tauri::command]"]
   end
   subgraph RustBackend["Rust 后端 (apps/tauri/src-tauri)"]
@@ -195,77 +179,60 @@ graph TB
 
 ### 3.2 Rust 模块划分
 
-新增 `apps/tauri/src-tauri/src/`，按领域分层。模块边界与 Electron TS 基线一一对应，便于迁移与对照。
+当前 `apps/tauri/src-tauri/src/` 按领域分层；`mod.rs` facade 通过同目录实现片段保持稳定入口，具体职责以实际目录为准。
 
 ```
 apps/tauri/src-tauri/src/
 ├── main.rs                       # Tauri 入口，装配 AppState
 ├── lib.rs
-├── error.rs                      # 统一错误类型 FileTermError + serde 序列化
-├── state.rs                      # AppState：持有 Workspace、TransferService、Repo 等
-├── commands/                     # #[tauri::command] 薄层（对应 ipc/*-handlers.ts）
-│   ├── mod.rs
-│   ├── app.rs                    # 对应 app-handlers.ts
-│   ├── local_files.rs            # 对应 local-files-handlers.ts
-│   ├── remote_files.rs           # 对应 remote-files-handlers.ts
-│   ├── ssh_interaction.rs        # 对应 ssh-interaction-handlers.ts
-│   ├── terminal.rs               # 对应 terminal-handlers.ts
-│   ├── transfer.rs               # 对应 transfer-handlers.ts
-│   └── workspace.rs              # 对应 workspace-handlers.ts
+├── lib/                          # error、platform、runtime、state、windows 等基础模块
+├── commands/                     # #[tauri::command] 薄层
+│   ├── mod.rs                    # 稳定 facade；include! 装配领域命令
+│   ├── platform_commands.rs
+│   ├── profile_commands.rs
+│   ├── remote_file_commands.rs
+│   ├── terminal_commands.rs
+│   ├── transfer_commands.rs
+│   ├── workspace_commands.rs
+│   ├── interaction_commands.rs
+│   ├── window_commands.rs
+│   └── ...
 ├── services/
-│   ├── workspace.rs              # 对应 workspace-service.ts（façade）
-│   ├── workspace/
-│   │   ├── session_runtime.rs    # 对应 workspace-session-runtime.ts（事件分发 + 快照）
-│   │   ├── tabs.rs               # 对应 workspace-tabs.ts
-│   │   ├── tab_lifecycle.rs      # 对应 workspace-tab-lifecycle.ts
-│   │   ├── terminal_batcher.rs   # 对应 terminal-output-batcher.ts（16ms）
-│   │   └── seed.rs               # 对应 seed-data.ts
-│   ├── transfers/
-│   │   ├── service.rs            # 对应 transfer-service.ts
-│   │   ├── journal.rs            # 对应 transfer-journal.ts（原子 rename + .bak）
-│   │   ├── manifest.rs           # 对应 transfer-manifest.ts
-│   │   └── utils.rs
-│   ├── sessions/
-│   │   ├── mod.rs                # SessionController trait + 共享类型
-│   │   ├── base.rs               # 对应 base-file-session-controller.ts
-│   │   ├── ssh.rs                # 对应 ssh-session-controller.ts（拆分！）
-│   │   ├── ssh/
-│   │   │   ├── connect.rs        # 连接/jumphost/proxy
-│   │   │   ├── host_verify.rs   # host key 验证
-│   │   │   ├── auth.rs           # password/key/keyboard-interactive/system(ssh-agent)
-│   │   │   ├── shell.rs          # PTY shell + write/resize
-│   │   │   ├── sftp.rs           # SFTP 文件操作
-│   │   │   ├── exec.rs           # exec channel + 系统指标采集执行器
-│   │   │   ├── sudo.rs           # root 文件访问模式
-│   │   │   ├── tunnel.rs         # 对应 ssh-tunnel-service.ts（-L/-R/-D）
-│   │   │   └── debug_logger.rs
-│   │   ├── ftp.rs                # 对应 ftp-session-controller.ts
-│   │   ├── telnet.rs             # 对应 telnet-session-controller.ts
-│   │   ├── serial.rs            # 对应 serial-session-controller.ts
-│   │   ├── shell_cwd.rs          # 对应 shell-cwd-integration.ts（OSC 7）
-│   │   ├── session_file_utils.rs
-│   │   └── system_metrics/
-│   │       ├── mod.rs           # 对应 system-metrics/index.ts
-│   │       ├── types.rs          # 对应 types.rs（SystemMetricsExecutor/Collector）
-│   │       ├── parser.rs         # CRLF 归一化
-│   │       ├── platform_probe.rs # 平台探测 + POSIX 注入门控
-│   │       ├── posix_script.rs
-│   │       ├── linux.rs / busybox.rs / windows.rs
-│   │       └── windows_metrics.rs
-│   ├── storage/
-│   │   ├── mod.rs               # ProfileRepository trait（对应 packages/storage）
-│   │   ├── json_repo.rs         # 对应 FileProfileRepository（JSON + 原子写）
-│   │   ├── secrets.rs           # 对应 profile-secrets.json + chmod 0600
-│   │   ├── ui_state.rs          # 对应 app-ui-state-store.ts
-│   │   └── migration.rs         # 旧用户数据兼容/迁移
-│   └── platform/
-│       ├── proxy.rs             # 对应 proxy-socket-factory.ts（SOCKS5/HTTP CONNECT）
-│       ├── clipboard.rs / window.rs / app_update.rs / webdav.rs
-│       └── encoding.rs          # iconv-lite / opencc-js 等价
-└── models/                       # serde 类型，对应 @fileterm/core
-    ├── mod.rs
-    ├── profile.rs / transfer.rs / workspace.rs / metrics.rs / ssh_interaction.rs
-    └── ...
+│   ├── workspace/                # workspace 状态、profile、快照与运行时
+│   │   ├── mod.rs                # 稳定 facade
+│   │   ├── model.rs
+│   │   ├── profiles.rs
+│   │   ├── state.rs
+│   │   └── tests.rs
+│   ├── transfers/                # 持久化传输与生命周期
+│   │   ├── mod.rs                # 稳定 facade
+│   │   ├── model.rs
+│   │   ├── runtime.rs
+│   │   ├── creation.rs
+│   │   ├── remote.rs
+│   │   ├── run_lifecycle.rs
+│   │   └── ...
+├── sessions/
+│   ├── mod.rs                    # worker command 与共享会话类型
+│   ├── ssh/                      # SSH shell、SFTP、认证、代理、隧道
+│   │   ├── mod.rs                # 稳定 facade
+│   │   ├── authentication/
+│   │   ├── transport/
+│   │   ├── shell/
+│   │   ├── worker/
+│   │   ├── sftp.rs / sftp_files.rs
+│   │   └── tunnels.rs
+│   ├── ftp/                      # 独立 FTP/FTPS 实现
+│   ├── telnet/                   # 独立 Telnet 实现
+│   ├── serial/                   # 独立 Serial 与文件传输实现
+│   ├── local_files/              # 本地文件与 SMB
+│   ├── local_terminal/           # 本地 PTY
+│   └── system_metrics/           # 平台探测、采集与解析
+├── storage/
+│   ├── mod.rs                    # 文件存储 facade
+│   ├── json_io.rs / paths.rs
+│   └── migration/                # 历史数据兼容与迁移
+└── ...                           # 领域类型主要来自 packages/core
 ```
 
 ### 3.3 关键 Rust trait 与数据结构
@@ -366,7 +333,7 @@ classDiagram
 TS 侧 `FileSessionController` 是隐式接口（结构性类型）。Rust 侧显式定义 trait，保留「协议物理分离」的同时统一生命周期与文件操作入口：
 
 ```rust
-// services/sessions/mod.rs
+// sessions/mod.rs
 #[async_trait::async_trait]
 pub trait SessionController: Send {
     fn controller_type(&self) -> SessionType;
@@ -390,10 +357,10 @@ pub trait SessionController: Send {
 
 ### 3.5 事件发射模型
 
-Tauri 用 `AppHandle::emit(event, payload)` 替代 Electron 的 `webContents.send`。Rust 侧封装一个 `EventBus`，对应 TS 的 7 类高频事件，并保留节流边界：
+Tauri 用 `AppHandle::emit(event, payload)` 替代迁移前实现的 `webContents.send`。Rust 侧封装一个 `EventBus`，对应 TS 的 7 类高频事件，并保留节流边界：
 
 ```rust
-// services/workspace/session_runtime.rs
+// apps/tauri/src-tauri/src/services/workspace/state.rs
 pub struct WorkspaceSessionRuntime {
     app: AppHandle,
     terminal_batcher: TerminalOutputBatcher, // 16ms 合并
@@ -416,17 +383,17 @@ impl WorkspaceSessionRuntime {
 
 ### 4.1 现状：JSON 文件存储
 
-当前 `FileProfileRepository`（`file-profile-repository.ts`，914 行）管理 7 个 JSON 文件：
+迁移前的 `FileProfileRepository`（约 914 行）管理 7 个 JSON 文件；当前 Rust 对应实现位于 `apps/tauri/src-tauri/src/services/profile_ops/` 和 `apps/tauri/src-tauri/src/storage/`：
 
-| 文件                                     | 内容                                             | 写入方式                                              | 当前处理 |
-| ---------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- | -------- |
-| `profiles.json`                          | 连接 profile（明文，secret 已剥离）              | `writeFile` 直接覆盖                                  | 全量读写 |
-| `profile-secrets.json`                   | password/privateKeyPath/passphrase/proxyPassword | `writeFile` + `chmod 0600`                            | 全量读写 |
-| `folders.json`                           | 连接文件夹树                                     | `writeFile`                                           | 全量读写 |
-| `command-folders.json` / `commands.json` | 命令模板                                         | `writeFile`                                           | 全量读写 |
-| `command-history.json`                   | 终端命令历史（按 profileId）                     | `writeFile`                                           | 全量读写 |
-| `command-send-preferences.json`          | 命令发送偏好                                     | `writeFile`                                           | 全量读写 |
-| `transfer-journal.json`                  | 传输任务（最近 200 条）                          | **临时文件 + rename + .bak**（`transfer-journal.ts`） | 原子写   |
+| 文件                                     | 内容                                             | 写入方式                                                | 当前处理 |
+| ---------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- | -------- |
+| `profiles.json`                          | 连接 profile（明文，secret 已剥离）              | `writeFile` 直接覆盖                                    | 全量读写 |
+| `profile-secrets.json`                   | password/privateKeyPath/passphrase/proxyPassword | `writeFile` + `chmod 0600`                              | 全量读写 |
+| `folders.json`                           | 连接文件夹树                                     | `writeFile`                                             | 全量读写 |
+| `command-folders.json` / `commands.json` | 命令模板                                         | `writeFile`                                             | 全量读写 |
+| `command-history.json`                   | 终端命令历史（按 profileId）                     | `writeFile`                                             | 全量读写 |
+| `command-send-preferences.json`          | 命令发送偏好                                     | `writeFile`                                             | 全量读写 |
+| `transfer-journal.json`                  | 传输任务（最近 200 条）                          | **临时文件 + rename + .bak**（迁移前 transfer journal） | 原子写   |
 
 关键特性：
 
@@ -453,7 +420,7 @@ impl WorkspaceSessionRuntime {
 > **第一阶段（Phase 2 存储迁移）继续使用 JSON 文件，不引入 SQLite。** 理由：
 >
 > 1. 当前 profile/命令规模远未到 JSON 性能瓶颈；
-> 2. JSON 与现有 Electron 用户数据保持 schema 兼容，可用一次性事务导入而无需领域转换；
+> 2. JSON 与现有 迁移前实现 用户数据保持 schema 兼容，可用一次性事务导入而无需领域转换；
 > 3. 把存储格式变更与后端语言迁移**解耦**，降低单次迁移风险；
 > 4. `transfer-journal` 已是原子写，Rust 侧直接复刻即可。
 
@@ -473,7 +440,7 @@ impl WorkspaceSessionRuntime {
 #### 4.3.2 ProfileRepository trait（对应 `packages/storage`）
 
 ```rust
-// services/storage/mod.rs
+// apps/tauri/src-tauri/src/storage/mod.rs
 #[async_trait::async_trait]
 pub trait ProfileRepository: Send + Sync {
     async fn list(&self) -> Result<Vec<ConnectionProfile>, FileTermError>;
@@ -491,7 +458,7 @@ pub trait ProfileRepository: Send + Sync {
 #### 4.3.3 JsonProfileRepository 关键行为复刻
 
 ```rust
-// services/storage/json_repo.rs
+// apps/tauri/src-tauri/src/storage/json_io.rs
 pub struct JsonProfileRepository {
     base_dir: PathBuf,
     profiles_path: PathBuf,
@@ -502,7 +469,7 @@ pub struct JsonProfileRepository {
 
 impl JsonProfileRepository {
     /// 原子写：temp -> rename(.bak) -> rename(temp -> current)
-    /// 复刻 transfer-journal.ts 的 writeJournal 模式，应用于所有 JSON 文件
+    /// 复刻迁移前 transfer journal 的 writeJournal 模式，应用于所有 JSON 文件
     async fn atomic_write_json<T: Serialize>(&self, path: &Path, value: &T) -> Result<(), FileTermError> {
         let tmp = path.with_extension("tmp");
         let bak = path.with_extension("bak");
@@ -544,14 +511,14 @@ impl JsonProfileRepository {
 
 | 场景                                | 处理                                                                                             |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 旧 Electron 用户首次启动 Tauri      | 从独立 Electron userData 一次性导入；Tauri 当前 ID 优先，legacy 只补缺失记录                     |
+| 迁移前用户首次启动 Tauri            | 从历史 userData 一次性导入；Tauri 当前 ID 优先，legacy 只补缺失记录                              |
 | `normalizeStoredProfile` 旧格式自愈 | Rust 侧复刻同等归一化逻辑（补 `type`/`authType`/`sftpEnabled`/`remotePath`/`forwards` 等默认值） |
 | inline secret 迁移                  | Rust 启动时检测并执行 `migrate_profile_secrets`                                                  |
 | legacy demo 数据清理                | Rust 复刻 `remove_legacy_demo_data`（同样 id 集合）                                              |
 | 事务与幂等                          | staging 后按文件提交；失败恢复备份且不写 marker；成功后禁止 live merge                           |
 | 写回兼容                            | Rust 写出的 JSON schema 与 TS 一致，但两个 runtime 不互相写同一 userData                         |
 
-> 验收：隔离的 Electron fixture 可被 Tauri 一次性导入；重复启动幂等、当前数据优先、删除不复活，任一文件提交失败时恢复迁移前状态。
+> 验收：隔离的 迁移前实现 fixture 可被 Tauri 一次性导入；重复启动幂等、当前数据优先、删除不复活，任一文件提交失败时恢复迁移前状态。
 
 ---
 
@@ -559,7 +526,7 @@ impl JsonProfileRepository {
 
 ### 5.1 契约冻结：FileTermDesktopApi 作为唯一真相源
 
-`FileTermDesktopApi`（`packages/core/src/index.ts:738`）是 renderer 与 Rust 后端的唯一契约。迁移期必须保证：**同一份 React 代码通过 Tauri bridge 调用 Rust commands/events**。
+`FileTermDesktopApi`（`packages/core/src/index.ts:738`）是 renderer 与 Rust 后端的唯一契约。当前仓库只有 Tauri bridge，必须保证：**React 代码通过 Tauri bridge 调用 Rust commands/events**。
 
 ### 5.2 Tauri bridge 架构
 
@@ -606,7 +573,7 @@ export const tauriApi: FileTermDesktopApi = {
 
 为保证 React 与 Rust 契约稳定，固化命名映射规则：
 
-| TS 方法                 | Electron IPC             | Tauri command/event         |
+| TS 方法                 | 迁移前 IPC（历史记录）   | Tauri command/event         |
 | ----------------------- | ------------------------ | --------------------------- |
 | `getSnapshot`           | `workspace:getSnapshot`  | `workspace_get_snapshot`    |
 | `writeTerminal`         | `terminal:write`（send） | `terminal_write`（invoke）  |
@@ -614,35 +581,31 @@ export const tauriApi: FileTermDesktopApi = {
 | `resolveSshInteraction` | `ssh:resolveInteraction` | `ssh_resolve_interaction`   |
 | `onSshInteraction`      | `ssh:interaction`（on）  | `ssh:interaction`（listen） |
 
-> 规则：Electron 用 `domain:action`，Tauri command 用 `domain_action`（下划线），Tauri event 保留 `domain:action`（与 Electron event 同名，便于 adapter 统一）。**这份映射表本身就是契约的一部分，需冻结并纳入 contract test。**
+> 规则：迁移前 IPC 使用 `domain:action`；当前 Tauri command 使用 `domain_action`（下划线），Tauri event 保留 `domain:action`。**这份映射表本身就是契约的一部分，需冻结并纳入 contract test。**
 
 #### 5.2.4 `writeTerminal` 语义差异处理
 
-Electron 用 `ipcRenderer.send`（fire-and-forget），Tauri 用 `invoke`（有返回值）。adapter 层统一为「不等待返回」语义（`void`），Tauri 侧 command 立即返回 `Ok(())`，实际写入在后台 tokio task。
+迁移前实现使用 fire-and-forget IPC，当前 Tauri 使用 `invoke`（有返回值）。bridge 层统一为「不等待返回」语义（`void`），Tauri 侧 command 立即返回 `Ok(())`，实际写入在后台 tokio task。
 
 ### 5.3 Contract Test（契约测试）
 
-为保证两个 adapter「形状一致」，建立 contract test 套件：
+为保证 bridge 与 Rust command 的「形状一致」，建立 contract test 套件：
 
 ```
-apps/tauri/src/bridge/__tests__/
-├── contract.spec.ts        # 对 FileTermDesktopApi 每个方法做形状/错误/返回类型断言
-└── fixtures/                # 共享 mock 数据
+apps/tauri/src-tauri/tests/
+└── contract.rs              # 对 FileTermDesktopApi 关键 command 做形状/错误/返回值断言
 ```
 
 ```ts
-// contract.spec.ts（示意）
-import type { FileTermDesktopApi } from '@fileterm/core'
-// 两个 adapter 都注入，断言同一输入产生同一（mock）输出形状
-function runContractTests(label: string, api: FileTermDesktopApi) {
-  it(`${label}: getSnapshot returns WorkspaceSnapshot`, async () => { ... })
-  it(`${label}: writeTerminal is void`, async () => { ... })
-  it(`${label}: onTerminalData returns unsubscribe`, () => { ... })
+// contract.rs（示意）
+// Rust command 与 packages/core 的输入、输出和错误形状保持一致。
+fn run_contract_tests() {
+  // get_snapshot、terminal_write、ssh_resolve_interaction 等关键 command
   // 覆盖全部 ~160 个方法/字段
 }
 ```
 
-> 验收：两个 adapter 通过同一套 contract test，且现有 Electron 行为不回归。
+> 验收：两个 adapter 通过同一套 contract test，且现有 迁移前实现 行为不回归。
 
 ### 5.4 类型双源同步
 
@@ -667,29 +630,29 @@ graph LR
 
 ### 6.2 领域迁移顺序明细
 
-| 顺序 | 领域                           | TS 来源                                               | Rust 目标                                                  | 依赖           | 备注                        |
-| ---- | ------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- | -------------- | --------------------------- |
-| 1    | 平台信息                       | `preload` 字段                                        | `commands/app.rs`                                          | 无             | 最简单，先打通 invoke 链路  |
-| 2    | 剪贴板                         | `app-handlers.ts`                                     | `platform/clipboard.rs`                                    | 1              | 验证 Tauri clipboard plugin |
-| 3    | UI preferences/state           | `app-ui-state-store.ts`                               | `storage/ui_state.rs`                                      | 1              | JSON 存储，验证原子写       |
-| 4    | 本地文件                       | `local-files-service.ts` + handlers                   | `commands/local_files.rs` + `services/local_files`         | 1              | 验证文件选择器/权限         |
-| 5    | 存储（profile/folder/command） | `file-profile-repository.ts`                          | `storage/json_repo.rs`                                     | 3              | 复刻自愈/secret 分离        |
-| 6    | Workspace snapshot/连接库      | `workspace-service.ts` 部分 + `workspace-handlers.ts` | `services/workspace.rs` + `commands/workspace.rs`          | 5              | 广播事件验证                |
-| 7    | 导入导出/WebDAV                | `workspace-handlers.ts`                               | `platform/webdav.rs` + `commands/workspace.rs`             | 6              |                             |
-| 8    | 窗口/子窗口/退出               | `app-handlers.ts` + `main.ts`                         | `platform/window.rs`                                       | 1              | 跨平台窗口行为              |
-| 9    | 应用更新                       | `app-update-service.ts`                               | `platform/app_update.rs`                                   | 1              | Tauri updater               |
-| 10   | SSH 连接+认证+host verify      | `ssh-session-controller.ts` connect/verify/auth       | `sessions/ssh/{connect,host_verify,auth}.rs`               | 6              | SSH PoC 锁定 crate          |
-| 11   | SSH shell+终端                 | ssh write/resize + `terminal-handlers.ts`             | `sessions/ssh/shell.rs` + `commands/terminal.rs` + batcher | 10             | 16ms batcher 验证           |
-| 12   | SFTP 文件操作                  | `remote-files-handlers.ts` + ssh sftp 方法            | `sessions/ssh/sftp.rs` + `commands/remote_files.rs`        | 11             |                             |
-| 13   | CWD 跟随 + sudo                | `shell-cwd-integration.ts` + ssh sudo                 | `sessions/shell_cwd.rs` + `sessions/ssh/sudo.rs`           | 12             | OSC 7 解析                  |
-| 14   | 系统指标                       | `system-metrics/*`                                    | `sessions/system_metrics/*`                                | 11             | 平台探测/CRLF/门控          |
-| 15   | SSH 交互请求（MFA）            | `ssh-interaction-handlers.ts`                         | `commands/ssh_interaction.rs`                              | 10             | keyboard-interactive        |
-| 16   | SSH 隧道                       | `ssh-tunnel-service.ts`                               | `sessions/ssh/tunnel.rs`                                   | 10             | -L/-R/-D                    |
-| 17   | 传输系统                       | `transfers/*`                                         | `services/transfers/*`                                     | 12             | journal+断点续传            |
-| 18   | FTP/FTPS                       | `ftp-session-controller.ts`                           | `sessions/ftp.rs`                                          | 5,12(共享传输) | 独立 crate                  |
-| 19   | Telnet                         | `telnet-session-controller.ts`                        | `sessions/telnet.rs`                                       | 5              | 自研                        |
-| 20   | Serial                         | `serial-session-controller.ts`                        | `sessions/serial.rs`                                       | 5              | tokio-serial                |
-| 21   | 发行/打包/切换                 | `main.ts` + electron-builder                          | Tauri bundler + updater                                    | 全部           | Phase 5                     |
+| 顺序 | 领域                           | 迁移前职责（历史记录）       | 当前 Rust 位置                                                   | 依赖           | 备注                       |
+| ---- | ------------------------------ | ---------------------------- | ---------------------------------------------------------------- | -------------- | -------------------------- |
+| 1    | 平台信息                       | 平台信息与 bridge 字段       | `commands/platform_commands.rs`                                  | 无             | 最简单，先打通 invoke 链路 |
+| 2    | 剪贴板                         | 剪贴板与窗口基础能力         | `commands/platform_commands.rs`                                  | 1              | 验证 Tauri clipboard API   |
+| 3    | UI preferences/state           | UI 状态文件存储              | `commands/ui_preferences.rs`                                     | 1              | JSON 存储，验证原子写      |
+| 4    | 本地文件                       | 本地文件与 SMB               | `sessions/local_files/mod.rs`                                    | 1              | 验证文件选择器/权限        |
+| 5    | 存储（profile/folder/command） | profile/folder/command 存储  | `services/profile_ops/mod.rs`、`commands/profile_commands.rs`    | 3              | 复刻自愈/secret 分离       |
+| 6    | Workspace snapshot/连接库      | Workspace 与连接库           | `services/workspace/mod.rs`、`commands/workspace_commands.rs`    | 5              | 广播事件验证               |
+| 7    | 导入导出/WebDAV                | 导入导出与 WebDAV            | `commands/import_commands.rs`、`services/webdav/mod.rs`          | 6              |                            |
+| 8    | 窗口/子窗口/退出               | 窗口生命周期与退出           | `lib/windows.rs`、`commands/window_commands.rs`                  | 1              | 跨平台窗口行为             |
+| 9    | 应用更新                       | 应用更新                     | `services/updates.rs`                                            | 1              | Tauri updater              |
+| 10   | SSH 连接+认证+host verify      | SSH 连接、认证与 host verify | `sessions/ssh/transport/`、`sessions/ssh/authentication/`        | 6              | SSH PoC 锁定 crate         |
+| 11   | SSH shell+终端                 | SSH shell、终端写入与 resize | `sessions/ssh/shell.rs`、`commands/terminal_commands.rs`         | 10             | 16ms batcher 验证          |
+| 12   | SFTP 文件操作                  | SFTP 文件操作                | `sessions/ssh/sftp.rs`、`commands/remote_file_commands.rs`       | 11             |                            |
+| 13   | CWD 跟随 + sudo                | CWD 跟随与 sudo              | `sessions/ssh/shell/cwd.rs`、`sessions/ssh/shell/root_access.rs` | 12             | OSC 7 解析                 |
+| 14   | 系统指标                       | 系统指标采集与解析           | `sessions/system_metrics/`                                       | 11             | 平台探测/CRLF/门控         |
+| 15   | SSH 交互请求（MFA）            | SSH 交互请求                 | `commands/interaction_commands.rs`                               | 10             | keyboard-interactive       |
+| 16   | SSH 隧道                       | SSH 隧道                     | `sessions/ssh/tunnels.rs`                                        | 10             | -L/-R/-D                   |
+| 17   | 传输系统                       | 传输任务与断点续传           | `services/transfers/`                                            | 12             | journal+断点续传           |
+| 18   | FTP/FTPS                       | FTP/FTPS 会话                | `sessions/ftp/mod.rs`                                            | 5,12(共享传输) | 独立 crate                 |
+| 19   | Telnet                         | Telnet 会话                  | `sessions/telnet/mod.rs`                                         | 5              | 自研                       |
+| 20   | Serial                         | Serial 会话                  | `sessions/serial/mod.rs`                                         | 5              | tokio-serial               |
+| 21   | 发行/打包/切换                 | 发行与打包                   | Tauri bundler + updater                                          | 全部           | Phase 5                    |
 
 ### 6.3 关键时序：SSH 连接 + 终端 + CWD 跟随
 
@@ -697,7 +660,7 @@ graph LR
 sequenceDiagram
   participant R as Renderer
   participant TA as Tauri Adapter
-  participant CMD as commands/workspace.rs
+  participant CMD as commands/workspace_commands.rs
   participant WS as WorkspaceService
   participant LC as TabLifecycleService
   participant SSH as SshController
@@ -742,7 +705,7 @@ sequenceDiagram
 sequenceDiagram
   participant R as Renderer
   participant TA as Tauri Adapter
-  participant CMD as commands/transfer.rs
+  participant CMD as commands/transfer_commands.rs
   participant TS as TransferService
   participant J as TransferJournal
   participant SC as SessionController(SSH/FTP)
@@ -774,7 +737,7 @@ sequenceDiagram
 
 ### 7.1 凭据存储迁移（保留明文决策）
 
-当前凭据存储（`file-profile-repository.ts`）：
+迁移前凭据存储（当前 Rust 对应实现位于 `apps/tauri/src-tauri/src/services/profile_ops/secrets.rs`）：
 
 - 公开部分在 `profiles.json`（password/privateKeyPath/passphrase/proxyPassword 已剥离）。
 - 敏感部分在 `profile-secrets.json`，结构 `{version:1, profiles:{[id]:{field:{storage:'plain-text-fallback', value}}}}`，写入后 `chmod 0600`。
@@ -783,7 +746,7 @@ sequenceDiagram
 **迁移策略：Rust 侧完全复刻，保留 C9 决策（明文 + 0600）。**
 
 ```rust
-// services/storage/secrets.rs
+// apps/tauri/src-tauri/src/services/profile_ops/secrets.rs
 #[derive(Serialize, Deserialize)]
 pub struct StoredProfileSecret {
     pub storage: String,   // "plain-text-fallback"
@@ -802,7 +765,7 @@ pub struct StoredProfileSecrets {
 
 ### 7.2 SSH 认证链路迁移
 
-TS 侧 `ssh-session-controller.ts` 支持 `SshAuthType`：`'password' | 'privateKey' | 'system' | 'keyboard-interactive'`。
+迁移前 SSH 实现支持 `SshAuthType`：`'password' | 'privateKey' | 'system' | 'keyboard-interactive'`。
 
 | 认证方式                    | TS 实现（ssh2）                                                                                           | Rust 实现                                                                  | crate 选型           |
 | --------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------- |
@@ -826,12 +789,12 @@ TS 侧 `ssh-session-controller.ts` 支持 `SshAuthType`：`'password' | 'private
 
 ### 7.3 Host Verification 迁移
 
-TS 侧 `verifyHostFingerprint`（`ssh-session-controller.ts:776`）：连接时拿到 host key，若与 `profile.trustedHostFingerprint` 不符，触发 `SshInteractionRequest`（host-verification），renderer 弹窗确认，确认后 `rememberTrustedHostFingerprint` 持久化。
+迁移前的 `verifyHostFingerprint`：连接时拿到 host key，若与 `profile.trustedHostFingerprint` 不符，触发 `SshInteractionRequest`（host-verification），renderer 弹窗确认，确认后 `rememberTrustedHostFingerprint` 持久化。
 
 Rust 侧迁移：
 
 ```rust
-// sessions/ssh/host_verify.rs
+// apps/tauri/src-tauri/src/sessions/ssh/transport/host.rs
 pub async fn verify_host_fingerprint(
     &self, profile: &SshProfile, host_key: &PublicKey,
     interaction_tx: &InteractionChannel,
@@ -858,7 +821,7 @@ TS 侧：`ssh2` 的 `keyboard-interactive` 回调 -> 构造 `SshInteractionReque
 Rust 侧用 `russh` 的 `KeyboardInteractiveAuth`：
 
 ```rust
-// sessions/ssh/auth.rs
+// apps/tauri/src-tauri/src/sessions/ssh/authentication.rs
 // russh 提供 auth_custom / keyboard-interactive 回调
 // 回调内：通过 InteractionChannel emit("ssh:interaction", KbdIntRequest{prompts})
 //         await resolve -> 返回 answers 给 russh
@@ -869,7 +832,7 @@ Rust 侧用 `russh` 的 `KeyboardInteractiveAuth`：
 
 ### 7.5 Proxy 链路迁移
 
-TS 侧 `proxy-socket-factory.ts` 实现 SOCKS5（含用户名/密码鉴权）与 HTTP CONNECT，产出一个 `net.Socket` 给 ssh2 作为底层 socket。
+迁移前代理 socket 工厂实现 SOCKS5（含用户名/密码鉴权）与 HTTP CONNECT，产出一个 `net.Socket` 给 ssh2 作为底层 socket。
 
 Rust 侧迁移：
 
@@ -898,7 +861,7 @@ pub async fn create_outbound_socket(host: &str, port: u16, proxy: Option<&ProxyC
 
 - russh 支持自定义 `TcpStream`（`russh::client::connect_stream`），把代理后的 stream 传入。
 - IPv6 编码（`encodeSocksAddress` 的 IPv6 展开逻辑）需逐字复刻并加 test。
-- Jump Host（`connectJumpHost`，`ssh-session-controller.ts:459`）：TS 用 ssh2 的 `forwardOut`/`stream` 实现串联。Rust 侧用 russh 的 channel stream forwarding 实现等价链路。
+- Jump Host（`connectJumpHost`）：迁移前实现用 ssh2 的 `forwardOut`/`stream` 串联；当前 Rust 侧用 russh 的 channel stream forwarding 实现等价链路。
 
 ### 7.6 sudo / root 文件访问模式迁移
 
@@ -908,7 +871,7 @@ Rust 侧迁移：
 
 - `SshController` 持有 `Option<PrivilegedAccess{sudo_user, sudo_password}>`。
 - root 模式文件操作走 exec channel + `sudo` 命令管道（与 TS 一致）。
-- `privileged_access` 缓存生命周期与 TS 一致（tab disconnect 时清除，见 `workspace-service.ts` 的 `privilegedAccess.delete`）。
+- `privileged_access` 缓存生命周期与迁移前行为一致（tab disconnect 时清除），当前逻辑由 workspace/session Rust 模块共同维护。
 
 ### 7.7 凭据不泄漏保证（跨阶段约束）
 
@@ -925,25 +888,25 @@ Rust 侧迁移：
 
 ### 8.1 IPC handler 层迁移（commands/）
 
-TS 侧 `ipc/*-handlers.ts` 8 个模块，用 `ipcMain.handle('xxx:yyy', handler)` 注册。Rust 侧用 `#[tauri::command]`，在 `main.rs` 的 `invoke_handler!` 注册。
+迁移前 IPC 层按领域拆分为 8 个 handler 模块，用 `ipcMain.handle('xxx:yyy', handler)` 注册。Rust 侧用 `#[tauri::command]`，在 `main.rs` 的 `invoke_handler!` 注册。
 
-| TS handler 文件               | Rust command 文件             | 关键命令                                                                          |
-| ----------------------------- | ----------------------------- | --------------------------------------------------------------------------------- |
-| `app-handlers.ts`             | `commands/app.rs`             | getUiPreferences/setUiPreferences/getUiStateItem/.../窗口控制/应用更新            |
-| `local-files-handlers.ts`     | `commands/local_files.rs`     | listDirectory/readFile/writeFile/copyPath/movePath/selectFiles/selectDirectory    |
-| `remote-files-handlers.ts`    | `commands/remote_files.rs`    | list/stat/mkdir/rename/delete/upload/download/setFileAccessMode/setFollowShellCwd |
-| `ssh-interaction-handlers.ts` | `commands/ssh_interaction.rs` | resolveInteraction                                                                |
-| `terminal-handlers.ts`        | `commands/terminal.rs`        | write/resize（+ data/state 事件）                                                 |
-| `transfer-handlers.ts`        | `commands/transfer.rs`        | queueUpload/cancel/pause/resume/discard/clear/uploadFile/downloadFile             |
-| `workspace-handlers.ts`       | `commands/workspace.rs`       | getSnapshot/getConnectionLibrary/导入导出/SSH 隧道/profile/folder/command CRUD    |
+| 迁移前职责               | Rust command / session 文件        | 关键命令                                                                          |
+| ------------------------ | ---------------------------------- | --------------------------------------------------------------------------------- |
+| 窗口、偏好、应用生命周期 | `commands/platform_commands.rs`    | getUiPreferences/setUiPreferences/getUiStateItem/.../窗口控制/应用更新            |
+| 本地文件                 | `sessions/local_files/mod.rs`      | listDirectory/readFile/writeFile/copyPath/movePath/selectFiles/selectDirectory    |
+| 远程文件                 | `commands/remote_file_commands.rs` | list/stat/mkdir/rename/delete/upload/download/setFileAccessMode/setFollowShellCwd |
+| SSH 交互                 | `commands/interaction_commands.rs` | resolveInteraction                                                                |
+| 终端                     | `commands/terminal_commands.rs`    | write/resize（+ data/state 事件）                                                 |
+| 传输                     | `commands/transfer_commands.rs`    | queueUpload/cancel/pause/resume/discard/clear/uploadFile/downloadFile             |
+| workspace                | `commands/workspace_commands.rs`   | getSnapshot/getConnectionLibrary/导入导出/SSH 隧道/profile/folder/command CRUD    |
 
 command 层保持「薄」：参数校验 + 调用 service + 结构化错误。业务逻辑在 `services/`。
 
 ### 8.2 Workspace runtime 迁移
 
-TS 侧 `workspace-session-runtime.ts`（1208 行）负责：全局事件分发、tab 状态、session controller 生命周期、snapshot 单飞尾随合并广播、CWD 广播、auto-reconnect。
+迁移前 workspace runtime 负责：全局事件分发、tab 状态、session controller 生命周期、snapshot 单飞尾随合并广播、CWD 广播、auto-reconnect；当前职责由 `services/workspace/state.rs` 与 session/command 模块共同承担。
 
-Rust 侧 `services/workspace/session_runtime.rs` 复刻：
+Rust 侧 `services/workspace/state.rs` 承担当前 workspace runtime 职责：
 
 ```rust
 pub struct WorkspaceSessionRuntime {
@@ -967,9 +930,9 @@ pub struct WorkspaceSessionRuntime {
 
 ### 8.3 Transfer journal 与断点续传
 
-TS 侧 `transfer-journal.ts`：原子写（temp -> rename current to .bak -> rename temp to current，失败回滚）+ `normalizeRestoredTransfer`（active 状态复原为 paused/canceled，保留 resumable 标记）+ 最近 200 条截断。
+迁移前 transfer journal：原子写（temp -> rename current to .bak -> rename temp to current，失败回滚）+ `normalizeRestoredTransfer`（active 状态复原为 paused/canceled，保留 resumable 标记）+ 最近 200 条截断。
 
-Rust 侧 `services/transfers/journal.rs` 复刻：
+Rust 侧 `services/transfers/` 承担当前 transfer journal 与断点续传职责：
 
 ```rust
 pub struct TransferJournal {
@@ -988,15 +951,14 @@ impl TransferJournal {
 
 ### 8.4 System-metrics 采集迁移
 
-TS 侧 `system-metrics/`（9 文件）：
+当前实现位于 `apps/tauri/src-tauri/src/sessions/system_metrics/`：
 
-- `platform-probe.ts`：探测 `linux`/`busybox`/`windows`/`unknown`（POSIX 用 `sh -lc 'uname -s; busybox 探测; openwrt 探测'`，Windows 用 powershell/pwsh/cmd ver）。
-- `platform-probe` + `supportsPosixShellSetup()` 门控：仅 linux/busybox 注入 POSIX 脚本，**Windows 严禁注入**（C5）。
-- `parser.ts`：CRLF 归一化 `replace(/\r\n?/g, '\n')`（C6）。
-- `linux-collector`/`busybox-collector`/`windows-collector`/`windows-metrics-collector`：各平台指标脚本与解析。
-- `posix-script.ts`：注入的 POSIX 脚本。
+- `exec.rs`：探测 `linux`/`busybox`/`windows`/`unknown`，并负责 bounded exec。
+- `exec.rs` 与 SSH shell CWD 模块共同执行 `supportsPosixShellSetup()` 门控：仅 linux/busybox 注入 POSIX 脚本，**Windows 严禁注入**（C5）。
+- `parser.rs`：CRLF 归一化 `replace(/\r\n?/g, '\n')`（C6）。
+- `posix.rs`、`freebsd.rs`、`windows.rs`：各平台指标脚本与解析。
 
-Rust 侧 `sessions/system_metrics/` 复刻：
+Rust 侧的职责拆分如下：
 
 ```rust
 pub async fn probe_remote_platform(executor: &dyn SystemMetricsExecutor) -> RemoteSystemPlatform { ... }
@@ -1013,17 +975,17 @@ pub fn normalize_crlf(s: &str) -> String { s.replace("\r\n", "\n").replace("\r",
 
 ### 8.5 终端输出 batcher 与节流
 
-| 组件                | TS                             | Rust                                                                    |
-| ------------------- | ------------------------------ | ----------------------------------------------------------------------- |
-| 终端输出 16ms 合并  | `terminal-output-batcher.ts`   | `TerminalOutputBatcher`：`tokio::time::interval(16ms)` + per-tab buffer |
-| 传输进度 200ms 节流 | `transfer-service.ts` 内节流   | `TransferService` 内 `tokio::time::throttle`/手动 last_emit             |
-| snapshot 单飞尾随   | `workspace-session-runtime.ts` | `SnapshotCoalescer`                                                     |
+| 组件                | TS                       | Rust                                                                    |
+| ------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| 终端输出 16ms 合并  | 迁移前终端输出合并逻辑   | `TerminalOutputBatcher`：`tokio::time::interval(16ms)` + per-tab buffer |
+| 传输进度 200ms 节流 | 迁移前传输服务内节流     | `TransferService` 内 `tokio::time::throttle`/手动 last_emit             |
+| snapshot 单飞尾随   | 迁移前 workspace runtime | `services/workspace/state.rs`                                           |
 
 ### 8.6 Shell CWD 集成（OSC 7）
 
-TS 侧 `shell-cwd-integration.ts` 解析 `\u001b]7;file://...` 与 `\u001b]1337;RemoteUser=...`，更新 cwd/user，通过 runtime 广播。
+迁移前 shell CWD 集成逻辑解析 `\u001b]7;file://...` 与 `\u001b]1337;RemoteUser=...`，更新 cwd/user，通过 runtime 广播。
 
-Rust 侧 `sessions/shell_cwd.rs` 复刻（正则用 `regex` crate，需与 TS `OSC_7_PATTERN`/`OSC_USER_PATTERN` 等价）：
+Rust 侧 `sessions/ssh/shell/cwd.rs` 复刻（正则用 `regex` crate，需与 TS `OSC_7_PATTERN`/`OSC_USER_PATTERN` 等价）：
 
 ```rust
 pub struct ShellCwdTracker { buffer: String }
@@ -1037,22 +999,22 @@ impl ShellCwdTracker {
 
 ### 8.7 SSH 隧道（-L/-R/-D）
 
-TS 侧 `ssh-tunnel-service.ts`（295 行）：
+迁移前 SSH 隧道服务：
 
 - local（-L）：`TcpListener` bind 本地 -> `client.forwardOut` 转发到远端。
 - remote（-R）：`client.forwardIn` -> 监听 `tcp connection` 事件 -> 连接目标。
 - dynamic（-D）：SOCKS server + forwardOut。
 - 活动连接追踪（`activeSockets`），停止时先关 socket 再 `server.close()`。
 
-Rust 侧 `sessions/ssh/tunnel.rs`：用 `tokio::net::TcpListener` + russh channel stream 等价实现。规则校验（`validateRule`）、端点占用检查（`assertEndpointAvailable`）逐字复刻。
+Rust 侧 `sessions/ssh/tunnels.rs`：用 `tokio::net::TcpListener` + russh channel stream 等价实现。规则校验（`validateRule`）、端点占用检查（`assertEndpointAvailable`）逐字复刻。
 
 ### 8.8 WebDAV 同步
 
-TS 侧 `webdav-sync-service.ts`：profile/命令的 WebDAV 上传/下载同步。Rust 侧用 `reqwest`（已在路线图候选）实现，配置存储走 JSON。
+迁移前 WebDAV 同步服务负责 profile/命令的 WebDAV 上传/下载同步。Rust 侧用 `reqwest`（已在路线图候选）实现，配置存储走 JSON。
 
 ### 8.9 应用更新
 
-历史 TS 侧使用 `app-update-service.ts`（electron-updater）。当前 Rust 侧已实现 GitHub Release 版本检查和安全发布页交接；签名静默更新尚未启用，待提供 Tauri updater endpoint、公钥、签名和公证资产后在 Phase 5 接入。`AppUpdateStatus` 结构继续与 `@fileterm/core` 保持一致。
+迁移前更新服务负责桌面更新。当前 Rust 侧已实现 GitHub Release 版本检查和安全发布页交接；签名静默更新尚未启用，待提供 Tauri updater endpoint、公钥、签名和公证资产后在 Phase 5 接入。`AppUpdateStatus` 结构继续与 `@fileterm/core` 保持一致。
 
 ---
 
@@ -1087,14 +1049,14 @@ gantt
 
 #### Phase 0：Tauri 直连骨架与基础能力
 
-| 里程碑                                | 验收标准                                                              |
-| ------------------------------------- | --------------------------------------------------------------------- |
-| M0.1 FileTermDesktopApi 拆分到 bridge | `apps/tauri/src/bridge/` 建立，renderer 不再直接 import Electron 类型 |
-| M0.2 Tauri 基础 commands              | 平台信息、剪贴板、UI preferences/state 可用                           |
-| M0.3 React bridge 接入                | renderer 通过 `tauri-api.ts` 初始化，不直接散落调用 Tauri             |
-| M0.4 Contract test 建立               | Rust commands 与 `FileTermDesktopApi` 关键字段一致                    |
+| 里程碑                                | 验收标准                                                                |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| M0.1 FileTermDesktopApi 拆分到 bridge | `apps/tauri/src/bridge/` 建立，renderer 不再直接 import 迁移前实现 类型 |
+| M0.2 Tauri 基础 commands              | 平台信息、剪贴板、UI preferences/state 可用                             |
+| M0.3 React bridge 接入                | renderer 通过 `tauri-api.ts` 初始化，不直接散落调用 Tauri               |
+| M0.4 Contract test 建立               | Rust commands 与 `FileTermDesktopApi` 关键字段一致                      |
 
-**验收：** Tauri 壳加载现有 React renderer；基础 commands 可用；renderer 不再依赖 Electron preload。
+**验收：** Tauri 壳加载现有 React renderer；基础 commands 可用；renderer 不再依赖 迁移前实现 Tauri bridge。
 
 **风险：** bridge 抽象引入的间接层可能遗漏事件 unsubscribe 语义（见 5.2.4）。
 
@@ -1108,7 +1070,7 @@ gantt
 
 **验收：** 同一套 React UI 在 Tauri 壳启动；三平台窗口与退出手测记录。
 
-**风险：** Tauri 窗口 API 与 Electron 差异（自定义标题栏 drag 区域、菜单）；Monaco/xterm worker 资源路径。
+**风险：** Tauri 窗口 API 与 迁移前实现 差异（自定义标题栏 drag 区域、菜单）；Monaco/xterm worker 资源路径。
 
 #### Phase 2：Rust 存储与 Workspace
 
@@ -1118,7 +1080,7 @@ gantt
 | M2.2 Workspace snapshot/连接库 | getSnapshot/getConnectionLibrary/导入导出；snapshot 广播                |
 | M2.3 旧用户数据兼容            | 一次性 current-wins 导入；marker 幂等、删除不复活、提交失败可回滚       |
 
-**验收：** 旧 Electron 用户数据可被 Tauri 一次性导入；之后两个 runtime 只写各自 userData。
+**验收：** 迁移前实现 用户数据可被 Tauri 一次性导入；之后两个 runtime 只写各自 userData。
 
 **风险：** group/parentId 自愈逻辑复杂，边界 case 多；secret 文件权限跨平台差异。
 
@@ -1154,15 +1116,15 @@ gantt
 
 #### Phase 5：发行与切换
 
-| 里程碑                        | 验收标准                                         |
-| ----------------------------- | ------------------------------------------------ |
-| M5.1 Tauri updater + 签名公证 | 三平台签名/公证通过                              |
-| M5.2 安装包                   | macOS DMG/zip、Windows NSIS/portable、Linux 包   |
-| M5.3 性能对比                 | 启动时间、内存、终端延迟对比 Electron（应更优）  |
-| M5.4 迁移工具 + 回滚          | 用户数据迁移幂等+备份；失败可回滚上一版 Tauri 包 |
-| M5.5 正式发布                 | Tauri 正式发布，数据备份与版本回滚可用           |
+| 里程碑                        | 验收标准                                          |
+| ----------------------------- | ------------------------------------------------- |
+| M5.1 Tauri updater + 签名公证 | 三平台签名/公证通过                               |
+| M5.2 安装包                   | macOS DMG/zip、Windows NSIS/portable、Linux 包    |
+| M5.3 性能对比                 | 启动时间、内存、终端延迟对比 迁移前实现（应更优） |
+| M5.4 迁移工具 + 回滚          | 用户数据迁移幂等+备份；失败可回滚上一版 Tauri 包  |
+| M5.5 正式发布                 | Tauri 正式发布，数据备份与版本回滚可用            |
 
-**验收：** 三平台安装包通过；性能不劣于 Electron；灰度无重大回归。
+**验收：** 三平台安装包通过；性能不劣于 迁移前实现；灰度无重大回归。
 
 **风险：** 签名/公证流程三平台差异；自动更新链路稳定性；用户数据迁移失败的回滚保障。
 
@@ -1189,28 +1151,28 @@ gantt
 
 ## 11. 回滚策略
 
-1. **不保留 Electron adapter 与 Electron 构建入口。** renderer 文件保持不变，用户数据迁移结果必须可备份、可幂等恢复。
+1. **不保留 迁移前实现 adapter 与 迁移前实现 构建入口。** renderer 文件保持不变，用户数据迁移结果必须可备份、可幂等恢复。
 2. **数据迁移先备份且幂等。** Rust 写 JSON 采用 temp+rename+.bak，与现有 transfer-journal 一致；首次迁移前完整备份 userData。
 3. **阶段级回滚：**
    - Phase 1-2 失败：停止当前 Tauri candidate，使用备份恢复数据；Rust 存储产物与历史 TS 格式一致，可由旧版本读取。
    - Phase 3（SSH）失败：保留已完成的 Tauri 基础能力，SSH command 明确返回 unsupported，继续推进 Rust 实现。
-   - Phase 5 灰度失败：停止 Tauri 灰度，回滚到上一版 Tauri 安装包并恢复备份数据；Electron 不作为当前运行时回滚入口。
-4. **配置开关：** 不保留 Electron/Tauri 双运行时开关；未完成能力由 Tauri command 明确返回 `unsupported`。
+   - Phase 5 灰度失败：停止 Tauri 灰度，回滚到上一版 Tauri 安装包并恢复备份数据；迁移前实现 不作为当前运行时回滚入口。
+4. **配置开关：** 不保留迁移前实现与 Tauri 的双运行时开关；未完成能力由 Tauri command 明确返回 `unsupported`。
 5. **用户数据不可逆操作保护：** 迁移工具对写入操作做 dry-run + 备份，失败自动回滚。
 
 ---
 
 ## 12. 待明确事项（UNCLEAR）
 
-1. **russh 已锁定**：`russh 0.62.2` + `russh-sftp 2.3.0` 已用于当前主链路；剩余是三平台 ssh-agent、真实服务和发行候选验证，不再回退到 Electron `ssh2` runtime。
+1. **russh 已锁定**：`russh 0.62.2` + `russh-sftp 2.3.0` 已用于当前主链路；剩余是三平台 ssh-agent、真实服务和发行候选验证，不再回退到 迁移前实现 `ssh2` runtime。
 2. **Monaco/xterm worker 在 Tauri 的资源加载**：Vite 构建产物在 Tauri webview 下的 `asset`/`crossOrigin` 配置需实测，可能需调整 base path。
-3. **Tauri updater 发布资产**：endpoint、公钥、签名和公证资产尚未提供；当前先使用 GitHub Release 检查与安全发布页交接，不与历史 `electron-updater` 并行。
+3. **Tauri updater 发布资产**：endpoint、公钥、签名和公证资产尚未提供；当前先使用 GitHub Release 检查与安全发布页交接，不与历史 `历史桌面更新器` 并行。
 4. **SQLite 引入时机**：本计划明确不在主迁移路径引入；但「命令历史分页」「profile 千级」等触发条件需产品/数据侧确认阈值。
 5. **凭据存储策略未来演进**：当前保留明文（C9）。若未来转向钥匙串/safeStorage，需单独立项并设计双向兼容；本计划不预设。
-6. **子窗口（连接管理器/命令管理器/文件编辑器/连接表单）在 Tauri 的实现**：Tauri 多 webview 窗口 API 与 Electron `BrowserWindow` 差异需实测；部分「模态」语义可能需用 webview 内路由替代。
-7. **图标/字体/样式离线资源打包**：Tauri resource 路径与 Electron `asar` 差异，需在 Phase 1 验证。
+6. **子窗口（连接管理器/命令管理器/文件编辑器/连接表单）在 Tauri 的实现**：Tauri 多 webview 窗口 API 与 迁移前实现 `Tauri window` 差异需实测；部分「模态」语义可能需用 webview 内路由替代。
+7. **图标/字体/样式离线资源打包**：Tauri resource 路径与 迁移前实现 `Tauri resource bundle` 差异，需在 Phase 1 验证。
 8. **Tauri command 命名最终规范**：本计划用 `domain_action`，但若与 Tauri 生态约定冲突需调整（需在 Phase 0 contract 冻结时定稿）。
-9. **`webUtils.getPathForFile`（拖拽）在 Tauri 的等价**：Tauri 拖拽 API 与 Electron 不同，`getDroppedFilePaths` 需重新实现，可能影响上传拖入体验。
+9. **`webUtils.getPathForFile`（拖拽）在 Tauri 的等价**：Tauri 拖拽 API 与 迁移前实现 不同，`getDroppedFilePaths` 需重新实现，可能影响上传拖入体验。
 
 ---
 
@@ -1252,4 +1214,4 @@ gantt
 | `setRemoteFileAccessMode` | `remote_files_set_file_access_mode` | `WorkspaceService::set_remote_file_access_mode` |
 | `createProfile`           | `workspace_create_profile`          | `WorkspaceService::create_profile`              |
 
-> 完整映射表（约 160 项）作为 Phase 0 契约冻结的交付物之一，随 contract test 一并落盘到 `apps/tauri/src/bridge/__tests__/contract-mapping.json`。
+> 完整映射表（约 160 项）作为 Phase 0 契约冻结的交付物之一，当前由 `apps/tauri/src-tauri/tests/contract.rs` 与 bridge 实现共同维护。

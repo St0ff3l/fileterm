@@ -105,4 +105,3 @@ pub fn set_dangerous_command_restrictions(
     state.dangerous_command_restrictions_enabled = input.enabled;
     Ok(public_mode_state(state))
 }
-

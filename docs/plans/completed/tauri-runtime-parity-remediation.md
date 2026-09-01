@@ -1,10 +1,10 @@
 > 归档状态（2026-07-23）：P0/P1/P2 自动化回归全部通过，renderer 交互与后端契约对齐已完成。打包态 macOS/Windows/Linux 人工验收因资源/产品决策暂停。本文档移至 `docs/plans/completed/`。
 
-# Tauri / Electron 细节功能对齐计划
+# Tauri / 迁移前实现 细节功能对齐计划
 
 ## 背景
 
-本计划用于收口 Tauri renderer 与 Rust backend 相比 Electron 版本仍存在的细节行为差异。
+本计划用于收口 Tauri renderer 与 Rust backend 相比 迁移前实现 版本仍存在的细节行为差异。
 重点不是补齐 API 数量，而是修复同一 API 在数据结构、窗口生命周期、会话状态、异步反馈和
 多窗口同步上的语义偏差。
 
@@ -37,9 +37,9 @@
 - [x] 读取旧数据时自愈上述缺失字段，避免已经落盘的坏数据继续导致 renderer 崩溃。
 - [x] 为创建与旧数据自愈补 Rust contract/unit tests。
 - [x] 独立连接管理器/表单使用的 connection library 与完整 snapshot 一样剥离密码、
-      私钥口令和代理密码，不把 main-side secret 暴露给 renderer。
+      私钥口令和代理密码，不把 backend-side secret 暴露给 renderer。
 - [x] 编辑脱敏 profile 时，空白密码/口令占位不会覆盖原凭据；表单 `proxyPassword`
-      在 main-side 规范化为嵌套 secret，并从公开 profile 数据中清除。
+      在 backend-side 规范化为嵌套 secret，并从公开 profile 数据中清除。
 
 ### B. 全应用退出与独立 Monaco 编辑器
 
@@ -105,8 +105,8 @@
 - [x] 通用 ContextMenu 增加 menu/menuitem 语义及方向键、Home/End 导航。
 - [x] 原生菜单和自定义窗口菜单统一命令管理器快捷键。
 - [x] 原生菜单标题跟随已持久化 locale 构建，并在语言切换后即时刷新。
-- [x] `setUiPreferences` 的 Tauri 返回值对齐共享 API/Electron，不再静默返回空 IPC payload。
-- [x] 更新检查按 Electron 的 single-flight 语义去重，异常路径不会把状态永久留在 checking。
+- [x] `setUiPreferences` 的 Tauri 返回值对齐共享 API/迁移前实现，不再静默返回空 IPC payload。
+- [x] 更新检查按迁移前实现的 single-flight 语义去重，异常路径不会把状态永久留在 checking。
 - [x] pointer sort 在 window blur、pointer capture 丢失时可靠清理 ghost/state。
 - [x] TabBar 从高风险 HTML5 DnD 迁移到 pointer sort，保留键盘操作并抑制拖拽后的误点击。
 - [ ] macOS/Windows/Linux 打包态分别验证标签排序和外部文件拖放。
@@ -132,8 +132,8 @@
 - [x] 远端目录下载接入右键菜单、顶部下载按钮和拖入本地窗格；文件与目录统一进入既有传输清单，
       保留进度、暂停、继续和取消，并校验清单相对路径不能逃逸用户选择的本地目标目录。
 - [x] 文件权限弹窗表头对齐新建连接的 `#242424 / 48px / 13px / 500 / 16px icon` 规格，
-      使用本地 lock 图标，并在 Electron/Tauri 保持一致。
-- [x] Tauri root 文件视角的 `sudo find` 列表补齐 `..` 父目录行，与普通 SFTP 和 Electron root
+      使用本地 lock 图标，并在迁移前实现与 Tauri 之间保持一致。
+- [x] Tauri root 文件视角的 `sudo find` 列表补齐 `..` 父目录行，与普通 SFTP 和 迁移前实现 root
       视角一致；远端 `/` 仍保持为唯一不显示返回入口的真实根目录。
 - [x] Tauri 终端从 `sudo -i` 执行 `exit` 回到登录用户时，文件区立即切回 user 访问模式并
       刷新当前目录；sudo 凭据缓存仅用于下次复用，不再错误地锁住工具栏 root 状态。
@@ -151,7 +151,7 @@
 
 ## 完成定义
 
-- P0/P1 自动化回归全部通过，且 Electron 行为差异有明确测试或文档化例外。
+- P0/P1 自动化回归全部通过，且 迁移前实现 行为差异有明确测试或文档化例外。
 - P2 中可以自动化的 renderer 交互进入测试；只能由原生 WebView 验证的项目保留三平台验收记录。
 - 完成后将本文件移动到 `docs/plans/completed/`，不在 `AGENTS.md` 堆积过程信息。
 
@@ -163,8 +163,8 @@
 - [x] `npm run test:tauri`：108 unit tests + 18 contract tests 全绿（含目录下载路径边界回归）。
 - [x] `cargo fmt --all -- --check`
 - [x] `cargo clippy --locked --all-targets --all-features -- -D warnings`
-- [x] `npm run test:electron`：65 unit tests + 21 controller tests 全绿。
-- [x] `npm run build:renderer -w @fileterm/electron`：Vite production bundle 构建成功。
+- [x] `旧版桌面测试命令（已移除）`：65 unit tests + 21 controller tests 全绿。
+- [x] `npm run build:renderer -w 旧版桌面 workspace（已移除）`：Vite production bundle 构建成功。
 - [x] `npm run build:renderer -w @fileterm/tauri`：Vite production bundle 构建成功。
 - [ ] macOS/Windows/Linux 打包态人工验收。
 

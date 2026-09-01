@@ -4,11 +4,11 @@
 
 > 2026-07-13 实施更新：本计划的核心交付已落地。SSH MFA、SOCKS5/HTTP 代理、Telnet、Serial、SSH Config 导入、Jump Host、运行时 SSH 隧道、两阶段 JSON 导入/单文件兼容导出，以及 WebDAV 手动同步均已接通。当前文档保留为实现与验收记录；后续仅补真实设备和真实 WebDAV 服务的手工验收结果。
 
-> 范围说明（2026-07-16）：Electron 是本计划的基线实现；Rust/Tauri 对齐进度以 `tauri-migration-progress.md` 为准。Tauri 已完成 SSH 代理、Jump Host 和运行时 `-L/-R/-D` 隧道，并补齐 workspace capability 快照，使 renderer 可显示并操作隧道面板；剩余工作以真实服务、实体设备和三平台发行验收为主。
+> 范围说明（2026-07-16）：迁移前实现 是本计划的基线实现；Rust/Tauri 对齐进度以 `tauri-migration-progress.md` 为准。Tauri 已完成 SSH 代理、Jump Host 和运行时 `-L/-R/-D` 隧道，并补齐 workspace capability 快照，使 renderer 可显示并操作隧道面板；剩余工作以真实服务、实体设备和三平台发行验收为主。
 
 ## 实施完成摘要
 
-- 用户手动导出的 FileTerm 备份和 WebDAV 同步包都包含连接密码、私钥口令和嵌套 `proxy.password`，用于完整迁移；这些明文只在 main/Rust 服务层处理，不进入 renderer snapshot 或预览。profile repository 也会把代理密码恢复到 main process，而不写回 `profiles.json`。
+- 用户手动导出的 FileTerm 备份和 WebDAV 同步包都包含连接密码、私钥口令和嵌套 `proxy.password`，用于完整迁移；这些明文只在 main/Rust 服务层处理，不进入 renderer snapshot 或预览。profile repository 也会把代理密码恢复到 Rust backend，而不写回 `profiles.json`。
 - SSH 工作区底部面板支持“文件 / 隧道”切换；可在当前 tab 运行时新增、启动、停止和删除 `-L/-R/-D`，断线或关闭 tab 自动回收 listener 和活动 socket。停止远程 `-R` 时会报告服务端取消失败并保留错误状态以供重试；本地 `-L/-D` 会在关闭 listener 前断开活动客户端，避免端口释放卡住。
 - Jump Host 使用自身的认证方式、代理、keyboard-interactive 和 host verification；仅支持单级，循环或自引用会被明确拒绝。
 - 单一导入入口支持 SSH 配置和外部 JSON，采用“选择文件或目录 → main-process 解析/秘密隔离 → renderer 预览 → 确认”流程。预览提供勾选、跳过/覆盖/另存为策略；覆盖会保留源文件未提供的既有凭据。
@@ -31,11 +31,11 @@ FileTerm 当前已经稳定覆盖 SSH shell、SFTP、FTP/显式 FTPS/隐式 FTPS
 ```txt
 packages/core
   -> main services / session controllers
-    -> IPC + preload
+    -> IPC + Tauri bridge
       -> renderer connection manager / workspace
 ```
 
-Renderer 不直接访问 socket、串口、SSH client 或 WebDAV client；所有系统和网络能力都从 main process 经过类型化 IPC 暴露。
+Renderer 不直接访问 socket、串口、SSH client 或 WebDAV client；所有系统和网络能力都从 Rust backend 经过类型化 IPC 暴露。
 
 ## 2. 目标与非目标
 
@@ -202,10 +202,10 @@ SSH、Telnet、Serial 可以共享终端生命周期接口，但各自实现协�
 - [ ] shell、exec、SFTP、transfer SFTP 四条 SSH 连接复用同一认证策略。
 - [ ] 日志只记录 prompt 类型和数量，不记录密码、OTP 或私钥内容。
 
-#### IPC/preload/renderer
+#### IPC bridge/renderer
 
 - [ ] 扩展 `SshInteractionRequest` 为 `keyboard-interactive` challenge。
-- [ ] `preload` 提供 resolve/cancel API，并保证 requestId 一次性消费。
+- [ ] `Tauri bridge` 提供 resolve/cancel API，并保证 requestId 一次性消费。
 - [ ] 复用 `useSshInteractions`，新增逐提示输入弹窗。
 - [ ] 连接表单新增“密码 / 键盘交互 / 私钥 / 系统认证”选项。
 
@@ -264,7 +264,7 @@ interface SshForwardRule {
 #### UI/IPC
 
 - [ ] `packages/core` 增加 tunnel runtime snapshot 和事件类型。
-- [ ] preload 暴露 list/start/stop/create/delete tunnel API。
+- [ ] Tauri bridge 暴露 list/start/stop/create/delete tunnel API。
 - [ ] SSH 文件面板增加“文件 / 隧道”切换，或建立独立隧道面板。
 - [ ] 显示监听地址、目标地址、状态、错误和所属 tab。
 
@@ -298,7 +298,7 @@ interface SshForwardRule {
 
 #### Controller
 
-- [ ] 新增 `telnet-session-controller.ts`。
+- [x] Telnet session 已落在 `apps/tauri/src-tauri/src/sessions/telnet/mod.rs`。
 - [ ] 复用 TCP socket 工厂和终端生命周期接口。
 - [ ] 实现 RFC 854 基础 option negotiation：IAC、DO/DONT、WILL/WONT、SB/SE。
 - [ ] 至少正确处理 suppress-go-ahead、echo、binary、terminal type/window size 的常见协商。
@@ -322,8 +322,8 @@ interface SshForwardRule {
 
 #### Controller
 
-- [ ] 新增 `serial-session-controller.ts`。
-- [ ] 选择跨平台串口库，并把设备打开/读取放在 main process。
+- [x] Serial session 已落在 `apps/tauri/src-tauri/src/sessions/serial/mod.rs`。
+- [ ] 选择跨平台串口库，并把设备打开/读取放在 Rust backend。
 - [ ] 读写使用背压和取消，关闭时释放设备句柄。
 - [ ] 设备拔出、占用、权限不足、参数不支持必须给出可读错误。
 - [ ] Serial 不创建 SFTP、exec、系统指标或 CWD runtime。
@@ -438,7 +438,7 @@ interface SshForwardRule {
 
 - [ ] `packages/core` 增加 `ImportConnectionResult`、`ExportConnectionOptions`、`ImportConflict` 等类型。
 - [ ] main 新增 connection-config codec/service，负责文件选择后的读取、解析、转换和写入。
-- [ ] preload 暴露单文件导入、批量导入、单连接导出、批量导出 API。
+- [ ] Tauri bridge 暴露单文件导入、批量导入、单连接导出、批量导出 API。
 - [ ] 连接管理器新增“导入连接”“导出连接”入口。
 - [ ] 导入预览支持逐条勾选和冲突策略选择。
 - [ ] 导出凭据选项必须明确风险，并默认关闭。
@@ -559,8 +559,8 @@ WebDAV 不是新的终端协议，也不是远程服务器连接类型。它只�
 npm run typecheck
 npm run lint --max-warnings=0
 npm run format:check
-npm run test:electron
-npm run test:transfers:protocol -w @fileterm/electron
+旧版桌面测试命令（已移除）
+旧版桌面协议测试命令（已移除）
 ```
 
 涉及真实 socket、串口或 WebDAV 的测试必须提供 mock/本地 fixture；不能让 CI 依赖公网、真实设备或用户 SSH 配置。
@@ -585,7 +585,7 @@ SSH 当前存在 shell、exec、SFTP、transfer 四条连接。高级网络能�
 
 ### 风险 5：跨平台设备和窗口回归
 
-串口路径、Windows 高 DPI、macOS trackpad 和 Electron 子窗口必须分别验证。其他桌面技术栈中的修复不能直接复制为 FileTerm 的实现。
+串口路径、Windows 高 DPI、macOS trackpad 和 迁移前实现 子窗口必须分别验证。其他桌面技术栈中的修复不能直接复制为 FileTerm 的实现。
 
 ## 9. 推荐落地顺序
 
@@ -612,4 +612,4 @@ SSH 当前存在 shell、exec、SFTP、transfer 四条连接。高级网络能�
 - Serial：COM 与 Unix 设备路径、完整串口参数。
 - 配置同步：可选的 WebDAV 手动上传/下载和冲突保护。
 
-所有能力都必须通过 `packages/core -> main -> preload -> renderer` 暴露，并有对应的存储迁移、controller 生命周期测试和 Windows/macOS/Linux 回归检查。
+所有能力都必须通过 `packages/core -> Rust backend -> bridge -> renderer` 暴露，并有对应的存储迁移、controller 生命周期测试和 Windows/macOS/Linux 回归检查。

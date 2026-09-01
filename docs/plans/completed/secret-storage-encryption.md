@@ -5,7 +5,7 @@
 
 ## 1. 结论
 
-FileTerm 不使用 macOS Keychain、Windows DPAPI 或 Linux credential store，因此不会在读取已保存连接时触发系统授权弹窗。为避免本地 JSON 中直接暴露凭据，Rust 存储层对各凭据字段采用 AES-256-GCM 加密：调用方仍只读写明文 `String`，加解密与迁移完全留在 main-side。
+FileTerm 不使用 macOS Keychain、Windows DPAPI 或 Linux credential store，因此不会在读取已保存连接时触发系统授权弹窗。为避免本地 JSON 中直接暴露凭据，Rust 存储层对各凭据字段采用 AES-256-GCM 加密：调用方仍只读写明文 `String`，加解密与迁移完全留在 backend-side。
 
 ```text
 安装目录内随机 seed（0600） ─┐
@@ -54,7 +54,7 @@ FileTerm 不使用 macOS Keychain、Windows DPAPI 或 Linux credential store，�
 ## 5. 实现位置
 
 - `apps/tauri/src-tauri/src/services/secret_crypto.rs`：seed 创建、三端设备标识、HMAC 派生、AES-GCM、版本前缀和 legacy 判断。
-- `services/ai.rs`、`services/ssh_keys.rs`、`services/profile_ops.rs`、`storage/mod.rs`、`services/webdav.rs`、`services/s3_backup.rs`：字段级加密、读取迁移与原子持久化。
+- `services/ai/mod.rs`、`services/ssh_keys.rs`、`services/profile_ops/mod.rs`、`storage/mod.rs`、`services/webdav/mod.rs`、`services/s3_backup/mod.rs`：字段级加密、读取迁移与原子持久化。
 - `Cargo.toml`：`aes-gcm`、`zeroize`；Windows 仅额外启用只读 `MachineGuid` Registry feature。
 
 实现明确不使用 safeStorage、Keychain、Credential Manager、DPAPI、libsecret、KWallet 或外部网络服务。

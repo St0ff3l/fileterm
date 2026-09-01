@@ -29,7 +29,7 @@ FileTerm 当前已经有 Telnet 和 Serial 会话；本计划先解决 SSH 网�
 
 现有 SSH 流程默认远端是完整服务器：
 
-- `apps/tauri/src-tauri/src/sessions/ssh.rs` 固定请求 `xterm-256color`，建立 shell 后还会先
+- `apps/tauri/src-tauri/src/sessions/ssh/mod.rs` 固定请求 `xterm-256color`，建立 shell 后还会先
   做平台探测，再决定是否注入 CWD 集成脚本；
 - `apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs` 会执行 POSIX/Windows 平台和指标探测；
 - SSH 默认开启 exec、资源监控和 SFTP；

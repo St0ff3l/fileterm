@@ -21,7 +21,7 @@ AI Copilot 不创建 Tauri 原生子窗口，也不使用透明桌面间隙。�
 
 ## 后续实现边界
 
-真实 Provider、凭据存储、上下文授权、命令提议与写入终端已转入 [AI Copilot 功能集成计划](../active/ai-copilot-integration.md)，并通过 `core → Rust commands/events → tauri-api → renderer` 接入。
+真实 Provider、凭据存储、上下文授权、命令提议与写入终端已转入 [AI Copilot 功能集成计划](ai-copilot-integration.md)，并通过 `core → Rust commands/events → tauri-api → renderer` 接入。
 
 ## 验收
 

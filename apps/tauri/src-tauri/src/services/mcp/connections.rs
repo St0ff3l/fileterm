@@ -389,4 +389,3 @@ async fn execute_command_template(app: &AppHandle, params: &Value) -> Result<Val
     .map(|result| json!({ "tabId": tab_id, "result": result }))
     .map_err(public_app_error)
 }
-

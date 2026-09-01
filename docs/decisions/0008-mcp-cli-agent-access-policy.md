@@ -88,7 +88,7 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 
 - `packages/core/src/index.ts`：共享的 MCP/CLI 偏好类型。
 - `apps/tauri/src-tauri/src/commands/mod.rs`：偏好规范化、迁移和设置命令。
-- `apps/tauri/src-tauri/src/services/mcp.rs`：MCP、CLI、CLI JSONL 协议、bridge route 和策略评估。
+- `apps/tauri/src-tauri/src/services/mcp/mod.rs`：MCP、CLI、CLI JSONL 协议、bridge route 和策略评估。
 - `apps/tauri/src-tauri/src/services/connection_operations.rs`：连接 single-flight 与可等待状态。
 - `apps/tauri/src-tauri/src/main.rs`：GUI、MCP、CLI JSONL 和一次性 CLI 入口分发。
-- `apps/tauri/src/renderer/features/settings/SettingsModal.tsx`：策略和 Agent 设置界面。
+- `apps/tauri/src/renderer/features/settings/settings-modal.tsx`：策略和 Agent 设置界面。

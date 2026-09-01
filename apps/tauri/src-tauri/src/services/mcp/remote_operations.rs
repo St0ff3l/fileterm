@@ -323,4 +323,3 @@ async fn tunnel_action(app: &AppHandle, params: &Value, action: &str) -> Result<
     .map_err(public_app_error)?;
     Ok(json!({ "tabId": tab_id, "items": items }))
 }
-

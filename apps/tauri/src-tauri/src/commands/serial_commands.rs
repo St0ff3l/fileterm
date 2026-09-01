@@ -275,4 +275,3 @@ pub async fn app_save_session_log(
 ) -> Result<Option<String>, AppError> {
     crate::services::session_logs::save_current_session(&app, &tab_id).await
 }
-

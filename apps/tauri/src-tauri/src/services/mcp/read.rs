@@ -238,4 +238,3 @@ async fn list_ssh_tunnels(app: &AppHandle, params: &Value) -> Result<Value, Stri
         .map_err(public_app_error)?;
     Ok(json!({ "tabId": tab_id, "items": items }))
 }
-

@@ -1,6 +1,6 @@
 # FileTerm macOS Release Checklist
 
-本文记录 macOS 桌面包的发布约定。运行时为 Rust + Tauri（历史 Electron 实现已彻底移除，`apps/electron` 不再存在，所有命令改用 `apps/tauri` 的 Tauri 构建脚本）。
+本文记录 macOS 桌面包的发布约定。运行时为 Rust + Tauri；历史桌面实现已彻底移除，所有命令改用 `apps/tauri` 的 Tauri 构建脚本。
 
 ## 1. 发布范围
 

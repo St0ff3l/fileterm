@@ -274,4 +274,3 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
         "activePaneTabIdByRoot": active_pane_tab_id_by_root,
     }))
 }
-

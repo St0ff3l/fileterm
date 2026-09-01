@@ -292,4 +292,3 @@ impl BridgeResponse {
         Self::error("FileTerm MCP bridge is busy; retry shortly")
     }
 }
-

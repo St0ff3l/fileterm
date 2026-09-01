@@ -501,4 +501,3 @@ fn normalize_user_message(value: &str) -> Result<String, AppError> {
     }
     Ok(value.to_string())
 }
-

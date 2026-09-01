@@ -8,7 +8,7 @@ FileTerm 已有统一传输列表、真实字节进度和取消能力，但任�
 
 - 为 SFTP、FTP、FTPS 单文件上传和下载提供跨连接、跨应用重启的断点续传。
 - 传输中的内容写入 FileTerm 专用临时文件，完成校验后再替换正式目标。
-- 将传输任务持久化到 Electron `userData`，运行态只通过 `main -> preload -> renderer` 暴露。
+- 将传输任务持久化到 迁移前实现 `userData`，运行态只通过 `Rust backend -> bridge -> renderer` 暴露。
 - 保持 SSH/SFTP 与 FTP/FTPS 的协议实现分离，共用任务状态、持久化和 UI 体验。
 - macOS、Windows、Linux 使用同一任务模型；本地文件最终替换失败时保留临时文件以便重试。
 
@@ -28,11 +28,11 @@ FileTerm 已有统一传输列表、真实字节进度和取消能力，但任�
 
 - `packages/core`
   - 定义任务状态、源文件身份、断点路径和公开 API。
-- `main/services/transfers`
+- `apps/tauri/src-tauri/src/services/transfers`
   - 持久化任务、临时文件命名、本地安全替换与恢复判断。
-- `main/services/sessions`
+- `apps/tauri/src-tauri/src/sessions`
   - SFTP 和 FTP/FTPS 分别实现 offset 读写、远端 stat、临时文件收尾。
-- `main/ipc` 与 `preload`
+- `apps/tauri/src-tauri/src/commands` 与 `Tauri bridge`
   - 暴露暂停、继续、丢弃操作。
 - `renderer/features/transfers`
   - 展示暂停、已中断、校验、收尾状态和对应操作。

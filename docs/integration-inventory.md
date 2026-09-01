@@ -1,18 +1,18 @@
 # FileTerm Integration Inventory
 
-本文归总 FileTerm 当前已经接入的核心第三方项目、采用理由、实现位置和维护边界。它不是依赖清单的替代品；精确版本以 `apps/tauri/package.json`、`apps/tauri/src-tauri/Cargo.toml` 和 `package-lock.json` 为准。历史 Electron 实现及其专用依赖已随 `apps/electron`（删除提交 `2a2eb7ff`）一并移除，本文不再列出。
+本文归总 FileTerm 当前已经接入的核心第三方项目、采用理由、实现位置和维护边界。它不是依赖清单的替代品；精确版本以 `apps/tauri/package.json`、`apps/tauri/src-tauri/Cargo.toml` 和 `package-lock.json` 为准。迁移前实现及其专用依赖已从仓库移除，本文不再列出。
 
 ## 1. 终端：xterm.js
 
 ### 已采用包
 
-| 包                       | 当前用途                                    | 实现位置                                              | 维护结论                                                                                      |
-| ------------------------ | ------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `@xterm/xterm`           | 终端主体渲染、输入、selection、控制序列解析 | `apps/tauri/src/renderer/components/TerminalView.tsx` | 实时 PTY 数据必须原样交给 xterm 解析，renderer 不改写 `\r` / `\n` 控制流。                    |
-| `@xterm/addon-fit`       | 根据容器尺寸计算行列数                      | `TerminalView.tsx`                                    | 配合 `ResizeObserver` 使用；resize 后必须把同一套 `cols/rows` 同步给后端 PTY。                |
-| `@xterm/addon-search`    | 终端内搜索                                  | `TerminalView.tsx`                                    | 绑定 `Ctrl+Shift+F` 的终端搜索 UI；`Ctrl+F` 保留给远程 CLI，支持上一条/下一条、大小写和正则。 |
-| `@xterm/addon-unicode11` | Unicode 11 宽字符支持                       | `TerminalView.tsx`                                    | 用于中文、Emoji、Powerline / Oh My Zsh 字符宽度计算，减少光标错位。                           |
-| `@xterm/addon-web-links` | HTTP/HTTPS 链接识别                         | `TerminalView.tsx`                                    | 终端输出中的链接可点击并通过浏览器打开。                                                      |
+| 包                       | 当前用途                                    | 实现位置                                               | 维护结论                                                                                      |
+| ------------------------ | ------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `@xterm/xterm`           | 终端主体渲染、输入、selection、控制序列解析 | `apps/tauri/src/renderer/components/terminal-view.tsx` | 实时 PTY 数据必须原样交给 xterm 解析，renderer 不改写 `\r` / `\n` 控制流。                    |
+| `@xterm/addon-fit`       | 根据容器尺寸计算行列数                      | `apps/tauri/src/renderer/components/terminal-view.tsx` | 配合 `ResizeObserver` 使用；resize 后必须把同一套 `cols/rows` 同步给后端 PTY。                |
+| `@xterm/addon-search`    | 终端内搜索                                  | `apps/tauri/src/renderer/components/terminal-view.tsx` | 绑定 `Ctrl+Shift+F` 的终端搜索 UI；`Ctrl+F` 保留给远程 CLI，支持上一条/下一条、大小写和正则。 |
+| `@xterm/addon-unicode11` | Unicode 11 宽字符支持                       | `apps/tauri/src/renderer/components/terminal-view.tsx` | 用于中文、Emoji、Powerline / Oh My Zsh 字符宽度计算，减少光标错位。                           |
+| `@xterm/addon-web-links` | HTTP/HTTPS 链接识别                         | `apps/tauri/src/renderer/components/terminal-view.tsx` | 终端输出中的链接可点击并通过浏览器打开。                                                      |
 
 ### 当前终端实例配置
 
@@ -91,11 +91,11 @@ FileTerm 当前采用“拖拽期间冻结列数，稳定后同步真实宽度�
 
 ### 已采用包
 
-| 包                     | 当前用途   | 实现位置                                                 | 维护结论                                                   |
-| ---------------------- | ---------- | -------------------------------------------------------- | ---------------------------------------------------------- |
-| `monaco-editor`        | 编辑器核心 | `apps/*/src/renderer/features/files/FileEditorModal.tsx` | 用于远程文件编辑，提供语言模式、查找、快捷键和编辑器主题。 |
-| `@monaco-editor/react` | React 封装 | `FileEditorModal.tsx`                                    | 用 React 组件管理 Monaco 生命周期和 mount 回调。           |
-| `opencc-js`            | 简繁转换   | `FileEditorModal.tsx`                                    | 对选中文本执行简体/繁体转换，不在协议层处理文本转换。      |
+| 包                     | 当前用途   | 实现位置                                                       | 维护结论                                                   |
+| ---------------------- | ---------- | -------------------------------------------------------------- | ---------------------------------------------------------- |
+| `monaco-editor`        | 编辑器核心 | `apps/tauri/src/renderer/features/files/file-editor-modal.tsx` | 用于远程文件编辑，提供语言模式、查找、快捷键和编辑器主题。 |
+| `@monaco-editor/react` | React 封装 | `apps/tauri/src/renderer/features/files/file-editor-modal.tsx` | 用 React 组件管理 Monaco 生命周期和 mount 回调。           |
+| `opencc-js`            | 简繁转换   | `apps/tauri/src/renderer/features/files/file-editor-modal.tsx` | 对选中文本执行简体/繁体转换，不在协议层处理文本转换。      |
 
 ### 当前 Monaco 能力
 
@@ -121,7 +121,7 @@ FileTerm 当前采用“拖拽期间冻结列数，稳定后同步真实宽度�
 | `@tauri-apps/api` / `tauri`     | Tauri 桌面窗口、Rust commands/events、系统能力 | `apps/tauri/src-tauri`, `apps/tauri/src/bridge` | renderer 只能经 `tauri-api.ts` 调用，不在 feature 中散落 `invoke/listen`。 |
 | `react` / `react-dom`           | Tauri Renderer UI                              | `apps/tauri/src/renderer`                       | 仓库只有一套 renderer；不要在 feature 组件里散落运行时判断。               |
 | `vite` / `@vitejs/plugin-react` | Renderer 构建与开发服务器                      | `apps/tauri/vite.config.ts`                     | 开发服务器固定 5188。                                                      |
-| `typescript`                    | 类型检查与构建                                 | `apps/*/tsconfig*.json`                         | 改动必须至少跑 `npm run typecheck`，再运行受影响 app 的测试/构建。         |
+| `typescript`                    | 类型检查与构建                                 | `apps/tauri/tsconfig.json`                      | 改动必须至少跑 `npm run typecheck`，再运行受影响 app 的测试/构建。         |
 
 ### 桌面壳资源和布局约定
 
@@ -133,12 +133,12 @@ FileTerm 当前采用“拖拽期间冻结列数，稳定后同步真实宽度�
 
 ## 4. 远程协议与文件传输
 
-| 包                     | 当前用途                                                         | 实现位置                                    | 维护结论                                                                                                                       |
-| ---------------------- | ---------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `russh` / `russh-sftp` | SSH shell、SFTP、远程命令与文件能力、SFTP offset 续传            | `apps/tauri/src-tauri/src/sessions/ssh/`    | 协议层只在 Rust 侧运行；renderer 经 `tauri-api.ts` 调用。注意 `vendor/russh` 保留了旧 Comware 兼容分支，升级时必须保留该边界。 |
-| `suppaftp`             | FTP / 显式 FTPS / 隐式 FTPS 会话、文件操作和断点续传             | `apps/tauri/src-tauri/src/sessions/ftp.rs`  | FTP 与 SSH/SFTP 在 session/protocol 层保持物理分离，不做伪统一。                                                               |
-| `iconv-lite`           | 文件内容编码处理                                                 | 文件读写相关链路                            | 编码处理属于文件读写链路，不放进 UI 组件零散处理。                                                                             |
-| `tokio-serial`         | Windows COM、macOS/Linux `/dev/*` 串口打开与读写、调制解调器状态 | `apps/tauri/src-tauri/src/sessions/serial/` | 设备参数、权限、句柄生命周期和 X/Y/ZMODEM、Kermit 传输都在 Rust；renderer 仅经 bridge 接收终端字节和传输进度。                 |
+| 包                     | 当前用途                                                         | 实现位置                                       | 维护结论                                                                                                                       |
+| ---------------------- | ---------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `russh` / `russh-sftp` | SSH shell、SFTP、远程命令与文件能力、SFTP offset 续传            | `apps/tauri/src-tauri/src/sessions/ssh/`       | 协议层只在 Rust 侧运行；renderer 经 `tauri-api.ts` 调用。注意 `vendor/russh` 保留了旧 Comware 兼容分支，升级时必须保留该边界。 |
+| `suppaftp`             | FTP / 显式 FTPS / 隐式 FTPS 会话、文件操作和断点续传             | `apps/tauri/src-tauri/src/sessions/ftp/mod.rs` | FTP 与 SSH/SFTP 在 session/protocol 层保持物理分离，不做伪统一。                                                               |
+| `iconv-lite`           | 文件内容编码处理                                                 | 文件读写相关链路                               | 编码处理属于文件读写链路，不放进 UI 组件零散处理。                                                                             |
+| `tokio-serial`         | Windows COM、macOS/Linux `/dev/*` 串口打开与读写、调制解调器状态 | `apps/tauri/src-tauri/src/sessions/serial/`    | 设备参数、权限、句柄生命周期和 X/Y/ZMODEM、Kermit 传输都在 Rust；renderer 仅经 bridge 接收终端字节和传输进度。                 |
 
 ### SSH 终端约定
 

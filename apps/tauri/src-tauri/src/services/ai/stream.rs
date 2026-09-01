@@ -724,4 +724,3 @@ async fn consume_streaming_response(
     stream.finalize_tool_calls();
     Ok(stream)
 }
-

@@ -179,19 +179,19 @@
 
 ### 新增文件
 
-- `apps/desktop/src/renderer/features/workspace/OverviewPage.tsx`
-- `apps/desktop/src/renderer/features/workspace/QuickLinksPage.tsx`
-- `apps/desktop/src/renderer/styles/features/overview.css`
-- `apps/desktop/src/renderer/styles/features/quick-links.css`
-- `apps/desktop/src/renderer/styles/features/modal-components.css`
+- `apps/tauri/src/renderer/features/workspace/overview-page.tsx`
+- `apps/tauri/src/renderer/features/workspace/quick-links-page.tsx`
+- `apps/tauri/src/renderer/styles/features/overview.css`
+- `apps/tauri/src/renderer/styles/features/quick-links.css`
+- `apps/tauri/src/renderer/styles/features/modal-components.css`
 
 ### 修改文件
 
-- `apps/desktop/src/renderer/features/workspace/HomeWorkspace.tsx` - 拆分为两个页面
-- `apps/desktop/src/renderer/styles/features/modals.css` - 统一基础弹窗样式
-- `apps/desktop/src/renderer/styles/features/home.css` - 调整布局
-- `apps/desktop/src/renderer/styles/features/confirm-dialog.css` - 优化确认对话框
-- `apps/desktop/src/renderer/styles/workstation.css` - 引入新样式文件
+- `apps/tauri/src/renderer/features/workspace/home-workspace.tsx` - 拆分为两个页面
+- `apps/tauri/src/renderer/styles/features/modals.css` - 统一基础弹窗样式
+- `apps/tauri/src/renderer/styles/features/home.css` - 调整布局
+- `apps/tauri/src/renderer/styles/features/confirm-dialog.css` - 优化确认对话框
+- `apps/tauri/src/renderer/styles/workstation.css` - 引入新样式文件
 
 ## 总结
 

@@ -271,4 +271,3 @@ impl BridgeProgress {
         }
     }
 }
-

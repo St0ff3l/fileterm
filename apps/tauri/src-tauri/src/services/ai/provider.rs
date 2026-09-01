@@ -370,4 +370,3 @@ pub fn delete_provider(
         .map(|provider| provider_summary(provider, &secrets))
         .collect())
 }
-

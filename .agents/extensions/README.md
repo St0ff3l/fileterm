@@ -18,7 +18,7 @@
 
 - `packages/core`
 - `apps/tauri/src-tauri/src`（Rust backend）
-- `apps/tauri/src/bridge`（Tauri IPC 边界，对应原 Electron preload）
+- `apps/tauri/src/bridge`（Tauri IPC 边界）
 - `apps/tauri/src/renderer`
 
 ## 4. IPC 设计

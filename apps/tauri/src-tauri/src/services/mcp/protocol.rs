@@ -736,4 +736,3 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
     };
     Ok(path.join(MCP_RUNTIME_FILE))
 }
-

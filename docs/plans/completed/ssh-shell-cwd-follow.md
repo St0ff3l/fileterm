@@ -16,8 +16,8 @@ remote shell integration
 ```
 
 - `packages/core`：区分 `shellCwd`、`shellUser`、`remotePath`、`followShellCwd`。
-- `ssh-session-controller`：探测远端登录 shell，安装可降级的 shell state integration，并解析 OSC cwd/user。
-- `workspace-session-runtime`：按 tab 去重 cwd/user，串行执行目录读取和文件身份切换，决定是否跟随。
+- `apps/tauri/src-tauri/src/sessions/ssh/`：探测远端登录 shell，安装可降级的 shell state integration，并解析 OSC cwd/user。
+- `apps/tauri/src-tauri/src/services/workspace/state.rs`：按 tab 去重 cwd/user，串行执行目录读取和文件身份切换，决定是否跟随。
 - `renderer`：只展示状态和切换跟随，不解析终端输出。
 
 ## 第一阶段范围
@@ -44,7 +44,7 @@ remote shell integration
 - 关闭跟随后 shell cwd 仍更新，但文件区不跳转；重新开启时同步到最新 cwd。
 - `sudo -i` 进入 root 后文件区切到 root 身份并重新跟随 `/root`；`exit` 回到登录用户后文件区回到普通身份。
 - 文件区手动切换 user/root 不改变终端用户，且相同 shell 用户的重复 prompt 不覆盖手动选择。
-- `npm run typecheck -w @fileterm/desktop` 通过。
+- `npm run typecheck -w @fileterm/tauri` 通过。
 
 ## 进度记录
 

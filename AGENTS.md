@@ -37,6 +37,11 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - 新窗口能力先定义 IPC 边界，再做 renderer 交互。
 - 主题样式优先走 `token -> theme vars -> component skins -> terminal colors`。
 
+### 命名与目录边界
+
+- TS/TSX 业务文件统一使用 `kebab-case` 文件名；React 组件和导出符号可以继续使用 PascalCase，但文件路径必须保持小写短横线风格。
+- Rust 文件与模块统一使用 `snake_case`；拆分模块由目录内的 `mod.rs` 保留稳定 facade，禁止以旧运行时或父模块前缀堆放文件。
+
 ### 平台兼容边界
 
 - **CWD 目录跟随**：终端工作目录 (CWD) 变化通过底层会话流安全捕获，经 runtime 广播同步给文件管理器，严禁 UI 层轮询或直接探测平台路径。
@@ -53,7 +58,7 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - **二次确认弹窗统一**：所有破坏性/危险操作（如删除、清空等）必须调用项目通用的 `<ConfirmActionDialog>` 确认弹窗组件，严禁在桌面 Webview 环境中使用原生 `window.confirm()`。
 - **按钮尺寸高度规范**：同一操作组/表单行内的按钮必须具有严格统一的高度（如 32px 紧凑型 / 36px 表单型）、边框半径与内边距，禁止主次按钮尺寸参差不齐。
 - **颜色语义边界**：`--focus-outline` 只用于焦点/选中/拖拽目标的描边或光环；文件相关操作使用 `--folder-accent`，实心主按钮使用 `--button-primary-*`，不要用描边色填充按钮。
-- **滚动条统一走公用组件**：Renderer 中新增或改造的纵向滚动区域，默认必须复用 `features/common/VerticalScrollbar.tsx`，像终端区、文件区一样通过 `scrollRef` 绑定，并隐藏容器原生纵向滚动条；除非用户明确要求特殊行为，禁止在业务组件里单独绘制一套滚动条。横向滚动、第三方编辑器内部滚动和协议组件自带滚动可保留各自实现，但不得替代纵向公用滚动条。
+- **滚动条统一走公用组件**：Renderer 中新增或改造的纵向滚动区域，默认必须复用 `features/common/vertical-scrollbar.tsx`，像终端区、文件区一样通过 `scrollRef` 绑定，并隐藏容器原生纵向滚动条；除非用户明确要求特殊行为，禁止在业务组件里单独绘制一套滚动条。横向滚动、第三方编辑器内部滚动和协议组件自带滚动可保留各自实现，但不得替代纵向公用滚动条。
 
 ### 资源与安全边界
 
@@ -82,9 +87,9 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - Tauri bridge：`apps/tauri/src/bridge/tauri-api.ts`
 - Tauri renderer：`apps/tauri/src/renderer`
 - Renderer hooks：`apps/tauri/src/renderer/hooks/`
-  - `useWorkspaceTabs.ts`、`useWorkspaceModals.ts`、`useFileOperations.ts`
-  - `useSshInteractions.ts`、`useFileEditor.ts`、`useWorkspaceIpcSync.ts`
-  - `useWorkspaceDataOps.ts`
+  - `use-workspace-tabs.ts`、`use-workspace-modals.ts`、`use-file-operations.ts`
+  - `use-ssh-interactions.ts`、`use-file-editor.ts`、`use-workspace-ipc-sync.ts`
+  - `use-workspace-data-ops.ts`
 - Renderer 通用组件：`apps/tauri/src/renderer/features/common/`；跨功能组件的样式统一维护在 `apps/tauri/src/renderer/styles/features/common-controls.css`。
 - Layout、ErrorBoundary、工作区、终端和主题组件：位于 `apps/tauri/src/renderer/`。
 - 领域类型：`packages/core`
@@ -147,19 +152,19 @@ CI（`.github/workflows/ci.yml`）：push/PR 时只执行共享包与 Rust/Tauri
 ### 已完成 ✅
 
 1. 质量门禁三件套：ESLint/Prettier + Husky 提交门禁 + CI 测试集成
-2. `workspace-service.ts` 按 `tabs / sessions / transfers` 拆子模块
-3. `App.tsx` 拆分：7 个 hooks + ModalPortalManager + ErrorBoundary（3898 → 1698 行）
+2. `apps/tauri/src-tauri/src/services/workspace/mod.rs` 按 `tabs / sessions / transfers` 收敛职责
+3. `app.tsx` 拆分：7 个 hooks + `modal-portal-manager.tsx` + `error-boundary.tsx`（3898 → 1698 行）
 4. SSH 与 FTP controller 物理分离
 5. 共享类型收敛到 `packages/core`
 6. 系统信息采集多平台化：Linux / BusyBox / Windows collector + parser 归一化 + CRLF 加固
 7. Windows 终端 POSIX 注入门控 + PowerShell 采集多级 fallback
-8. as any 清理（ssh-session-controller 零命中）+ renderer :any 清理（零命中）
+8. as any 清理（`apps/tauri/src-tauri/src/sessions/ssh/` 零命中）+ renderer :any 清理（零命中）
 9. SSH/FTP controller 直接测试：生命周期、Windows/POSIX 注入门控、FTP 重连与操作串行化
 
 ### 当前重点 🔜
 
 1. 继续稳定主题系统，避免颜色、阴影、圆角散落在业务组件里
-2. 评估 Zustand 状态管理（App.tsx 已拆分 56%，hooks 方案已足够，非必须迁移）
+2. 评估 Zustand 状态管理（`app.tsx` 已拆分 56%，hooks 方案已足够，非必须迁移）
 3. 继续扩展 Rust SSH/FTP service 异常与协议边界测试（基础生命周期覆盖已落地）
 
 ### 可接受债务 📋

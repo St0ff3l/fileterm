@@ -301,4 +301,3 @@ fn read_ui_state(app: &AppHandle) -> Result<serde_json::Map<String, Value>, AppE
 fn write_ui_state(app: &AppHandle, states: serde_json::Map<String, Value>) -> Result<(), AppError> {
     write_json_object(app, "ui-state.json", &Value::Object(states))
 }
-

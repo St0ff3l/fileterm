@@ -420,4 +420,3 @@ async fn test_anthropic_messages(
         .map_err(|error| chat_request_error(error, "连接测试"))?;
     validate_provider_test_response(response).await
 }
-

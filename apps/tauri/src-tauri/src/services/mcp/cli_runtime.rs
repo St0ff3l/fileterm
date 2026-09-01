@@ -295,4 +295,3 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
     let _ = write_cli_jsonl_value(stdout, &response);
     controls.remove(&request_id);
 }
-

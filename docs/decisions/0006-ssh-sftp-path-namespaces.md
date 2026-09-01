@@ -93,7 +93,7 @@ CWD follow failed for /volume1/homes/Stoffel: No such file
 
 当前实现位置：
 
-- `apps/tauri/src-tauri/src/sessions/ssh.rs`：候选生成、SFTP 列目录探测和事件驱动的 CWD 跟随。
+- `apps/tauri/src-tauri/src/sessions/ssh/mod.rs`：候选生成、SFTP 列目录探测和事件驱动的 CWD 跟随。
 - `apps/tauri/src-tauri/src/commands/mod.rs`：重新开启“跟随终端”时的即时恢复路径。
 - `sessions::ssh::tests`：`volumeN`、`/var/services`、Home chroot 和错误类型回归测试。
 

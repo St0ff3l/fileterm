@@ -251,4 +251,3 @@ fn public_app_error(error: AppError) -> String {
         }
     }
 }
-

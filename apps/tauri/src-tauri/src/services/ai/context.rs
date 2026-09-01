@@ -579,4 +579,3 @@ async fn refresh_copilot_prompt_context(
         network_device: attachment.target.network_device,
     }))
 }
-

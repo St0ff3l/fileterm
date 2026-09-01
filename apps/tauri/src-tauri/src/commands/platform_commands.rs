@@ -492,4 +492,3 @@ pub async fn app_list_serial_ports() -> Result<Vec<SerialPortListItem>, AppError
         .await
         .map_err(AppError::Command)
 }
-

@@ -27,4 +27,4 @@ git diff --check
 
 真实 socket 协议夹具位于 `apps/tauri/src-tauri/`，包含本地 OpenSSH SFTP、FTP、显式 FTPS 和隐式 FTPS。受限环境缺少 sshd/openssl 或禁止监听 localhost 时相应用例显示 skipped；普通 macOS/Linux 开发机或 CI 中必须执行为 pass。
 
-Rust 回归位于 `apps/tauri/src-tauri/src/sessions/` 与 `services/transfers.rs`：本地 OpenSSH 覆盖认证、exec、SFTP 和代理链路，本地 FTP/FTPS socket 夹具覆盖明文及两类 TLS 数据通道，并分别断言 `APPE -> SIZE` 与 `APPE 失败 -> REST -> STOR -> SIZE` 的续传命令顺序；transfer 单测覆盖 root 旧 journal 到“两阶段 staging + partial”的迁移。发行候选还需在真实服务器上验证传输期间并发浏览、root 目标目录与 `/var/tmp` 跨文件系统、断线后重新授权继续三项场景。
+Rust 回归位于 `apps/tauri/src-tauri/src/sessions/` 与 `services/transfers/mod.rs`：本地 OpenSSH 覆盖认证、exec、SFTP 和代理链路，本地 FTP/FTPS socket 夹具覆盖明文及两类 TLS 数据通道，并分别断言 `APPE -> SIZE` 与 `APPE 失败 -> REST -> STOR -> SIZE` 的续传命令顺序；transfer 单测覆盖 root 旧 journal 到“两阶段 staging + partial”的迁移。发行候选还需在真实服务器上验证传输期间并发浏览、root 目标目录与 `/var/tmp` 跨文件系统、断线后重新授权继续三项场景。

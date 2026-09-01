@@ -601,4 +601,3 @@ fn print_cli_command_help(command: &str) {
         _ => print_cli_help(),
     }
 }
-

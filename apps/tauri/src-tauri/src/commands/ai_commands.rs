@@ -146,4 +146,3 @@ pub async fn app_retry_ai_chat(
 pub fn app_cancel_ai_chat(request_id: String) -> Result<(), AppError> {
     crate::services::ai::cancel_chat(&request_id)
 }
-

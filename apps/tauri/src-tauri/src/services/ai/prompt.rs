@@ -409,4 +409,3 @@ fn normalize_ai_title_suggestion(value: &str) -> Result<String, AppError> {
         )
     })
 }
-
