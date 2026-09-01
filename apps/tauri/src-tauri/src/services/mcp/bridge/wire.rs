@@ -8,29 +8,37 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum BridgeFrame {
     Hello {
+        #[serde(rename = "protocolVersion")]
         protocol_version: u32,
         token: String,
+        #[serde(rename = "clientId")]
         client_id: String,
     },
     HelloAck {
+        #[serde(rename = "protocolVersion")]
         protocol_version: u32,
+        #[serde(rename = "sessionId")]
         session_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
     Request {
+        #[serde(rename = "requestId")]
         request_id: String,
         request: BridgeRequest,
     },
     Progress {
+        #[serde(rename = "requestId")]
         request_id: String,
         progress: BridgeProgress,
     },
     Response {
+        #[serde(rename = "requestId")]
         request_id: String,
         response: BridgeResponse,
     },
     Cancel {
+        #[serde(rename = "requestId")]
         request_id: String,
     },
     Ping {
