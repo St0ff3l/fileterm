@@ -554,7 +554,8 @@ mod ui_preferences_tests {
         default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
         default_theme_config, default_update_channel, normalize_local_terminal_shells,
         normalize_mcp_operation_policy, normalize_resource_monitoring_metric_order,
-        normalize_theme_config, normalize_ui_preferences, resolve_profile_with_connection_defaults,
+        normalize_theme_config, normalize_ui_preferences, reset_active_theme_for_app_version,
+        resolve_profile_with_connection_defaults,
         LocalTerminalShellPreferences, McpAgentPreferences, SavedTheme, SshConnectionDefaults,
         UiPreferences, UiPreferencesInput,
     };
@@ -669,6 +670,7 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            fileterm_theme_reset_app_version: Some("2.2.8".to_string()),
             custom_themes: vec![
                 SavedTheme {
                     id: "  custom-one  ".to_string(),
@@ -710,11 +712,59 @@ mod ui_preferences_tests {
     }
 
     #[test]
+    fn resets_any_existing_theme_after_each_app_update_without_changing_the_variant() {
+        let mut custom_theme = default_theme_config();
+        custom_theme.code_theme_id = "custom".to_string();
+        custom_theme.base_theme_id = Some("codex".to_string());
+        custom_theme.variant = "light".to_string();
+        custom_theme.theme.accent = "#123456".to_string();
+        let mut preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-light".to_string(),
+            locale: "zhCN".to_string(),
+            theme_config: custom_theme,
+            fileterm_theme_reset_app_version: None,
+            custom_themes: Vec::new(),
+            auto_check_updates: true,
+            update_channel: default_update_channel(),
+            terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
+            file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
+            connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences::default(),
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: default_overview_section_order(),
+        });
+
+        assert!(reset_active_theme_for_app_version(&mut preferences, "2.2.8"));
+        assert_eq!(preferences.theme, "default-light");
+        assert_eq!(preferences.theme_config.code_theme_id, "fileterm");
+        assert_eq!(preferences.theme_config.base_theme_id.as_deref(), Some("fileterm"));
+        assert_eq!(preferences.theme_config.variant, "light");
+        assert_eq!(
+            preferences.fileterm_theme_reset_app_version.as_deref(),
+            Some("2.2.8")
+        );
+
+        preferences.theme_config.code_theme_id = "codex".to_string();
+        preferences.theme_config.base_theme_id = Some("codex".to_string());
+        assert!(!reset_active_theme_for_app_version(&mut preferences, "2.2.8"));
+        assert_eq!(preferences.theme_config.code_theme_id, "codex");
+        assert!(reset_active_theme_for_app_version(&mut preferences, "2.2.9"));
+        assert_eq!(preferences.theme_config.code_theme_id, "fileterm");
+    }
+
+    #[test]
     fn falls_back_to_safe_values_for_unknown_preferences() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
             theme_config: default_theme_config(),
+            fileterm_theme_reset_app_version: Some("2.2.8".to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: false,
             update_channel: "nightly".to_string(),
@@ -736,7 +786,7 @@ mod ui_preferences_tests {
             ],
         });
 
-        assert_eq!(preferences.theme, "default-dark");
+        assert_eq!(preferences.theme, "fileterm-dark");
         assert_eq!(preferences.locale, "zhCN");
         assert_eq!(preferences.update_channel, "stable");
         assert!(preferences.overview_show_recent);
@@ -803,6 +853,7 @@ mod ui_preferences_tests {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
             theme_config: default_theme_config(),
+            fileterm_theme_reset_app_version: Some("2.2.8".to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: false,
             update_channel: "beta".to_string(),
@@ -851,6 +902,7 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            fileterm_theme_reset_app_version: Some("2.2.8".to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: true,
             update_channel: default_update_channel(),
@@ -901,6 +953,7 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            fileterm_theme_reset_app_version: Some("2.2.8".to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: true,
             update_channel: default_update_channel(),
@@ -941,6 +994,7 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            fileterm_theme_reset_app_version: Some("2.2.8".to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: true,
             update_channel: default_update_channel(),
@@ -1111,6 +1165,7 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            fileterm_theme_reset_app_version: Some("2.2.8".to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: false,
             update_channel: "beta".to_string(),

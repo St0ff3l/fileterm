@@ -26,6 +26,15 @@ if effective_resource_monitoring_enabled(profile) {
     let metrics_tid = tab_id.to_string();
     let metrics_plat = platform.to_string();
     let metrics_interval_seconds = resource_monitoring_interval_seconds(profile);
+    // A healthy collector emits at least one marker per configured interval.
+    // Give the server three intervals (and never less than 15s) before
+    // declaring the channel stalled, so a silent jump-host path cannot leave
+    // the sidebar waiting forever with no diagnostic.
+    let metrics_idle_timeout = Duration::from_secs(
+        metrics_interval_seconds
+            .saturating_mul(3)
+            .max(15),
+    );
     let metrics_cancellation = cancellation.clone();
     tokio::spawn(async move {
         crate::services::logging::session(
@@ -169,7 +178,10 @@ if effective_resource_monitoring_enabled(profile) {
             "INFO",
             "metrics",
             &metrics_tid,
-            "collector started; waiting for first sample",
+            format!(
+                "collector started; waiting for first sample idle_timeout_secs={}",
+                metrics_idle_timeout.as_secs()
+            ),
         );
 
         // Stream reader: accumulate data, split on the marker, parse
@@ -189,9 +201,33 @@ if effective_resource_monitoring_enabled(profile) {
                     let _ = channel.close().await;
                     break;
                 }
-                msg = channel.wait() => {
+                msg = timeout(metrics_idle_timeout, channel.wait()) => {
                     match msg {
-                        Some(ChannelMsg::Data { data }) => {
+                        Err(_) => {
+                            crate::services::logging::session(
+                                &metrics_app,
+                                "WARN",
+                                "metrics",
+                                &metrics_tid,
+                                format!(
+                                    "collector idle timeout timeout_secs={} samples={} buffer_bytes={}",
+                                    metrics_idle_timeout.as_secs(),
+                                    sample_count,
+                                    buffer.len(),
+                                ),
+                            );
+                            disable_resource_monitoring_capability(
+                                &metrics_app,
+                                &metrics_tid,
+                                format!(
+                                    "collector idle timeout after {} seconds",
+                                    metrics_idle_timeout.as_secs()
+                                ),
+                            )
+                            .await;
+                            break;
+                        }
+                        Ok(Some(ChannelMsg::Data { data })) => {
                             buffer.extend_from_slice(data.as_ref());
                             // Drain all complete blocks from the buffer.
                             while let Some(idx) = find_subsequence(&buffer, marker_bytes) {
@@ -225,6 +261,18 @@ if effective_resource_monitoring_enabled(profile) {
                                         &metrics_tid,
                                         format!("first sample cpu_percent={cpu_pct:.1} memory_percent={mem_pct:.1}"),
                                     );
+                                } else if sample_count.is_multiple_of(60) {
+                                    crate::services::logging::session(
+                                        &metrics_app,
+                                        "DEBUG",
+                                        "metrics",
+                                        &metrics_tid,
+                                        format!(
+                                            "sample heartbeat count={} cpu_percent={cpu_pct:.1} memory_percent={mem_pct:.1} buffer_bytes={}",
+                                            sample_count,
+                                            buffer.len(),
+                                        ),
+                                    );
                                 }
                                 {
                                     let state = metrics_app
@@ -250,10 +298,10 @@ if effective_resource_monitoring_enabled(profile) {
                                 buffer.drain(..buffer.len() - 500_000);
                             }
                         }
-                        Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        Ok(Some(ChannelMsg::ExtendedData { data, .. })) => {
                             buffer.extend_from_slice(data.as_ref());
                         }
-                        Some(ChannelMsg::ExitStatus { .. }) | None => {
+                        Ok(Some(ChannelMsg::ExitStatus { .. })) | Ok(None) => {
                             if !metrics_cancellation.is_cancelled() {
                                 disable_resource_monitoring_capability(
                                     &metrics_app,

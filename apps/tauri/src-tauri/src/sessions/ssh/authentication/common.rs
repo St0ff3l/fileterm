@@ -66,7 +66,16 @@ async fn authenticate_session(
     interaction: &SshInteractionContext,
     interaction_timeout: Duration,
 ) -> Result<bool, String> {
-    match try_authenticate(
+    interaction.log_interaction(
+        app,
+        "DEBUG",
+        "-",
+        "authentication",
+        "primary",
+        0,
+        format!("started auth_type={auth_type}"),
+    );
+    let result = try_authenticate(
         handle,
         username,
         auth_type,
@@ -75,20 +84,32 @@ async fn authenticate_session(
         interaction,
         interaction_timeout,
     )
-    .await?
-    {
+    .await?;
+    interaction.log_interaction(
+        app,
+        match result {
+            AuthenticationResult::Authenticated => "INFO",
+            AuthenticationResult::KeyboardInteractiveAvailable { .. } => "INFO",
+            AuthenticationResult::Rejected => "WARN",
+        },
+        "-",
+        "authentication",
+        "primary",
+        0,
+        format!("completed result={result:?}"),
+    );
+    match result {
         AuthenticationResult::Authenticated => Ok(true),
         AuthenticationResult::KeyboardInteractiveAvailable { mode } => {
-            crate::services::logging::session(
+            interaction.log_interaction(
                 app,
                 "INFO",
-                "ssh",
-                &interaction.tab_id,
+                "-",
+                "authentication",
+                "keyboard-interactive",
+                0,
                 format!(
-                    "continuing authentication with keyboard-interactive target={} host={}:{}",
-                    interaction.authentication_target.as_str(),
-                    interaction.host,
-                    interaction.port
+                    "continuing mode={mode:?}"
                 ),
             );
             try_keyboard_interactive(

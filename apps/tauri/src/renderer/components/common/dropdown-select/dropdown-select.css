@@ -1,0 +1,223 @@
+/*
+ * Standard Common DropdownSelect Styles
+ * Strictly consumes semantic tokens. Zero hardcoded colors.
+ */
+
+.dropdown-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: var(--control-height-md);
+  padding: 0 var(--control-padding-x-sm);
+  background-color: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color var(--transition-normal),
+    background-color var(--transition-normal),
+    box-shadow var(--transition-normal);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.dropdown-select-trigger:hover:not(:disabled) {
+  border-color: var(--border-default);
+}
+
+.dropdown-select-trigger:focus-visible,
+.dropdown-select-trigger[aria-expanded='true'] {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+  background-color: var(--surface-input-focus);
+}
+
+.dropdown-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dropdown-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.dropdown-select-placeholder {
+  color: var(--text-muted);
+}
+
+.dropdown-select-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform var(--transition-normal);
+}
+
+.dropdown-select-trigger[aria-expanded='true'] .dropdown-select-arrow {
+  transform: rotate(180deg);
+}
+
+/* Dropdown Menu (Portal) */
+.dropdown-select-menu {
+  position: fixed;
+  background-color: var(--surface-modal);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: ft-dropdown-fade-in var(--transition-fast);
+}
+
+.dropdown-select-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  height: var(--control-height-sm);
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.dropdown-select-menu button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.dropdown-select-menu button.is-selected {
+  background-color: var(--surface-active);
+  color: var(--action-primary-bg);
+  font-weight: 500;
+}
+
+.dropdown-select-menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dropdown-select-check-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.dropdown-select-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* macOS Native Select Shell */
+.ft-select-shell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  height: var(--control-height-md);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  box-sizing: border-box;
+  transition:
+    border-color var(--transition-normal),
+    box-shadow var(--transition-normal);
+}
+
+.ft-select-shell:hover {
+  border-color: var(--border-default);
+}
+
+.ft-select-shell:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+
+/* Native select reset: required for the platform-specific shell wrapper. */
+.ft-select-shell select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0 34px 0 var(--control-padding-x-sm);
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.ft-select-shell select:focus,
+.ft-select-shell select:focus-visible {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.ft-select-shell select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ft-select-shell select option {
+  background-color: var(--surface-modal);
+  color: var(--text-primary);
+}
+
+.ft-select-shell__icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-secondary);
+}
+
+@keyframes ft-dropdown-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

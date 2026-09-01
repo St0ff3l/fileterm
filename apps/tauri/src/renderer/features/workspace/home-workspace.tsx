@@ -13,9 +13,11 @@ import type {
   WorkspaceTab
 } from '@fileterm/core'
 import { useEffect, useState } from 'react'
+import type { ThemeMode } from '../../app/theme-config'
 import { t } from '../../i18n'
 import { resolveRendererPlatform } from '../../lib/renderer-platform'
 import { AppIcon } from '../common/app-icon'
+import { PortableUpdateDialog } from '../common/portable-update-dialog'
 import { OverviewPage } from './overview-page'
 import { QuickLinksPage } from './quick-links-page'
 import { ConnectionManagerModal } from '../connections/connection-manager-modal'
@@ -80,7 +82,7 @@ export function HomeWorkspace({
   folders?: ConnectionFolder[]
   commandFolders?: CommandFolder[]
   commandTemplates?: CommandTemplate[]
-  theme: 'default-dark' | 'default-light'
+  theme: ThemeMode
   themeConfig: ThemeConfig
   customThemes: SavedTheme[]
   locale: 'zhCN' | 'enUS'
@@ -111,7 +113,7 @@ export function HomeWorkspace({
   onDeleteCommandFolder(folderId: string): Promise<boolean> | boolean | void
   onUpdateCommandFolder(folderId: string, updates: Partial<CommandFolder>): Promise<boolean> | boolean | void
   onUpdateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<boolean> | boolean | void
-  onSetTheme(value: 'default-dark' | 'default-light'): void
+  onSetTheme(value: ThemeMode): void
   onSetThemeConfig(value: ThemeConfig): void
   onSetCustomThemes(value: SavedTheme[]): void
   onSetLocale(value: 'zhCN' | 'enUS'): void
@@ -164,6 +166,7 @@ export function HomeWorkspace({
   const usesWindowsHomeLayout = rendererPlatform === 'win32' || rendererPlatform === 'linux'
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
+  const [isPortableUpdateDialogOpen, setPortableUpdateDialogOpen] = useState(false)
 
   useEffect(() => {
     if (updatePreviewState) {
@@ -207,7 +210,11 @@ export function HomeWorkspace({
   const updateAction = () => {
     if (updateStatus?.state === 'available') {
       if (updateStatus.updateMode === 'release-page') {
-        void desktopApi?.openExternalUrl(updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
+        if (updateStatus.isPortable) {
+          setPortableUpdateDialogOpen(true)
+        } else {
+          void desktopApi?.openExternalUrl(updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
+        }
       } else {
         void desktopApi?.downloadUpdate()
       }
@@ -532,6 +539,15 @@ export function HomeWorkspace({
           {/* Footer nav hidden: Changelog, API Reference, Status — code/handlers preserved */}
         </footer>
       </main>
+      {isPortableUpdateDialogOpen ? (
+        <PortableUpdateDialog
+          onClose={() => setPortableUpdateDialogOpen(false)}
+          onOpenReleasePage={() => {
+            if (import.meta.env.DEV && !updateStatus?.isPortable) return
+            void desktopApi?.openExternalUrl(updateStatus?.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
+          }}
+        />
+      ) : null}
     </section>
   )
 }

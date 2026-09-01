@@ -1,4 +1,5 @@
 import type { McpAgentClientStatus, SavedTheme, ThemeConfig } from '@fileterm/core'
+import type { ThemeMode } from '../../../app/theme-config'
 import { t } from '../../../i18n'
 import { AppIcon } from '../../common/app-icon'
 import { CloseButton } from '../../common/close-button'
@@ -36,10 +37,10 @@ export function SettingsModal({
   standalone = false,
   inline = false
 }: {
-  theme: 'default-dark' | 'default-light'
+  theme: ThemeMode
   themeConfig: ThemeConfig
   customThemes: SavedTheme[]
-  onSetTheme(value: 'default-dark' | 'default-light'): void
+  onSetTheme(value: ThemeMode): void
   onSetThemeConfig(value: ThemeConfig): void
   onSetCustomThemes(value: SavedTheme[]): void
   locale: 'zhCN' | 'enUS'

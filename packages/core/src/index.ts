@@ -1225,6 +1225,8 @@ interface SshInteractionEnvelope {
   stage: SshInteractionStage
   /** Monotonic order within the connection flow. */
   sequence: number
+  /** Unix epoch milliseconds after which the renderer should dismiss it. */
+  expiresAt?: number
 }
 
 export interface SshHostVerificationRequest extends SshInteractionEnvelope {
@@ -1521,6 +1523,8 @@ export interface ThemeSemanticColors {
   warning: string
   error: string
   success: string
+  primaryAction?: string
+  dangerAction?: string
 }
 
 /**
@@ -1651,7 +1655,9 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
         info: isLight ? '#339cff' : '#38bdf8',
         warning: isLight ? '#b45309' : '#f59e0b',
         error: isLight ? '#ba2623' : '#f43f5e',
-        success: isLight ? '#059669' : '#34d399'
+        success: isLight ? '#059669' : '#34d399',
+        primaryAction: isLight ? '#339cff' : '#0169cc',
+        dangerAction: isLight ? '#dc2626' : '#c93b3b'
       },
       surface: isLight ? '#ffffff' : '#111111',
       surfaceSecondary: isLight ? '#ffffff' : '#181818',
@@ -1705,7 +1711,9 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         info: isLight ? '#3b82f6' : '#38bdf8',
         warning: isLight ? '#d97706' : '#f59e0b',
         error: isLight ? '#d94e4e' : '#ff5f57',
-        success: isLight ? '#168a53' : '#34d399'
+        success: isLight ? '#168a53' : '#34d399',
+        primaryAction: isLight ? '#3b82f6' : '#1687e8',
+        dangerAction: isLight ? '#d32f2f' : '#c93b3b'
       },
       surface: isLight ? '#F4F4F6' : '#151515',
       surfaceSecondary: isLight ? '#ffffff' : '#1e1e1e',
@@ -1714,6 +1722,8 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
     }
   }
 }
+
+export const createFileTermThemeConfig = createDefaultThemeConfig
 
 function asThemeRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -1871,7 +1881,15 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
         info: normalizeThemeColor(rawSemanticColors.info, variantFallback.theme.semanticColors.info),
         warning: normalizeThemeColor(rawSemanticColors.warning, variantFallback.theme.semanticColors.warning),
         error: normalizeThemeColor(rawSemanticColors.error, variantFallback.theme.semanticColors.error),
-        success: normalizedSuccess
+        success: normalizedSuccess,
+        primaryAction: normalizeThemeColor(
+          rawSemanticColors.primaryAction,
+          variantFallback.theme.semanticColors.primaryAction ?? variantFallback.theme.accent
+        ),
+        dangerAction: normalizeThemeColor(
+          rawSemanticColors.dangerAction,
+          variantFallback.theme.semanticColors.dangerAction ?? (variant === 'light' ? '#d32f2f' : '#c93b3b')
+        )
       },
       surface: normalizedSurface,
       surfaceSecondary: normalizedSurfaceSecondary,
@@ -1904,10 +1922,14 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
   }
 }
 
+export type ThemeMode =
+  'fileterm-dark' | 'fileterm-light' | 'codex-dark' | 'codex-light' | 'default-dark' | 'default-light'
+
 export interface UiPreferences {
-  theme: 'default-dark' | 'default-light'
+  theme: ThemeMode
   locale: 'zhCN' | 'enUS'
   themeConfig: ThemeConfig
+  filetermThemeResetAppVersion: string | null
   customThemes: SavedTheme[]
   autoCheckUpdates: boolean
   updateChannel: AppUpdateChannel
@@ -2605,6 +2627,8 @@ export interface AppUpdateStatus {
   state: AppUpdateState
   currentVersion: string
   updateMode?: AppUpdateMode
+  /** Whether this status came from the self-contained Windows portable build. */
+  isPortable?: boolean
   updateChannel?: AppUpdateChannel
   availableVersion?: string
   releaseTag?: string

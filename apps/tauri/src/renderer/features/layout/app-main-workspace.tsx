@@ -153,7 +153,14 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   const { startSidebarResize, startAiCopilotResize } = resize
 
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
-  const brandWidth = isHomeWorkspaceVisible ? resolvedSidebarWidth : 214
+  const activeJumpHost =
+    activeProfile?.type === 'ssh' && activeProfile.jumpProfileId
+      ? (workspace.profiles.find((profile) => profile.id === activeProfile.jumpProfileId) ?? null)
+      : null
+  // Keep the home titlebar brand independent from the collapsed sidebar. When
+  // the sidebar is expanded, its live width still drives the brand column so
+  // the two boundaries track together during a resize.
+  const brandWidth = isHomeWorkspaceVisible && !isSystemSidebarCollapsed ? sidebarWidth : 214
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
@@ -423,6 +430,9 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           activeProfileId={activeTab?.profileId}
           activeTabId={activeTab?.id ?? null}
           activeTabStatus={activeTab?.status ?? null}
+          activeJumpHost={
+            activeJumpHost ? { name: activeJumpHost.name, host: activeJumpHost.host, port: activeJumpHost.port } : null
+          }
           activeTabSource={activeTab?.source ?? null}
           desktopApi={desktopApi}
           fullWidth={!shouldShowSystemSidebar}

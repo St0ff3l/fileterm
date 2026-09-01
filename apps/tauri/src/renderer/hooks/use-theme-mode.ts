@@ -4,17 +4,12 @@ import { applyThemeVariables, clearThemeVariables, type ThemeMode } from '../app
 
 export type { ThemeMode } from '../app/theme-config'
 
-export function useThemeMode(themeName: ThemeMode = 'default-dark', themeConfig?: ThemeConfig) {
+export function useThemeMode(themeName: ThemeMode = 'fileterm-dark', themeConfig?: ThemeConfig) {
   useEffect(() => {
     applyThemeVariables(themeName, themeConfig)
     return () => {
-      if (document.documentElement.dataset.theme === themeName) {
-        clearThemeVariables()
-        delete document.documentElement.dataset.theme
-      }
-      if (document.documentElement.style.colorScheme === (themeName === 'default-light' ? 'light' : 'dark')) {
-        document.documentElement.style.removeProperty('color-scheme')
-      }
+      clearThemeVariables()
+      document.documentElement.style.removeProperty('color-scheme')
     }
   }, [themeConfig, themeName])
 }

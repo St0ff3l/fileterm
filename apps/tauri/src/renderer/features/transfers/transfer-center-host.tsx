@@ -7,10 +7,17 @@ import type {
 } from '@fileterm/core'
 import { TransferCenter } from './transfer-center'
 
+type JumpHostSummary = {
+  name: string
+  host: string
+  port: number
+}
+
 export function TransferCenterHost({
   activeProfileId,
   activeTabId,
   activeTabStatus,
+  activeJumpHost,
   activeTabSource,
   desktopApi,
   fullWidth,
@@ -25,6 +32,7 @@ export function TransferCenterHost({
   activeProfileId?: string
   activeTabId: string | null
   activeTabStatus: WorkspaceTab['status'] | null
+  activeJumpHost?: JumpHostSummary | null
   activeTabSource: WorkspaceSessionSource | null
   desktopApi?: FileTermDesktopApi
   fullWidth: boolean
@@ -41,6 +49,7 @@ export function TransferCenterHost({
       activeProfileId={activeProfileId}
       activeTabId={activeTabId}
       activeTabStatus={activeTabStatus}
+      activeJumpHost={activeJumpHost}
       activeTabSource={activeTabSource}
       desktopApi={desktopApi}
       fullWidth={fullWidth}

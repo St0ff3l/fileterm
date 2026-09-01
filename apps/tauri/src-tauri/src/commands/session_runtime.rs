@@ -54,7 +54,14 @@ async fn send_worker_file_cmd_with_response_timeout<T>(
         .await
         .get(tab_id)
         .cloned()
-        .ok_or_else(|| AppError::Storage("Session not found".to_string()))?;
+        .ok_or_else(|| {
+            crate::services::logging::warn(
+                app,
+                &format!("worker:{tab_id}"),
+                "file command rejected: session not found",
+            );
+            AppError::Storage("Session not found".to_string())
+        })?;
     let (tx, rx) = oneshot::channel();
     let cancellation = CancellationToken::new();
     let cmd = make_cmd(tx, cancellation.clone());
@@ -63,10 +70,23 @@ async fn send_worker_file_cmd_with_response_timeout<T>(
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
             cancellation.cancel();
+            crate::services::logging::warn(
+                app,
+                &format!("worker:{tab_id}"),
+                format!("file command send failed error={error}"),
+            );
             return Err(AppError::Storage(error.to_string()));
         }
         Err(_) => {
             cancellation.cancel();
+            crate::services::logging::warn(
+                app,
+                &format!("worker:{tab_id}"),
+                format!(
+                    "file command send timed out timeout_secs={}",
+                    WORKER_FILE_CMD_SEND_TIMEOUT.as_secs()
+                ),
+            );
             return Err(AppError::Storage(
                 "Worker busy: command send timeout".to_string(),
             ));
@@ -75,13 +95,33 @@ async fn send_worker_file_cmd_with_response_timeout<T>(
 
     match timeout(response_timeout, rx).await {
         Ok(Ok(Ok(result))) => Ok(result),
-        Ok(Ok(Err(error))) => Err(AppError::Storage(error)),
+        Ok(Ok(Err(error))) => {
+            crate::services::logging::warn(
+                app,
+                &format!("worker:{tab_id}"),
+                format!("file command failed error={error}"),
+            );
+            Err(AppError::Storage(error))
+        }
         Ok(Err(error)) => {
             cancellation.cancel();
+            crate::services::logging::warn(
+                app,
+                &format!("worker:{tab_id}"),
+                format!("file command receiver closed error={error}"),
+            );
             Err(AppError::Storage(error.to_string()))
         }
         Err(_) => {
             cancellation.cancel();
+            crate::services::logging::warn(
+                app,
+                &format!("worker:{tab_id}"),
+                format!(
+                    "file command response timed out timeout_secs={}",
+                    response_timeout.as_secs()
+                ),
+            );
             Err(AppError::Storage(
                 "远程操作超时，后台操作已取消，请检查连接后重试".to_string(),
             ))
@@ -165,12 +205,43 @@ pub(crate) async fn send_worker_cmd_with_response_timeout_cancellable<T>(
 }
 
 async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Result<(), AppError> {
-    let files = send_worker_file_cmd(app, tab_id, |tx, cancellation| WorkerCmd::ListRemoteFiles {
-        path: path.to_string(),
-        cancellation,
-        respond_to: tx,
+    let started_at = Instant::now();
+    crate::services::logging::debug(
+        app,
+        &format!("sftp:{tab_id}"),
+        format!("remote directory listing started path={path}"),
+    );
+    let files = match send_worker_file_cmd(app, tab_id, |tx, cancellation| {
+        WorkerCmd::ListRemoteFiles {
+            path: path.to_string(),
+            cancellation,
+            respond_to: tx,
+        }
     })
-    .await?;
+    .await
+    {
+        Ok(files) => files,
+        Err(error) => {
+            crate::services::logging::warn(
+                app,
+                &format!("sftp:{tab_id}"),
+                format!(
+                    "remote directory listing failed path={path} elapsed_ms={} error={error}",
+                    started_at.elapsed().as_millis()
+                ),
+            );
+            return Err(error);
+        }
+    };
+    crate::services::logging::debug(
+        app,
+        &format!("sftp:{tab_id}"),
+        format!(
+            "remote directory listing completed path={path} entries={} elapsed_ms={}",
+            files.len(),
+            started_at.elapsed().as_millis()
+        ),
+    );
 
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let mut sessions = state.sessions.write().await;

@@ -18,6 +18,17 @@ import { withParentRow } from '../app/app-utils'
 import { t, type AppLocale } from '../i18n'
 import { resolveRendererPlatform } from '../lib/renderer-platform'
 import type { ThemeMode } from './use-theme-mode'
+
+function isThemeMode(val: unknown): val is ThemeMode {
+  return (
+    val === 'fileterm-dark' ||
+    val === 'fileterm-light' ||
+    val === 'codex-dark' ||
+    val === 'codex-light' ||
+    val === 'default-dark' ||
+    val === 'default-light'
+  )
+}
 import {
   sameSyncedUiPreferences,
   syncedUiPreferencesFrom,
@@ -290,7 +301,7 @@ export function useWorkspaceIpcSync({
 
     return desktopApi.onUiPreferencesChanged((preferences) => {
       lastPersistedUiPreferencesRef.current = syncedUiPreferencesFrom(preferences)
-      if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
+      if (isThemeMode(preferences.theme)) {
         onThemeModeChangeRef.current(preferences.theme)
       }
       onThemeConfigChangeRef.current(preferences.themeConfig)
@@ -328,7 +339,7 @@ export function useWorkspaceIpcSync({
         }
         lastPersistedUiPreferencesRef.current = syncedUiPreferencesFrom(preferences)
         setCanPersistUiPreferences(true)
-        if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
+        if (isThemeMode(preferences.theme)) {
           onThemeModeChangeRef.current(preferences.theme)
         }
         onThemeConfigChangeRef.current(preferences.themeConfig)

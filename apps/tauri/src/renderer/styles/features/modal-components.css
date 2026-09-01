@@ -1096,7 +1096,7 @@
   align-items: center;
   gap: 4px;
   padding: 4px;
-  background: var(--bg-sidebar, rgba(0, 0, 0, 0.2));
+  background: var(--surface-sidebar);
   border: 1px solid var(--border-light);
   border-radius: 10px;
   width: fit-content;
@@ -1131,15 +1131,15 @@
 .sync-subtab-button:hover,
 .agent-mcp-subtab-button:hover {
   color: var(--text-main);
-  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  background: var(--surface-hover);
 }
 
 .sync-subtab-button.active,
 .agent-mcp-subtab-button.active {
-  background: var(--bg-card, #2b2b2b) !important;
-  color: var(--text-main) !important;
+  background: var(--surface-card) !important;
+  color: var(--text-primary) !important;
   font-weight: 600;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-sm);
 }
 
 .sync-subtab-button:focus-visible,
@@ -1594,12 +1594,12 @@
 }
 
 .update-status-indicator.error {
-  background: var(--danger, #dc2626);
+  background: var(--status-danger);
 }
 
 .update-status-indicator.checking,
 .update-status-indicator.downloading {
-  background: var(--warning, #d97706);
+  background: var(--status-warning);
 }
 
 .update-progress {
@@ -1686,11 +1686,11 @@
 }
 
 .theme-card.dark .theme-card-preview {
-  background: #141414;
+  background: var(--theme-preview-dark-canvas);
 }
 
 .theme-card.light .theme-card-preview {
-  background: #f5f5f5;
+  background: var(--theme-preview-light-canvas);
 }
 
 .preview-header {
@@ -1710,25 +1710,25 @@
 }
 
 .preview-header .dot-close {
-  background: #ff5f57;
+  background: var(--traffic-close);
 }
 
 .preview-header .dot-min {
-  background: #ffbd2e;
+  background: var(--traffic-minimize);
 }
 
 .preview-header .dot-max {
-  background: #27c93f;
+  background: var(--traffic-maximize);
 }
 
 .theme-card.dark .preview-header {
-  background: #1e1e1e;
-  border-bottom-color: #2e2e2e;
+  background: var(--theme-preview-dark-header);
+  border-bottom-color: var(--theme-preview-dark-divider);
 }
 
 .theme-card.light .preview-header {
-  background: #e8e8e8;
-  border-bottom-color: #dcdcdc;
+  background: var(--theme-preview-light-header);
+  border-bottom-color: var(--theme-preview-light-divider);
 }
 
 .preview-body {
@@ -1742,13 +1742,13 @@
 }
 
 .theme-card.dark .preview-sidebar {
-  background: #1a1a1a;
-  border-right-color: #2e2e2e;
+  background: var(--theme-preview-dark-sidebar);
+  border-right-color: var(--theme-preview-dark-divider);
 }
 
 .theme-card.light .preview-sidebar {
-  background: #f0f0f0;
-  border-right-color: #dcdcdc;
+  background: var(--theme-preview-light-sidebar);
+  border-right-color: var(--theme-preview-light-divider);
 }
 
 .preview-content {
@@ -1764,7 +1764,7 @@
   display: block;
   width: 65%;
   height: 5px;
-  background: #2e2e2e;
+  background: var(--theme-preview-dark-content);
   border-radius: 2px;
 }
 
@@ -1773,7 +1773,7 @@
   display: block;
   width: 65%;
   height: 5px;
-  background: #dcdcdc;
+  background: var(--theme-preview-light-content);
   border-radius: 2px;
 }
 
@@ -1969,10 +1969,10 @@
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 40%, var(--border-light));
+  border: 1px solid color-mix(in srgb, var(--status-danger) 40%, var(--border-subtle));
   border-radius: var(--radius-md, 6px);
-  background: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--bg-card));
-  color: var(--danger, #ef4444);
+  background: color-mix(in srgb, var(--status-danger) 10%, var(--surface-card));
+  color: var(--status-danger);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   white-space: nowrap;
@@ -1984,27 +1984,27 @@
 }
 
 .settings-modal .theme-config-actions-control .theme-config-danger-button:hover:not(:disabled) {
-  border-color: var(--danger, #ef4444);
-  background: color-mix(in srgb, var(--danger, #ef4444) 18%, var(--bg-card));
-  color: var(--danger, #ef4444);
+  border-color: var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 18%, var(--surface-card));
+  color: var(--status-danger);
 }
 
 .settings-modal .theme-config-actions-control .theme-config-danger-button:focus-visible {
   outline: none;
-  border-color: var(--danger, #ef4444);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger, #ef4444) 25%, transparent);
+  border-color: var(--status-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger) 25%, transparent);
 }
 
 .theme-config-select.dropdown-select-trigger:hover:not(:disabled),
-.theme-config-select.ft-select-shell select:hover:not(:disabled) {
+.theme-config-select.ft-select-shell:hover {
   border-color: var(--focus-outline);
 }
 
 .theme-config-select.dropdown-select-trigger:focus-visible,
-.theme-config-select.ft-select-shell select:focus-visible {
+.theme-config-select.ft-select-shell:focus-within {
   outline: none;
   border-color: var(--focus-outline);
-  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 .theme-config-preview {
@@ -2423,7 +2423,7 @@
   font-size: 11px;
   font-weight: 600;
   padding: 2px 6px;
-  background: var(--surface-inset, rgba(255, 255, 255, 0.06));
+  background: var(--surface-inset);
   border: 1px solid var(--border-light);
   border-radius: 4px;
 }
@@ -2512,7 +2512,7 @@
 }
 
 .theme-config-action-status.is-warning {
-  color: var(--warning, #f59e0b);
+  color: var(--status-warning);
 }
 
 .theme-config-action-status.is-success {
@@ -2882,13 +2882,13 @@
 }
 
 .sync-op-badge.upload {
-  background: color-mix(in srgb, var(--accent-highlight, #3b82f6) 14%, var(--bg-hover));
-  color: var(--accent-highlight, #3b82f6);
+  background: color-mix(in srgb, var(--accent-secondary) 14%, var(--surface-hover));
+  color: var(--accent-secondary);
 }
 
 .sync-op-badge.download {
-  background: color-mix(in srgb, #10b981 14%, var(--bg-hover));
-  color: #10b981;
+  background: color-mix(in srgb, var(--status-success) 14%, var(--surface-hover));
+  color: var(--status-success);
 }
 
 .sync-op-name {
@@ -3065,7 +3065,7 @@
   text-align: right;
 }
 .connection-import-item.is-invalid .connection-import-item-status {
-  color: var(--danger-text, #d86666);
+  color: var(--status-danger);
 }
 .connection-import-actions {
   display: flex;

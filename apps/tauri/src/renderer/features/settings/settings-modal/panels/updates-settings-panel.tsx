@@ -1,6 +1,8 @@
 import type { AppUpdateStatus, FileTermDesktopApi, UiPreferences } from '@fileterm/core'
+import { useState } from 'react'
 import { AppIcon } from '../../../common/app-icon'
 import { DropdownSelect } from '../../../common/dropdown-select'
+import { PortableUpdateDialog } from '../../../common/portable-update-dialog'
 import { StableButtonContent, StableButtonLabel } from '../../../common/stable-button-content'
 import { type LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
@@ -29,6 +31,7 @@ export function UpdatesSettingsPanel() {
     updateChannel,
     setUpdateChannelPreference
   } = useSettingsModalContext<UpdatesSettingsPanelContext>()
+  const [isPortableUpdateDialogOpen, setPortableUpdateDialogOpen] = useState(false)
 
   return (
     <div className="settings-panel">
@@ -85,9 +88,13 @@ export function UpdatesSettingsPanel() {
               className="primary-button compact"
               onClick={() => {
                 if (updateStatus.updateMode === 'release-page') {
-                  void desktopApi?.openExternalUrl(
-                    updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases'
-                  )
+                  if (updateStatus.isPortable) {
+                    setPortableUpdateDialogOpen(true)
+                  } else {
+                    void desktopApi?.openExternalUrl(
+                      updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases'
+                    )
+                  }
                 } else {
                   void desktopApi?.downloadUpdate()
                 }
@@ -123,6 +130,14 @@ export function UpdatesSettingsPanel() {
           ) : null}
         </div>
       </section>
+      {isPortableUpdateDialogOpen ? (
+        <PortableUpdateDialog
+          onClose={() => setPortableUpdateDialogOpen(false)}
+          onOpenReleasePage={() =>
+            void desktopApi?.openExternalUrl(updateStatus?.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
+          }
+        />
+      ) : null}
     </div>
   )
 }

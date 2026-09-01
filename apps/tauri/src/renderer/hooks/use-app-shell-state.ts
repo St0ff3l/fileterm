@@ -17,7 +17,7 @@ import {
   type ThemeConfig,
   type UiPreferences
 } from '@fileterm/core'
-import { deriveThemeVariant, normalizeSavedTheme } from '../app/theme-config'
+import { deriveThemeVariant, normalizeSavedTheme, themeVariantForMode } from '../app/theme-config'
 import { registerImportedFonts } from '../app/imported-fonts'
 import { formatAppError, reportError, type ErrorDetails } from '../app/app-error-utils'
 import { DEFAULT_SIDEBAR_WIDTH, FILE_PANEL_PREFERENCES_KEY, MAX_FILE_PANEL_RATIO } from '../app/app-shell-utils'
@@ -60,15 +60,26 @@ export type AppShellOptions = {
   rendererPlatform: ReturnType<typeof resolveRendererPlatform>
 }
 
+function isThemeMode(val: unknown): val is ThemeMode {
+  return (
+    val === 'fileterm-dark' ||
+    val === 'fileterm-light' ||
+    val === 'codex-dark' ||
+    val === 'codex-light' ||
+    val === 'default-dark' ||
+    val === 'default-light'
+  )
+}
+
 function readInitialTheme(searchParams: URLSearchParams, persistedPreferences?: InitialUiPreferences): ThemeMode {
   const queryTheme = searchParams.get('theme')
-  if (queryTheme === 'default-light' || queryTheme === 'default-dark') {
+  if (isThemeMode(queryTheme)) {
     return queryTheme
   }
-  if (persistedPreferences?.theme === 'default-light' || persistedPreferences?.theme === 'default-dark') {
+  if (isThemeMode(persistedPreferences?.theme)) {
     return persistedPreferences.theme
   }
-  return 'default-dark'
+  return 'fileterm-dark'
 }
 
 function readInitialLocale(searchParams: URLSearchParams, persistedPreferences?: InitialUiPreferences): AppLocale {
@@ -104,7 +115,7 @@ export function useAppShellState({
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams, initialUiPreferences))
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => {
     const initialTheme = readInitialTheme(searchParams, initialUiPreferences)
-    const variant = initialTheme === 'default-light' ? 'light' : 'dark'
+    const variant = themeVariantForMode(initialTheme)
     return initialUiPreferences?.themeConfig
       ? normalizeThemeConfig(initialUiPreferences.themeConfig, variant)
       : createDefaultThemeConfig(variant)
@@ -229,7 +240,7 @@ export function useAppShellState({
   const handleSetTheme = useCallback((nextTheme: ThemeMode) => {
     setThemeMode(nextTheme)
     setThemeConfig((current) => {
-      const nextVariant = nextTheme === 'default-light' ? 'light' : 'dark'
+      const nextVariant = themeVariantForMode(nextTheme)
       if (current.variant === nextVariant) return current
       if (current.codeThemeId === 'codex' || current.codeThemeId.startsWith('codex-')) {
         return createCodexThemeConfig(nextVariant)

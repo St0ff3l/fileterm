@@ -35,6 +35,10 @@ pub struct UiPreferences {
     pub locale: String,
     #[serde(default = "default_theme_config")]
     pub theme_config: ThemeConfig,
+    /// The app version that last reset the active theme family to FileTerm.
+    /// A different version means the user has installed an update.
+    #[serde(default)]
+    pub fileterm_theme_reset_app_version: Option<String>,
     #[serde(default)]
     pub custom_themes: Vec<SavedTheme>,
     #[serde(default = "default_auto_check_updates")]
@@ -90,7 +94,7 @@ pub struct UiPreferencesInput {
     pub overview_section_order: Option<Vec<String>>,
 }
 
-const DEFAULT_UI_THEME: &str = "default-dark";
+const DEFAULT_UI_THEME: &str = "fileterm-dark";
 const DEFAULT_UI_LOCALE: &str = "zhCN";
 const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
     ["stats", "recent", "allConnections", "quickActions"];
@@ -399,7 +403,15 @@ fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
 }
 
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
-    if !matches!(preferences.theme.as_str(), "default-dark" | "default-light") {
+    if !matches!(
+        preferences.theme.as_str(),
+        "fileterm-dark"
+            | "fileterm-light"
+            | "codex-dark"
+            | "codex-light"
+            | "default-dark"
+            | "default-light"
+    ) {
         preferences.theme = DEFAULT_UI_THEME.to_string();
     }
     if !matches!(preferences.locale.as_str(), "zhCN" | "enUS") {
@@ -475,6 +487,24 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     );
     preferences.custom_themes = normalize_saved_themes(preferences.custom_themes);
     preferences
+}
+
+/// Apply the product-default theme after an application update. The selected
+/// dark/light variant and saved theme library remain intact; only the active
+/// theme family changes. Reopening the same app version is a no-op.
+fn reset_active_theme_for_app_version(preferences: &mut UiPreferences, app_version: &str) -> bool {
+    if preferences.fileterm_theme_reset_app_version.as_deref() == Some(app_version) {
+        return false;
+    }
+
+    let variant = if preferences.theme == "default-light" {
+        "light"
+    } else {
+        "dark"
+    };
+    preferences.theme_config = default_theme_config_for_variant(variant);
+    preferences.fileterm_theme_reset_app_version = Some(app_version.to_string());
+    true
 }
 
 /// Resolve the effective SSH behavior for a live session without mutating the

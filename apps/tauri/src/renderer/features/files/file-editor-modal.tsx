@@ -3,6 +3,7 @@ import Editor, { loader, type Monaco, type OnMount } from '@monaco-editor/react'
 import OpenCC from 'opencc-js'
 import * as monacoEditor from 'monaco-editor'
 import type { FileContentSnapshot } from '@fileterm/core'
+import { isDarkTheme, type ThemeMode } from '../../app/theme-config'
 import { t } from '../../i18n'
 import { getConfiguredMonoFontFamily, observeCanvasTextMetrics } from '../../app/font-metrics'
 import { CloseButton } from '../common/close-button'
@@ -78,7 +79,7 @@ export function FileEditorModal({
   onReloadWithEncoding(encoding: string): void
   onSave(content: string, encoding: string): void
   standalone?: boolean
-  themeMode: string
+  themeMode: ThemeMode
 }) {
   const [content, setContent] = useState(file.content)
   const [encoding, setEncoding] = useState(file.encoding ?? 'utf-8')
@@ -158,7 +159,7 @@ export function FileEditorModal({
     setLanguages(sortEditorLanguages(monaco.languages.getLanguages()))
 
     defineFileTermMonacoTheme(monaco)
-    monaco.editor.setTheme(themeMode === 'default-dark' ? MONACO_DARK_THEME : 'vs')
+    monaco.editor.setTheme(isDarkTheme(themeMode) ? MONACO_DARK_THEME : 'vs')
     setLanguage(editor.getModel()?.getLanguageId() ?? 'plaintext')
 
     // Monaco caches both font widths and line rendering. Unlike normal DOM
@@ -198,7 +199,7 @@ export function FileEditorModal({
       return
     }
     defineFileTermMonacoTheme(monacoRef.current)
-    monacoRef.current.editor.setTheme(themeMode === 'default-dark' ? MONACO_DARK_THEME : 'vs')
+    monacoRef.current.editor.setTheme(isDarkTheme(themeMode) ? MONACO_DARK_THEME : 'vs')
   }, [themeMode])
 
   useEffect(() => {
@@ -395,7 +396,7 @@ export function FileEditorModal({
                   lineNumbers: showLineNumbers ? 'on' : 'off'
                 }}
                 path={file.path}
-                theme={themeMode === 'default-dark' ? MONACO_DARK_THEME : 'vs'}
+                theme={isDarkTheme(themeMode) ? MONACO_DARK_THEME : 'vs'}
                 value={content}
               />
             </div>

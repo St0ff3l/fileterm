@@ -71,17 +71,33 @@ async fn ensure_password_credentials(
         return Ok(());
     };
     let request_id = uuid::Uuid::new_v4().to_string();
+    let sequence = interaction.next_sequence();
+    let expires_at = ssh_interaction_expires_at(interaction_timeout);
+    let username_present = profile
+        .get("username")
+        .and_then(Value::as_str)
+        .is_some_and(|username| !username.trim().is_empty());
     let (tx, rx) = oneshot::channel::<Value>();
-    {
+    let pending_count = {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
-        state
-            .pending_interactions
-            .write()
-            .await
-            .insert(request_id.clone(), tx);
-    }
+        let mut pending = state.pending_interactions.write().await;
+        pending.insert(request_id.clone(), tx);
+        pending.len()
+    };
+    interaction.log_interaction(
+        app,
+        "DEBUG",
+        &request_id,
+        "credentials",
+        "credentials",
+        sequence,
+        format!(
+            "queued reason={reason} username_present={username_present} pending={pending_count} timeout_secs={}",
+            interaction_timeout.as_secs()
+        ),
+    );
     let payload = serde_json::json!({
-        "requestId": request_id,
+        "requestId": request_id.clone(),
         "kind": "credentials",
         "flowId": interaction.flow.flow_id,
         "tabId": interaction.tab_id,
@@ -90,7 +106,8 @@ async fn ensure_password_credentials(
         "authenticationTarget": interaction.authentication_target.as_str(),
         "hopIndex": interaction.hop_index,
         "stage": "credentials",
-        "sequence": interaction.next_sequence(),
+        "sequence": sequence,
+        "expiresAt": expires_at,
         "host": interaction.host,
         "port": interaction.port,
         "username": profile.get("username").and_then(Value::as_str),
@@ -102,31 +119,66 @@ async fn ensure_password_credentials(
         interaction.interaction_window_label.as_deref(),
         &payload,
     ) {
-        app.state::<crate::services::workspace::WorkspaceState>()
-            .pending_interactions
-            .write()
-            .await
-            .remove(&request_id);
+        let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
+        interaction.log_interaction(
+            app,
+            "WARN",
+            &request_id,
+            "credentials",
+            "credentials",
+            sequence,
+            format!("event emission failed pending={pending_after} error={error}"),
+        );
         return Err(error.to_string());
     }
 
     let response = match timeout(interaction_timeout, rx).await {
         Ok(Ok(response)) => response,
-        Ok(Err(_)) => return Err("SSH credentials request canceled".to_string()),
+        Ok(Err(_)) => {
+            let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
+            interaction.log_interaction(
+                app,
+                "WARN",
+                &request_id,
+                "credentials",
+                "credentials",
+                sequence,
+                format!("renderer receiver closed pending={pending_after}"),
+            );
+            return Err("SSH credentials request canceled".to_string());
+        }
         Err(_) => {
-            app.state::<crate::services::workspace::WorkspaceState>()
-                .pending_interactions
-                .write()
-                .await
-                .remove(&request_id);
+            let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
+            interaction.log_interaction(
+                app,
+                "WARN",
+                &request_id,
+                "credentials",
+                "credentials",
+                sequence,
+                format!(
+                    "expired reason=interaction-timeout timeout_secs={} pending={pending_after}",
+                    interaction_timeout.as_secs()
+                ),
+            );
             return Err("SSH credentials request timed out".to_string());
         }
     };
+    let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
     if response
         .get("canceled")
         .and_then(Value::as_bool)
         .unwrap_or(false)
     {
+        interaction.log_interaction(
+            app,
+            "INFO",
+            &request_id,
+            "credentials",
+            "credentials",
+            sequence,
+            format!("resolved canceled=true pending={pending_after}"),
+        );
         return Err("SSH credentials request canceled".to_string());
     }
     let username = response
@@ -139,6 +191,19 @@ async fn ensure_password_credentials(
         .and_then(Value::as_str)
         .unwrap_or("");
     if username.is_empty() || password.is_empty() {
+        interaction.log_interaction(
+            app,
+            "WARN",
+            &request_id,
+            "credentials",
+            "credentials",
+            sequence,
+            format!(
+                "resolved with incomplete values username_present={} password_present={} pending={pending_after}",
+                !username.is_empty(),
+                !password.is_empty(),
+            ),
+        );
         return Err("SSH username and password are required".to_string());
     }
     let object = profile
@@ -146,5 +211,14 @@ async fn ensure_password_credentials(
         .ok_or_else(|| "SSH profile is invalid".to_string())?;
     object.insert("username".to_string(), Value::String(username.to_string()));
     object.insert("password".to_string(), Value::String(password.to_string()));
+    interaction.log_interaction(
+        app,
+        "INFO",
+        &request_id,
+        "credentials",
+        "credentials",
+        sequence,
+        format!("resolved canceled=false username_present=true password_present=true pending={pending_after}"),
+    );
     Ok(())
 }

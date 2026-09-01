@@ -17,7 +17,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, LazyLock, Mutex as StdMutex,
 };
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use russh::client::{Handle, Handler};
@@ -53,10 +53,11 @@ use crate::services::{
 const DEFAULT_SSH_KEY_FILES: [&str; 4] = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"];
 const SSH_INTERACTION_TIMEOUT: Duration = Duration::from_secs(300);
 // Connection tests are transient and have no workspace session to keep alive.
-// If a first-time host-key prompt cannot be observed by the form, release the
-// SSH handshake promptly instead of occupying a server-side unauthenticated
-// slot for the normal five-minute interaction window.
-const SSH_CONNECTION_TEST_INTERACTION_TIMEOUT: Duration = Duration::from_secs(30);
+// Keep the prompt window long enough for a human to retrieve an OTP/security
+// key response. The old 30s budget left a visible MFA dialog alive after the
+// backend had already removed its pending request, so the next click returned
+// "SSH interaction request is no longer pending".
+const SSH_CONNECTION_TEST_INTERACTION_TIMEOUT: Duration = Duration::from_secs(120);
 // A TCP connection, SSH protocol handshake, or password-auth reply can remain
 // pending indefinitely on a broken server or middlebox. Keep each startup
 // stage bounded so the workspace moves out of `connecting` and the user can
@@ -208,6 +209,58 @@ impl SshInteractionContext {
     fn next_sequence(&self) -> u64 {
         self.flow.next_sequence()
     }
+
+    /// Write a single, searchable interaction line without ever including
+    /// prompt text or user-entered answers. Request/flow ids make jump-host
+    /// and target-hop races diagnosable while the logger's redaction layer
+    /// remains a final safety net for error strings.
+    #[allow(clippy::too_many_arguments)] // The log line deliberately carries the full SSH interaction identity.
+    fn log_interaction(
+        &self,
+        app: &AppHandle,
+        level: &str,
+        request_id: &str,
+        kind: &str,
+        stage: &str,
+        sequence: u64,
+        message: impl AsRef<str>,
+    ) {
+        crate::services::logging::session(
+            app,
+            level,
+            "ssh",
+            &self.tab_id,
+            format!(
+                "interaction flow_id={} request_id={} kind={} stage={} target={} hop={} sequence={} host={} port={} {}",
+                self.flow.flow_id,
+                request_id.escape_default(),
+                kind,
+                stage,
+                self.authentication_target.as_str(),
+                self.hop_index,
+                sequence,
+                self.host,
+                self.port,
+                message.as_ref(),
+            ),
+        );
+    }
+}
+
+async fn remove_pending_ssh_interaction(app: &AppHandle, request_id: &str) -> (bool, usize) {
+    let state = app
+        .state::<crate::services::workspace::WorkspaceState>();
+    let mut pending = state.pending_interactions.write().await;
+    let removed = pending.remove(request_id).is_some();
+    (removed, pending.len())
+}
+
+fn ssh_interaction_expires_at(deadline: Duration) -> u64 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    now.saturating_add(deadline.as_millis()).min(u64::MAX as u128) as u64
 }
 
 fn read_shared_remote_sshid(remote_sshid: &SharedRemoteSshId) -> Vec<u8> {

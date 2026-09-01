@@ -1,0 +1,60 @@
+/*
+ * Standard Common Card Styles
+ * Strictly consumes semantic tokens. Zero hardcoded colors.
+ */
+
+.ft-card {
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition:
+    border-color var(--transition-normal),
+    box-shadow var(--transition-normal);
+}
+
+.ft-card--hoverable:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+.ft-card--elevated {
+  background-color: var(--surface-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.ft-card--flat {
+  box-shadow: none;
+}
+
+.ft-card__header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ft-card__title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ft-card__body {
+  padding: 16px;
+}
+
+.ft-card__footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background-color: var(--surface-hover);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}

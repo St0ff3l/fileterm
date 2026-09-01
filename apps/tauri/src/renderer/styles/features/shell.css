@@ -667,6 +667,14 @@
   line-height: 1;
 }
 
+.network-rate.up {
+  color: var(--network-tx);
+}
+
+.network-rate.down {
+  color: var(--network-rx);
+}
+
 .network-select {
   flex: none;
   min-width: 0;

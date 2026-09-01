@@ -166,17 +166,17 @@ export function localTerminalShellOptionsFor(detectedOptions: LocalTerminalShell
 export const THEME_PRESETS: Array<{
   id: ThemePresetFamily
   labelKey: 'themePresetFileTerm' | 'themePresetCodex'
-  config: Record<ThemePresetVariant, ThemeConfig>
+  getConfig: (variant: ThemePresetVariant) => ThemeConfig
 }> = [
   {
     id: 'fileterm',
     labelKey: 'themePresetFileTerm',
-    config: { dark: createDefaultThemeConfig('dark'), light: createDefaultThemeConfig('light') }
+    getConfig: (variant) => createDefaultThemeConfig(variant)
   },
   {
     id: 'codex',
     labelKey: 'themePresetCodex',
-    config: { dark: createCodexThemeConfig('dark'), light: createCodexThemeConfig('light') }
+    getConfig: (variant) => createCodexThemeConfig(variant)
   }
 ]
 
@@ -184,7 +184,6 @@ export function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME
   if (!themeConfig) return undefined
   const normalizedTheme = normalizeThemeConfig(themeConfig, themeConfig.variant ?? 'dark')
   return THEME_PRESETS.find((preset) => {
-    const candidate = preset.config[normalizedTheme.variant]
     const matchesId =
       preset.id === 'fileterm'
         ? normalizedTheme.codeThemeId === 'fileterm' ||
@@ -193,51 +192,10 @@ export function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME
         : normalizedTheme.codeThemeId === 'codex' ||
           normalizedTheme.codeThemeId === 'codex-dark' ||
           normalizedTheme.codeThemeId === 'codex-light'
-    if (!matchesId) return false
-    const colorValues = [
-      candidate.theme.accent,
-      candidate.theme.surface,
-      candidate.theme.surfaceSecondary,
-      candidate.theme.surfaceElevated,
-      candidate.theme.ink,
-      candidate.theme.semanticColors.secondary,
-      candidate.theme.semanticColors.textSecondary,
-      candidate.theme.semanticColors.total,
-      candidate.theme.semanticColors.telnet,
-      candidate.theme.semanticColors.ftp,
-      candidate.theme.semanticColors.networkRx,
-      candidate.theme.semanticColors.networkTx,
-      candidate.theme.semanticColors.info,
-      candidate.theme.semanticColors.warning,
-      candidate.theme.semanticColors.error,
-      candidate.theme.semanticColors.success
-    ]
-    const themeColorValues = [
-      normalizedTheme.theme.accent,
-      normalizedTheme.theme.surface,
-      normalizedTheme.theme.surfaceSecondary,
-      normalizedTheme.theme.surfaceElevated,
-      normalizedTheme.theme.ink,
-      normalizedTheme.theme.semanticColors.secondary,
-      normalizedTheme.theme.semanticColors.textSecondary,
-      normalizedTheme.theme.semanticColors.total,
-      normalizedTheme.theme.semanticColors.telnet,
-      normalizedTheme.theme.semanticColors.ftp,
-      normalizedTheme.theme.semanticColors.networkRx,
-      normalizedTheme.theme.semanticColors.networkTx,
-      normalizedTheme.theme.semanticColors.info,
-      normalizedTheme.theme.semanticColors.warning,
-      normalizedTheme.theme.semanticColors.error,
-      normalizedTheme.theme.semanticColors.success
-    ]
-    return (
-      colorValues.every(
-        (value, index) =>
-          typeof value === 'string' &&
-          typeof themeColorValues[index] === 'string' &&
-          value.toUpperCase() === themeColorValues[index].toUpperCase()
-      ) && candidate.theme.contrast === normalizedTheme.theme.contrast
-    )
+    // Preset identity is authoritative. User edits and saved/imported custom
+    // themes are assigned `custom`, while legacy FileTerm/Codex color tokens
+    // can legitimately differ from the current renderer defaults.
+    return matchesId
   })
 }
 

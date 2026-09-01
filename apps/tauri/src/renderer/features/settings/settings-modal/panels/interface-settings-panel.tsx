@@ -28,6 +28,7 @@ type InterfaceSettingsPanelContext = {
   t: LocaleMessages
   desktopApi: FileTermDesktopApi | undefined
   themeConfig: ThemeConfig
+  themeVariant: ThemePresetVariant
   normalizedThemeConfig: ThemeConfig
   customThemes: SavedTheme[]
   themeConfigOperation: 'import' | 'copy' | null
@@ -92,6 +93,7 @@ export function InterfaceSettingsPanel() {
     t,
     desktopApi,
     themeConfig,
+    themeVariant,
     normalizedThemeConfig,
     customThemes,
     themeConfigOperation,
@@ -157,8 +159,8 @@ export function InterfaceSettingsPanel() {
         <h3>{t.appearanceTheme}</h3>
         <div aria-label={t.themeSelection} className="theme-options-grid" role="group">
           <button
-            aria-pressed={themeConfig.variant === 'light'}
-            className={`theme-card light ${themeConfig.variant === 'light' ? 'active' : ''}`}
+            aria-pressed={themeVariant === 'light'}
+            className={`theme-card light ${themeVariant === 'light' ? 'active' : ''}`}
             onClick={() => switchThemeVariant('light')}
             type="button"
           >
@@ -176,8 +178,8 @@ export function InterfaceSettingsPanel() {
             <span className="theme-card-label">{t.themeLight}</span>
           </button>
           <button
-            aria-pressed={themeConfig.variant === 'dark'}
-            className={`theme-card dark ${themeConfig.variant === 'dark' ? 'active' : ''}`}
+            aria-pressed={themeVariant === 'dark'}
+            className={`theme-card dark ${themeVariant === 'dark' ? 'active' : ''}`}
             onClick={() => switchThemeVariant('dark')}
             type="button"
           >
@@ -407,6 +409,19 @@ export function InterfaceSettingsPanel() {
                 label={t.themeSuccessColor}
                 onChange={(value) => updateThemeSemanticColors({ success: value })}
                 value={normalizedThemeConfig.theme.semanticColors.success}
+              />
+              <ThemeColorField
+                label={t.themePrimaryActionColor}
+                onChange={(value) => updateThemeSemanticColors({ primaryAction: value })}
+                value={normalizedThemeConfig.theme.semanticColors.primaryAction ?? normalizedThemeConfig.theme.accent}
+              />
+              <ThemeColorField
+                label={t.themeDangerActionColor}
+                onChange={(value) => updateThemeSemanticColors({ dangerAction: value })}
+                value={
+                  normalizedThemeConfig.theme.semanticColors.dangerAction ??
+                  (normalizedThemeConfig.variant === 'light' ? '#d32f2f' : '#c93b3b')
+                }
               />
             </div>
           </section>

@@ -1,0 +1,988 @@
+:root[data-theme*='light'] .fs-shell,
+:root[data-theme*='light'] .home-workspace,
+:root[data-theme*='light'] .session-workspace,
+:root[data-theme*='light'] .system-info-workspace {
+  background: var(--bg-main);
+}
+
+:root[data-theme*='light'] .terminal-area,
+:root[data-theme*='light'] .terminal-host,
+:root[data-theme*='light'] .terminal-host .xterm-viewport,
+:root[data-theme*='light'] .terminal-host .xterm-screen {
+  background: var(--terminal-bg);
+}
+
+:root[data-theme*='light'] .terminal-area,
+:root[data-theme*='light'] .terminal-host,
+:root[data-theme*='light'] .terminal-area::after {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+:root[data-theme*='light'] .local-terminal-frame {
+  background: var(--surface-card);
+}
+
+:root[data-theme*='light'] .terminal-find {
+  border: 1px solid transparent;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-theme*='light'] .terminal-find input {
+  border: 1px solid var(--border-dark);
+  background: var(--bg-main);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .terminal-find .terminal-find-actions {
+  --terminal-find-action-divider: transparent;
+  background: transparent;
+}
+
+:root[data-theme*='light'] .terminal-dock {
+  --terminal-dock-border: var(--border-light);
+}
+
+:root[data-theme*='light'] .terminal-find button {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .terminal-find .terminal-find-actions > button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .terminal-find .terminal-find-actions > button:hover {
+  background: var(--bg-active);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .terminal-find .terminal-find-actions > button.is-active {
+  background: var(--bg-active);
+  color: var(--text-main);
+  box-shadow: 0 0 0 1px var(--border-dark) inset;
+}
+
+:root[data-theme*='light'] .terminal-find .terminal-find-actions > .terminal-find-submit {
+  background: var(--bg-active);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .fs-sidebar,
+:root[data-theme*='light'] .titlebar-brand,
+:root[data-theme*='light'] .tabbar-folder-button,
+:root[data-theme*='light'] .window-menubar,
+:root[data-theme*='light'] .standalone-window-titlebar {
+  background: var(--bg-sidebar);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-tabs,
+:root[data-theme*='light'] .pane-title,
+:root[data-theme*='light'] .pane-path-bar,
+:root[data-theme*='light'] .fs-file-table th,
+:root[data-theme*='light'] .disk-head,
+:root[data-theme*='light'] .transfer-strip {
+  background: var(--bg-main);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .fs-sidebar::before {
+  display: none !important;
+}
+
+:root[data-theme*='light'] .fs-sidebar {
+  border-right: 1px solid var(--border-light) !important;
+}
+
+:root[data-theme*='light'] .sidebar-resizer {
+  right: -3px !important;
+  width: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:root[data-theme*='light'] .ai-copilot-resizer {
+  left: -3px !important;
+  width: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:root[data-theme*='light'] .sidebar-resizer::after,
+:root[data-theme*='light'] .ai-copilot-resizer::after {
+  width: 2px !important;
+  left: 2px !important;
+  background: transparent !important;
+}
+
+:root[data-theme*='light'] .sidebar-resizer:hover::after,
+:root[data-theme*='light'] .sidebar-resizer.is-active::after,
+:root[data-theme*='light'] .ai-copilot-resizer:hover::after,
+:root[data-theme*='light'] .ai-copilot-resizer.is-active::after {
+  background: var(--primary) !important;
+}
+
+:root[data-theme*='light'] .titlebar-brand {
+  border-right: 0 !important;
+  --titlebar-brand-divider: var(--system-sidebar-frame);
+}
+
+:root[data-theme*='light'] .fs-tabbar {
+  border-bottom: 1px solid var(--border-light) !important;
+  background: var(--bg-main);
+}
+
+:root[data-theme*='light'] .fs-tabbar::after {
+  display: none !important;
+}
+
+:root[data-theme*='light'] .fs-tabs {
+  bottom: 0 !important;
+  height: 47px !important;
+}
+
+:root[data-theme*='light'] .connection-summary {
+  border-bottom: 1px solid var(--system-sidebar-frame);
+}
+
+:root[data-theme*='light'] .system-sidebar-layout .sys-card {
+  border-bottom-color: var(--system-sidebar-frame);
+}
+
+:root[data-theme*='light'] .system-sidebar-layout .system-sidebar-toggle,
+:root[data-theme*='light'] .system-sidebar-layout .system-title,
+:root[data-theme*='light'] .system-sidebar-layout .network-select,
+:root[data-theme*='light'] .system-sidebar-layout .grid-chart {
+  border-color: var(--system-sidebar-control-border);
+}
+
+:root[data-theme*='light'] .system-title {
+  background: var(--surface-hover);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 90%, transparent);
+}
+
+/* Segmented Control style for .mini-tabs to eliminate heavy control borders */
+:root[data-theme*='light'] .mini-tabs {
+  border: none !important;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent) !important;
+  padding: 2px !important;
+  border-radius: var(--radius-md) !important;
+}
+
+:root[data-theme*='light'] .mini-tabs span {
+  background: transparent !important;
+  color: var(--text-soft) !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  transition: all 0.2s ease;
+}
+
+:root[data-theme*='light'] .mini-tabs span:hover:not(.active) {
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent) !important;
+  color: var(--text-main) !important;
+}
+
+:root[data-theme*='light'] .mini-tabs span.active {
+  background: var(--surface-card) !important;
+  color: var(--text-main) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+:root[data-theme*='light'] .system-sidebar-layout,
+:root[data-theme*='light'] .system-sidebar-layout .sys-card,
+:root[data-theme*='light'] .system-sidebar-layout .disk-table,
+:root[data-theme*='light'] .system-sidebar-layout .process-table,
+:root[data-theme*='light'] .system-sidebar-layout .disk-scroll-region,
+:root[data-theme*='light'] .system-sidebar-layout .disk-body {
+  background: var(--bg-sidebar);
+}
+
+:root[data-theme*='light'] .system-sidebar-layout .process-row,
+:root[data-theme*='light'] .system-sidebar-layout .disk-row {
+  border-bottom-color: var(--system-sidebar-divider);
+}
+
+:root[data-theme*='light'] .system-sidebar-layout .disk-head {
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* Light Theme Sidebar Typography Optimization */
+:root[data-theme*='light'] .system-sidebar-layout,
+:root[data-theme*='light'] .fs-sidebar {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Microsoft YaHei', sans-serif;
+}
+
+:root[data-theme*='light'] .system-sidebar-layout .address-line .label,
+:root[data-theme*='light'] .system-sidebar-layout .metric-line span,
+:root[data-theme*='light'] .system-sidebar-layout .meter-header span,
+:root[data-theme*='light'] .system-sidebar-layout .disk-head span {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+:root[data-theme*='light'] .system-sidebar-layout .address-line .value,
+:root[data-theme*='light'] .system-sidebar-layout .metric-line .value,
+:root[data-theme*='light'] .system-sidebar-layout .metric-chip-summary,
+:root[data-theme*='light'] .system-sidebar-layout .system-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+:root[data-theme*='light'] .system-sidebar-layout .address-line .value,
+:root[data-theme*='light'] .system-sidebar-layout .disk-row,
+:root[data-theme*='light'] .system-sidebar-layout .process-row {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme*='light'] .window-menu-items button:hover,
+:root[data-theme*='light'] .window-control-buttons button:hover {
+  background: var(--bg-hover);
+}
+
+:root[data-theme*='light'] .window-tools {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .window-tools button {
+  background: transparent;
+  color: inherit;
+}
+
+:root[data-theme*='light'] .window-tools button:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .window-control-buttons .window-close-button:hover {
+  background: var(--window-control-danger-bg);
+  color: var(--window-control-danger-text);
+}
+
+:root[data-theme*='light'] .quick-panel,
+:root[data-theme*='light'] .modal-card,
+:root[data-theme*='light'] .manager-table,
+:root[data-theme*='light'] .file-manager,
+:root[data-theme*='light'] .file-table-shell,
+:root[data-theme*='light'] .local-pane,
+:root[data-theme*='light'] .remote-pane,
+:root[data-theme*='light'] .system-info-card {
+  background: var(--bg-card);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-tabs button,
+:root[data-theme*='light'] .file-tab-actions button,
+:root[data-theme*='light'] .flat-button,
+:root[data-theme*='light'] .transfer-segments button,
+:root[data-theme*='light'] .network-select,
+:root[data-theme*='light'] .ssh-grid input,
+:root[data-theme*='light'] .ssh-grid select,
+:root[data-theme*='light'] .ssh-grid textarea,
+:root[data-theme*='light'] .connection-form input,
+:root[data-theme*='light'] .connection-form select {
+  background: var(--input-bg);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+/* Inactive Tabs in Light Mode */
+:root[data-theme*='light'] .fs-tab {
+  background: var(--surface-hover) !important;
+  border: none !important;
+  color: var(--text-soft) !important;
+  height: 47px !important;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+:root[data-theme*='light'] .fs-tab:hover:not(.active) {
+  background: var(--surface-active) !important;
+  color: var(--text-main) !important;
+}
+
+/* Add Tab Button "+" in Light Mode */
+:root[data-theme*='light'] .add-tab {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-soft) !important;
+  height: 28px !important;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+:root[data-theme*='light'] .add-tab:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+
+:root[data-theme*='light'] .primary-button {
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-border);
+  color: var(--button-primary-text);
+}
+
+:root[data-theme*='light'] .primary-button:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+}
+
+:root[data-theme*='light'] .file-tabs button.active,
+:root[data-theme*='light'] .transfer-segments button.active,
+:root[data-theme*='light'] .transfer-segments button:hover,
+:root[data-theme*='light'] .quick-row:hover,
+:root[data-theme*='light'] .manager-row:hover,
+:root[data-theme*='light'] .fs-file-table tbody tr:hover,
+:root[data-theme*='light'] .fs-file-table tbody tr.is-selected,
+:root[data-theme*='light'] .fs-file-table tbody tr.is-selected:nth-child(even) {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+/* Active Tab styling in Light Mode: White background + top indicator strip */
+:root[data-theme*='light'] .fs-tab.active {
+  background: var(--surface-card) !important;
+  color: var(--text-main) !important;
+  box-shadow: inset 0 3px 0 0 var(--primary) !important;
+  height: 47px !important;
+}
+
+:root[data-theme*='light'] .context-menu,
+:root[data-theme*='light'] .dropdown-select-menu {
+  background: var(--popover-bg);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  box-shadow: var(--popover-shadow);
+}
+
+:root[data-theme*='light'] .context-menu button,
+:root[data-theme*='light'] .dropdown-select-menu button {
+  background: transparent;
+  color: inherit;
+}
+
+:root[data-theme*='light'] .context-menu button:hover:not(:disabled),
+:root[data-theme*='light'] .dropdown-select-menu button:hover:not(:disabled) {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .dropdown-select-menu button.is-selected {
+  color: var(--accent-highlight);
+}
+
+:root[data-theme*='light'] .context-menu.tools-menu {
+  background: var(--bg-card);
+  border-color: var(--border-dark);
+  box-shadow: none;
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .context-menu.tools-menu button:hover:not(:disabled) {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .context-menu.tools-menu button:disabled {
+  background: transparent;
+  color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  opacity: 1;
+}
+
+:root[data-theme*='light'] .context-menu.tools-menu .context-menu-separator {
+  background: var(--border-light);
+}
+
+:root[data-theme*='light'] .modal-backdrop {
+  background: var(--modal-backdrop-bg);
+}
+
+:root[data-theme*='light'] .ssh-modal-nav,
+:root[data-theme*='light'] .ssh-form-shell,
+:root[data-theme*='light'] .ssh-fieldset,
+:root[data-theme*='light'] .terminal-key-box,
+:root[data-theme*='light'] .ssh-placeholder,
+:root[data-theme*='light'] .file-split,
+:root[data-theme*='light'] .file-split-resizer,
+:root[data-theme*='light'] .file-editor-path {
+  background: var(--surface-hover);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .fs-file-table th,
+:root[data-theme*='light'] .system-table th {
+  background: var(--surface-hover);
+}
+
+:root[data-theme*='light'] .system-title {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .meter-track {
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+:root[data-theme*='light'] .metric-dot.app {
+  background: var(--metric-app);
+}
+
+:root[data-theme*='light'] .metric-dot.cache {
+  background: var(--metric-cache);
+}
+
+:root[data-theme*='light'] .metric-dot.kernel {
+  background: var(--metric-kernel);
+}
+
+:root[data-theme*='light'] .metric-dot.tone-success {
+  background: var(--metric-status-green);
+}
+
+:root[data-theme*='light'] .metric-dot.tone-warning {
+  background: var(--metric-status-yellow);
+}
+
+:root[data-theme*='light'] .metric-dot.tone-danger {
+  background: var(--metric-status-red);
+}
+
+:root[data-theme*='light'] .meter-fill.app {
+  background: var(--metric-app);
+}
+
+:root[data-theme*='light'] .meter-fill.cache {
+  background: var(--metric-cache);
+}
+
+:root[data-theme*='light'] .meter-fill.kernel {
+  background: var(--metric-kernel);
+}
+
+:root[data-theme*='light'] .meter-fill.tone-success {
+  background: var(--success);
+}
+
+:root[data-theme*='light'] .meter-fill.yellow,
+:root[data-theme*='light'] .meter-fill.tone-warning {
+  background: var(--warning);
+}
+
+:root[data-theme*='light'] .meter-fill.tone-danger {
+  background: var(--metric-status-red);
+}
+
+:root[data-theme*='light'] .network-select {
+  border-color: var(--border-light);
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .network-scale {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .grid-chart {
+  background: transparent;
+}
+
+:root[data-theme*='light'] .network-guide {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+:root[data-theme*='light'] .network-guide.minor {
+  stroke: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+:root[data-theme*='light'] .network-path {
+  fill: none;
+}
+
+:root[data-theme*='light'] .tx-path {
+  stroke: var(--network-tx);
+}
+
+:root[data-theme*='light'] .rx-path {
+  stroke: var(--network-rx);
+}
+
+:root[data-theme*='light'] .terminal-area::after {
+  background: none;
+  box-shadow: none;
+}
+
+:root[data-theme*='light'] .file-manager,
+:root[data-theme*='light'] .command-center {
+  background: var(--surface-card);
+}
+
+:root[data-theme*='light'] .file-manager {
+  border-top: 0;
+}
+
+:root[data-theme*='light'] .file-tabs {
+  background: var(--surface-canvas);
+  border-top: 1px solid var(--border-light);
+  border-bottom-color: var(--border-light);
+}
+
+:root[data-theme*='light'] .file-tabs button {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .file-tabs button:hover:not(.active) {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-tabs button.active {
+  background: var(--surface-card);
+  color: var(--text-main);
+  box-shadow: none;
+}
+
+:root[data-theme*='light'] .file-current-path {
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-current-path.is-status-hint {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .file-tab-actions button {
+  border: 1px solid var(--border-light);
+  background: var(--surface-card);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-tab-actions button:hover,
+:root[data-theme*='light'] .file-tab-actions button.active {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-toolbar {
+  background: var(--surface-canvas);
+  border-bottom-color: var(--border-light);
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .file-toolbar button {
+  border-color: var(--border-light);
+  background: var(--surface-card);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-toolbar button:hover {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .local-pane,
+:root[data-theme*='light'] .remote-pane,
+:root[data-theme*='light'] .command-pane-preview {
+  background: var(--surface-card);
+}
+
+:root[data-theme*='light'] .command-pane-list {
+  background: transparent;
+}
+
+:root[data-theme*='light'] .file-split-resizer {
+  background: transparent;
+}
+
+:root[data-theme*='light'] .file-split-resizer::before {
+  background: color-mix(in srgb, var(--text-secondary) 42%, transparent);
+}
+
+:root[data-theme*='light'] .file-split-resizer:hover {
+  background: transparent;
+}
+
+:root[data-theme*='light'] .file-split-resizer:hover::before {
+  background: color-mix(in srgb, var(--text-secondary) 58%, transparent);
+}
+
+:root[data-theme*='light'] .pane-title {
+  border-bottom-color: var(--border-light);
+  background: var(--surface-card);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .pane-title span {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .pane-path-bar {
+  background: var(--surface-card);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .pane-path-bar input {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .pane-path-bar input:hover,
+:root[data-theme*='light'] .pane-path-bar input:focus,
+:root[data-theme*='light'] .pane-filter-input-wrapper:hover,
+:root[data-theme*='light'] .pane-filter-input-wrapper:focus-within {
+  border-color: var(--border-light);
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .pane-path-bar span {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .fs-file-table {
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .fs-file-table th {
+  border-bottom-color: var(--border-light);
+  background: var(--manager-head-bg);
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .fs-file-table td {
+  border-bottom-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+:root[data-theme*='light'] .process-row:nth-child(odd),
+:root[data-theme*='light'] .disk-row:nth-child(odd),
+:root[data-theme*='light'] .system-table tbody tr:nth-child(odd),
+:root[data-theme*='light'] .fs-file-table tbody tr:nth-child(odd) {
+  background: var(--surface-card);
+}
+
+:root[data-theme*='light'] .process-row:nth-child(even),
+:root[data-theme*='light'] .disk-row:nth-child(even),
+:root[data-theme*='light'] .system-table tbody tr:nth-child(even),
+:root[data-theme*='light'] .fs-file-table tbody tr:nth-child(even) {
+  background: var(--surface-hover);
+}
+
+/* Keep file selection and hover states above the alternating row backgrounds. */
+:root[data-theme*='light'] .fs-file-table tbody tr:hover,
+:root[data-theme*='light'] .fs-file-table tbody tr.is-selected,
+:root[data-theme*='light'] .fs-file-table tbody tr.is-selected:nth-child(even) {
+  background: var(--selection-bg) !important;
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-icon,
+:root[data-theme*='light'] .file-drag-preview-icon {
+  color: var(--folder-accent);
+}
+
+:root[data-theme*='light'] .file-drag-preview {
+  background: color-mix(in srgb, var(--surface-card) 96%, transparent);
+  color: var(--text-main);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-theme*='light'] .transfer-strip {
+  border-top-color: var(--border-light);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+:root[data-theme*='light'] .transfer-summary-button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .transfer-summary-button:hover {
+  border-color: var(--border-light);
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .transfer-popover {
+  background: var(--surface-card);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-theme*='light'] .transfer-segments button {
+  border: 1px solid var(--border-light);
+  background: var(--surface-card);
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .transfer-segments button:hover,
+:root[data-theme*='light'] .transfer-segments button.active {
+  background: var(--surface-hover);
+  color: var(--text-main);
+  border-color: var(--border-dark);
+}
+
+:root[data-theme*='light'] .transfer-segments-sub button {
+  background: var(--surface-hover);
+}
+
+:root[data-theme*='light'] .transfer-row {
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .transfer-row:hover {
+  background: var(--surface-hover);
+}
+
+:root[data-theme*='light'] .transfer-row-main span,
+:root[data-theme*='light'] .transfer-row small,
+:root[data-theme*='light'] .transfer-row time,
+:root[data-theme*='light'] .transfer-row-meta span,
+:root[data-theme*='light'] .transfer-empty {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .transfer-cancel {
+  border: 1px solid var(--border-light);
+  background: var(--surface-card);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .transfer-cancel:hover {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .transfer-progress {
+  background: color-mix(in srgb, var(--text-secondary) 18%, transparent);
+}
+
+:root[data-theme*='light'] .transfer-progress b {
+  background: var(--primary);
+}
+
+:root[data-theme*='light'] .manager-window,
+:root[data-theme*='light'] .connection-form-window,
+:root[data-theme*='light'] .command-editor-window,
+:root[data-theme*='light'] .standalone-shell {
+  background: linear-gradient(180deg, var(--surface-canvas) 0%, var(--surface-hover) 100%);
+}
+
+:root[data-theme*='light'] .file-editor-window,
+:root[data-theme*='light'] .file-editor-modal {
+  background: linear-gradient(180deg, var(--surface-canvas) 0%, var(--surface-hover) 100%);
+}
+
+:root[data-theme*='light'] .file-editor-modal {
+  border-color: var(--border-light);
+  box-shadow: var(--shadow-modal);
+}
+
+:root[data-theme*='light'] .file-editor-modal .modal-header {
+  border-bottom: 1px solid var(--border-light);
+}
+
+:root[data-theme*='light'] .file-editor-title span,
+:root[data-theme*='light'] .file-editor-path,
+:root[data-theme*='light'] .file-editor-statusbar {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .file-editor-title strong {
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-editor-title b {
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  color: var(--action-primary-bg);
+}
+
+:root[data-theme*='light'] .file-editor-menubar {
+  border-bottom-color: var(--border-light);
+}
+
+:root[data-theme*='light'] .file-editor-menubar-button,
+:root[data-theme*='light'] .file-editor-status-button {
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-editor-menubar-button:hover,
+:root[data-theme*='light'] .file-editor-status-button:hover,
+:root[data-theme*='light'] .file-editor-menubar-button.is-open,
+:root[data-theme*='light'] .file-editor-status-button.is-open,
+:root[data-theme*='light'] .file-editor-menu button:hover,
+:root[data-theme*='light'] .file-editor-menu button.is-active {
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .file-editor-body {
+  border-color: var(--border-light);
+  background: var(--surface-card);
+}
+
+:root[data-theme*='light'] .file-editor-menu {
+  background: color-mix(in srgb, var(--surface-card) 96%, transparent);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-theme*='light'] .file-editor-menu button {
+  color: var(--text-main);
+  background: transparent;
+}
+
+:root[data-theme*='light'] .file-editor-menu-separator {
+  background: var(--border-light);
+}
+
+:root[data-theme*='light'] .file-editor-statusbar {
+  border-top: 1px solid var(--border-light);
+}
+
+:root[data-theme*='light'] .modal-card.manager-modal.standalone,
+:root[data-theme*='light'] .modal-card.ssh-modal.standalone {
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme*='light'] .modal-card.manager-modal.standalone .modal-header,
+:root[data-theme*='light'] .command-editor-page.standalone .modal-header span,
+:root[data-theme*='light'] .command-manager-modal.standalone .modal-header span {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .manager-head {
+  background: var(--manager-head-bg);
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .manager-row {
+  background: transparent;
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .manager-row:hover,
+:root[data-theme*='light'] .manager-row.dragging {
+  background: var(--surface-hover);
+}
+
+:root[data-theme*='light'] .manager-row.drop-inside {
+  background: var(--selection-bg);
+  box-shadow: inset 3px 0 0 var(--focus-outline);
+}
+
+:root[data-theme*='light'] .folder-row {
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+}
+
+:root[data-theme*='light'] .folder-row {
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .command-detail-block code,
+:root[data-theme*='light'] .command-manager-item code,
+:root[data-theme*='light'] .command-preview code {
+  background: var(--surface-hover);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .command-folder-tabs button:hover {
+  background: var(--surface-hover);
+}
+
+:root[data-theme*='light'] .command-folder-tabs button small {
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  color: var(--action-primary-bg);
+}
+
+:root[data-theme*='light'] .status-message {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--status-warning) 10%, transparent);
+}
+
+:root[data-theme*='light'] .status-message-close:hover {
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
+}
+
+/* Standalone Command Form Theme Styles */
+:root[data-theme*='light'] .command-form-standalone-page label {
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme*='light'] .command-form-standalone-page select,
+:root[data-theme*='light'] .command-form-standalone-page textarea {
+  background: var(--surface-card);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+:root[data-theme*='light'] .command-form-standalone-page input:not([type='checkbox']):focus,
+:root[data-theme*='light'] .command-form-standalone-page select:focus,
+:root[data-theme*='light'] .command-form-standalone-page textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-secondary) 15%, transparent);
+  background: var(--surface-card);
+  outline: none;
+}
+
+/* Invalid State Theme Colors (Light) */
+:root[data-theme*='light'] .command-form-standalone-page input.is-invalid,
+:root[data-theme*='light'] .command-form-standalone-page textarea.is-invalid,
+:root[data-theme*='light'] .command-editor-dialog-form input.is-invalid,
+:root[data-theme*='light'] .command-editor-dialog-form textarea.is-invalid {
+  border-color: var(--danger) !important;
+}
+
+:root[data-theme*='light'] .command-form-standalone-page input.is-invalid:focus,
+:root[data-theme*='light'] .command-form-standalone-page textarea.is-invalid:focus,
+:root[data-theme*='light'] .command-editor-dialog-form input.is-invalid:focus,
+:root[data-theme*='light'] .command-editor-dialog-form textarea.is-invalid:focus {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger) 18%, transparent) !important;
+}
+
+/* Detected parameters preview box (Light) */
+:root[data-theme*='light'] .command-preview {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  margin-top: 4px !important;
+}
+
+:root[data-theme*='light'] .command-preview code {
+  color: var(--primary) !important;
+  font-family: var(--font-mono) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 0 0 0 !important;
+  display: block !important;
+}
+
+:root[data-theme*='light'] .command-preview code.is-empty {
+  color: var(--text-muted) !important;
+  opacity: 0.7 !important;
+}

@@ -67,9 +67,9 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 
 - `apps/tauri/src/renderer/styles/themes/tokens.css`
   - 基础视觉 token，供半径、阴影、间距等全局样式复用。
-- `apps/tauri/src/renderer/styles/themes/default-dark.css`
-- `apps/tauri/src/renderer/styles/themes/default-light.css`
-  - 只保存明暗主题 token。
+- `apps/tauri/src/renderer/styles/themes/fileterm-dark.css`
+- `apps/tauri/src/renderer/styles/themes/fileterm-light.css`
+  - 只保存明暗主题 token（包含 `default-dark` / `default-light` 兼容别名）。
 - `apps/tauri/src/renderer/styles/features/component-skins.css`
   - 内置主题的组件皮肤与兼容覆盖层；保持旧 UI 的选择器作用域和级联顺序。
 - `apps/tauri/src/renderer/hooks/use-theme-mode.ts`

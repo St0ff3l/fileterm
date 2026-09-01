@@ -18,6 +18,7 @@ import type { Dispatch, DragEvent, SetStateAction } from 'react'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import type { TabBarProps } from '../layout/tab-bar'
 import { SystemInfoWorkspace } from '../system/system-info-workspace'
+import type { ThemeMode } from '../../app/theme-config'
 import { HomeWorkspace } from './home-workspace'
 import { LocalTerminalWorkspace } from './local-terminal-workspace'
 import { SessionWorkspace } from './session-workspace'
@@ -198,7 +199,7 @@ export function WorkspaceStage({
   backgroundTabs: WorkspaceTab[]
   onAttachBackgroundSession(tabId: string): void | Promise<void>
   onCloseBackgroundSession(tabId: string): void | Promise<void>
-  theme: 'default-dark' | 'default-light'
+  theme: ThemeMode
   themeConfig: ThemeConfig
   customThemes: SavedTheme[]
   locale: 'zhCN' | 'enUS'
@@ -268,7 +269,7 @@ export function WorkspaceStage({
   onDeleteCommandFolder(folderId: string): Promise<boolean> | boolean | void
   onUpdateCommandFolder(folderId: string, updates: Partial<CommandFolder>): Promise<boolean> | boolean | void
   onUpdateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<boolean> | boolean | void
-  onSetTheme(value: 'default-dark' | 'default-light'): void
+  onSetTheme(value: ThemeMode): void
   onSetThemeConfig(value: ThemeConfig): void
   onSetCustomThemes(value: SavedTheme[]): void
   onSetLocale(value: 'zhCN' | 'enUS'): void

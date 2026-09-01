@@ -1,0 +1,94 @@
+/*
+ * Base CSS Reset & Viewport Constraints
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Standalone child windows support transparency on macOS and Linux */
+html[data-platform='darwin'].tauri-standalone-window,
+html[data-platform='darwin'].tauri-standalone-window body,
+html[data-platform='darwin'].tauri-standalone-window #root,
+html[data-platform='linux'].tauri-standalone-window,
+html[data-platform='linux'].tauri-standalone-window body,
+html[data-platform='linux'].tauri-standalone-window #root {
+  background: transparent !important;
+}
+
+html[data-platform='darwin'].tauri-standalone-window #root,
+html[data-platform='linux'].tauri-standalone-window #root {
+  overflow: hidden;
+  border-radius: var(--window-corner-radius);
+}
+
+/* Linux native window rounding support */
+html[data-platform='linux'],
+html[data-platform='linux'] body,
+html[data-platform='linux'] #root {
+  background: transparent !important;
+}
+
+html[data-platform='linux'] {
+  --window-corner-radius: 15px;
+}
+
+html[data-platform='linux'] #root {
+  overflow: hidden;
+  border-radius: var(--window-corner-radius);
+}
+
+html[data-platform='linux'][data-window-maximized='true'] #root {
+  border-radius: 0;
+}
+
+/* Form & Text Selection Defaults */
+input,
+textarea,
+[contenteditable='true'],
+.xterm,
+.monaco-editor,
+.selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+body.is-resizing-sidebar,
+body.is-resizing-sidebar * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button,
+input,
+select,
+textarea,
+table {
+  font: inherit;
+}

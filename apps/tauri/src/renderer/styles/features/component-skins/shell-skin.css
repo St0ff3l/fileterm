@@ -1,0 +1,524 @@
+/* shell.css */
+:root:not([data-theme]) .fs-shell,
+:root:not([data-theme*='light']) .fs-shell,
+:root[data-theme='default'] .fs-shell {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .fs-sidebar,
+:root:not([data-theme*='light']) .fs-sidebar,
+:root[data-theme='default'] .fs-sidebar {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .sidebar-resizer,
+:root:not([data-theme*='light']) .sidebar-resizer,
+:root[data-theme='default'] .sidebar-resizer,
+:root:not([data-theme]) .ai-copilot-resizer,
+:root:not([data-theme*='light']) .ai-copilot-resizer,
+:root[data-theme='default'] .ai-copilot-resizer {
+  background: transparent;
+}
+
+:root:not([data-theme]) .sidebar-resizer::after,
+:root:not([data-theme*='light']) .sidebar-resizer::after,
+:root[data-theme='default'] .sidebar-resizer::after,
+:root:not([data-theme]) .ai-copilot-resizer::after,
+:root:not([data-theme*='light']) .ai-copilot-resizer::after,
+:root[data-theme='default'] .ai-copilot-resizer::after {
+  width: 2px;
+  left: 2px;
+}
+
+:root:not([data-theme]) .sidebar-resizer:hover::after,
+:root:not([data-theme*='light']) .sidebar-resizer:hover::after,
+:root[data-theme='default'] .sidebar-resizer:hover::after,
+:root:not([data-theme]) .sidebar-resizer.is-active::after,
+:root:not([data-theme*='light']) .sidebar-resizer.is-active::after,
+:root[data-theme='default'] .sidebar-resizer.is-active::after,
+:root:not([data-theme]) .ai-copilot-resizer:hover::after,
+:root:not([data-theme*='light']) .ai-copilot-resizer:hover::after,
+:root[data-theme='default'] .ai-copilot-resizer:hover::after,
+:root:not([data-theme]) .ai-copilot-resizer.is-active::after,
+:root:not([data-theme*='light']) .ai-copilot-resizer.is-active::after,
+:root[data-theme='default'] .ai-copilot-resizer.is-active::after {
+  background: var(--focus-outline);
+}
+
+:root:not([data-theme]) .sync-dot,
+:root:not([data-theme*='light']) .sync-dot,
+:root[data-theme='default'] .sync-dot {
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+:root:not([data-theme]) .copy-link,
+:root:not([data-theme*='light']) .copy-link,
+:root[data-theme='default'] .copy-link {
+  color: var(--copy-link);
+  background: transparent;
+}
+
+:root:not([data-theme]) .copy-link:hover,
+:root:not([data-theme*='light']) .copy-link:hover,
+:root[data-theme='default'] .copy-link:hover {
+  color: var(--copy-link-hover);
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .system-title,
+:root:not([data-theme*='light']) .system-title,
+:root[data-theme='default'] .system-title {
+  color: var(--text-main);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+:root:not([data-theme]) .metric-line,
+:root:not([data-theme*='light']) .metric-line,
+:root[data-theme='default'] .metric-line {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .metric-line strong,
+:root:not([data-theme*='light']) .metric-line strong,
+:root[data-theme='default'] .metric-line strong {
+  color: var(--text-main);
+  padding-right: 8px;
+}
+
+:root:not([data-theme]) .metric-subline,
+:root:not([data-theme*='light']) .metric-subline,
+:root[data-theme='default'] .metric-subline {
+  color: var(--text-soft);
+}
+
+:root:not([data-theme]) .memory-details,
+:root:not([data-theme*='light']) .memory-details,
+:root[data-theme='default'] .memory-details {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .memory-details strong,
+:root:not([data-theme*='light']) .memory-details strong,
+:root[data-theme='default'] .memory-details strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .metric-chip strong,
+:root:not([data-theme*='light']) .metric-chip strong,
+:root[data-theme='default'] .metric-chip strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .metric-dot.app,
+:root:not([data-theme*='light']) .metric-dot.app,
+:root[data-theme='default'] .metric-dot.app {
+  background: var(--metric-app);
+}
+
+:root:not([data-theme]) .metric-dot.cache,
+:root:not([data-theme*='light']) .metric-dot.cache,
+:root[data-theme='default'] .metric-dot.cache {
+  background: var(--metric-cache);
+}
+
+:root:not([data-theme]) .metric-dot.kernel,
+:root:not([data-theme*='light']) .metric-dot.kernel,
+:root[data-theme='default'] .metric-dot.kernel {
+  background: var(--metric-kernel);
+}
+
+:root:not([data-theme]) .metric-dot.tone-success,
+:root:not([data-theme*='light']) .metric-dot.tone-success,
+:root[data-theme='default'] .metric-dot.tone-success {
+  background: var(--metric-status-green);
+}
+
+:root:not([data-theme]) .metric-dot.tone-warning,
+:root:not([data-theme*='light']) .metric-dot.tone-warning,
+:root[data-theme='default'] .metric-dot.tone-warning {
+  background: var(--metric-status-yellow);
+}
+
+:root:not([data-theme]) .metric-dot.tone-danger,
+:root:not([data-theme*='light']) .metric-dot.tone-danger,
+:root[data-theme='default'] .metric-dot.tone-danger {
+  background: var(--metric-status-red);
+}
+
+:root:not([data-theme]) .meter-row,
+:root:not([data-theme*='light']) .meter-row,
+:root[data-theme='default'] .meter-row {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .meter-row strong,
+:root:not([data-theme*='light']) .meter-row strong,
+:root[data-theme='default'] .meter-row strong {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .meter-track,
+:root:not([data-theme*='light']) .meter-track,
+:root[data-theme='default'] .meter-track {
+  background: var(--meter-track);
+}
+
+:root:not([data-theme]) .meter-fill.tone-success,
+:root:not([data-theme*='light']) .meter-fill.tone-success,
+:root[data-theme='default'] .meter-fill.tone-success {
+  background: var(--success);
+}
+
+:root:not([data-theme]) .meter-fill.tone-warning,
+:root:not([data-theme*='light']) .meter-fill.tone-warning,
+:root[data-theme='default'] .meter-fill.tone-warning {
+  background: var(--memory-warn);
+}
+
+:root:not([data-theme]) .meter-fill.yellow,
+:root:not([data-theme*='light']) .meter-fill.yellow,
+:root[data-theme='default'] .meter-fill.yellow {
+  background: var(--memory-warn);
+}
+
+:root:not([data-theme]) .meter-fill.tone-danger,
+:root:not([data-theme*='light']) .meter-fill.tone-danger,
+:root[data-theme='default'] .meter-fill.tone-danger {
+  background: var(--metric-status-red);
+}
+
+:root:not([data-theme]) .meter-fill.app,
+:root:not([data-theme*='light']) .meter-fill.app,
+:root[data-theme='default'] .meter-fill.app {
+  background: var(--metric-app);
+}
+
+:root:not([data-theme]) .meter-fill.cache,
+:root:not([data-theme*='light']) .meter-fill.cache,
+:root[data-theme='default'] .meter-fill.cache {
+  background: var(--metric-cache);
+}
+
+:root:not([data-theme]) .meter-fill.kernel,
+:root:not([data-theme*='light']) .meter-fill.kernel,
+:root[data-theme='default'] .meter-fill.kernel {
+  background: var(--metric-kernel);
+}
+
+:root:not([data-theme]) .mini-tabs,
+:root:not([data-theme*='light']) .mini-tabs,
+:root[data-theme='default'] .mini-tabs {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .mini-tabs span,
+:root:not([data-theme*='light']) .mini-tabs span,
+:root[data-theme='default'] .mini-tabs span {
+  background: var(--surface-active);
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .mini-tabs span.active,
+:root:not([data-theme*='light']) .mini-tabs span.active,
+:root[data-theme='default'] .mini-tabs span.active {
+  background: var(--mini-tab-active-bg);
+  color: var(--mini-tab-active-text);
+}
+
+:root:not([data-theme]) .up,
+:root:not([data-theme*='light']) .up,
+:root[data-theme='default'] .up {
+  color: var(--danger);
+}
+
+:root:not([data-theme]) .down,
+:root:not([data-theme*='light']) .down,
+:root[data-theme='default'] .down {
+  color: var(--success);
+}
+
+:root:not([data-theme]) .network-select,
+:root:not([data-theme*='light']) .network-select,
+:root[data-theme='default'] .network-select {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .network-scale,
+:root:not([data-theme*='light']) .network-scale,
+:root[data-theme='default'] .network-scale {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .grid-chart,
+:root:not([data-theme*='light']) .grid-chart,
+:root[data-theme='default'] .grid-chart {
+  background:
+    linear-gradient(to bottom, color-mix(in srgb, var(--accent-secondary) 4%, transparent), transparent),
+    var(--surface-card);
+}
+
+:root:not([data-theme]) .network-guide,
+:root:not([data-theme*='light']) .network-guide,
+:root[data-theme='default'] .network-guide {
+  fill: none;
+  stroke: var(--border-light);
+}
+
+:root:not([data-theme]) .network-path,
+:root:not([data-theme*='light']) .network-path,
+:root[data-theme='default'] .network-path {
+  fill: none;
+}
+
+:root:not([data-theme]) .tx-path,
+:root:not([data-theme*='light']) .tx-path,
+:root[data-theme='default'] .tx-path {
+  stroke: var(--network-tx);
+}
+
+:root:not([data-theme]) .rx-path,
+:root:not([data-theme*='light']) .rx-path,
+:root[data-theme='default'] .rx-path {
+  stroke: var(--network-rx);
+}
+
+:root:not([data-theme]) .process-table,
+:root:not([data-theme*='light']) .process-table,
+:root[data-theme='default'] .process-table {
+  height: 96px;
+  min-height: 96px;
+  max-height: 96px;
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .disk-table,
+:root:not([data-theme*='light']) .disk-table,
+:root[data-theme='default'] .disk-table {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .disk-head,
+:root:not([data-theme*='light']) .disk-head,
+:root[data-theme='default'] .disk-head {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .disk-row,
+:root:not([data-theme*='light']) .disk-row,
+:root[data-theme='default'] .disk-row {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .disk-row:hover,
+:root:not([data-theme*='light']) .disk-row:hover,
+:root[data-theme='default'] .disk-row:hover {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .fs-main,
+:root:not([data-theme*='light']) .fs-main,
+:root[data-theme='default'] .fs-main {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .fs-tabbar,
+:root:not([data-theme*='light']) .fs-tabbar,
+:root[data-theme='default'] .fs-tabbar {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .window-menubar,
+:root:not([data-theme*='light']) .window-menubar,
+:root[data-theme='default'] .window-menubar,
+:root:not([data-theme]) .standalone-window-titlebar,
+:root:not([data-theme*='light']) .standalone-window-titlebar,
+:root[data-theme='default'] .standalone-window-titlebar {
+  background: var(--bg-sidebar);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .window-menu-items button:hover,
+:root:not([data-theme*='light']) .window-menu-items button:hover,
+:root[data-theme='default'] .window-menu-items button:hover,
+:root:not([data-theme]) .window-control-buttons button:hover,
+:root:not([data-theme*='light']) .window-control-buttons button:hover,
+:root[data-theme='default'] .window-control-buttons button:hover {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .window-control-buttons .window-close-button:hover,
+:root:not([data-theme*='light']) .window-control-buttons .window-close-button:hover,
+:root[data-theme='default'] .window-control-buttons .window-close-button:hover {
+  background: var(--window-control-danger-bg);
+  color: var(--window-control-danger-text);
+}
+
+:root:not([data-theme]) .fs-tabbar::after,
+:root:not([data-theme*='light']) .fs-tabbar::after,
+:root[data-theme='default'] .fs-tabbar::after {
+  background: var(--titlebar-divider, var(--border-light));
+}
+
+:root:not([data-theme]) .titlebar-brand strong,
+:root:not([data-theme*='light']) .titlebar-brand strong,
+:root[data-theme='default'] .titlebar-brand strong {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .tabbar-folder-button,
+:root:not([data-theme*='light']) .tabbar-folder-button,
+:root[data-theme='default'] .tabbar-folder-button,
+:root:not([data-theme]) .add-tab,
+:root:not([data-theme*='light']) .add-tab,
+:root[data-theme='default'] .add-tab,
+:root:not([data-theme]) .window-tools span,
+:root:not([data-theme*='light']) .window-tools span,
+:root[data-theme='default'] .window-tools span,
+:root:not([data-theme]) .flat-button,
+:root:not([data-theme*='light']) .flat-button,
+:root[data-theme='default'] .flat-button,
+:root:not([data-theme]) .file-toolbar button,
+:root:not([data-theme*='light']) .file-toolbar button,
+:root[data-theme='default'] .file-toolbar button,
+:root:not([data-theme]) .terminal-tools button,
+:root:not([data-theme*='light']) .terminal-tools button,
+:root[data-theme='default'] .terminal-tools button,
+:root:not([data-theme]) .tab-close,
+:root:not([data-theme*='light']) .tab-close,
+:root[data-theme='default'] .tab-close,
+:root:not([data-theme]) .row-delete,
+:root:not([data-theme*='light']) .row-delete,
+:root[data-theme='default'] .row-delete,
+:root:not([data-theme]) .icon-button,
+:root:not([data-theme*='light']) .icon-button,
+:root[data-theme='default'] .icon-button {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .tabbar-folder-button,
+:root:not([data-theme*='light']) .tabbar-folder-button,
+:root[data-theme='default'] .tabbar-folder-button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .tabbar-folder-button:hover,
+:root:not([data-theme*='light']) .tabbar-folder-button:hover,
+:root[data-theme='default'] .tabbar-folder-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .fs-tab,
+:root:not([data-theme*='light']) .fs-tab,
+:root[data-theme='default'] .fs-tab {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .fs-tab:hover:not(.active),
+:root:not([data-theme*='light']) .fs-tab:hover:not(.active),
+:root[data-theme='default'] .fs-tab:hover:not(.active) {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .fs-tab.active,
+:root:not([data-theme*='light']) .fs-tab.active,
+:root[data-theme='default'] .fs-tab.active {
+  background: var(--bg-card);
+  border-bottom-color: var(--bg-card);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .tab-close,
+:root:not([data-theme*='light']) .tab-close,
+:root[data-theme='default'] .tab-close,
+:root:not([data-theme]) .row-delete,
+:root:not([data-theme*='light']) .row-delete,
+:root[data-theme='default'] .row-delete,
+:root:not([data-theme]) .icon-button,
+:root:not([data-theme*='light']) .icon-button,
+:root[data-theme='default'] .icon-button {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+:root:not([data-theme]) .tab-close:hover,
+:root:not([data-theme*='light']) .tab-close:hover,
+:root[data-theme='default'] .tab-close:hover,
+:root:not([data-theme]) .row-delete:hover,
+:root:not([data-theme*='light']) .row-delete:hover,
+:root[data-theme='default'] .row-delete:hover,
+:root:not([data-theme]) .icon-button:hover,
+:root:not([data-theme*='light']) .icon-button:hover,
+:root[data-theme='default'] .icon-button:hover {
+  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+  color: var(--status-danger);
+}
+
+:root:not([data-theme]) .add-tab,
+:root:not([data-theme*='light']) .add-tab,
+:root[data-theme='default'] .add-tab {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+:root:not([data-theme]) .add-tab:hover,
+:root:not([data-theme*='light']) .add-tab:hover,
+:root[data-theme='default'] .add-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .window-tools,
+:root:not([data-theme*='light']) .window-tools,
+:root[data-theme='default'] .window-tools {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .window-tools span,
+:root:not([data-theme*='light']) .window-tools span,
+:root[data-theme='default'] .window-tools span,
+:root:not([data-theme]) .window-tools button,
+:root:not([data-theme*='light']) .window-tools button,
+:root[data-theme='default'] .window-tools button {
+  background: transparent;
+}
+
+:root:not([data-theme]) .window-tools button,
+:root:not([data-theme*='light']) .window-tools button,
+:root[data-theme='default'] .window-tools button {
+  color: inherit;
+}
+
+:root:not([data-theme]) .tabbar-folder-button:hover,
+:root:not([data-theme*='light']) .tabbar-folder-button:hover,
+:root[data-theme='default'] .tabbar-folder-button:hover,
+:root:not([data-theme]) .window-tools span:hover,
+:root:not([data-theme*='light']) .window-tools span:hover,
+:root[data-theme='default'] .window-tools span:hover,
+:root:not([data-theme]) .window-tools button:hover,
+:root:not([data-theme*='light']) .window-tools button:hover,
+:root[data-theme='default'] .window-tools button:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .status-message,
+:root:not([data-theme*='light']) .status-message,
+:root[data-theme='default'] .status-message {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--status-warning) 10%, transparent);
+}
+
+:root:not([data-theme]) .status-message-close:hover,
+:root:not([data-theme*='light']) .status-message-close:hover,
+:root[data-theme='default'] .status-message-close:hover {
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+}

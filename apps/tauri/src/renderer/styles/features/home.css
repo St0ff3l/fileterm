@@ -162,7 +162,7 @@
 }
 
 .sidebar-nav-link.active {
-  background: var(--bg-active, rgba(255, 255, 255, 0.08));
+  background: var(--surface-active);
   border-radius: 8px;
   color: var(--text-main);
   font-weight: 500;
@@ -1002,7 +1002,7 @@
   left: var(--sidebar-width, 214px);
   right: 0;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-md);
   border-bottom: 1px solid var(--border-light);
   border-left: 1px solid var(--border-light);
 }

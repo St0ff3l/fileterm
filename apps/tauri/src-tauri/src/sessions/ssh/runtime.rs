@@ -222,16 +222,74 @@ fn emit_ssh_interaction(
     interaction_window_label: Option<&str>,
     payload: &Value,
 ) -> Result<(), tauri::Error> {
-    match interaction_window_label
+    let request_id = payload
+        .get("requestId")
+        .and_then(Value::as_str)
+        .unwrap_or("-");
+    let flow_id = payload
+        .get("flowId")
+        .and_then(Value::as_str)
+        .unwrap_or("-");
+    let tab_id = payload
+        .get("tabId")
+        .and_then(Value::as_str)
+        .unwrap_or("-");
+    let kind = payload
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let stage = payload
+        .get("stage")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let target = payload
+        .get("authenticationTarget")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let hop = payload
+        .get("hopIndex")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let sequence = payload
+        .get("sequence")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let (result, route) = match interaction_window_label
         .and_then(|label| app.get_webview_window(label))
     {
-        Some(window) => app.emit_to(
-            EventTarget::webview_window(window.label()),
-            "ssh:interaction",
-            payload,
+        Some(window) => (
+            app.emit_to(
+                EventTarget::webview_window(window.label()),
+                "ssh:interaction",
+                payload,
+            ),
+            format!("window:{}", window.label()),
         ),
-        None => app.emit("ssh:interaction", payload),
-    }
+        None => (app.emit("ssh:interaction", payload), "broadcast".to_string()),
+    };
+    crate::services::logging::session(
+        app,
+        if result.is_ok() { "DEBUG" } else { "WARN" },
+        "ssh",
+        tab_id,
+        format!(
+            "interaction emitted flow_id={} request_id={} kind={} stage={} target={} hop={} sequence={} route={} result={}",
+            flow_id,
+            request_id.escape_default(),
+            kind,
+            stage,
+            target,
+            hop,
+            sequence,
+            route,
+            result
+                .as_ref()
+                .err()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "ok".to_string()),
+        ),
+    );
+    result
 }
 
 pub struct ClientHandler {
@@ -307,16 +365,33 @@ impl Handler for ClientHandler {
         }
         let known = self.trusted_fingerprint.clone();
         let request_id = uuid::Uuid::new_v4().to_string();
+        let sequence = self.interaction.next_sequence();
+        let expires_at = ssh_interaction_expires_at(self.interaction_timeout);
         let (tx, rx) = oneshot::channel::<Value>();
-        {
+        let pending_count = {
             let state = self
                 .app
                 .state::<crate::services::workspace::WorkspaceState>();
             let mut pending = state.pending_interactions.write().await;
             pending.insert(request_id.clone(), tx);
-        }
+            pending.len()
+        };
         self.host_verification_waiting
             .store(true, Ordering::Release);
+        self.interaction.log_interaction(
+            &self.app,
+            "DEBUG",
+            &request_id,
+            "host-verification",
+            "host-key",
+            sequence,
+            format!(
+                "queued known_fingerprint={} pending={} timeout_secs={}",
+                known.is_some(),
+                pending_count,
+                self.interaction_timeout.as_secs(),
+            ),
+        );
         // Emit a `host-verification` interaction request. The payload shape
         // matches `SshHostVerificationRequest` in packages/core so the
         // renderer's `useSshInteractions` hook recognises it and shows the
@@ -333,46 +408,32 @@ impl Handler for ClientHandler {
             "authenticationTarget": self.interaction.authentication_target.as_str(),
             "hopIndex": self.interaction.hop_index,
             "stage": "host-key",
-            "sequence": self.interaction.next_sequence(),
+            "sequence": sequence,
+            "expiresAt": expires_at,
             "host": self.host,
             "port": self.port,
             "fingerprint": fp,
             "knownFingerprint": known,
         });
-        let (emit_result, route) = match self
-            .interaction_window_label
-            .as_deref()
-            .and_then(|label| self.app.get_webview_window(label))
-        {
-            Some(window) => (
-                self.app.emit_to(
-                    EventTarget::webview_window(window.label()),
-                    "ssh:interaction",
-                    &payload,
-                ),
-                format!("window:{}", window.label()),
-            ),
-            None => (
-                self.app.emit("ssh:interaction", &payload),
-                "broadcast".to_string(),
-            ),
-        };
-        crate::services::logging::session(
+        let emit_result = emit_ssh_interaction(
             &self.app,
-            "DEBUG",
-            "ssh",
-            &self.tab_id,
-            format!("host-key request emitted route={route}"),
+            self.interaction_window_label.as_deref(),
+            &payload,
         );
         if emit_result.is_err() {
             self.host_verification_waiting
                 .store(false, Ordering::Release);
-            self.app
-                .state::<crate::services::workspace::WorkspaceState>()
-                .pending_interactions
-                .write()
-                .await
-                .remove(&request_id);
+            let (_, pending_after) =
+                remove_pending_ssh_interaction(&self.app, &request_id).await;
+            self.interaction.log_interaction(
+                &self.app,
+                "WARN",
+                &request_id,
+                "host-verification",
+                "host-key",
+                sequence,
+                format!("event emission failed pending={pending_after}"),
+            );
             return Ok(false);
         }
         let response = timeout(self.interaction_timeout, rx).await;
@@ -380,21 +441,55 @@ impl Handler for ClientHandler {
         // interaction. A timeout has no renderer response, so clean it up
         // here to prevent stale host-key requests from affecting later
         // connection attempts.
-        self.app
-            .state::<crate::services::workspace::WorkspaceState>()
-            .pending_interactions
-            .write()
-            .await
-            .remove(&request_id);
+        let (_, pending_after) =
+            remove_pending_ssh_interaction(&self.app, &request_id).await;
         self.host_verification_waiting
             .store(false, Ordering::Release);
         let decision = match response {
-            Ok(Ok(response)) => response
-                .get("decision")
-                .and_then(|v| v.as_str())
-                .unwrap_or("cancel")
-                .to_string(),
-            Ok(Err(_)) | Err(_) => "cancel".to_string(),
+            Ok(Ok(response)) => {
+                let decision = response
+                    .get("decision")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("cancel")
+                    .to_string();
+                self.interaction.log_interaction(
+                    &self.app,
+                    "INFO",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!("resolved decision={} pending={pending_after}", decision),
+                );
+                decision
+            }
+            Ok(Err(_)) => {
+                self.interaction.log_interaction(
+                    &self.app,
+                    "WARN",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!("renderer receiver closed pending={pending_after}"),
+                );
+                "cancel".to_string()
+            }
+            Err(_) => {
+                self.interaction.log_interaction(
+                    &self.app,
+                    "WARN",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!(
+                        "expired reason=interaction-timeout timeout_secs={} pending={pending_after}",
+                        self.interaction_timeout.as_secs()
+                    ),
+                );
+                "cancel".to_string()
+            }
         };
         match decision.as_str() {
             "accept-and-save" => {

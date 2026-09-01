@@ -58,7 +58,7 @@
 .command-manager-submit button:hover,
 .command-param-hints button:hover {
   background: var(--command-history-head-bg);
-  border-color: var(--primary);
+  border-color: var(--focus-outline);
 }
 
 .command-center-body,
@@ -253,7 +253,7 @@
 
 .command-folder-add:hover {
   color: var(--text-main);
-  border-color: var(--primary);
+  border-color: var(--focus-outline);
   background: var(--bg-main);
 }
 
@@ -2370,7 +2370,7 @@
 .command-manager-modal .command-manager-sidebar-head button:hover,
 .command-manager-modal .command-manager-submit button:hover {
   background: var(--bg-main);
-  border-color: var(--primary);
+  border-color: var(--focus-outline);
   box-shadow: none;
 }
 

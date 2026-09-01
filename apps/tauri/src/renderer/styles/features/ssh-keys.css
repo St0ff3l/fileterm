@@ -359,7 +359,7 @@
 .ssh-key-import-dialog__source-switch button.is-active {
   background: var(--bg-active);
   color: var(--text-main);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 16%);
+  box-shadow: var(--shadow-xs);
 }
 
 .ssh-key-import-dialog__source-switch button:focus-visible {

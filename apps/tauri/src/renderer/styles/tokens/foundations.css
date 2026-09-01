@@ -1,0 +1,69 @@
+:root {
+  /* Typography */
+  --font-ui:
+    'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  /* Font Sizes */
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+
+  /* Line Heights */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.4;
+  --line-height-relaxed: 1.5;
+
+  /* Border Radii */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+  --window-corner-radius: 14px;
+
+  /* Control Heights & Metrics */
+  --control-height-sm: 28px;
+  --control-height-md: 36px;
+  --control-height-lg: 40px;
+
+  --control-padding-x-sm: 12px;
+  --control-padding-x-md: 20px;
+  --control-padding-x-lg: 24px;
+
+  /* Button Specifications */
+  --button-height-sm: 28px;
+  --button-height-md: 36px;
+  --button-height-lg: 40px;
+  --button-padding-x-sm: 12px;
+  --button-padding-x-md: 20px;
+  --button-padding-x-lg: 24px;
+  --button-gap-md: 8px;
+  --button-font-size-compact: 11px;
+  --button-font-size-regular: 12px;
+  --button-font-size-prominent: 13px;
+  --button-font-size-sm: 11px;
+  --button-font-size-md: 12px;
+  --button-font-size-lg: 13px;
+  --button-font-weight: 600;
+  --button-line-height: 1;
+
+  /* Elevation Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 18px 42px rgba(15, 23, 42, 0.14);
+  --shadow-modal: 0 24px 48px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.1);
+
+  /* Transitions */
+  --transition-fast: 0.1s ease;
+  --transition-normal: 0.15s ease;
+  --transition-slow: 0.25s ease;
+}
