@@ -42,6 +42,11 @@ async fn try_keyboard_interactive(
                 pending.insert(request_id.clone(), tx);
                 pending.len()
             };
+            let _pending_cleanup = PendingSshInteractionGuard::new(
+                &app,
+                &interaction.tab_id,
+                &request_id,
+            );
             interaction.log_interaction(
                 &app,
                 "DEBUG",
@@ -100,8 +105,8 @@ async fn try_keyboard_interactive(
                 );
                 return None;
             }
-            match timeout(interaction_timeout, rx).await {
-                Ok(Ok(response)) => {
+            match wait_for_ssh_interaction(&interaction, rx, interaction_timeout).await {
+                SshInteractionWaitResult::Response(response) => {
                     let canceled = response
                         .get("canceled")
                         .and_then(|value| value.as_bool())
@@ -150,7 +155,7 @@ async fn try_keyboard_interactive(
                             .collect(),
                     )
                 }
-                Ok(Err(_)) => {
+                SshInteractionWaitResult::ReceiverClosed => {
                     let (_, pending_after) =
                         remove_pending_ssh_interaction(&app, &request_id).await;
                     interaction.log_interaction(
@@ -164,7 +169,7 @@ async fn try_keyboard_interactive(
                     );
                     None
                 }
-                Err(_) => {
+                SshInteractionWaitResult::Timeout => {
                     let (_, pending_after) =
                         remove_pending_ssh_interaction(&app, &request_id).await;
                     interaction.log_interaction(
@@ -177,6 +182,22 @@ async fn try_keyboard_interactive(
                         format!(
                             "expired reason=interaction-timeout timeout_secs={} pending={pending_after}",
                             interaction_timeout.as_secs()
+                        ),
+                    );
+                    None
+                }
+                SshInteractionWaitResult::Cancelled => {
+                    let (_, pending_after) =
+                        remove_pending_ssh_interaction(&app, &request_id).await;
+                    interaction.log_interaction(
+                        &app,
+                        "INFO",
+                        &request_id,
+                        "keyboard-interactive",
+                        "keyboard-interactive",
+                        sequence,
+                        format!(
+                            "canceled reason=connection-cancelled pending={pending_after}"
                         ),
                     );
                     None

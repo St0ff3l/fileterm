@@ -21,6 +21,7 @@ use tauri::AppHandle;
 use crate::storage::state_path;
 
 const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_LOG_MESSAGE_BYTES: usize = 16 * 1024;
 static LOG_LOCK: Mutex<()> = Mutex::new(());
 static LOG_DIRECTORY: OnceLock<PathBuf> = OnceLock::new();
 static AUTHORIZATION_PATTERN: LazyLock<regex::Regex> = LazyLock::new(|| {
@@ -29,9 +30,9 @@ static AUTHORIZATION_PATTERN: LazyLock<regex::Regex> = LazyLock::new(|| {
 });
 static SECRET_PATTERN: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(
-        r#"(?i)(password|passphrase|authorization|proxy[_-]?password|token)["']?\s*([:=])\s*["']?([^\s,;"'}]+)"#,
+        r##"(?i)(password|passphrase|authorization|proxy[_-]?password|otp|mfa|one[-_ ]?time[-_ ]?password|verification[-_ ]?code|private[-_ ]?key|secret|api[-_ ]?key|token)["']?\s*([:=])\s*(?:"[^"]*"|'[^']*'|[^\s,;"'}\]]+)"##,
     )
-    .expect("static redaction regex")
+        .expect("static redaction regex")
 });
 
 fn log_directory(app: &AppHandle) -> Option<std::path::PathBuf> {
@@ -44,11 +45,40 @@ pub fn init(app: &AppHandle) {
     }
 }
 
+/// Keep diagnostics one physical line and bounded even when a remote server
+/// returns a banner/error containing newlines or an unexpectedly large blob.
+/// This prevents log injection and keeps a malformed SSH response from
+/// turning the local log into an unbounded append workload.
+fn sanitize_fragment(value: &str, max_bytes: usize) -> String {
+    let mut sanitized = String::with_capacity(value.len().min(max_bytes));
+    let mut used = 0usize;
+    for character in value.chars() {
+        let escaped = match character {
+            '\n' => "\\n".to_string(),
+            '\r' => "\\r".to_string(),
+            '\t' => "\\t".to_string(),
+            character if character.is_control() => {
+                format!("\\u{{{:04x}}}", character as u32)
+            }
+            character => character.to_string(),
+        };
+        if used.saturating_add(escaped.len()) > max_bytes {
+            sanitized.push_str("…[truncated]");
+            break;
+        }
+        used += escaped.len();
+        sanitized.push_str(&escaped);
+    }
+    sanitized
+}
+
 fn redact(message: &str) -> String {
+    // Redact before truncating. If a quoted secret is cut in half first, the
+    // closing quote may disappear and the redaction pattern could leave a
+    // prefix of that value in the bounded diagnostic line.
     let message = AUTHORIZATION_PATTERN.replace_all(message, "$1[REDACTED]");
-    SECRET_PATTERN
-        .replace_all(&message, "$1$2[REDACTED]")
-        .into_owned()
+    let message = SECRET_PATTERN.replace_all(&message, "$1$2[REDACTED]");
+    sanitize_fragment(&message, MAX_LOG_MESSAGE_BYTES)
 }
 
 /// Build the formatted log line. Pure / allocation-only, safe to call from
@@ -58,7 +88,12 @@ fn build_line(level: &str, scope: &str, message: &str) -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    format!("{timestamp} [{level}] [{scope}] {}\n", redact(message))
+    format!(
+        "{timestamp} [{}] [{}] {}\n",
+        sanitize_fragment(level, 32),
+        sanitize_fragment(scope, 256),
+        redact(message)
+    )
 }
 
 /// Synchronous append — only called from `spawn_blocking`. Holds `LOG_LOCK`
@@ -232,5 +267,21 @@ mod tests {
     fn preserves_non_secret_diagnostics() {
         let line = redact("session=tab-1 platform=windows cpu=12%");
         assert_eq!(line, "session=tab-1 platform=windows cpu=12%");
+    }
+
+    #[test]
+    fn removes_control_characters_and_redacts_quoted_values() {
+        let line = redact("error=first\nsecond password=\"otp with spaces\" otp='123456'");
+        assert_eq!(
+            line,
+            "error=first\\nsecond password=[REDACTED] otp=[REDACTED]"
+        );
+    }
+
+    #[test]
+    fn truncates_unbounded_remote_diagnostics() {
+        let line = redact(&"x".repeat(super::MAX_LOG_MESSAGE_BYTES + 128));
+        assert!(line.len() <= super::MAX_LOG_MESSAGE_BYTES + "…[truncated]".len());
+        assert!(line.ends_with("…[truncated]"));
     }
 }

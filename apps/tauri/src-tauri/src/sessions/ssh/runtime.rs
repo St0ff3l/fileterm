@@ -376,6 +376,11 @@ impl Handler for ClientHandler {
             pending.insert(request_id.clone(), tx);
             pending.len()
         };
+        let _pending_cleanup = PendingSshInteractionGuard::new(
+            &self.app,
+            &self.interaction.tab_id,
+            &request_id,
+        );
         self.host_verification_waiting
             .store(true, Ordering::Release);
         self.interaction.log_interaction(
@@ -436,7 +441,12 @@ impl Handler for ClientHandler {
             );
             return Ok(false);
         }
-        let response = timeout(self.interaction_timeout, rx).await;
+        let response = wait_for_ssh_interaction(
+            &self.interaction,
+            rx,
+            self.interaction_timeout,
+        )
+        .await;
         // The renderer normally removes this entry when it resolves the
         // interaction. A timeout has no renderer response, so clean it up
         // here to prevent stale host-key requests from affecting later
@@ -446,7 +456,7 @@ impl Handler for ClientHandler {
         self.host_verification_waiting
             .store(false, Ordering::Release);
         let decision = match response {
-            Ok(Ok(response)) => {
+            SshInteractionWaitResult::Response(response) => {
                 let decision = response
                     .get("decision")
                     .and_then(|v| v.as_str())
@@ -463,7 +473,7 @@ impl Handler for ClientHandler {
                 );
                 decision
             }
-            Ok(Err(_)) => {
+            SshInteractionWaitResult::ReceiverClosed => {
                 self.interaction.log_interaction(
                     &self.app,
                     "WARN",
@@ -475,7 +485,7 @@ impl Handler for ClientHandler {
                 );
                 "cancel".to_string()
             }
-            Err(_) => {
+            SshInteractionWaitResult::Timeout => {
                 self.interaction.log_interaction(
                     &self.app,
                     "WARN",
@@ -486,6 +496,20 @@ impl Handler for ClientHandler {
                     format!(
                         "expired reason=interaction-timeout timeout_secs={} pending={pending_after}",
                         self.interaction_timeout.as_secs()
+                    ),
+                );
+                "cancel".to_string()
+            }
+            SshInteractionWaitResult::Cancelled => {
+                self.interaction.log_interaction(
+                    &self.app,
+                    "INFO",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!(
+                        "canceled reason=connection-cancelled pending={pending_after}"
                     ),
                 );
                 "cancel".to_string()

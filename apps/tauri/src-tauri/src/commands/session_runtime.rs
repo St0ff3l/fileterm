@@ -205,11 +205,14 @@ pub(crate) async fn send_worker_cmd_with_response_timeout_cancellable<T>(
 }
 
 async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Result<(), AppError> {
+    let operation_id = uuid::Uuid::new_v4().to_string();
     let started_at = Instant::now();
     crate::services::logging::debug(
         app,
         &format!("sftp:{tab_id}"),
-        format!("remote directory listing started path={path}"),
+        format!(
+            "remote directory listing started operation_id={operation_id} path={path}"
+        ),
     );
     let files = match send_worker_file_cmd(app, tab_id, |tx, cancellation| {
         WorkerCmd::ListRemoteFiles {
@@ -226,7 +229,7 @@ async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Resu
                 app,
                 &format!("sftp:{tab_id}"),
                 format!(
-                    "remote directory listing failed path={path} elapsed_ms={} error={error}",
+                    "remote directory listing failed operation_id={operation_id} path={path} elapsed_ms={} error={error}",
                     started_at.elapsed().as_millis()
                 ),
             );
@@ -237,7 +240,7 @@ async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Resu
         app,
         &format!("sftp:{tab_id}"),
         format!(
-            "remote directory listing completed path={path} entries={} elapsed_ms={}",
+            "remote directory listing completed operation_id={operation_id} path={path} entries={} elapsed_ms={}",
             files.len(),
             started_at.elapsed().as_millis()
         ),
@@ -245,9 +248,27 @@ async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Resu
 
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let mut sessions = state.sessions.write().await;
-    if let Some(session) = sessions.get_mut(tab_id) {
-        session.remote_files = files;
+    let Some(session) = sessions.get_mut(tab_id) else {
+        crate::services::logging::warn(
+            app,
+            &format!("sftp:{tab_id}"),
+            format!(
+                "remote directory listing result discarded operation_id={operation_id} reason=session-missing"
+            ),
+        );
+        return Ok(());
+    };
+    if !session.connected {
+        crate::services::logging::warn(
+            app,
+            &format!("sftp:{tab_id}"),
+            format!(
+                "remote directory listing result discarded operation_id={operation_id} reason=session-disconnected"
+            ),
+        );
+        return Ok(());
     }
+    session.remote_files = files;
     Ok(())
 }
 
@@ -275,6 +296,16 @@ async fn refresh_remote_files_for_shell_cwd(
                 let can_try_next = use_sftp_namespace
                     && index + 1 < candidates.len()
                     && crate::sessions::ssh::is_sftp_path_not_found_message(&error.to_string());
+                if can_try_next {
+                    crate::services::logging::debug(
+                        app,
+                        &format!("sftp:{tab_id}"),
+                        format!(
+                            "remote directory listing trying fallback candidate index={} reason=path-not-found",
+                            index + 1
+                        ),
+                    );
+                }
                 last_error = Some(error);
                 if !can_try_next {
                     break;

@@ -31,6 +31,7 @@ mod tests {
         KeyboardInteractiveMode, KeyboardInteractiveRequest, ResolvedSshDeviceMode, RootFileAccessMethod,
         ShellSetupEchoSuppression, SshDeviceModeResolution, SshTunnelRule, TunnelCommand,
         SshInteractionContext, SshInteractionFlow, SshAuthenticationTarget,
+        SshInteractionWaitResult, wait_for_ssh_interaction,
         BUSYBOX_SHELL_CWD_SETUP, SHELL_CWD_SETUP, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
@@ -649,6 +650,29 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error, "SSH password authentication timed out after 1 ms");
+    }
+
+    #[tokio::test]
+    async fn ssh_interaction_wait_stops_immediately_when_session_is_cancelled() {
+        let cancellation = CancellationToken::new();
+        let flow = SshInteractionFlow::new();
+        let context = SshInteractionContext::from_profile(
+            &flow,
+            "tab-1",
+            &serde_json::json!({"id": "profile-1", "name": "Test"}),
+            "example.test",
+            22,
+            SshAuthenticationTarget::Direct,
+            Some("main".to_string()),
+            cancellation.clone(),
+        );
+        let (_sender, receiver) = oneshot::channel();
+        cancellation.cancel();
+
+        let result =
+            wait_for_ssh_interaction(&context, receiver, Duration::from_secs(60)).await;
+
+        assert!(matches!(result, SshInteractionWaitResult::Cancelled));
     }
 
     #[tokio::test]
@@ -2198,6 +2222,7 @@ mod tests {
             22,
             SshAuthenticationTarget::JumpHost,
             Some("main".to_string()),
+            CancellationToken::new(),
         );
         let target = SshInteractionContext::from_profile(
             &flow,
@@ -2207,6 +2232,7 @@ mod tests {
             2222,
             SshAuthenticationTarget::Target,
             Some("main".to_string()),
+            CancellationToken::new(),
         );
 
         assert_eq!(jump.flow.flow_id, target.flow.flow_id);

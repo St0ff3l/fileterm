@@ -33,6 +33,7 @@ fn build_legacy_preferred() -> russh::Preferred {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Recursive jump-host setup keeps transport and interaction policy explicit.
 async fn open_session(
     profile: &Value,
     app: &AppHandle,
@@ -41,6 +42,7 @@ async fn open_session(
     interaction_window_label: Option<String>,
     authentication_target: SshAuthenticationTarget,
     flow: SshInteractionFlow,
+    cancellation: CancellationToken,
 ) -> Result<OpenSshSession, String> {
     let mut effective_profile = profile.clone();
     let has_jump_host = effective_profile
@@ -61,6 +63,7 @@ async fn open_session(
         port,
         authentication_target,
         interaction_window_label.clone(),
+        cancellation.clone(),
     );
     interaction.log_interaction(
         app,
@@ -225,6 +228,7 @@ async fn open_session(
             interaction_window_label.clone(),
             SshAuthenticationTarget::JumpHost,
             flow.clone(),
+            cancellation.clone(),
         ))
         .await?;
         let jump_handle = jump_session.handle;
@@ -238,6 +242,7 @@ async fn open_session(
             port,
             SshAuthenticationTarget::Target,
             interaction_window_label.clone(),
+            cancellation.clone(),
         );
         ensure_password_credentials(
             &mut target_profile,
@@ -427,6 +432,7 @@ pub async fn test_connection(
     interaction_window_label: String,
 ) -> Result<(), String> {
     let flow = SshInteractionFlow::new();
+    let cancellation = CancellationToken::new();
     crate::services::logging::session(
         app,
         "INFO",
@@ -438,7 +444,7 @@ pub async fn test_connection(
             SSH_CONNECTION_TEST_INTERACTION_TIMEOUT.as_secs(),
         ),
     );
-    let session = match open_session(
+    let session_result = open_session(
         profile,
         app,
         tab_id,
@@ -446,9 +452,14 @@ pub async fn test_connection(
         Some(interaction_window_label),
         SshAuthenticationTarget::Direct,
         flow.clone(),
+        cancellation.clone(),
     )
-    .await
-    {
+    .await;
+    // A connection test is transient. Cancel its interaction boundary as
+    // soon as the open attempt returns so a late handler future cannot leave
+    // a credentials/MFA sender behind while the form is already closing.
+    cancellation.cancel();
+    let session = match session_result {
         Ok(handle) => handle,
         Err(error) => {
             crate::services::logging::session(

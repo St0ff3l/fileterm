@@ -169,9 +169,15 @@ struct SshInteractionContext {
     authentication_target: SshAuthenticationTarget,
     hop_index: u32,
     interaction_window_label: Option<String>,
+    /// The owning session's cancellation boundary. A prompt must disappear
+    /// as soon as a tab is closed or a connection attempt is superseded;
+    /// waiting only on the user-facing timeout leaves stale senders in
+    /// `pending_interactions` for up to five minutes.
+    cancellation: CancellationToken,
 }
 
 impl SshInteractionContext {
+    #[allow(clippy::too_many_arguments)] // Context construction keeps the complete hop identity explicit.
     fn from_profile(
         flow: &SshInteractionFlow,
         tab_id: &str,
@@ -180,6 +186,7 @@ impl SshInteractionContext {
         port: u16,
         authentication_target: SshAuthenticationTarget,
         interaction_window_label: Option<String>,
+        cancellation: CancellationToken,
     ) -> Self {
         let profile_id = profile
             .get("id")
@@ -203,6 +210,7 @@ impl SshInteractionContext {
             authentication_target,
             hop_index: authentication_target.hop_index(),
             interaction_window_label,
+            cancellation,
         }
     }
 
@@ -255,12 +263,85 @@ async fn remove_pending_ssh_interaction(app: &AppHandle, request_id: &str) -> (b
     (removed, pending.len())
 }
 
+/// Last-resort cleanup for an interaction future that is dropped by an outer
+/// cancellation boundary before it reaches its normal `select!` cleanup path.
+/// This is intentionally silent when the request was already removed by the
+/// renderer or the waiter; it only emits a diagnostic when it actually finds
+/// and removes a stale sender.
+struct PendingSshInteractionGuard {
+    app: AppHandle,
+    request_id: String,
+    tab_id: String,
+}
+
+impl PendingSshInteractionGuard {
+    fn new(app: &AppHandle, tab_id: &str, request_id: &str) -> Self {
+        Self {
+            app: app.clone(),
+            request_id: request_id.to_string(),
+            tab_id: tab_id.to_string(),
+        }
+    }
+}
+
+impl Drop for PendingSshInteractionGuard {
+    fn drop(&mut self) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let app = self.app.clone();
+        let request_id = self.request_id.clone();
+        let tab_id = self.tab_id.clone();
+        runtime.spawn(async move {
+            let (removed, pending_after) =
+                remove_pending_ssh_interaction(&app, &request_id).await;
+            if removed {
+                crate::services::logging::warn(
+                    &app,
+                    &format!("ssh-interaction:{tab_id}"),
+                    format!(
+                        "pending interaction cleaned after task cancellation request_id={} pending={pending_after}",
+                        request_id.escape_default()
+                    ),
+                );
+            }
+        });
+    }
+}
+
 fn ssh_interaction_expires_at(deadline: Duration) -> u64 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
     now.saturating_add(deadline.as_millis()).min(u64::MAX as u128) as u64
+}
+
+/// Wait for a renderer-owned SSH interaction while also observing the owning
+/// session's cancellation token. Closing a tab must wake host-key, password,
+/// key-passphrase, and KBI waits immediately; otherwise their oneshot senders
+/// remain in the global pending map until the normal human-response timeout.
+enum SshInteractionWaitResult {
+    Response(Value),
+    ReceiverClosed,
+    Timeout,
+    Cancelled,
+}
+
+async fn wait_for_ssh_interaction(
+    interaction: &SshInteractionContext,
+    rx: oneshot::Receiver<Value>,
+    interaction_timeout: Duration,
+) -> SshInteractionWaitResult {
+    tokio::select! {
+        biased;
+        _ = interaction.cancellation.cancelled() => SshInteractionWaitResult::Cancelled,
+        response = timeout(interaction_timeout, rx) => match response {
+            Ok(Ok(value)) => SshInteractionWaitResult::Response(value),
+            Ok(Err(_)) => SshInteractionWaitResult::ReceiverClosed,
+            Err(_) => SshInteractionWaitResult::Timeout,
+        },
+    }
 }
 
 fn read_shared_remote_sshid(remote_sshid: &SharedRemoteSshId) -> Vec<u8> {

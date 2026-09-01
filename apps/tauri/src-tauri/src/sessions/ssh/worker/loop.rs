@@ -22,17 +22,20 @@ async fn run_worker_loop(
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
     // one authenticated handle for every channel. The handle is wrapped in
     // `Arc` so the background metrics task can share it with the main loop.
-    let session = match open_session(
-        profile,
-        app,
-        tab_id,
-        SSH_INTERACTION_TIMEOUT,
-        Some("main".to_string()),
-        SshAuthenticationTarget::Direct,
-        SshInteractionFlow::new(),
-    )
-    .await
-    {
+    let session = match tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err("SSH connection canceled".to_string()),
+        result = open_session(
+            profile,
+            app,
+            tab_id,
+            SSH_INTERACTION_TIMEOUT,
+            Some("main".to_string()),
+            SshAuthenticationTarget::Direct,
+            SshInteractionFlow::new(),
+            cancellation.clone(),
+        ) => result,
+    } {
         Ok(h) => h,
         Err(error) => {
             crate::services::logging::session(

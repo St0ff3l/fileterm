@@ -84,6 +84,11 @@ async fn ensure_password_credentials(
         pending.insert(request_id.clone(), tx);
         pending.len()
     };
+    let _pending_cleanup = PendingSshInteractionGuard::new(
+        app,
+        &interaction.tab_id,
+        &request_id,
+    );
     interaction.log_interaction(
         app,
         "DEBUG",
@@ -132,9 +137,9 @@ async fn ensure_password_credentials(
         return Err(error.to_string());
     }
 
-    let response = match timeout(interaction_timeout, rx).await {
-        Ok(Ok(response)) => response,
-        Ok(Err(_)) => {
+    let response = match wait_for_ssh_interaction(interaction, rx, interaction_timeout).await {
+        SshInteractionWaitResult::Response(response) => response,
+        SshInteractionWaitResult::ReceiverClosed => {
             let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
             interaction.log_interaction(
                 app,
@@ -147,7 +152,7 @@ async fn ensure_password_credentials(
             );
             return Err("SSH credentials request canceled".to_string());
         }
-        Err(_) => {
+        SshInteractionWaitResult::Timeout => {
             let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
             interaction.log_interaction(
                 app,
@@ -162,6 +167,21 @@ async fn ensure_password_credentials(
                 ),
             );
             return Err("SSH credentials request timed out".to_string());
+        }
+        SshInteractionWaitResult::Cancelled => {
+            let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
+            interaction.log_interaction(
+                app,
+                "INFO",
+                &request_id,
+                "credentials",
+                "credentials",
+                sequence,
+                format!(
+                    "canceled reason=connection-cancelled pending={pending_after}"
+                ),
+            );
+            return Err("SSH credentials request canceled".to_string());
         }
     };
     let (_, pending_after) = remove_pending_ssh_interaction(app, &request_id).await;
