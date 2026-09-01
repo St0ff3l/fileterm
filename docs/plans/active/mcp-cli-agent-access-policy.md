@@ -1011,6 +1011,9 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 增加长任务 CLI 别名 `start-remote-command`、`read-remote-command`、`terminate-remote-command` 和 `close-remote-command`，并支持 `open --execution-mode` 与删除软链接参数透传。
 - [x] 终止后台命令后有界等待远端 channel 的最终状态；若服务端没有及时关闭，明确返回仍为 `running`，不伪造退出结果。
 - [x] 补充长任务工具 schema、分页契约、危险操作标注和 CLI 子进程回归。
+- [x] 参考 ssh-mcp 的 channel retry：SSH exec 只对 `channel_open_session` 做最多 3 次短退避重试，PTY、stdin 和已接受的命令不会被重放。
+- [x] 参考 ssh-mcp 的 session 上限：单个 tab 最多 5 个 active 后台命令；容量不足返回稳定的 `FILETERM_REMOTE_COMMAND_SESSION_LIMIT`，并在并发竞态下终止未注册 channel。
+- [x] 关闭后台命令时有界等待原 channel 完成，并使用对象身份保护 registry 清理，避免旧任务误删新条目。
 
 ### 阶段 4：CLI 凭据输入硬化
 

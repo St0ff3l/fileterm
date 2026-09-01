@@ -22,6 +22,12 @@ const EXEC_CHANNEL_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
 /// A cancellation must not wait behind a broken SSH server indefinitely. Each
 /// signal is best-effort and the channel is closed after the ladder.
 const EXEC_TERMINATION_SIGNAL_TIMEOUT: Duration = Duration::from_millis(300);
+/// Some SSH servers (notably Dropbear and hosts with a strict MaxSessions)
+/// can reject the next channel immediately after a previous channel closes.
+/// Retry only the channel-open handshake; once `exec` has been sent the
+/// command must never be replayed on a replacement channel.
+const EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS: usize = 3;
+const EXEC_CHANNEL_OPEN_RETRY_DELAY: Duration = Duration::from_millis(150);
 
 /// `exec_command` / `exec_command_with_stdin` 收集的 output 字节上限。
 /// probe 命令的正常输出只有几行（uname / 系统信息），超过 256KB 说明

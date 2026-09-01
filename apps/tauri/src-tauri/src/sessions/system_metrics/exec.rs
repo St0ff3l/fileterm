@@ -241,7 +241,7 @@ pub(crate) async fn open_background_exec_channel<H: Handler>(
     cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<BackgroundExecChannel, String> {
     let deadline = Some(tokio::time::Instant::now() + startup_timeout);
-    let channel = await_exec_stage(handle.channel_open_session(), deadline, cancellation).await?;
+    let channel = open_exec_channel_with_retry(handle, deadline, cancellation).await?;
     if request_pty {
         if let Err(error) = await_exec_stage(
             channel.request_pty(
@@ -314,7 +314,7 @@ async fn exec_command_internal<H: Handler>(
         return Err("AI_REQUEST_CANCELLED".to_string());
     }
     let deadline = command_timeout.map(|duration| tokio::time::Instant::now() + duration);
-    let mut channel = await_exec_stage(handle.channel_open_session(), deadline, cancellation).await?;
+    let mut channel = open_exec_channel_with_retry(handle, deadline, cancellation).await?;
     if request_pty {
         let result = await_exec_stage(
             channel.request_pty(
@@ -516,6 +516,59 @@ async fn wait_for_exec_cancellation(
         cancellation.cancelled().await;
     } else {
         std::future::pending::<()>().await;
+    }
+}
+
+/// Open one SSH exec channel with the bounded retry used by ssh-mcp's channel
+/// retry layer. Only `channel_open_session` is retried: no PTY request, stdin
+/// write, or command execution has happened yet, so this cannot duplicate a
+/// command that the server may already have accepted.
+async fn open_exec_channel_with_retry<H: Handler>(
+    handle: &Handle<H>,
+    deadline: Option<tokio::time::Instant>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<russh::Channel<russh::client::Msg>, String> {
+    let mut last_error = None;
+    for attempt in 0..EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS {
+        match await_exec_stage(handle.channel_open_session(), deadline, cancellation).await {
+            Ok(channel) => return Ok(channel),
+            Err(error) => {
+                if !is_retryable_exec_channel_open_error(&error)
+                    || attempt + 1 >= EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS
+                {
+                    return Err(error);
+                }
+                last_error = Some(error);
+                let delay = EXEC_CHANNEL_OPEN_RETRY_DELAY
+                    .checked_mul((attempt + 1) as u32)
+                    .unwrap_or(EXEC_CHANNEL_OPEN_RETRY_DELAY);
+                wait_for_exec_channel_retry(delay, deadline, cancellation).await?;
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "SSH exec channel open failed".to_string()))
+}
+
+fn is_retryable_exec_channel_open_error(error: &str) -> bool {
+    !matches!(error, "AI_REQUEST_TIMEOUT" | "AI_REQUEST_CANCELLED")
+}
+
+async fn wait_for_exec_channel_retry(
+    delay: Duration,
+    deadline: Option<tokio::time::Instant>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<(), String> {
+    if let Some(deadline) = deadline {
+        tokio::select! {
+            _ = tokio::time::sleep_until(deadline) => Err("AI_REQUEST_TIMEOUT".to_string()),
+            _ = tokio::time::sleep(delay) => Ok(()),
+            _ = wait_for_exec_cancellation(cancellation) => Err("AI_REQUEST_CANCELLED".to_string()),
+        }
+    } else {
+        tokio::select! {
+            _ = tokio::time::sleep(delay) => Ok(()),
+            _ = wait_for_exec_cancellation(cancellation) => Err("AI_REQUEST_CANCELLED".to_string()),
+        }
     }
 }
 

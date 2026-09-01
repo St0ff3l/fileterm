@@ -5,8 +5,10 @@ mod tests {
         build_windows_metrics_command, build_windows_streaming_metrics_command,
         build_windows_streaming_metrics_exec_command, classify_posix_probe_body,
         classify_windows_probe_output, extend_with_cap, parse_system_metrics,
-        pty_password_prompt_detected, EXEC_COMMAND_OUTPUT_CAP,
+        pty_password_prompt_detected, is_retryable_exec_channel_open_error,
+        EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS, EXEC_CHANNEL_OPEN_RETRY_DELAY, EXEC_COMMAND_OUTPUT_CAP,
     };
+    use std::time::Duration;
 
     #[test]
     fn bounded_exec_output_marks_when_remote_data_is_discarded() {
@@ -19,6 +21,15 @@ mod tests {
         assert_eq!(output.len(), EXEC_COMMAND_OUTPUT_CAP);
         assert!(capped);
         assert_eq!(&output[EXEC_COMMAND_OUTPUT_CAP - 2..], b"ab");
+    }
+
+    #[test]
+    fn exec_channel_retry_is_bounded_and_never_retries_after_timeout_or_cancel() {
+        assert_eq!(EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS, 3);
+        assert_eq!(EXEC_CHANNEL_OPEN_RETRY_DELAY, Duration::from_millis(150));
+        assert!(is_retryable_exec_channel_open_error("channel open rejected"));
+        assert!(!is_retryable_exec_channel_open_error("AI_REQUEST_TIMEOUT"));
+        assert!(!is_retryable_exec_channel_open_error("AI_REQUEST_CANCELLED"));
     }
 
     #[test]

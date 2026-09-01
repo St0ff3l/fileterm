@@ -14,6 +14,10 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, RwLock};
 use tokio::time::sleep_until;
 
 const MAX_BACKGROUND_REMOTE_COMMANDS: usize = 128;
+/// Mirror ssh-mcp's default `sessionMaxPerConnection`: one FileTerm tab must
+/// not fan out an unbounded number of detached exec channels while a deploy
+/// agent is polling or retrying requests.
+const MAX_ACTIVE_BACKGROUND_REMOTE_COMMANDS_PER_TAB: usize = 5;
 const BACKGROUND_REMOTE_COMMAND_RETENTION: Duration = Duration::from_secs(30 * 60);
 const BACKGROUND_REMOTE_COMMAND_OUTPUT_CAP: usize = 256 * 1024;
 const BACKGROUND_REMOTE_COMMAND_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
@@ -107,6 +111,27 @@ pub struct BackgroundRemoteCommandRegistry {
 }
 
 impl BackgroundRemoteCommandRegistry {
+    /// Fast-fail before opening a remote channel when the tab or registry is
+    /// already at capacity. `register` repeats the check after channel setup
+    /// to close the small race between concurrent starts safely.
+    pub(crate) async fn ensure_capacity(&self, tab_id: &str) -> Result<(), String> {
+        self.prune_finished().await;
+        let commands = self.commands.read().await;
+        if commands.len() >= MAX_BACKGROUND_REMOTE_COMMANDS {
+            return Err(format!(
+                "{FILETERM_REMOTE_COMMAND_LIMIT}: too many background remote commands"
+            ));
+        }
+        if count_active_commands_for_tab(&commands, tab_id).await
+            >= MAX_ACTIVE_BACKGROUND_REMOTE_COMMANDS_PER_TAB
+        {
+            return Err(format!(
+                "{FILETERM_REMOTE_COMMAND_SESSION_LIMIT}: tab has too many active background remote commands"
+            ));
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn register(
         &self,
@@ -144,15 +169,18 @@ impl BackgroundRemoteCommandRegistry {
             let mut commands = self.commands.write().await;
             if commands.len() >= MAX_BACKGROUND_REMOTE_COMMANDS {
                 drop(commands);
-                let writer = command
-                    .writer
-                    .lock()
-                    .await
-                    .take()
-                    .expect("new background command must own its writer");
-                let _ = close_writer(&writer).await;
+                terminate_unregistered_command(&command).await;
                 return Err(format!(
                     "{FILETERM_REMOTE_COMMAND_LIMIT}: too many background remote commands"
+                ));
+            }
+            if count_active_commands_for_tab(&commands, &tab_id).await
+                >= MAX_ACTIVE_BACKGROUND_REMOTE_COMMANDS_PER_TAB
+            {
+                drop(commands);
+                terminate_unregistered_command(&command).await;
+                return Err(format!(
+                    "{FILETERM_REMOTE_COMMAND_SESSION_LIMIT}: tab has too many active background remote commands"
                 ));
             }
             commands.insert(command_id.clone(), Arc::clone(&command));
@@ -278,10 +306,26 @@ impl BackgroundRemoteCommandRegistry {
 
     pub(crate) async fn close(&self, tab_id: &str, command_id: &str) -> Result<(), String> {
         let command = self.lookup_for_tab(tab_id, command_id).await?;
+        let notified = command.notify.notified();
+        let running = command.state.lock().await.running;
         command.cancellation.cancel();
         terminate_writer(&command).await;
+        if running && command.state.lock().await.running {
+            let _ = tokio::time::timeout(
+                BACKGROUND_REMOTE_COMMAND_TERMINATION_WAIT,
+                notified,
+            )
+            .await;
+        }
         let mut commands = self.commands.write().await;
-        commands.remove(command_id);
+        // Keep the same identity guard as ssh-mcp's session manager: an old
+        // close task must never remove a newer entry if IDs are ever reused.
+        if commands
+            .get(command_id)
+            .is_some_and(|candidate| Arc::ptr_eq(candidate, &command))
+        {
+            commands.remove(command_id);
+        }
         Ok(())
     }
 
@@ -341,6 +385,19 @@ impl BackgroundRemoteCommandRegistry {
             commands.remove(&id);
         }
     }
+}
+
+async fn count_active_commands_for_tab(
+    commands: &HashMap<String, Arc<BackgroundRemoteCommand>>,
+    tab_id: &str,
+) -> usize {
+    let mut active = 0;
+    for command in commands.values().filter(|command| command.tab_id == tab_id) {
+        if command.state.lock().await.running {
+            active += 1;
+        }
+    }
+    active
 }
 
 async fn run_background_remote_command(
@@ -486,6 +543,13 @@ async fn snapshot_command(
 }
 
 async fn terminate_writer(command: &BackgroundRemoteCommand) {
+    let writer = command.writer.lock().await;
+    if let Some(writer) = writer.as_ref() {
+        let _ = crate::sessions::system_metrics::terminate_exec_channel_writer(writer).await;
+    }
+}
+
+async fn terminate_unregistered_command(command: &BackgroundRemoteCommand) {
     let writer = command.writer.lock().await;
     if let Some(writer) = writer.as_ref() {
         let _ = crate::sessions::system_metrics::terminate_exec_channel_writer(writer).await;

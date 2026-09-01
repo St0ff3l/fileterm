@@ -70,6 +70,8 @@ The start result contains `commandId` and the read result contains `nextOffset`.
 
 Background commands stay in the FileTerm worker and are scoped to the originating `tabId`. Their output is bounded and retained for a limited period. Termination waits briefly for the remote channel to report its final state, but a command can remain `running` when the server does not close the channel promptly; this is not a claim that the remote process has already exited.
 
+A tab can have at most five active background commands. SSH exec channel creation retries up to three times with a short bounded backoff, but only the channel-open handshake is retried; once the server has accepted `exec`, FileTerm never resubmits that command on a replacement channel.
+
 ## Manual CLI
 
 Show help:

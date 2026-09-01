@@ -283,6 +283,14 @@ async fn execute_remote_command_inner(
         .map(RemoteExecOperationResult::Completed);
     }
 
+    if matches!(mode, RemoteExecMode::Background) {
+        state
+            .background_remote_commands
+            .ensure_capacity(&tab_id)
+            .await
+            .map_err(AppError::Command)?;
+    }
+
     let initial_prepared = prepare_remote_exec(
         app,
         &profile_id,
