@@ -327,7 +327,8 @@ async fn run_bridge_request(
     _request_permit: tokio::sync::OwnedSemaphorePermit,
 ) {
     let request_timeout = bridge_request_timeout(&request);
-    let (progress_sender, mut progress_receiver) = mpsc::unbounded_channel();
+    let (progress_sender, mut progress_receiver) =
+        mpsc::channel(MCP_BRIDGE_PROGRESS_QUEUE_SIZE);
     let dispatch = dispatch_bridge_request(
         &app,
         request,

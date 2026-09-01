@@ -10,6 +10,8 @@ mod tests {
         ActionApprovalSource, BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility,
         McpVisibilityScope, EXECUTION_MODE_BACKGROUND, EXECUTION_MODE_VISIBLE_TERMINAL,
         MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
+        FILETERM_MCP_BRIDGE_BACKPRESSURE, FILETERM_MCP_BRIDGE_DISCONNECTED,
+        FILETERM_MCP_BRIDGE_UNAVAILABLE,
         BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED, DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
         FILETERM_REMOTE_COMMAND_LIMIT, FILETERM_REMOTE_COMMAND_NOT_FOUND,
         FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH, FILETERM_REMOTE_COMMAND_SESSION_LIMIT,
@@ -914,6 +916,21 @@ mod tests {
             FILETERM_REMOTE_COMMAND_SESSION_LIMIT
         );
         assert!(mcp_error_is_retryable(FILETERM_REMOTE_COMMAND_SESSION_LIMIT));
+        assert_eq!(
+            mcp_error_code("FILETERM_MCP_BRIDGE_DISCONNECTED: bridge session closed"),
+            FILETERM_MCP_BRIDGE_DISCONNECTED
+        );
+        assert!(mcp_error_is_retryable(FILETERM_MCP_BRIDGE_DISCONNECTED));
+        assert_eq!(
+            mcp_error_code("FILETERM_MCP_BRIDGE_BACKPRESSURE: queue is full"),
+            FILETERM_MCP_BRIDGE_BACKPRESSURE
+        );
+        assert!(mcp_error_is_retryable(FILETERM_MCP_BRIDGE_BACKPRESSURE));
+        assert_eq!(
+            mcp_error_code("FILETERM_MCP_BRIDGE_UNAVAILABLE: recovery cooling down"),
+            FILETERM_MCP_BRIDGE_UNAVAILABLE
+        );
+        assert!(mcp_error_is_retryable(FILETERM_MCP_BRIDGE_UNAVAILABLE));
     }
 
     #[test]

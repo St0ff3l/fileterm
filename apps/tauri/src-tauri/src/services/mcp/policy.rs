@@ -2,14 +2,14 @@
 async fn dispatch_bridge_request(
     app: &AppHandle,
     request: BridgeRequest,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     cancellation: Option<tokio_util::sync::CancellationToken>,
 ) -> Result<Value, String> {
     let progress_token = request.progress_token.clone();
     let policy = enforce_mcp_access_policy(app, &request).await?;
     if should_request_mcp_approval(&policy, &request) {
         if let Some(progress_sender) = progress_sender.as_ref() {
-            let _ = progress_sender.send(BridgeProgress::action_approval_waiting(
+            let _ = progress_sender.try_send(BridgeProgress::action_approval_waiting(
                 &request.action,
                 progress_token.clone(),
             ));

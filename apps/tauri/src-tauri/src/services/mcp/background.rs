@@ -4,7 +4,7 @@
 // deployment, image build, or migration is different: the caller needs a
 // stable command identity while output continues to arrive. This registry
 // keeps the SSH channel and its bounded output buffer in the desktop process,
-// so the short loopback request is no longer the lifetime of the remote job.
+// so the individual loopback request is no longer the lifetime of the remote job.
 
 use std::cmp::min;
 use std::time::{SystemTime, UNIX_EPOCH};

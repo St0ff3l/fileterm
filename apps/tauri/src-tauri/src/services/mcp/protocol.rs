@@ -265,6 +265,9 @@ fn mcp_error_code(error: &str) -> &'static str {
         FILETERM_REMOTE_COMMAND_SESSION_LIMIT,
         BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED,
         FILETERM_CLI_JSONL_REQUEST_CANCELLED,
+        FILETERM_MCP_BRIDGE_DISCONNECTED,
+        FILETERM_MCP_BRIDGE_BACKPRESSURE,
+        FILETERM_MCP_BRIDGE_UNAVAILABLE,
     ] {
         if upper.contains(code) {
             return code;
@@ -292,6 +295,9 @@ fn mcp_error_is_retryable(code: &str) -> bool {
         code,
         "FILETERM_APP_UNAVAILABLE"
             | "FILETERM_BRIDGE_BUSY"
+            | FILETERM_MCP_BRIDGE_DISCONNECTED
+            | FILETERM_MCP_BRIDGE_BACKPRESSURE
+            | FILETERM_MCP_BRIDGE_UNAVAILABLE
             | "FILETERM_REQUEST_TIMEOUT"
             | FILETERM_CONNECTION_WAIT_TIMEOUT
             | "FILETERM_SESSION_DISCONNECTED"

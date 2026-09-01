@@ -3,7 +3,7 @@ async fn open_connection(
     app: &AppHandle,
     params: &Value,
     source: WorkspaceSessionSource,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
 ) -> Result<Value, String> {
     let profile_id = required_string(params, "profile_id", 256)?;
@@ -96,7 +96,7 @@ fn requested_execution_mode(params: &Value) -> Result<&'static str, String> {
 async fn wait_for_connection(
     app: &AppHandle,
     params: &Value,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
 ) -> Result<Value, String> {
     let operation_id = required_string(params, "operation_id", 256)?;
@@ -115,7 +115,7 @@ async fn wait_for_connection_operation(
     app: &AppHandle,
     operation_id: &str,
     params: &Value,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
     operation_name: &str,
 ) -> Result<Value, String> {
@@ -135,7 +135,7 @@ async fn wait_for_connection_operation(
         .await
         .map_err(|error| format!("{MCP_CONNECTION_OPERATION_NOT_FOUND}: {error}"))?;
     if let Some(sender) = progress_sender {
-        let _ = sender.send(BridgeProgress::connection_waiting(progress_token));
+        let _ = sender.try_send(BridgeProgress::connection_waiting(progress_token));
     }
 
     let mut tab_id = info.tab_id;
@@ -308,7 +308,7 @@ async fn close_session(app: &AppHandle, params: &Value) -> Result<Value, String>
 async fn execute_remote_command(
     app: &AppHandle,
     params: &Value,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
     cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<Value, String> {
@@ -323,7 +323,7 @@ async fn execute_remote_command(
     let privileged_prompt_notice = progress_sender.map(|sender| {
         let progress_token = progress_token.clone();
         Arc::new(move |needed_code: &str| {
-            let _ = sender.send(BridgeProgress::privileged_password_prompt(
+            let _ = sender.try_send(BridgeProgress::privileged_password_prompt(
                 needed_code,
                 progress_token.clone(),
             ));
@@ -365,7 +365,7 @@ async fn execute_remote_command(
 async fn start_remote_command(
     app: &AppHandle,
     params: &Value,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
     cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<Value, String> {
@@ -378,7 +378,7 @@ async fn start_remote_command(
     let privileged_prompt_notice = progress_sender.map(|sender| {
         let progress_token = progress_token.clone();
         Arc::new(move |needed_code: &str| {
-            let _ = sender.send(BridgeProgress::privileged_password_prompt(
+            let _ = sender.try_send(BridgeProgress::privileged_password_prompt(
                 needed_code,
                 progress_token.clone(),
             ));
