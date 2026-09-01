@@ -114,7 +114,7 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [aiApiKey, setAiApiKey] = useState('')
   const [clearAiApiKey, setClearAiApiKey] = useState(false)
   const [aiMessage, setAiMessage] = useState<AiFeedback | null>(null)
-  const [aiOperation, setAiOperation] = useState<'load' | 'save' | 'test' | 'delete' | null>(null)
+  const [aiOperation, setAiOperation] = useState<'load' | 'models' | 'save' | 'test' | 'delete' | null>(null)
   const aiActionInFlightRef = useRef(false)
   const [showDeleteAiProviderConfirm, setShowDeleteAiProviderConfirm] = useState(false)
   const [syncOperation, setSyncOperation] = useState<

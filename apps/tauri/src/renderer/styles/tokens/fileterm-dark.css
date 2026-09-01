@@ -16,6 +16,7 @@
   --ref-surface-card: #1e1e1e;
   --ref-surface-elevated: #2a2a2a;
   --ref-surface-modal: #1e1e1e;
+  --ref-surface-context-menu: #1e2024;
   --ref-surface-overlay: rgba(0, 0, 0, 0.65);
   --ref-surface-hover: #303030;
   --ref-surface-active: #3a3d42;
@@ -34,12 +35,14 @@
   --ref-text-muted: #808080;
   --ref-text-disabled: #555555;
   --ref-text-inverse: #151515;
+  --ref-text-context-menu: #eef3fa;
 
   /* Borders & Dividers */
   --ref-border-subtle: #2b2b2b;
   --ref-border-default: #383838;
   --ref-border-strong: #4a4a4a;
   --ref-border-glass: rgba(255, 255, 255, 0.08);
+  --ref-border-context-menu: rgba(255, 255, 255, 0.08);
 
   /* Accents & Brand Actions */
   --ref-accent: #1687e8;
@@ -83,6 +86,7 @@
   --ref-action-danger-active: #9e2d2d;
   --ref-action-danger-text: #ffffff;
   --ref-control-inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  --ref-shadow-context-menu: 0 16px 40px rgba(0, 0, 0, 0.34);
   /* Codex glass fallback: unused by FileTerm, kept complete for the shared semantic contract. */
   --ref-codex-glass-divider: var(--ref-border-default);
   --ref-codex-glass-unfocused-surface: var(--ref-surface-panel);
@@ -92,6 +96,10 @@
   --ref-window-control-danger-bg: #c42b1c;
   --ref-window-control-danger-text: #ffffff;
   --ref-file-editor-primary-shadow: 0 2px 10px rgba(22, 135, 232, 0.26);
+  --ref-terminal-frame-gradient:
+    linear-gradient(to left, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px),
+    linear-gradient(to right, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px);
+  --ref-terminal-frame-shadow: inset 0 0 14px rgba(0, 0, 0, 0.3);
 
   /* Static swatches used by the light/dark theme picker preview. */
   --ref-preview-dark-canvas: #141414;

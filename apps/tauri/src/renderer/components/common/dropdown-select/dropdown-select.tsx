@@ -193,6 +193,9 @@ export function DropdownSelect({
   if (nativeSelect) {
     return (
       <span className={`ft-select-shell ${className ?? ''}`.trim()}>
+        <span className="ft-select-shell__value">
+          {selectedOption && renderValue ? renderValue(selectedOption) : selectedLabel}
+        </span>
         <select
           ref={selectRef}
           autoFocus={autoFocus}

@@ -32,24 +32,44 @@
   position: relative;
   height: 100%;
   min-height: 0;
-  padding: 0 var(--local-terminal-frame-size) var(--local-terminal-frame-size);
+  grid-template-columns: var(--local-terminal-frame-size) minmax(0, 1fr) var(--local-terminal-frame-size);
+  grid-template-rows: minmax(0, 1fr) var(--local-terminal-frame-size);
+  grid-template-areas:
+    'left surface right'
+    'bottom bottom bottom';
   overflow: hidden;
   background: var(--surface-toolbar);
 }
 
-.local-terminal-frame::before {
-  content: '';
-  position: absolute;
-  inset: 0 var(--local-terminal-frame-size) var(--local-terminal-frame-size);
-  border-inline: 1px solid var(--terminal-right-frame-accent);
-  border-bottom: 1px solid var(--terminal-right-frame-accent);
+.local-terminal-frame-left,
+.local-terminal-frame-right,
+.local-terminal-frame-bottom {
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-toolbar);
   pointer-events: none;
   z-index: 6;
+}
+
+.local-terminal-frame-left {
+  grid-area: left;
+  border-left: 1px solid var(--terminal-right-frame-accent);
+}
+
+.local-terminal-frame-right {
+  grid-area: right;
+  border-left: 1px solid var(--terminal-right-frame-accent);
+}
+
+.local-terminal-frame-bottom {
+  grid-area: bottom;
+  border-top: 1px solid var(--terminal-right-frame-accent);
 }
 
 .local-terminal-surface {
   display: grid;
   position: relative;
+  grid-area: surface;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1420,7 +1440,7 @@
 }
 
 .terminal-area .vertical-scrollbar {
-  right: 18px;
+  right: 4px;
 }
 
 .vertical-scrollbar.is-visible,
@@ -1437,11 +1457,6 @@
   border-radius: 999px;
   background: var(--border, var(--border-light));
   cursor: grab;
-}
-
-.terminal-area .vertical-scrollbar__thumb {
-  width: 4px;
-  margin-left: auto;
 }
 
 .vertical-scrollbar__thumb:hover,

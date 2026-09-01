@@ -8,9 +8,12 @@
 :root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']),
 :root:not([data-theme*='light']) .command-form-standalone-page input:not([type='checkbox']),
 :root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']),
-:root:not([data-theme]) .command-form-standalone-page select,
-:root:not([data-theme*='light']) .command-form-standalone-page select,
-:root[data-theme='default'] .command-form-standalone-page select,
+:root:not([data-theme]) .command-form-standalone-page .dropdown-select-trigger,
+:root:not([data-theme*='light']) .command-form-standalone-page .dropdown-select-trigger,
+:root[data-theme='default'] .command-form-standalone-page .dropdown-select-trigger,
+:root:not([data-theme]) .command-form-standalone-page .ft-select-shell,
+:root:not([data-theme*='light']) .command-form-standalone-page .ft-select-shell,
+:root[data-theme='default'] .command-form-standalone-page .ft-select-shell,
 :root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root:not([data-theme*='light']) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
@@ -28,9 +31,12 @@
 :root[data-theme='default']
   .command-form-standalone-page
   input:not([type='checkbox']):not(.command-code-area textarea):focus,
-:root:not([data-theme]) .command-form-standalone-page select:focus,
-:root:not([data-theme*='light']) .command-form-standalone-page select:focus,
-:root[data-theme='default'] .command-form-standalone-page select:focus {
+:root:not([data-theme]) .command-form-standalone-page .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .command-form-standalone-page .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .command-form-standalone-page .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .command-form-standalone-page .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .command-form-standalone-page .ft-select-shell:focus-within,
+:root[data-theme='default'] .command-form-standalone-page .ft-select-shell:focus-within {
   border-color: var(--text-muted);
   box-shadow: none;
   background: var(--bg-hover);
@@ -193,18 +199,33 @@
 :root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']),
 :root:not([data-theme*='light']) .command-editor-dialog-form input:not([type='checkbox']),
 :root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']),
-:root:not([data-theme]) .command-editor-dialog-form select,
-:root:not([data-theme*='light']) .command-editor-dialog-form select,
-:root[data-theme='default'] .command-editor-dialog-form select,
+:root:not([data-theme]) .command-editor-dialog-form .dropdown-select-trigger,
+:root:not([data-theme*='light']) .command-editor-dialog-form .dropdown-select-trigger,
+:root[data-theme='default'] .command-editor-dialog-form .dropdown-select-trigger,
+:root:not([data-theme]) .command-editor-dialog-form .ft-select-shell,
+:root:not([data-theme*='light']) .command-editor-dialog-form .ft-select-shell,
+:root[data-theme='default'] .command-editor-dialog-form .ft-select-shell,
+:root:not([data-theme]) .command-editor-field input:not([type='checkbox']),
+:root:not([data-theme*='light']) .command-editor-field input:not([type='checkbox']),
+:root[data-theme='default'] .command-editor-field input:not([type='checkbox']),
+:root:not([data-theme]) .command-editor-field .dropdown-select-trigger,
+:root:not([data-theme*='light']) .command-editor-field .dropdown-select-trigger,
+:root[data-theme='default'] .command-editor-field .dropdown-select-trigger,
+:root:not([data-theme]) .command-editor-field .ft-select-shell,
+:root:not([data-theme*='light']) .command-editor-field .ft-select-shell,
+:root[data-theme='default'] .command-editor-field .ft-select-shell,
 :root:not([data-theme]) .command-editor-dialog-form textarea:not(.command-code-area textarea),
 :root:not([data-theme*='light']) .command-editor-dialog-form textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
 :root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']),
 :root:not([data-theme*='light']) .command-form-standalone-page input:not([type='checkbox']),
 :root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']),
-:root:not([data-theme]) .command-form-standalone-page select,
-:root:not([data-theme*='light']) .command-form-standalone-page select,
-:root[data-theme='default'] .command-form-standalone-page select,
+:root:not([data-theme]) .command-form-standalone-page .dropdown-select-trigger,
+:root:not([data-theme*='light']) .command-form-standalone-page .dropdown-select-trigger,
+:root[data-theme='default'] .command-form-standalone-page .dropdown-select-trigger,
+:root:not([data-theme]) .command-form-standalone-page .ft-select-shell,
+:root:not([data-theme*='light']) .command-form-standalone-page .ft-select-shell,
+:root[data-theme='default'] .command-form-standalone-page .ft-select-shell,
 :root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root:not([data-theme*='light']) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
@@ -219,30 +240,6 @@
   transition:
     border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
-
-:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']),
-:root:not([data-theme*='light']) .command-editor-dialog-form input:not([type='checkbox']),
-:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']),
-:root:not([data-theme]) .command-editor-dialog-form select,
-:root:not([data-theme*='light']) .command-editor-dialog-form select,
-:root[data-theme='default'] .command-editor-dialog-form select,
-:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']),
-:root:not([data-theme*='light']) .command-form-standalone-page input:not([type='checkbox']),
-:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']),
-:root:not([data-theme]) .command-form-standalone-page select,
-:root:not([data-theme*='light']) .command-form-standalone-page select,
-:root[data-theme='default'] .command-form-standalone-page select {
-  font-size: 13px !important;
-}
-
-:root:not([data-theme]) .command-editor-dialog-form select,
-:root:not([data-theme*='light']) .command-editor-dialog-form select,
-:root[data-theme='default'] .command-editor-dialog-form select,
-:root:not([data-theme]) .command-form-standalone-page select,
-:root:not([data-theme*='light']) .command-form-standalone-page select,
-:root[data-theme='default'] .command-form-standalone-page select {
-  padding-right: 60px !important;
 }
 
 /* Adjust paddings for textareas */
@@ -260,15 +257,30 @@
 :root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']):hover,
 :root:not([data-theme*='light']) .command-editor-dialog-form input:not([type='checkbox']):hover,
 :root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']):hover,
-:root:not([data-theme]) .command-editor-dialog-form select:hover,
-:root:not([data-theme*='light']) .command-editor-dialog-form select:hover,
-:root[data-theme='default'] .command-editor-dialog-form select:hover,
+:root:not([data-theme]) .command-editor-dialog-form .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme*='light']) .command-editor-dialog-form .dropdown-select-trigger:hover:not(:disabled),
+:root[data-theme='default'] .command-editor-dialog-form .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme]) .command-editor-dialog-form .ft-select-shell:hover:not(:has(select:disabled)),
+:root:not([data-theme*='light']) .command-editor-dialog-form .ft-select-shell:hover:not(:has(select:disabled)),
+:root[data-theme='default'] .command-editor-dialog-form .ft-select-shell:hover:not(:has(select:disabled)),
+:root:not([data-theme]) .command-editor-field input:not([type='checkbox']):hover,
+:root:not([data-theme*='light']) .command-editor-field input:not([type='checkbox']):hover,
+:root[data-theme='default'] .command-editor-field input:not([type='checkbox']):hover,
+:root:not([data-theme]) .command-editor-field .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme*='light']) .command-editor-field .dropdown-select-trigger:hover:not(:disabled),
+:root[data-theme='default'] .command-editor-field .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme]) .command-editor-field .ft-select-shell:hover:not(:has(select:disabled)),
+:root:not([data-theme*='light']) .command-editor-field .ft-select-shell:hover:not(:has(select:disabled)),
+:root[data-theme='default'] .command-editor-field .ft-select-shell:hover:not(:has(select:disabled)),
 :root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):hover,
 :root:not([data-theme*='light']) .command-form-standalone-page input:not([type='checkbox']):hover,
 :root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):hover,
-:root:not([data-theme]) .command-form-standalone-page select:hover,
-:root:not([data-theme*='light']) .command-form-standalone-page select:hover,
-:root[data-theme='default'] .command-form-standalone-page select:hover {
+:root:not([data-theme]) .command-form-standalone-page .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme*='light']) .command-form-standalone-page .dropdown-select-trigger:hover:not(:disabled),
+:root[data-theme='default'] .command-form-standalone-page .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme]) .command-form-standalone-page .ft-select-shell:hover:not(:has(select:disabled)),
+:root:not([data-theme*='light']) .command-form-standalone-page .ft-select-shell:hover:not(:has(select:disabled)),
+:root[data-theme='default'] .command-form-standalone-page .ft-select-shell:hover:not(:has(select:disabled)) {
   border-color: var(--border-dark) !important;
 }
 
@@ -276,17 +288,32 @@
 :root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']):focus,
 :root:not([data-theme*='light']) .command-editor-dialog-form input:not([type='checkbox']):focus,
 :root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']):focus,
-:root:not([data-theme]) .command-editor-dialog-form select:focus,
-:root:not([data-theme*='light']) .command-editor-dialog-form select:focus,
-:root[data-theme='default'] .command-editor-dialog-form select:focus,
+:root:not([data-theme]) .command-editor-dialog-form .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .command-editor-dialog-form .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .command-editor-dialog-form .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .command-editor-dialog-form .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .command-editor-dialog-form .ft-select-shell:focus-within,
+:root[data-theme='default'] .command-editor-dialog-form .ft-select-shell:focus-within,
+:root:not([data-theme]) .command-editor-field input:not([type='checkbox']):focus,
+:root:not([data-theme*='light']) .command-editor-field input:not([type='checkbox']):focus,
+:root[data-theme='default'] .command-editor-field input:not([type='checkbox']):focus,
+:root:not([data-theme]) .command-editor-field .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .command-editor-field .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .command-editor-field .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .command-editor-field .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .command-editor-field .ft-select-shell:focus-within,
+:root[data-theme='default'] .command-editor-field .ft-select-shell:focus-within,
 :root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):focus,
 :root:not([data-theme*='light']) .command-form-standalone-page input:not([type='checkbox']):focus,
 :root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):focus,
-:root:not([data-theme]) .command-form-standalone-page select:focus,
-:root:not([data-theme*='light']) .command-form-standalone-page select:focus,
-:root[data-theme='default'] .command-form-standalone-page select:focus {
+:root:not([data-theme]) .command-form-standalone-page .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .command-form-standalone-page .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .command-form-standalone-page .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .command-form-standalone-page .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .command-form-standalone-page .ft-select-shell:focus-within,
+:root[data-theme='default'] .command-form-standalone-page .ft-select-shell:focus-within {
   border-color: var(--focus-outline) !important;
-  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring) !important;
   background: var(--input-bg) !important;
   outline: none !important;
 }
@@ -544,9 +571,12 @@
 :root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
 :root:not([data-theme*='light']) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
 :root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
-:root:not([data-theme]) .modal-card.ssh-modal select,
-:root:not([data-theme*='light']) .modal-card.ssh-modal select,
-:root[data-theme='default'] .modal-card.ssh-modal select,
+:root:not([data-theme]) .modal-card.ssh-modal .dropdown-select-trigger,
+:root:not([data-theme*='light']) .modal-card.ssh-modal .dropdown-select-trigger,
+:root[data-theme='default'] .modal-card.ssh-modal .dropdown-select-trigger,
+:root:not([data-theme]) .modal-card.ssh-modal .ft-select-shell,
+:root:not([data-theme*='light']) .modal-card.ssh-modal .ft-select-shell,
+:root[data-theme='default'] .modal-card.ssh-modal .ft-select-shell,
 :root:not([data-theme]) .modal-card.ssh-modal textarea,
 :root:not([data-theme*='light']) .modal-card.ssh-modal textarea,
 :root[data-theme='default'] .modal-card.ssh-modal textarea {
@@ -562,9 +592,12 @@
 :root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
 :root:not([data-theme*='light']) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
 :root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
-:root:not([data-theme]) .modal-card.ssh-modal select:hover,
-:root:not([data-theme*='light']) .modal-card.ssh-modal select:hover,
-:root[data-theme='default'] .modal-card.ssh-modal select:hover,
+:root:not([data-theme]) .modal-card.ssh-modal .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme*='light']) .modal-card.ssh-modal .dropdown-select-trigger:hover:not(:disabled),
+:root[data-theme='default'] .modal-card.ssh-modal .dropdown-select-trigger:hover:not(:disabled),
+:root:not([data-theme]) .modal-card.ssh-modal .ft-select-shell:hover:not(:has(select:disabled)),
+:root:not([data-theme*='light']) .modal-card.ssh-modal .ft-select-shell:hover:not(:has(select:disabled)),
+:root[data-theme='default'] .modal-card.ssh-modal .ft-select-shell:hover:not(:has(select:disabled)),
 :root:not([data-theme]) .modal-card.ssh-modal textarea:hover,
 :root:not([data-theme*='light']) .modal-card.ssh-modal textarea:hover,
 :root[data-theme='default'] .modal-card.ssh-modal textarea:hover {
@@ -574,14 +607,17 @@
 :root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
 :root:not([data-theme*='light']) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
 :root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
-:root:not([data-theme]) .modal-card.ssh-modal select:focus,
-:root:not([data-theme*='light']) .modal-card.ssh-modal select:focus,
-:root[data-theme='default'] .modal-card.ssh-modal select:focus,
+:root:not([data-theme]) .modal-card.ssh-modal .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .modal-card.ssh-modal .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .modal-card.ssh-modal .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .modal-card.ssh-modal .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .modal-card.ssh-modal .ft-select-shell:focus-within,
+:root[data-theme='default'] .modal-card.ssh-modal .ft-select-shell:focus-within,
 :root:not([data-theme]) .modal-card.ssh-modal textarea:focus,
 :root:not([data-theme*='light']) .modal-card.ssh-modal textarea:focus,
 :root[data-theme='default'] .modal-card.ssh-modal textarea:focus {
   border-color: var(--focus-outline) !important;
-  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring) !important;
   background: var(--input-bg) !important;
   outline: none !important;
 }
@@ -681,9 +717,12 @@
 :root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field input,
 :root:not([data-theme*='light']) .ssh-key-import-dialog .ssh-key-note-dialog__field input,
 :root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field input,
-:root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field select,
-:root:not([data-theme*='light']) .ssh-key-import-dialog .ssh-key-note-dialog__field select,
-:root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field select,
+:root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field .dropdown-select-trigger,
+:root:not([data-theme*='light']) .ssh-key-import-dialog .ssh-key-note-dialog__field .dropdown-select-trigger,
+:root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field .dropdown-select-trigger,
+:root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field .ft-select-shell,
+:root:not([data-theme*='light']) .ssh-key-import-dialog .ssh-key-note-dialog__field .ft-select-shell,
+:root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field .ft-select-shell,
 :root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field textarea,
 :root:not([data-theme*='light']) .ssh-key-import-dialog .ssh-key-note-dialog__field textarea,
 :root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field textarea,

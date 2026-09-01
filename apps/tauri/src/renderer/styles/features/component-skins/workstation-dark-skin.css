@@ -177,7 +177,7 @@
 :root:not([data-theme*='light']) .connection-summary,
 :root[data-theme='default'] .connection-summary {
   border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 18%, transparent);
-  background: var(--surface-panel);
+  background: transparent;
 }
 
 :root:not([data-theme]) .sync-row,
@@ -586,15 +586,28 @@
 :root:not([data-theme]) .file-tab-actions button,
 :root:not([data-theme*='light']) .file-tab-actions button,
 :root[data-theme='default'] .file-tab-actions button {
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-card);
-  color: var(--text-primary);
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 :root:not([data-theme]) .file-tab-actions button:hover,
 :root:not([data-theme*='light']) .file-tab-actions button:hover,
 :root[data-theme='default'] .file-tab-actions button:hover {
   background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .file-tab-actions button[aria-pressed],
+:root:not([data-theme*='light']) .file-tab-actions button[aria-pressed],
+:root[data-theme='default'] .file-tab-actions button[aria-pressed] {
+  border: 1px solid var(--border-subtle);
+}
+
+:root:not([data-theme]) .file-tab-actions button.active,
+:root:not([data-theme*='light']) .file-tab-actions button.active,
+:root[data-theme='default'] .file-tab-actions button.active {
+  background: var(--surface-active);
   color: var(--text-primary);
 }
 
@@ -998,18 +1011,24 @@
 :root:not([data-theme]) .ssh-grid input,
 :root:not([data-theme*='light']) .ssh-grid input,
 :root[data-theme='default'] .ssh-grid input,
-:root:not([data-theme]) .ssh-grid select,
-:root:not([data-theme*='light']) .ssh-grid select,
-:root[data-theme='default'] .ssh-grid select,
+:root:not([data-theme]) .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme*='light']) .ssh-grid .dropdown-select-trigger,
+:root[data-theme='default'] .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme]) .ssh-grid .ft-select-shell,
+:root:not([data-theme*='light']) .ssh-grid .ft-select-shell,
+:root[data-theme='default'] .ssh-grid .ft-select-shell,
 :root:not([data-theme]) .ssh-grid textarea,
 :root:not([data-theme*='light']) .ssh-grid textarea,
 :root[data-theme='default'] .ssh-grid textarea,
 :root:not([data-theme]) .connection-form input,
 :root:not([data-theme*='light']) .connection-form input,
 :root[data-theme='default'] .connection-form input,
-:root:not([data-theme]) .connection-form select,
-:root:not([data-theme*='light']) .connection-form select,
-:root[data-theme='default'] .connection-form select {
+:root:not([data-theme]) .connection-form .dropdown-select-trigger,
+:root:not([data-theme*='light']) .connection-form .dropdown-select-trigger,
+:root[data-theme='default'] .connection-form .dropdown-select-trigger,
+:root:not([data-theme]) .connection-form .ft-select-shell,
+:root:not([data-theme*='light']) .connection-form .ft-select-shell,
+:root[data-theme='default'] .connection-form .ft-select-shell {
   background: var(--input-bg);
   border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
   color: var(--text-main);

@@ -295,10 +295,12 @@
 :root[data-theme*='light'] .transfer-segments button,
 :root[data-theme*='light'] .network-select,
 :root[data-theme*='light'] .ssh-grid input,
-:root[data-theme*='light'] .ssh-grid select,
+:root[data-theme*='light'] .ssh-grid .dropdown-select-trigger,
+:root[data-theme*='light'] .ssh-grid .ft-select-shell,
 :root[data-theme*='light'] .ssh-grid textarea,
 :root[data-theme*='light'] .connection-form input,
-:root[data-theme*='light'] .connection-form select {
+:root[data-theme*='light'] .connection-form .dropdown-select-trigger,
+:root[data-theme*='light'] .connection-form .ft-select-shell {
   background: var(--input-bg);
   border-color: var(--border-light);
   color: var(--text-main);
@@ -368,10 +370,10 @@
 
 :root[data-theme*='light'] .context-menu,
 :root[data-theme*='light'] .dropdown-select-menu {
-  background: var(--popover-bg);
-  border: 1px solid var(--border-light);
-  color: var(--text-main);
-  box-shadow: var(--popover-shadow);
+  background: var(--surface-context-menu);
+  border: 1px solid var(--border-context-menu);
+  color: var(--text-context-menu);
+  box-shadow: var(--shadow-context-menu);
 }
 
 :root[data-theme*='light'] .context-menu button,

@@ -7,6 +7,14 @@ pub fn app_list_ai_providers(
 }
 
 #[tauri::command]
+pub async fn app_list_ai_models(
+    app: AppHandle,
+    input: crate::services::ai::ListAiModelsInput,
+) -> Result<Vec<crate::services::ai::AiModelInfo>, AppError> {
+    crate::services::ai::list_models(&app, input).await
+}
+
+#[tauri::command]
 pub fn app_save_ai_provider(
     app: AppHandle,
     input: crate::services::ai::SaveAiProviderInput,

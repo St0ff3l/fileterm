@@ -2119,16 +2119,46 @@
 }
 
 .command-editor-dialog-form input:not([type='checkbox']),
-.command-editor-dialog-form select,
+.command-editor-dialog-form .dropdown-select-trigger,
+.command-editor-dialog-form .ft-select-shell,
 .command-editor-dialog-form textarea:not(.command-code-area textarea),
+.command-editor-field input:not([type='checkbox']),
+.command-editor-field .dropdown-select-trigger,
+.command-editor-field .ft-select-shell,
 .command-folder-dialog-form input {
+  box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--bg-main);
-  color: var(--text-main);
-  font-size: 13px;
-  font-family: inherit;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg, var(--surface-input));
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-ui);
+  font-weight: 400;
+}
+
+.command-editor-dialog-form input:not([type='checkbox']):hover:not(:disabled),
+.command-editor-dialog-form .dropdown-select-trigger:hover:not(:disabled),
+.command-editor-dialog-form .ft-select-shell:hover:not(:has(select:disabled)),
+.command-editor-field input:not([type='checkbox']):hover:not(:disabled),
+.command-editor-field .dropdown-select-trigger:hover:not(:disabled),
+.command-editor-field .ft-select-shell:hover:not(:has(select:disabled)),
+.command-folder-dialog-form input:hover:not(:disabled) {
+  border-color: var(--border-default);
+}
+
+.command-editor-dialog-form input:not([type='checkbox']):focus,
+.command-editor-dialog-form .dropdown-select-trigger:focus-visible,
+.command-editor-dialog-form .ft-select-shell:focus-within,
+.command-editor-field input:not([type='checkbox']):focus,
+.command-editor-field .dropdown-select-trigger:focus-visible,
+.command-editor-field .ft-select-shell:focus-within,
+.command-folder-dialog-form input:focus {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 /* Code area textarea overrides: no border, transparent bg */
@@ -2144,21 +2174,10 @@
   border: none !important;
 }
 
-.command-editor-dialog-form input:not([type='checkbox']),
-.command-editor-dialog-form select,
-.command-folder-dialog-form input {
-  height: 36px;
-  padding: 0 12px;
-}
-
-.command-editor-dialog-form select {
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: none !important;
-}
-
-.command-select-shell {
-  --ft-select-shell-bg: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card));
+.command-editor-dialog-form textarea:not(.command-code-area textarea) {
+  height: auto;
+  min-height: 72px;
+  padding: 6px 12px;
 }
 
 .command-editor-dialog-textarea .command-code-area {

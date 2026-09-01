@@ -143,6 +143,12 @@ function resolveCompactUiVariables(
 
   const sidebarGlassActive = !theme.opaqueWindows && sidebarGlassSupported()
   const sidebarBackground = sidebarGlassActive ? alpha(sidebar, isLight ? 88 : 82) : sidebar
+  const contextMenuSurface = isCodex && !isLight ? '#242424' : surfaceElevated
+  const contextMenuShadow = isLight
+    ? '0 12px 32px rgba(15, 23, 42, 0.12)'
+    : isCodex
+      ? '0 20px 40px rgba(0, 0, 0, 0.4)'
+      : '0 16px 40px rgba(0, 0, 0, 0.34)'
 
   const folderAccent = isCodex ? (isLight ? '#3b82f6' : '#fbbf24') : isLight ? '#3b82f6' : '#65a9ff'
   const kernelAccent = isCodex ? accent : isLight ? '#2563eb' : '#65a9ff'
@@ -167,6 +173,7 @@ function resolveCompactUiVariables(
     '--surface-raised': elevated,
     '--surface-secondary': surfaceSecondary,
     '--surface-elevated': surfaceElevated,
+    '--ref-surface-context-menu': contextMenuSurface,
     '--surface-hover': alpha(ink, isLight ? 5 : 7),
     '--surface-chip': alpha(ink, isLight ? 8 : 14),
     '--surface-inset': alpha(ink, isLight ? 3 : 5),
@@ -178,6 +185,7 @@ function resolveCompactUiVariables(
     '--border-dark': strongBorder,
     '--border': border,
     '--border-subtle': subtleBorder,
+    '--ref-border-context-menu': border,
     '--text-main': ink,
     '--text-primary': ink,
     '--text-secondary': secondaryText,
@@ -262,6 +270,8 @@ function resolveCompactUiVariables(
     '--system-sidebar-toggle-hover-shadow': isLight
       ? '0 6px 16px rgba(0, 0, 0, 0.08)'
       : '0 10px 22px rgba(15, 23, 42, 0.16)',
+    '--ref-text-context-menu': ink,
+    '--ref-shadow-context-menu': contextMenuShadow,
     '--popover-bg': elevated,
     '--popover-border': border,
     '--popover-shadow': isLight ? '0 12px 32px rgba(15, 23, 42, 0.12)' : '0 20px 40px rgba(0, 0, 0, 0.4)',
@@ -318,6 +328,11 @@ function resolveCompactUiVariables(
     '--file-editor-primary-shadow': `0 2px 10px ${alpha(accent, 35)}`,
     '--terminal-cmd-bg': alpha(ink, isLight ? 8 : 16),
     '--terminal-cmd-text': ink,
+    '--terminal-frame-gradient':
+      isCodex || isLight
+        ? 'none'
+        : 'linear-gradient(to left, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to right, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px)',
+    '--terminal-frame-shadow': isCodex || isLight ? 'none' : 'inset 0 0 14px rgba(0, 0, 0, 0.3)',
     '--terminal-right-frame-outer': sidebar,
     '--terminal-right-frame-accent': border,
     '--theme-terminal-dock-surface': surfaceElevated,

@@ -290,25 +290,27 @@
 }
 
 .ssh-key-note-dialog__field input,
-.ssh-key-note-dialog__field select,
+.ssh-key-note-dialog__field .dropdown-select-trigger,
+.ssh-key-note-dialog__field .ft-select-shell,
 .ssh-key-note-dialog__field textarea {
   width: 100%;
   min-height: 36px;
   padding: 6px 10px;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: var(--bg-main);
-  color: var(--text-main);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg, var(--surface-input));
+  color: var(--text-primary);
   box-sizing: border-box;
   font-weight: 400;
 }
 
 .ssh-key-note-dialog__field input:focus-visible,
-.ssh-key-note-dialog__field select:focus-visible,
+.ssh-key-note-dialog__field .dropdown-select-trigger:focus-visible,
+.ssh-key-note-dialog__field .ft-select-shell:focus-within,
 .ssh-key-note-dialog__field textarea:focus-visible {
   outline: none;
-  border-color: var(--copy-link);
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 .ssh-key-note-dialog__field textarea {

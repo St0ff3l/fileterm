@@ -54,9 +54,12 @@
 :root:not([data-theme]) .ssh-grid input,
 :root:not([data-theme*='light']) .ssh-grid input,
 :root[data-theme='default'] .ssh-grid input,
-:root:not([data-theme]) .ssh-grid select,
-:root:not([data-theme*='light']) .ssh-grid select,
-:root[data-theme='default'] .ssh-grid select,
+:root:not([data-theme]) .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme*='light']) .ssh-grid .dropdown-select-trigger,
+:root[data-theme='default'] .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme]) .ssh-grid .ft-select-shell,
+:root:not([data-theme*='light']) .ssh-grid .ft-select-shell,
+:root[data-theme='default'] .ssh-grid .ft-select-shell,
 :root:not([data-theme]) .ssh-grid textarea,
 :root:not([data-theme*='light']) .ssh-grid textarea,
 :root[data-theme='default'] .ssh-grid textarea {
@@ -87,9 +90,12 @@
 :root:not([data-theme]) .connection-form input,
 :root:not([data-theme*='light']) .connection-form input,
 :root[data-theme='default'] .connection-form input,
-:root:not([data-theme]) .connection-form select,
-:root:not([data-theme*='light']) .connection-form select,
-:root[data-theme='default'] .connection-form select {
+:root:not([data-theme]) .connection-form .dropdown-select-trigger,
+:root:not([data-theme*='light']) .connection-form .dropdown-select-trigger,
+:root[data-theme='default'] .connection-form .dropdown-select-trigger,
+:root:not([data-theme]) .connection-form .ft-select-shell,
+:root:not([data-theme*='light']) .connection-form .ft-select-shell,
+:root[data-theme='default'] .connection-form .ft-select-shell {
   background: var(--input-bg);
   color: var(--text-main);
 }
@@ -97,20 +103,26 @@
 :root:not([data-theme]) .connection-form input:focus,
 :root:not([data-theme*='light']) .connection-form input:focus,
 :root[data-theme='default'] .connection-form input:focus,
-:root:not([data-theme]) .connection-form select:focus,
-:root:not([data-theme*='light']) .connection-form select:focus,
-:root[data-theme='default'] .connection-form select:focus,
+:root:not([data-theme]) .connection-form .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .connection-form .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .connection-form .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .connection-form .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .connection-form .ft-select-shell:focus-within,
+:root[data-theme='default'] .connection-form .ft-select-shell:focus-within,
 :root:not([data-theme]) .ssh-grid input:focus,
 :root:not([data-theme*='light']) .ssh-grid input:focus,
 :root[data-theme='default'] .ssh-grid input:focus,
-:root:not([data-theme]) .ssh-grid select:focus,
-:root:not([data-theme*='light']) .ssh-grid select:focus,
-:root[data-theme='default'] .ssh-grid select:focus,
+:root:not([data-theme]) .ssh-grid .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .ssh-grid .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .ssh-grid .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .ssh-grid .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .ssh-grid .ft-select-shell:focus-within,
+:root[data-theme='default'] .ssh-grid .ft-select-shell:focus-within,
 :root:not([data-theme]) .ssh-grid textarea:focus,
 :root:not([data-theme*='light']) .ssh-grid textarea:focus,
 :root[data-theme='default'] .ssh-grid textarea:focus {
   border-color: var(--focus-outline) !important;
-  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring) !important;
   background: var(--input-bg) !important;
   outline: none !important;
   position: relative !important;

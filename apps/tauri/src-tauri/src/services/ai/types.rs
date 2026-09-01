@@ -7,6 +7,74 @@ pub enum AiProviderKind {
     AnthropicMessages,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiModelReasoningMode {
+    #[default]
+    None,
+    Effort,
+    Budget,
+    Toggle,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiModelReasoningParameter {
+    #[default]
+    Auto,
+    ReasoningEffort,
+    ReasoningObject,
+    OutputConfigEffort,
+    ThinkingToggle,
+    ThinkingBudget,
+    ChatTemplateReasoningEffort,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiModelInputModality {
+    Text,
+    Image,
+    Audio,
+    Video,
+    Pdf,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelReasoningConfig {
+    #[serde(default)]
+    pub mode: AiModelReasoningMode,
+    #[serde(default)]
+    pub parameter: AiModelReasoningParameter,
+    #[serde(default)]
+    pub efforts: Vec<AiReasoningEffort>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub budgets: BTreeMap<String, u32>,
+}
+
+fn default_input_modalities() -> Vec<AiModelInputModality> {
+    vec![AiModelInputModality::Text]
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelCapabilities {
+    #[serde(default = "default_input_modalities")]
+    pub input_modalities: Vec<AiModelInputModality>,
+    #[serde(default)]
+    pub reasoning: AiModelReasoningConfig,
+}
+
+impl Default for AiModelCapabilities {
+    fn default() -> Self {
+        Self {
+            input_modalities: default_input_modalities(),
+            reasoning: AiModelReasoningConfig::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiProviderDraft {
@@ -18,6 +86,8 @@ pub struct AiProviderDraft {
     pub model: String,
     #[serde(default)]
     pub models: Vec<String>,
+    #[serde(default)]
+    pub model_capabilities: BTreeMap<String, AiModelCapabilities>,
     pub enabled: bool,
     pub is_default: bool,
     pub allow_no_auth: bool,
@@ -77,6 +147,20 @@ pub struct TestAiProviderInput {
     pub secrets: Option<AiProviderSecretPatch>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAiModelsInput {
+    pub provider: AiProviderDraft,
+    #[serde(default)]
+    pub secrets: Option<AiProviderSecretPatch>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelInfo {
+    pub id: String,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiProviderSummary {
@@ -87,6 +171,8 @@ pub struct AiProviderSummary {
     pub model: String,
     #[serde(default)]
     pub models: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub model_capabilities: BTreeMap<String, AiModelCapabilities>,
     pub enabled: bool,
     pub has_api_key: bool,
     pub usable: bool,
@@ -109,6 +195,34 @@ pub enum AiCopilotMode {
     PureConversation,
     SemiAutomatic,
     FullyAutomatic,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AiReasoningEffort {
+    Auto,
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+    Max,
+}
+
+impl AiReasoningEffort {
+    fn request_value(self) -> Option<&'static str> {
+        match self {
+            Self::Auto => None,
+            Self::None => Some("none"),
+            Self::Minimal => Some("minimal"),
+            Self::Low => Some("low"),
+            Self::Medium => Some("medium"),
+            Self::High => Some("high"),
+            Self::Xhigh => Some("xhigh"),
+            Self::Max => Some("max"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -413,6 +527,8 @@ pub struct StartAiChatInput {
     pub context_snapshot_id: Option<String>,
     #[serde(default)]
     pub mode: AiCopilotMode,
+    #[serde(default)]
+    pub reasoning_effort: Option<AiReasoningEffort>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -426,6 +542,8 @@ pub struct RetryAiChatInput {
     pub context_snapshot_id: Option<String>,
     #[serde(default)]
     pub mode: AiCopilotMode,
+    #[serde(default)]
+    pub reasoning_effort: Option<AiReasoningEffort>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -547,6 +665,8 @@ struct StoredAiProvider {
     model: String,
     #[serde(default)]
     models: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    model_capabilities: BTreeMap<String, AiModelCapabilities>,
     enabled: bool,
     is_default: bool,
     allow_no_auth: bool,

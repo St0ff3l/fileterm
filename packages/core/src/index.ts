@@ -1997,6 +1997,40 @@ export interface RemoteFileAccessOptions {
 
 export type AiProviderKind = 'openai-compatible-chat' | 'openai-responses' | 'anthropic-messages'
 
+/** Input modalities a configured model can accept from the Copilot composer. */
+export type AiModelInputModality = 'text' | 'image' | 'audio' | 'video' | 'pdf'
+
+/** The family of control exposed by a model's reasoning API. */
+export type AiModelReasoningMode = 'none' | 'effort' | 'budget' | 'toggle'
+
+/**
+ * Request mapping for a model's reasoning control. `auto` delegates to the
+ * provider/model adapter; the other values describe common upstream fields.
+ */
+export type AiModelReasoningParameter =
+  | 'auto'
+  | 'reasoning-effort'
+  | 'reasoning-object'
+  | 'output-config-effort'
+  | 'thinking-toggle'
+  | 'thinking-budget'
+  | 'chat-template-reasoning-effort'
+
+export interface AiModelReasoningConfig {
+  mode: AiModelReasoningMode
+  parameter: AiModelReasoningParameter
+  /** Supported values for this model; `auto` is implicit and is not persisted. */
+  efforts: Array<Exclude<AiReasoningEffort, 'auto'>>
+  /** Optional token-budget overrides keyed by the selected effort. */
+  budgets?: Partial<Record<Exclude<AiReasoningEffort, 'auto' | 'none'>, number>>
+}
+
+/** Explicit per-model capability metadata, modeled after OpenCode capabilities/variants. */
+export interface AiModelCapabilities {
+  inputModalities: AiModelInputModality[]
+  reasoning: AiModelReasoningConfig
+}
+
 export interface AiProviderSummary {
   id: string
   name: string
@@ -2004,6 +2038,8 @@ export interface AiProviderSummary {
   baseUrl: string
   model: string
   models?: string[]
+  /** Keyed by the exact upstream model ID. Missing entries remain fail-closed. */
+  modelCapabilities?: Record<string, AiModelCapabilities>
   enabled: boolean
   hasApiKey: boolean
   usable: boolean
@@ -2019,6 +2055,8 @@ export interface AiProviderDraft {
   baseUrl: string
   model: string
   models?: string[]
+  /** Keyed by the exact upstream model ID. */
+  modelCapabilities?: Record<string, AiModelCapabilities>
   enabled: boolean
   isDefault: boolean
   allowNoAuth: boolean
@@ -2043,6 +2081,17 @@ export interface TestAiProviderInput {
   secrets?: AiProviderSecretPatch
 }
 
+/** A model returned by a Provider's live model directory. */
+export interface AiModelInfo {
+  id: string
+}
+
+/** Request used by the settings model picker to refresh a Provider catalog. */
+export interface ListAiModelsInput {
+  provider: AiProviderDraft
+  secrets?: AiProviderSecretPatch
+}
+
 export interface AiProviderTestResult {
   ok: true
   message: string
@@ -2050,6 +2099,9 @@ export interface AiProviderTestResult {
 
 /** The user-visible Copilot execution mode. */
 export type AiCopilotMode = 'pure-conversation' | 'semi-automatic' | 'fully-automatic'
+
+/** Provider-neutral reasoning preference; `auto` leaves the provider default untouched. */
+export type AiReasoningEffort = 'auto' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 /** The only context levels exposed by the new Copilot contract. */
 export type AiContextLevel = 'L0' | 'L2'
@@ -2241,6 +2293,8 @@ export interface StartAiChatInput {
   contextSnapshotId?: string
   /** Optional for callers that need to pin the active mode. */
   mode?: AiCopilotMode
+  /** Optional per-request reasoning preference; `auto` is omitted on the wire. */
+  reasoningEffort?: AiReasoningEffort
 }
 
 /** Retries the latest user turn without duplicating it in local history. */
@@ -2250,6 +2304,7 @@ export interface RetryAiChatInput {
   modelOverride?: string
   contextSnapshotId?: string
   mode?: AiCopilotMode
+  reasoningEffort?: AiReasoningEffort
 }
 
 export interface AiChatRequest {
@@ -2348,6 +2403,7 @@ export interface FileTermDesktopApi {
   listLocalTerminalShells(): Promise<LocalTerminalShellOption[]>
   getMcpAgentSetup(): Promise<McpAgentSetup>
   listAiProviders(): Promise<AiProviderSummary[]>
+  listAiModels(input: ListAiModelsInput): Promise<AiModelInfo[]>
   saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
   deleteAiProvider(providerId: string): Promise<AiProviderSummary[]>
   testAiProvider(input: TestAiProviderInput): Promise<AiProviderTestResult>

@@ -318,10 +318,10 @@
 :root:not([data-theme]) .context-menu,
 :root:not([data-theme*='light']) .context-menu,
 :root[data-theme='default'] .context-menu {
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-modal);
-  box-shadow: var(--shadow-lg);
-  color: var(--text-primary);
+  border: 1px solid var(--border-context-menu);
+  background: var(--surface-context-menu);
+  box-shadow: var(--shadow-context-menu);
+  color: var(--text-context-menu);
 }
 
 :root:not([data-theme]) .context-menu button,

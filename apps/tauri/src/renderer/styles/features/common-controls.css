@@ -49,7 +49,7 @@
   border: 1px solid var(--border-light);
   border-radius: 8px;
   color: var(--text-secondary);
-  background: var(--bg-primary);
+  background: var(--surface-card);
   cursor: pointer;
   transition:
     border-color 120ms ease,
@@ -59,7 +59,7 @@
 
 .radio-card-group__option:hover:not(.is-disabled) {
   border-color: color-mix(in srgb, var(--focus-outline) 65%, var(--border-light));
-  background: color-mix(in srgb, var(--focus-outline) 6%, var(--bg-primary));
+  background: color-mix(in srgb, var(--focus-outline) 6%, var(--surface-card));
 }
 
 .radio-card-group__option:focus-within {
@@ -69,7 +69,7 @@
 
 .radio-card-group__option.is-selected {
   border-color: var(--focus-outline);
-  background: color-mix(in srgb, var(--focus-outline) 10%, var(--bg-primary));
+  background: color-mix(in srgb, var(--focus-outline) 10%, var(--surface-card));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-outline) 24%, transparent);
 }
 

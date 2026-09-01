@@ -464,6 +464,7 @@ pub fn run() {
             crate::commands::app_verify_security_password,
             crate::commands::app_list_local_terminal_shells,
             crate::commands::app_list_ai_providers,
+            crate::commands::app_list_ai_models,
             crate::commands::app_save_ai_provider,
             crate::commands::app_delete_ai_provider,
             crate::commands::app_test_ai_provider,

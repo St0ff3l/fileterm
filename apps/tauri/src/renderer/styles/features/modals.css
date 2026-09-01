@@ -425,19 +425,19 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   display: grid;
   gap: 5px;
   color: var(--text-muted);
-  font-size: 11px;
-}
-.tunnel-rule-grid input,
-.tunnel-rule-grid select {
-  min-width: 0;
-  height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-dark);
-  border-radius: 5px;
-  background: var(--bg-main);
-  color: var(--text-main);
-}
-.tunnel-autostart {
+  .tunnel-rule-grid input,
+  .tunnel-rule-grid .dropdown-select-trigger,
+  .tunnel-rule-grid .ft-select-shell {
+    min-width: 0;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--input-bg, var(--surface-input));
+    color: var(--text-primary);
+    box-sizing: border-box;
+  }
+
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -657,89 +657,46 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   align-items: start;
 }
 
-.ssh-grid input,
-.ssh-grid select,
-.ssh-grid textarea {
-  width: 100%;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-dark);
-  border-radius: 4px;
-}
-
-.ft-select-shell {
-  position: relative;
-  display: block;
-  width: 100%;
-}
-
-.ft-select-shell select {
-  width: 100%;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: none !important;
-  padding-right: 34px !important;
-  font-weight: 400;
-}
-
-.ft-select-shell__icon {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--text-main);
-  font-size: 18px;
-  line-height: 1;
-}
-
-/* Form controls rendered through DropdownSelect must follow the same rhythm
-   as the neighboring inputs. The shared component keeps the platform
-   behavior (native select on macOS, portal menu elsewhere); this only aligns
-   its two rendered control branches inside the SSH form grid. */
 .ssh-grid input:not([type='checkbox']):not([type='radio']),
-.ssh-grid select,
+.ssh-grid textarea,
 .ssh-grid .dropdown-select-trigger,
-.ssh-grid .ft-select-shell,
-.ssh-grid .ft-select-shell select {
+.ssh-grid .ft-select-shell {
   box-sizing: border-box;
+  width: 100%;
   height: var(--button-height-md, 36px);
   min-height: var(--button-height-md, 36px);
-}
-
-.ssh-grid .dropdown-select-trigger {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--input-bg);
-  color: var(--text-main);
   padding: 0 10px;
-  line-height: 1.2;
-}
-
-.ssh-grid .ft-select-shell select {
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm, 4px);
-  background: var(--input-bg);
-  color: var(--text-main);
-  padding: 0 34px 0 10px !important;
+  background: var(--input-bg, var(--surface-input));
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
   line-height: 1.2;
-}
-
-.ssh-grid .dropdown-select-trigger:hover:not(:disabled),
-.ssh-grid .ft-select-shell select:hover:not(:disabled) {
-  border-color: var(--text-muted);
-}
-
-.ssh-grid .dropdown-select-trigger:focus-visible,
-.ssh-grid .ft-select-shell select:focus-visible {
-  outline: none;
-  border-color: var(--focus-outline);
-  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
 .ssh-grid textarea {
   min-height: 72px;
+  height: auto;
+  padding: 6px 10px;
   resize: vertical;
+}
+
+.ssh-grid input:hover:not(:disabled),
+.ssh-grid textarea:hover:not(:disabled),
+.ssh-grid .dropdown-select-trigger:hover:not(:disabled),
+.ssh-grid .ft-select-shell:hover:not(:has(select:disabled)) {
+  border-color: var(--border-default);
+}
+
+.ssh-grid input:focus,
+.ssh-grid textarea:focus,
+.ssh-grid .dropdown-select-trigger:focus-visible,
+.ssh-grid .ft-select-shell:focus-within {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 .terminal-key-box {
@@ -1513,56 +1470,38 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 }
 
 .connection-form input,
-.connection-form select {
+.connection-form .dropdown-select-trigger,
+.connection-form .ft-select-shell {
   width: 100%;
   height: 36px;
   padding: 0 12px;
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  background: var(--bg-main);
-  color: var(--text-main);
-  font-size: 14px;
-  transition: all 0.2s ease;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg, var(--surface-input));
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  transition: border-color var(--transition-normal);
+  box-sizing: border-box;
+}
+
+.connection-form .ft-select-shell {
+  padding: 0;
 }
 
 .connection-form input:focus,
-.connection-form select:focus {
+.connection-form .dropdown-select-trigger:focus-visible,
+.connection-form .ft-select-shell:focus-within {
   outline: none;
   border-color: var(--focus-outline);
-  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 .connection-form input:hover,
-.connection-form select:hover {
-  border-color: var(--text-muted);
-}
-
-.ssh-grid input,
-.ssh-grid select,
-.ssh-grid textarea {
-  width: 100%;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: var(--bg-main);
-  color: var(--text-main);
-  font-size: 13px;
-  transition: all 0.2s ease;
-}
-
-.ssh-grid input:focus,
-.ssh-grid select:focus,
-.ssh-grid textarea:focus {
-  outline: none;
-  border-color: var(--focus-outline);
-  box-shadow: 0 0 0 3px var(--accent-focus-ring);
-}
-
-.ssh-grid textarea {
-  min-height: 80px;
-  resize: vertical;
-  line-height: 1.5;
+.connection-form .dropdown-select-trigger:hover:not(:disabled),
+.connection-form .ft-select-shell:hover:not(:has(select:disabled)) {
+  border-color: var(--border-default);
 }
 
 .checkbox-row {

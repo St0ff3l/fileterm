@@ -153,8 +153,10 @@ export function AiCopilotPanel({
     resolvingToolApprovalIds,
     isContextPreviewing,
     modeState,
+    reasoningEffort,
     selectProvider,
     selectModel,
+    selectReasoningEffort,
     loadConversation,
     newChat,
     renameConversation,
@@ -499,10 +501,12 @@ export function AiCopilotPanel({
           onComposerKeyDown={onComposerKeyDown}
           providers={providers}
           referenceTerminal={referenceTerminal}
+          reasoningEffort={reasoningEffort}
           requiresTerminalContext={requiresTerminalContext}
           selectCopilotMode={selectCopilotMode}
           selectModel={selectModel}
           selectProvider={selectProvider}
+          selectReasoningEffort={selectReasoningEffort}
           selectedModel={selectedModel}
           selectedProviderId={selectedProviderId}
           send={send}

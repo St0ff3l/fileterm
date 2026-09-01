@@ -6,7 +6,8 @@ import { DropdownSelect } from '../../../common/dropdown-select'
 import { SelectionControl } from '../../../common/selection-control'
 import { type LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
-import { AI_PROVIDER_PRESETS, type AiFeedback, type AiProviderPreset } from '../constants'
+import { AI_PROVIDER_PRESETS, isAiManualCapabilityProvider, type AiFeedback, type AiProviderPreset } from '../constants'
+import { AiModelCapabilityEditor } from './ai-model-capability-editor'
 
 type AiSettingsPanelContext = {
   t: LocaleMessages
@@ -27,11 +28,16 @@ type AiSettingsPanelContext = {
   clearAiApiKey: boolean
   setClearAiApiKey: Dispatch<SetStateAction<boolean>>
   aiMessage: AiFeedback | null
-  aiOperation: 'load' | 'save' | 'test' | 'delete' | null
+  aiOperation: 'load' | 'models' | 'save' | 'test' | 'delete' | null
   aiRequestUrlPreview: string | null
   applyAiPreset(preset: AiProviderPreset): void
   selectAiProvider(provider: AiProviderSummary | undefined): void
   patchAiDraft(patch: Partial<AiProviderDraft>): void
+  patchAiModelCapabilities(
+    modelName: string,
+    capabilities: NonNullable<AiProviderDraft['modelCapabilities']>[string]
+  ): void
+  refreshAiModelChoices(): Promise<void>
   addSelectedModelToProvider(): void
   removeConfiguredModel(modelName: string): void
   saveAiProvider(): Promise<void>
@@ -66,6 +72,8 @@ export function AiSettingsPanel() {
     applyAiPreset,
     selectAiProvider,
     patchAiDraft,
+    patchAiModelCapabilities,
+    refreshAiModelChoices,
     addSelectedModelToProvider,
     removeConfiguredModel,
     saveAiProvider,
@@ -74,6 +82,9 @@ export function AiSettingsPanel() {
     setShowDeleteAiProviderConfirm,
     deleteAiProvider
   } = useSettingsModalContext<AiSettingsPanelContext>()
+
+  const showManualCapabilities = isAiManualCapabilityProvider(aiDraft)
+  const activeModel = aiDraft.model || configuredModels[0] || ''
 
   return (
     <div className="settings-panel settings-ai-panel">
@@ -143,7 +154,7 @@ export function AiSettingsPanel() {
               value="__none__"
               placeholder={t.aiSettingsPresetPlaceholder}
               options={[
-                { value: '__none__', label: t.aiSettingsPresetPlaceholder },
+                { value: '__none__', label: t.aiSettingsCustomProvider },
                 ...AI_PROVIDER_PRESETS.map((preset) => ({
                   value: preset.id,
                   label: String(t[preset.labelKey])
@@ -183,7 +194,7 @@ export function AiSettingsPanel() {
                 onChange={(value) => patchAiDraft({ kind: value as AiProviderKind })}
               />
             </label>
-            <label className="ai-settings-model-field">
+            <div className="ai-settings-model-field">
               <div className="ai-settings-model-header">
                 <span>{t.aiSettingsModel}</span>
                 <small className="ai-settings-model-picker-hint">{t.aiSettingsModelAddHint}</small>
@@ -193,54 +204,60 @@ export function AiSettingsPanel() {
                   {isCustomInput ? (
                     <div className="ai-settings-model-add-row">
                       <input
+                        aria-label={t.aiSettingsModel}
                         autoFocus
                         className="ai-settings-model-add-input"
-                        placeholder="输入自定义模型名称 (例: deepseek-r1)"
+                        placeholder={t.aiSettingsModelManualPlaceholder}
                         value={customModelText}
-                        onChange={(e) => setCustomModelText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
+                        onChange={(event) => setCustomModelText(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
                             addSelectedModelToProvider()
-                          } else if (e.key === 'Escape') {
+                          } else if (event.key === 'Escape') {
                             setIsCustomInput(false)
+                            setCustomModelText('')
                           }
                         }}
                       />
                       <button
                         className="ai-settings-secondary-button ai-settings-add-model-btn"
-                        disabled={!customModelText.trim()}
+                        disabled={!desktopApi || aiOperation !== null || !customModelText.trim()}
                         type="button"
                         onClick={addSelectedModelToProvider}
-                        title="添加此自定义模型到 Provider"
+                        title={t.aiSettingsModelManualInput}
                       >
                         <AppIcon name="plus" size={14} />
                       </button>
                       <button
                         className="ai-settings-secondary-button ai-settings-model-cancel-btn"
                         type="button"
-                        onClick={() => setIsCustomInput(false)}
-                        title="取消"
+                        onClick={() => {
+                          setIsCustomInput(false)
+                          setCustomModelText('')
+                        }}
+                        title={t.cancel}
                       >
-                        取消
+                        {t.cancel}
                       </button>
                     </div>
                   ) : (
                     <div className="ai-settings-model-picker-row">
                       <DropdownSelect
+                        ariaLabel={t.aiSettingsModelSuggestionsPlaceholder}
                         className="ai-settings-model-select"
                         disabled={!desktopApi || aiOperation !== null}
                         value={selectedCandidateModel || '__none__'}
                         options={[
-                          { value: '__none__', label: '选择模型以添加...' },
+                          { value: '__none__', label: t.aiSettingsModelSuggestionsPlaceholder },
                           ...candidateModelOptions.map((model: string) => ({
                             value: model,
                             label: model
                           })),
-                          { value: '__custom__', label: '+ 自定义模型...' }
+                          { value: '__manual__', label: t.aiSettingsModelManualInput }
                         ]}
                         onChange={(value) => {
-                          if (value === '__custom__') {
+                          if (value === '__manual__') {
                             setIsCustomInput(true)
                             setSelectedCandidateModel('')
                             setCustomModelText('')
@@ -248,7 +265,7 @@ export function AiSettingsPanel() {
                             setSelectedCandidateModel('')
                           } else {
                             setSelectedCandidateModel(value)
-                            setIsCustomInput(false)
+                            setCustomModelText('')
                           }
                         }}
                       />
@@ -257,9 +274,22 @@ export function AiSettingsPanel() {
                         disabled={!desktopApi || aiOperation !== null || !selectedCandidateModel}
                         type="button"
                         onClick={addSelectedModelToProvider}
-                        title="添加当前下拉框选中的模型到 Provider"
+                        title={t.aiSettingsModelAddHint}
                       >
                         <AppIcon name="plus" size={14} />
+                      </button>
+                      <button
+                        aria-busy={aiOperation === 'models'}
+                        className="ai-settings-secondary-button ai-settings-refresh-models-btn"
+                        disabled={!desktopApi || aiOperation !== null}
+                        type="button"
+                        onClick={() => void refreshAiModelChoices()}
+                        title={t.aiSettingsRefreshModelsHint}
+                      >
+                        <AppIcon name="refresh" size={14} />
+                        <span>
+                          {aiOperation === 'models' ? t.aiSettingsRefreshingModels : t.aiSettingsRefreshModels}
+                        </span>
                       </button>
                     </div>
                   )}
@@ -301,7 +331,18 @@ export function AiSettingsPanel() {
                   )}
                 </div>
               </div>
-            </label>
+            </div>
+            {showManualCapabilities && activeModel ? (
+              <AiModelCapabilityEditor
+                capabilities={aiDraft.modelCapabilities?.[activeModel]}
+                modelName={activeModel}
+                onChange={(capabilities) => patchAiModelCapabilities(activeModel, capabilities)}
+                provider={aiDraft}
+                t={t}
+              />
+            ) : !showManualCapabilities ? (
+              <small className="ai-settings-model-capability-auto-hint">{t.aiSettingsModelCapabilitiesAutoHint}</small>
+            ) : null}
             <label className="ai-settings-form-span-two">
               <span>{t.aiSettingsEndpoint}</span>
               <input

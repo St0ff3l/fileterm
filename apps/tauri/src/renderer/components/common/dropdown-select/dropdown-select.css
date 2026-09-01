@@ -13,10 +13,11 @@
   padding: 0 var(--control-padding-x-sm);
   background-color: var(--surface-input);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: var(--font-size-sm);
+  font-weight: 400;
   cursor: pointer;
   outline: none;
   transition:
@@ -72,10 +73,10 @@
 /* Dropdown Menu (Portal) */
 .dropdown-select-menu {
   position: fixed;
-  background-color: var(--surface-modal);
-  border: 1px solid var(--border-subtle);
+  background-color: var(--surface-context-menu);
+  border: 1px solid var(--border-context-menu);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-context-menu);
   padding: 4px;
   max-height: 280px;
   overflow-y: auto;
@@ -97,7 +98,7 @@
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  color: var(--text-context-menu);
   font-family: var(--font-ui);
   font-size: var(--font-size-sm);
   text-align: left;
@@ -146,69 +147,81 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   height: var(--control-height-md);
-  border-radius: var(--radius-md);
+  padding: 0 var(--control-padding-x-sm);
+  border-radius: var(--radius-sm, 4px);
   background-color: var(--surface-input);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   box-sizing: border-box;
   transition:
     border-color var(--transition-normal),
+    background-color var(--transition-normal),
     box-shadow var(--transition-normal);
+  user-select: none;
+  white-space: nowrap;
 }
 
-.ft-select-shell:hover {
+.ft-select-shell:hover:not(:has(select:disabled)) {
   border-color: var(--border-default);
 }
 
 .ft-select-shell:focus-within {
-  border-color: var(--border-focus);
+  border-color: var(--focus-outline);
   box-shadow: 0 0 0 2px var(--accent-focus-ring);
+  background-color: var(--surface-input-focus, var(--surface-input));
 }
 
-/* Native select reset: required for the platform-specific shell wrapper. */
-.ft-select-shell select {
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  padding: 0 34px 0 var(--control-padding-x-sm);
-  background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
+.ft-select-shell:has(select:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ft-select-shell__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
   font-family: var(--font-ui);
   font-size: var(--font-size-sm);
+  font-weight: 400;
   color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
+  pointer-events: none;
 }
 
-.ft-select-shell select:focus,
-.ft-select-shell select:focus-visible {
-  border: none !important;
+.ft-select-shell__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* Native select element sits on top to receive native clicks/events, but is visually hidden */
+.ft-select-shell select {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 0 !important;
+  cursor: pointer;
+  z-index: 2;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
   outline: none !important;
-  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
 }
 
 .ft-select-shell select:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.ft-select-shell select option {
-  background-color: var(--surface-modal);
-  color: var(--text-primary);
-}
-
-.ft-select-shell__icon {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--text-secondary);
 }
 
 @keyframes ft-dropdown-fade-in {
