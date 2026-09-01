@@ -26,20 +26,20 @@ use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
-    io::{self, BufRead, BufReader, Read, Write},
-    net::{SocketAddr, TcpStream as StdTcpStream},
+    io::{self, BufRead, Read, Write},
+    net::SocketAddr,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use subtle::ConstantTimeEq;
 use tauri::{AppHandle, Manager};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
     net::{TcpListener, TcpStream},
     sync::{mpsc, Semaphore},
     time::timeout,
@@ -47,7 +47,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 const MCP_RUNTIME_FILE: &str = "mcp-runtime.json";
-const MCP_PROTOCOL_VERSION: u32 = 1;
+const MCP_PROTOCOL_VERSION: u32 = 2;
 const MCP_JSONRPC_PROTOCOL_VERSION: &str = "2025-06-18";
 const MCP_BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_CLIENT_TIMEOUT: Duration = Duration::from_secs(600);
@@ -61,6 +61,9 @@ const MCP_INITIALIZE_INSTRUCTIONS: &str = "Before the first fileterm_open_connec
 const MCP_MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
 const MCP_MAX_CONCURRENT_CLIENTS: usize = 8;
 const MCP_MAX_QUEUED_REQUESTS: usize = 32;
+const MCP_BRIDGE_WRITER_QUEUE_SIZE: usize = 128;
+const MCP_BRIDGE_CANCEL_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
+const MCP_MAX_BRIDGE_REQUEST_ID_BYTES: usize = 256;
 const AGENT_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const MCP_DEFAULT_PAGE_SIZE: usize = 20;
 const MCP_MAX_PAGE_SIZE: usize = 100;
@@ -82,6 +85,9 @@ const MCP_SCOPE_DENIED: &str = "MCP_SCOPE_DENIED";
 const FILETERM_CLI_JSONL_REQUEST_CANCELLED: &str = "FILETERM_CLI_JSONL_REQUEST_CANCELLED";
 const FILETERM_REQUEST_QUEUE_FULL: &str = "FILETERM_REQUEST_QUEUE_FULL";
 const MCP_SERVER_BUSY_ERROR_CODE: i32 = -32001;
+
+mod bridge;
+use bridge::{BridgeClient, BridgeFrame};
 
 include!("types.rs");
 include!("background.rs");

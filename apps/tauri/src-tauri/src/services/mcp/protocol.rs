@@ -2,13 +2,20 @@
 #[cfg(test)]
 fn handle_jsonrpc_request(request: Value) -> Option<Value> {
     let mut ignore_progress = |_progress: &BridgeProgress| {};
-    handle_jsonrpc_request_with_progress_and_cancellation(request, &mut ignore_progress, None)
+    let bridge = BridgeClient::new();
+    handle_jsonrpc_request_with_progress_and_cancellation(
+        request,
+        &mut ignore_progress,
+        None,
+        &bridge,
+    )
 }
 
 fn handle_jsonrpc_request_with_progress_and_cancellation<F>(
     request: Value,
     on_progress: &mut F,
     cancellation: Option<&AtomicBool>,
+    bridge: &BridgeClient,
 ) -> Option<Value>
 where
     F: FnMut(&BridgeProgress),
@@ -29,7 +36,7 @@ where
         "initialize" => initialize_result(&params),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({ "tools": tool_definitions() })),
-        "tools/call" => call_tool_with_cancellation(&params, on_progress, cancellation),
+        "tools/call" => call_tool_with_cancellation(&params, on_progress, cancellation, bridge),
         "notifications/cancelled" => return None,
         _ => return Some(jsonrpc_error(id, -32601, "Method not found")),
     };
@@ -54,6 +61,7 @@ fn call_tool_with_cancellation<F>(
     params: &Value,
     on_progress: &mut F,
     cancellation: Option<&AtomicBool>,
+    bridge: &BridgeClient,
 ) -> Result<Value, String>
 where
     F: FnMut(&BridgeProgress),
@@ -83,7 +91,7 @@ where
         requires_approval: true,
         progress_token,
     };
-    match call_desktop_bridge_with_progress_and_cancellation(request, on_progress, cancellation) {
+    match call_desktop_bridge_with_client(bridge, request, on_progress, cancellation) {
         Ok(result) => Ok(tool_result(result, false)),
         Err(error) => Ok(tool_error_result(error)),
     }
@@ -656,20 +664,12 @@ fn call_desktop_bridge(request: BridgeRequest) -> Result<Value, String> {
     let mut print_progress = |progress: &BridgeProgress| {
         eprintln!("{}", progress.message);
     };
-    call_desktop_bridge_with_progress(request, &mut print_progress)
+    let bridge = BridgeClient::new();
+    call_desktop_bridge_with_client(&bridge, request, &mut print_progress, None)
 }
 
-fn call_desktop_bridge_with_progress<F>(
-    request: BridgeRequest,
-    on_progress: &mut F,
-) -> Result<Value, String>
-where
-    F: FnMut(&BridgeProgress),
-{
-    call_desktop_bridge_with_progress_and_cancellation(request, on_progress, None)
-}
-
-fn call_desktop_bridge_with_progress_and_cancellation<F>(
+fn call_desktop_bridge_with_client<F>(
+    bridge: &BridgeClient,
     request: BridgeRequest,
     on_progress: &mut F,
     cancellation: Option<&AtomicBool>,
@@ -677,144 +677,7 @@ fn call_desktop_bridge_with_progress_and_cancellation<F>(
 where
     F: FnMut(&BridgeProgress),
 {
-    if cancellation_requested(cancellation) {
-        return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-    }
-    let runtime_path = runtime_descriptor_path()?;
-    let descriptor_content = fs::read_to_string(&runtime_path).map_err(|_| {
-        "FileTerm desktop app is not running. Open FileTerm, then retry this MCP tool.".to_string()
-    })?;
-    let descriptor: RuntimeDescriptor = serde_json::from_str(&descriptor_content).map_err(|_| {
-        "FileTerm MCP runtime information is invalid. Restart FileTerm, then retry this MCP tool.".to_string()
-    })?;
-    if descriptor.protocol_version != MCP_PROTOCOL_VERSION || descriptor.token.is_empty() {
-        return Err(
-            "FileTerm MCP runtime version is unsupported. Restart FileTerm and retry.".to_string(),
-        );
-    }
-    let address: SocketAddr = descriptor.address.parse().map_err(|_| {
-        "FileTerm MCP runtime address is invalid. Restart FileTerm, then retry this MCP tool."
-            .to_string()
-    })?;
-    if !address.ip().is_loopback() {
-        return Err("FileTerm MCP rejected a non-local runtime address.".to_string());
-    }
-    if cancellation_requested(cancellation) {
-        return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-    }
-
-    let request_timeout = MCP_CLIENT_TIMEOUT;
-    let mut stream = StdTcpStream::connect_timeout(&address, MCP_BRIDGE_TIMEOUT).map_err(|_| {
-        "FileTerm desktop app is unavailable. Open or restart FileTerm, then retry this MCP tool.".to_string()
-    })?;
-    if cancellation_requested(cancellation) {
-        return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-    }
-    let read_timeout = if cancellation.is_some() {
-        AGENT_CANCEL_POLL_INTERVAL
-    } else {
-        request_timeout
-    };
-    stream
-        .set_read_timeout(Some(read_timeout))
-        .map_err(|_| "Unable to configure FileTerm MCP connection".to_string())?;
-    stream
-        .set_write_timeout(Some(request_timeout))
-        .map_err(|_| "Unable to configure FileTerm MCP connection".to_string())?;
-    let envelope = BridgeEnvelope {
-        token: descriptor.token,
-        request,
-    };
-    let payload = serde_json::to_vec(&envelope)
-        .map_err(|_| "Unable to encode FileTerm MCP request".to_string())?;
-    if payload.len() > MCP_MAX_MESSAGE_BYTES {
-        return Err("FileTerm MCP request exceeds the size limit.".to_string());
-    }
-    stream
-        .write_all(&payload)
-        .and_then(|()| stream.write_all(b"\n"))
-        .and_then(|()| stream.flush())
-        .map_err(|_| {
-            "Unable to send the request to FileTerm. Restart FileTerm and retry.".to_string()
-        })?;
-    if cancellation_requested(cancellation) {
-        return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-    }
-
-    let mut reader = BufReader::new(stream);
-    let mut response_line = String::new();
-    let response_deadline = Instant::now() + request_timeout;
-    loop {
-        if cancellation_requested(cancellation) {
-            return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-        }
-        let read_result = reader.read_line(&mut response_line);
-        match read_result {
-            Ok(0) => {
-                return Err(
-                    "FileTerm did not respond to the MCP request. Retry shortly.".to_string(),
-                )
-            }
-            Ok(_) => {}
-            Err(error)
-                if cancellation.is_some()
-                    && matches!(
-                        error.kind(),
-                        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
-                    ) =>
-            {
-                if cancellation_requested(cancellation) {
-                    return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-                }
-                if Instant::now() >= response_deadline {
-                    return Err(
-                        "FileTerm did not respond to the MCP request. Retry shortly.".to_string(),
-                    );
-                }
-                continue;
-            }
-            Err(_) => {
-                return Err(
-                    "FileTerm did not respond to the MCP request. Retry shortly.".to_string(),
-                )
-            }
-        }
-        if response_line.len() > MCP_MAX_MESSAGE_BYTES {
-            return Err("FileTerm MCP response exceeds the size limit.".to_string());
-        }
-        let response_value: Value = serde_json::from_str(&response_line).map_err(|_| {
-            "FileTerm returned an invalid MCP response. Restart FileTerm and retry.".to_string()
-        })?;
-        if response_value.get("kind").and_then(Value::as_str) == Some("progress") {
-            let progress: BridgeProgress =
-                serde_json::from_value(response_value).map_err(|_| {
-                    "FileTerm returned an invalid MCP progress event. Restart FileTerm and retry."
-                        .to_string()
-                })?;
-            if cancellation_requested(cancellation) {
-                return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-            }
-            on_progress(&progress);
-            response_line.clear();
-            continue;
-        }
-        let response: BridgeResponse = serde_json::from_value(response_value).map_err(|_| {
-            "FileTerm returned an invalid MCP response. Restart FileTerm and retry.".to_string()
-        })?;
-        let result = if response.ok {
-            response
-                .result
-                .ok_or_else(|| "FileTerm returned an empty MCP response.".to_string())
-        } else {
-            Err(response
-                .error
-                .unwrap_or_else(|| "FileTerm could not complete the MCP request.".to_string()))
-        };
-        if cancellation_requested(cancellation) {
-            return Err(FILETERM_CLI_JSONL_REQUEST_CANCELLED.to_string());
-        }
-        return result;
-    }
+    bridge.call(request, on_progress, cancellation)
 }
 
 fn cancellation_requested(cancellation: Option<&AtomicBool>) -> bool {

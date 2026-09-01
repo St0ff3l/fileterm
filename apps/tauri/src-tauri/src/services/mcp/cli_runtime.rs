@@ -4,6 +4,7 @@ struct McpStdioJob {
     id: Value,
     cancellation: Arc<AtomicBool>,
     controls: CliJsonlRequestControls,
+    bridge: Arc<BridgeClient>,
 }
 
 /// Entry point for `fileterm mcp`. This is deliberately dependency-free: MCP
@@ -20,6 +21,7 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
 
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
     let controls = CliJsonlRequestControls::default();
+    let bridge = Arc::new(BridgeClient::new());
     let (job_sender, job_receiver) =
         std::sync::mpsc::sync_channel::<Option<McpStdioJob>>(MCP_MAX_QUEUED_REQUESTS);
     let job_receiver = Arc::new(Mutex::new(job_receiver));
@@ -98,6 +100,7 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
             id: id.clone(),
             cancellation,
             controls: controls.clone(),
+            bridge: Arc::clone(&bridge),
         };
         match job_sender.try_send(Some(job)) {
             Ok(()) => {}
@@ -137,6 +140,7 @@ fn process_mcp_stdio_request(
         id,
         cancellation,
         controls,
+        bridge,
     } = job;
     let request_id = id.clone();
     let mut on_progress = |progress: &BridgeProgress| {
@@ -152,6 +156,7 @@ fn process_mcp_stdio_request(
         request,
         &mut on_progress,
         Some(&cancellation),
+        &bridge,
     );
     if let Some(response) = response {
         let _ = write_mcp_stdio_value(stdout, &response);
@@ -196,6 +201,7 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
 
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
     let controls = CliJsonlRequestControls::default();
+    let bridge = Arc::new(BridgeClient::new());
     let (job_sender, job_receiver) =
         std::sync::mpsc::sync_channel::<Option<CliJsonlJob>>(MCP_MAX_QUEUED_REQUESTS);
     let job_receiver = Arc::new(Mutex::new(job_receiver));
@@ -318,6 +324,7 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
             request,
             cancellation,
             controls: controls.clone(),
+            bridge: Arc::clone(&bridge),
         };
         match job_sender.try_send(Some(job)) {
             Ok(()) => {}
@@ -388,6 +395,7 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
         request,
         cancellation,
         controls,
+        bridge,
     } = job;
     let id = request.id.clone();
     let request_id = id.clone();
@@ -418,7 +426,8 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
         }
         let _ = write_cli_jsonl_value(stdout, &value);
     };
-    let response = match call_desktop_bridge_with_progress_and_cancellation(
+    let response = match call_desktop_bridge_with_client(
+        &bridge,
         bridge_request,
         &mut on_progress,
         Some(&cancellation),

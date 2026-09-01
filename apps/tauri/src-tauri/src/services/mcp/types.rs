@@ -75,13 +75,6 @@ struct RuntimeDescriptor {
     token: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BridgeEnvelope {
-    token: String,
-    request: BridgeRequest,
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 struct BridgeRequest {
@@ -113,6 +106,7 @@ struct CliJsonlJob {
     request: CliJsonlRequest,
     cancellation: Arc<AtomicBool>,
     controls: CliJsonlRequestControls,
+    bridge: Arc<BridgeClient>,
 }
 
 #[derive(Clone, Default)]
