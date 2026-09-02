@@ -330,6 +330,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 /* Remove the separate header - now part of pages */
@@ -346,6 +347,11 @@
   margin-bottom: 12px;
   padding: 18px 24px 20px;
   box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.home-content-body::-webkit-scrollbar {
+  display: none;
 }
 
 .home-content-body:has(.manager-inline) {
@@ -361,22 +367,9 @@
   padding-top: 0;
 }
 
-/* Custom Scrollbar */
-.home-content-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.home-content-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.home-content-body::-webkit-scrollbar-thumb {
-  background: var(--surface-chip);
-  border-radius: 3px;
-}
-
-.home-content-body::-webkit-scrollbar-thumb:hover {
-  background: var(--surface-hover);
+.home-main-content > .vertical-scrollbar {
+  bottom: 42px;
+  right: 2px;
 }
 
 /* Page switch fly-in: direction follows sidebar nav (down/up) */

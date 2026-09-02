@@ -12,11 +12,12 @@ import type {
   ThemeConfig,
   WorkspaceTab
 } from '@fileterm/core'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ThemeMode } from '../../app/theme-config'
 import { t } from '../../i18n'
 import { resolveRendererPlatform } from '../../lib/renderer-platform'
 import { AppIcon } from '../common/app-icon'
+import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { PortableUpdateDialog } from '../common/portable-update-dialog'
 import { OverviewPage } from './overview-page'
 import { QuickLinksPage } from './quick-links-page'
@@ -137,6 +138,7 @@ export function HomeWorkspace({
     | 'background-sessions'
     | 'settings'
   >('overview')
+  const contentBodyRef = useRef<HTMLDivElement | null>(null)
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
   const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
@@ -367,7 +369,7 @@ export function HomeWorkspace({
 
       {/* Main Content Area */}
       <main className="home-main-content">
-        <div className="home-content-body scrollbar-scroll">
+        <div className="home-content-body scrollbar-scroll" ref={contentBodyRef}>
           {activeTab === 'overview' && (
             <div key="overview" className="page-transition" data-nav-direction={navDirection}>
               <OverviewPage
@@ -473,6 +475,7 @@ export function HomeWorkspace({
             </div>
           )}
         </div>
+        <VerticalScrollbar ariaLabel={t.overview} scrollRef={contentBodyRef} />
 
         {/* Custom Footer */}
         <footer className="home-footer">
