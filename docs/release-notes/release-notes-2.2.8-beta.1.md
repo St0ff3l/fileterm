@@ -12,7 +12,7 @@ FileTerm 2.2.8-beta.1 是一次 Beta 版本，重点完善 AI/MCP 工作流、SS
 
 ### 本版本包含的主要 PR 和问题修复
 
-- AI/MCP 工作流、SSH 稳定性、FreeBSD 指标兼容性以及主题和工作区交互的集中改进，详见下方版本对比。
+- [PR #229](https://github.com/St0ff3l/fileterm/pull/229)：集中改进 AI/MCP 工作流、SSH 稳定性、FreeBSD 指标兼容性以及主题和工作区交互。
 
 完整变更记录请查看 [v2.2.7 与 v2.2.8-beta.1 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.7...v2.2.8-beta.1)。
 
@@ -38,7 +38,7 @@ FileTerm 2.2.8-beta.1 is a beta release focused on AI/MCP workflows, SSH stabili
 
 ### Main PRs and issues
 
-- Consolidated improvements to AI/MCP workflows, SSH stability, FreeBSD metrics compatibility, and theme and workspace interaction; see the version comparison below for the complete scope.
+- [PR #229](https://github.com/St0ff3l/fileterm/pull/229): Consolidated improvements to AI/MCP workflows, SSH stability, FreeBSD metrics compatibility, and theme and workspace interaction.
 
 See the [comparison between v2.2.7 and v2.2.8-beta.1](https://github.com/St0ff3l/fileterm/compare/v2.2.7...v2.2.8-beta.1) for the complete change set.
 
