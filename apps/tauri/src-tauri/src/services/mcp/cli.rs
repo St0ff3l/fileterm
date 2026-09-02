@@ -44,6 +44,14 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
             print_cli_help();
             Ok(())
         }
+        "agent-contract" | "capabilities" => {
+            if has_cli_help(options) {
+                print_cli_command_help("get_agent_contract");
+                Ok(())
+            } else {
+                print_cli_result(agent_contract())
+            }
+        }
         "-V" | "--version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
@@ -626,7 +634,7 @@ fn print_cli_result(result: Value) -> Result<(), String> {
 
 fn print_cli_help() {
     println!(
-        "Persistent external-Agent mode: `fileterm cli --jsonl` keeps one JSONL stdin/stdout process alive. FileTerm must already be running; send one JSON request per line and reuse this process."
+        "Persistent external-Agent mode: `fileterm cli --jsonl` keeps one JSONL stdin/stdout process alive. FileTerm must already be running; send one JSON request per line and reuse this process. Run `fileterm cli agent-contract` for the machine-readable workflow contract."
     );
     println!(
         "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` uses a dedicated non-interactive SSH channel for ordinary servers. A network-device session instead sends one single-line native CLI command through the visible raw terminal and returns `rawTerminal=true` with `exitCode=null`; its output can include the command echo and prompt. If a command needs generic input such as MFA, a confirmation, or a REPL answer, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish that operation in the visible SSH terminal and retry. Sudo/su credentials use explicit trusted parameters, encrypted profiles, or the FileTerm main-window secure prompt, and apply only to ordinary server sessions. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. The shared policy runs queries and ordinary safe commands automatically; dangerous, privileged, mutating or unrecognized commands, session changes, file or transfer changes, tunnels, sudo/su and unknown actions use the FileTerm main-window approval unless Full access is selected.\nUse `fileterm cli <command>` as an equivalent spelling.",
@@ -642,12 +650,15 @@ fn print_cli_help() {
         "Connection lifecycle: `fileterm open --profile-id ID [--execution-mode background|visible-terminal] [--wait-for-ready true|false] [--timeout-ms N]`; resume with `fileterm wait-connection --operation-id ID [--timeout-ms N]`."
     );
     println!(
-        "Long jobs: use `fileterm call start_remote_command --params-json JSON`, then poll `read_remote_command` with the returned commandId and nextOffset; terminate/close explicitly when finished."
+        "Long jobs: use `fileterm call start_remote_command --params-json JSON`, then poll `read_remote_command` with the returned commandId and nextOffset; terminate/close explicitly when finished. Never start the same job again after a read or bridge timeout; inspect the existing command first."
     );
 }
 
 fn print_cli_command_help(command: &str) {
     match command {
+        "get_agent_contract" => println!(
+            "Usage: fileterm cli agent-contract\n       fileterm cli capabilities\n\nRead the machine-readable Agent workflow contract without opening a connection."
+        ),
         "connections" => println!("Usage: fileterm connections [--limit N] [--offset N]"),
         "sessions" => println!("Usage: fileterm sessions [--profile-id PROFILE_ID]"),
         "directory" => println!(

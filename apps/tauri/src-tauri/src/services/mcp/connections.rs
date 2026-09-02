@@ -226,7 +226,8 @@ fn connection_operation_result(
         );
         object.insert("timedOut".to_string(), Value::Bool(timed_out));
     }
-    result
+    let agent = connection_agent_metadata(&result, operation_id, status, timed_out);
+    attach_agent_metadata(result, agent)
 }
 
 fn with_execution_mode(mut result: Value, execution_mode: &str) -> Value {
@@ -355,11 +356,13 @@ async fn execute_remote_command(
             .await,
     }
     .map_err(public_app_error)?;
-    Ok(json!({
+    let response = json!({
         "tabId": tab_id,
         "executionMode": EXECUTION_MODE_BACKGROUND,
         "result": result,
-    }))
+    });
+    let agent = synchronous_command_agent_metadata(&response);
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn start_remote_command(
@@ -409,13 +412,21 @@ async fn start_remote_command(
         None => crate::services::action_review::start_background_remote_command(app, request).await,
     }
     .map_err(public_app_error)?;
-    Ok(json!({
+    let response = json!({
         "tabId": result.tab_id,
         "executionMode": EXECUTION_MODE_BACKGROUND,
         "commandId": result.command_id,
         "startedAt": result.started_at,
         "status": "running",
-    }))
+    });
+    let agent = command_start_agent_metadata(
+        response.get("tabId").and_then(Value::as_str).unwrap_or_default(),
+        response
+            .get("commandId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn read_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -441,7 +452,9 @@ async fn read_remote_command(app: &AppHandle, params: &Value) -> Result<Value, S
             Duration::from_millis(wait_ms),
         )
         .await?;
-    serde_json::to_value(snapshot).map_err(|error| error.to_string())
+    let response = serde_json::to_value(snapshot).map_err(|error| error.to_string())?;
+    let agent = background_command_agent_metadata(&response, "read");
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn terminate_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -452,7 +465,9 @@ async fn terminate_remote_command(app: &AppHandle, params: &Value) -> Result<Val
         .background_remote_commands
         .terminate(&tab_id, &command_id)
         .await?;
-    serde_json::to_value(snapshot).map_err(|error| error.to_string())
+    let response = serde_json::to_value(snapshot).map_err(|error| error.to_string())?;
+    let agent = background_command_agent_metadata(&response, "terminate");
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn close_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -462,11 +477,19 @@ async fn close_remote_command(app: &AppHandle, params: &Value) -> Result<Value, 
         .background_remote_commands
         .close(&tab_id, &command_id)
         .await?;
-    Ok(json!({
+    let response = json!({
         "tabId": tab_id,
         "commandId": command_id,
         "closed": true,
-    }))
+    });
+    let agent = command_close_agent_metadata(
+        response.get("tabId").and_then(Value::as_str).unwrap_or_default(),
+        response
+            .get("commandId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn execute_visible_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -478,12 +501,14 @@ async fn execute_visible_command(app: &AppHandle, params: &Value) -> Result<Valu
     )
     .await
     .map_err(public_app_error)?;
-    Ok(json!({
+    let response = json!({
         "tabId": tab_id,
         "executionMode": EXECUTION_MODE_VISIBLE_TERMINAL,
         "accepted": true,
         "result": result,
-    }))
+    });
+    let agent = visible_command_agent_metadata(&response);
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn execute_command_template(app: &AppHandle, params: &Value) -> Result<Value, String> {

@@ -3,13 +3,17 @@
 mod tests {
     use super::{
         action_approval_source, action_is_read_only, bridge_request_timeout, compact_session,
-        handle_jsonrpc_request, initialize_result, mcp_cancel_request_id, mcp_error_code,
-        mcp_error_is_retryable,
+        agent_contract, agent_error_metadata, background_command_agent_metadata,
+        command_start_agent_metadata, handle_jsonrpc_request, initialize_result,
+        mcp_cancel_request_id, mcp_error_code, mcp_error_is_retryable,
         optional_string, pagination, requested_execution_mode, should_request_mcp_approval,
         tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
+        visible_command_agent_metadata,
         ActionApprovalSource, BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility,
         McpVisibilityScope, EXECUTION_MODE_BACKGROUND, EXECUTION_MODE_VISIBLE_TERMINAL,
         MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
+        FILETERM_AGENT_CONTRACT_VERSION,
+        FILETERM_REQUEST_QUEUE_FULL,
         FILETERM_MCP_BRIDGE_BACKPRESSURE, FILETERM_MCP_BRIDGE_DISCONNECTED,
         FILETERM_MCP_BRIDGE_UNAVAILABLE,
         BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED, DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
@@ -219,6 +223,11 @@ mod tests {
             assert!(tool["name"].as_str().unwrap().starts_with("fileterm_"));
             assert_eq!(tool["inputSchema"]["additionalProperties"], false);
             assert_eq!(tool["outputSchema"]["type"], "object");
+            assert!(tool["description"]
+                .as_str()
+                .unwrap()
+                .to_ascii_lowercase()
+                .contains("retry"), "{}", tool["name"]);
         }
         let read_tool = tool_definitions()
             .into_iter()
@@ -253,7 +262,7 @@ mod tests {
             .contains("never writes to the visible terminal"));
         assert_eq!(
             remote_tool["outputSchema"]["required"],
-            json!(["tabId", "executionMode", "result"])
+            json!(["tabId", "executionMode", "agent", "result"])
         );
         assert!(
             remote_tool["outputSchema"]["properties"]["result"]["required"]
@@ -305,7 +314,7 @@ mod tests {
         );
         assert_eq!(
             visible_tool["outputSchema"]["required"],
-            json!(["tabId", "executionMode", "accepted", "result"])
+            json!(["tabId", "executionMode", "accepted", "agent", "result"])
         );
         assert!(visible_tool["description"]
             .as_str()
@@ -550,7 +559,21 @@ mod tests {
             "method": "tools/list"
         }))
         .unwrap();
-        assert!(response["result"]["tools"].as_array().unwrap().len() >= 20);
+        let tools = response["result"]["tools"].as_array().unwrap();
+        assert!(tools.len() >= 20);
+        let contract = tools
+            .iter()
+            .find(|tool| tool["name"] == "fileterm_get_agent_contract")
+            .expect("Agent contract tool should be discoverable");
+        assert!(contract["description"]
+            .as_str()
+            .unwrap()
+            .contains("machine-readable"));
+        assert!(contract["outputSchema"]["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|field| field == "workflows"));
     }
 
     #[test]
@@ -582,6 +605,174 @@ mod tests {
         assert!(instructions.contains("execution_mode"));
         assert!(instructions.contains("fileterm_start_remote_command"));
         assert!(instructions.contains("increasing offset"));
+        assert!(instructions.contains("safeToRetry"));
+        assert!(instructions.contains("fileterm_get_agent_contract"));
+        assert!(instructions.contains("MUST FOLLOW"));
+        assert_eq!(
+            result["_meta"]["fileterm"]["agentContractVersion"],
+            FILETERM_AGENT_CONTRACT_VERSION
+        );
+        assert_eq!(
+            result["_meta"]["fileterm"]["agentContract"]["contractVersion"],
+            FILETERM_AGENT_CONTRACT_VERSION
+        );
+        assert_eq!(
+            result["capabilities"]["experimental"]["filetermAgentContract"]["tool"],
+            "fileterm_get_agent_contract"
+        );
+    }
+
+    #[test]
+    fn agent_contract_exposes_transport_ids_workflows_and_recovery_rules() {
+        let contract = agent_contract();
+        assert_eq!(contract["contractVersion"], FILETERM_AGENT_CONTRACT_VERSION);
+        assert_eq!(contract["transport"]["mcp"]["reuseProcess"], true);
+        assert_eq!(contract["transport"]["cliJsonl"]["reuseProcess"], true);
+        assert!(contract["transport"]["cliJsonl"]["responseCorrelation"]
+            .as_str()
+            .unwrap()
+            .contains("out of order"));
+        assert_eq!(contract["identifiers"]["sessionId"]["argumentName"], "tab_id");
+        assert_eq!(
+            contract["identifiers"]["connectionOperationId"]["argumentName"],
+            "operation_id"
+        );
+        assert_eq!(
+            contract["responseShape"]["mcpToolCall"]["successPath"],
+            "JSON-RPC result.structuredContent"
+        );
+        assert_eq!(contract["transport"]["oneShotCli"]["agentUse"], "manual-or-script-only");
+        assert_eq!(contract["identifiers"]["bridgeIds"]["visibleToAgent"], false);
+        assert_eq!(contract["workflows"]["longCommand"][0]["mcpTool"], "fileterm_start_remote_command");
+        assert!(contract["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["id"] == "uncertain-side-effect"));
+        assert!(contract["recovery"]["sideEffectRequest"]
+            .as_str()
+            .unwrap()
+            .contains("never replay"));
+        assert!(contract["recovery"]["queueFull"]
+            .as_str()
+            .unwrap()
+            .contains("not accepted"));
+    }
+
+    #[test]
+    fn continuation_metadata_gives_an_unambiguous_next_action() {
+        let start = command_start_agent_metadata("tab-1", "command-1");
+        assert_eq!(start["acceptedOnce"], true);
+        assert_eq!(start["next"]["mcpTool"], "fileterm_read_remote_command");
+        assert_eq!(start["next"]["cliJsonlAction"], "read_remote_command");
+        assert_eq!(start["next"]["cliCommand"], "read-remote-command");
+        assert_eq!(start["next"]["arguments"]["offset"], 0);
+        assert_eq!(start["doNotCall"][0], "fileterm_start_remote_command");
+
+        let running = json!({
+            "tabId": "tab-1",
+            "commandId": "command-1",
+            "nextOffset": 128,
+            "running": true
+        });
+        let running_agent = background_command_agent_metadata(&running, "read");
+        assert_eq!(running_agent["next"]["mcpTool"], "fileterm_read_remote_command");
+        assert_eq!(running_agent["next"]["cliJsonlAction"], "read_remote_command");
+        assert_eq!(running_agent["next"]["arguments"]["offset"], 128);
+
+        let finished = json!({
+            "tabId": "tab-1",
+            "commandId": "command-1",
+            "nextOffset": 256,
+            "running": false
+        });
+        let finished_agent = background_command_agent_metadata(&finished, "read");
+        assert_eq!(finished_agent["next"]["mcpTool"], "fileterm_close_remote_command");
+        assert_eq!(finished_agent["next"]["cliJsonlAction"], "close_remote_command");
+        assert_eq!(finished_agent["replayPolicy"], "never-restart");
+
+        let visible = visible_command_agent_metadata(&json!({
+            "result": {
+                "output": "",
+                "timedOut": false,
+                "inputRequired": false
+            }
+        }));
+        assert_eq!(visible["state"], "visible-command-accepted");
+        assert_eq!(visible["terminalOwnsLifecycle"], true);
+        assert_eq!(visible["doNotCall"][0], "fileterm_execute_visible_command");
+    }
+
+    #[test]
+    fn error_metadata_separates_transport_retryability_from_side_effect_replay() {
+        let uncertain = agent_error_metadata(
+            "start_remote_command",
+            &json!({ "tab_id": "tab-1" }),
+            "FILETERM_MCP_BRIDGE_DISCONNECTED: bridge session closed",
+        );
+        assert_eq!(uncertain["retryable"], true);
+        assert_eq!(uncertain["safeToRetry"], false);
+        assert_eq!(uncertain["outcome"], "unknown");
+        assert_eq!(uncertain["recovery"]["mcpTool"], "fileterm_list_remote_commands");
+        assert_eq!(uncertain["recovery"]["cliJsonlAction"], "list_remote_commands");
+        assert_eq!(
+            uncertain["recovery"]["mustNotCall"][0],
+            "fileterm_start_remote_command"
+        );
+
+        let read = agent_error_metadata(
+            "read_remote_command",
+            &json!({
+                "tab_id": "tab-1",
+                "command_id": "command-1",
+                "offset": 128,
+                "wait_ms": 10000
+            }),
+            "FILETERM_MCP_BRIDGE_DISCONNECTED: bridge session closed",
+        );
+        assert_eq!(read["safeToRetry"], true);
+        assert_eq!(read["recovery"]["type"], "retry-same-read");
+        assert_eq!(read["recovery"]["mcpTool"], "fileterm_read_remote_command");
+        assert_eq!(read["recovery"]["arguments"]["offset"], 128);
+
+        let wait = agent_error_metadata(
+            "wait_for_connection",
+            &json!({ "operation_id": "operation-1", "timeout_ms": 10000 }),
+            "FILETERM_CONNECTION_WAIT_TIMEOUT: still connecting",
+        );
+        assert_eq!(wait["safeToRetry"], true);
+        assert_eq!(wait["recovery"]["type"], "wait-same-operation");
+        assert_eq!(wait["recovery"]["arguments"]["operation_id"], "operation-1");
+        assert_eq!(wait["recovery"]["mustNotCall"][0], "fileterm_open_connection");
+
+        let open = agent_error_metadata(
+            "open_connection",
+            &json!({ "profile_id": "profile-1" }),
+            "FILETERM_MCP_BRIDGE_DISCONNECTED: bridge session closed",
+        );
+        assert_eq!(open["safeToRetry"], false);
+        assert_eq!(open["outcome"], "unknown");
+        assert_eq!(open["recovery"]["mcpTool"], "fileterm_get_session_context");
+        assert_eq!(open["recovery"]["mustNotCall"][0], "fileterm_open_connection");
+
+        let input = agent_error_metadata(
+            "execute_remote_command",
+            &json!({ "tab_id": "tab-1" }),
+            "REMOTE_INTERACTIVE_INPUT_REQUIRED: finish the operation in the visible SSH terminal",
+        );
+        assert_eq!(input["outcome"], "needs-user-input");
+        assert_eq!(input["recovery"]["type"], "finish-input-in-visible-terminal");
+        assert_eq!(input["recovery"]["mustNotCall"][0], "fileterm_execute_remote_command");
+
+        let queue = agent_error_metadata(
+            "start_remote_command",
+            &json!({ "tab_id": "tab-1" }),
+            FILETERM_REQUEST_QUEUE_FULL,
+        );
+        assert_eq!(queue["retryable"], true);
+        assert_eq!(queue["safeToRetry"], true);
+        assert_eq!(queue["outcome"], "not-accepted-or-needs-user-action");
+        assert_eq!(queue["recovery"]["type"], "retry-after-cooldown");
     }
 
     #[test]
@@ -623,6 +814,12 @@ mod tests {
             validate_tool_arguments("fileterm_list_connections", &json!({ "secret": true }))
                 .is_err()
         );
+        assert!(validate_tool_arguments("fileterm_get_agent_contract", &json!({})).is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_get_agent_contract",
+            &json!({ "tab_id": "unexpected" })
+        )
+        .is_err());
         assert!(validate_tool_arguments("fileterm_get_session_context", &json!("bad")).is_err());
         assert!(validate_tool_arguments(
             "fileterm_execute_unsupported_legacy_tool",
@@ -731,6 +928,8 @@ mod tests {
     #[test]
     fn tool_errors_include_stable_codes_and_retry_semantics() {
         let unavailable = tool_error_result(
+            "fileterm_execute_remote_command",
+            &json!({ "tab_id": "tab-1" }),
             "REMOTE_INTERACTIVE_INPUT_REQUIRED: finish the operation in the visible SSH terminal"
                 .to_string(),
         );
@@ -740,8 +939,11 @@ mod tests {
         );
         assert_eq!(unavailable["structuredContent"]["error"]["retryable"], true);
 
-        let rejected =
-            tool_error_result("FileTerm external operation was rejected by the user".to_string());
+        let rejected = tool_error_result(
+            "fileterm_execute_remote_command",
+            &json!({ "tab_id": "tab-1" }),
+            "FileTerm external operation was rejected by the user".to_string(),
+        );
         assert_eq!(
             rejected["structuredContent"]["error"]["code"],
             "FILETERM_OPERATION_REJECTED"

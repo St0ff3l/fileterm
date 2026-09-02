@@ -49,8 +49,23 @@ where
 fn initialize_result(_params: &Value) -> Result<Value, String> {
     Ok(json!({
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
-        "capabilities": { "tools": {}, "logging": {} },
+        "capabilities": {
+            "tools": {},
+            "logging": {},
+            "experimental": {
+                "filetermAgentContract": {
+                    "version": FILETERM_AGENT_CONTRACT_VERSION,
+                    "tool": "fileterm_get_agent_contract"
+                }
+            }
+        },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
+        "_meta": {
+            "fileterm": {
+                "agentContractVersion": FILETERM_AGENT_CONTRACT_VERSION,
+                "agentContract": agent_contract()
+            }
+        },
         "instructions": format!(
             "{MCP_INITIALIZE_INSTRUCTIONS} {MCP_BACKGROUND_REMOTE_COMMAND_INSTRUCTIONS}"
         )
@@ -78,6 +93,10 @@ where
     let action = name
         .strip_prefix("fileterm_")
         .ok_or_else(|| "Unknown FileTerm tool".to_string())?;
+    if action == "get_agent_contract" {
+        return Ok(tool_result(agent_contract(), false));
+    }
+    let error_params = arguments.clone();
     let progress_token = params
         .get("_meta")
         .and_then(Value::as_object)
@@ -93,7 +112,7 @@ where
     };
     match call_desktop_bridge_with_client(bridge, request, on_progress, cancellation) {
         Ok(result) => Ok(tool_result(result, false)),
-        Err(error) => Ok(tool_error_result(error)),
+        Err(error) => Ok(tool_error_result(action, &error_params, error)),
     }
 }
 
@@ -113,6 +132,7 @@ fn mcp_cancel_request_id(request: &Value) -> Option<Value> {
 
 fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> {
     let allowed: &[&str] = match name {
+        "fileterm_get_agent_contract" => &[],
         "fileterm_list_connections"
         | "fileterm_list_transfers"
         | "fileterm_get_command_templates" => &["limit", "offset"],
@@ -215,15 +235,10 @@ fn tool_result(value: Value, is_error: bool) -> Value {
     })
 }
 
-fn tool_error_result(error: String) -> Value {
-    let code = mcp_error_code(&error);
+fn tool_error_result(action: &str, params: &Value, error: String) -> Value {
     tool_result(
         json!({
-            "error": {
-                "code": code,
-                "message": error,
-                "retryable": mcp_error_is_retryable(code),
-            }
+            "error": agent_error_metadata(action, params, &error)
         }),
         true,
     )
@@ -265,6 +280,7 @@ fn mcp_error_code(error: &str) -> &'static str {
         FILETERM_REMOTE_COMMAND_SESSION_LIMIT,
         BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED,
         FILETERM_CLI_JSONL_REQUEST_CANCELLED,
+        FILETERM_REQUEST_QUEUE_FULL,
         FILETERM_MCP_BRIDGE_DISCONNECTED,
         FILETERM_MCP_BRIDGE_BACKPRESSURE,
         FILETERM_MCP_BRIDGE_UNAVAILABLE,
@@ -299,6 +315,7 @@ fn mcp_error_is_retryable(code: &str) -> bool {
             | FILETERM_MCP_BRIDGE_BACKPRESSURE
             | FILETERM_MCP_BRIDGE_UNAVAILABLE
             | "FILETERM_REQUEST_TIMEOUT"
+            | FILETERM_REQUEST_QUEUE_FULL
             | FILETERM_CONNECTION_WAIT_TIMEOUT
             | "FILETERM_SESSION_DISCONNECTED"
             | NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED
@@ -315,6 +332,7 @@ fn mcp_error_is_retryable(code: &str) -> bool {
 
 fn tool_definitions() -> Vec<Value> {
     vec![
+        tool_definition("fileterm_get_agent_contract", "Get FileTerm Agent contract", "Read the machine-readable FileTerm workflow contract. Call this first when the connection, session, long-command, retry, or CLI JSONL rules are unclear. It does not open a connection or execute a remote action.", json!({}), &[], true, false, true, false),
         tool_definition("fileterm_list_connections", "List FileTerm connections", "List saved profiles without credentials.", json!({
             "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
             "offset": { "type": "integer", "minimum": 0 }
@@ -446,6 +464,7 @@ fn tool_definition(
     idempotent: bool,
     open_world: bool,
 ) -> Value {
+    let description = agent_tool_description(name, description, read_only);
     json!({
         "name": name,
         "title": title,
@@ -468,12 +487,14 @@ fn tool_definition(
 
 fn tool_output_schema(name: &str) -> Value {
     match name {
+        "fileterm_get_agent_contract" => agent_contract_output_schema(),
         "fileterm_execute_remote_command" => {
             json!({
                 "type": "object",
                 "properties": {
                     "tabId": { "type": "string" },
                     "executionMode": { "type": "string", "const": "background" },
+                    "agent": { "type": "object" },
                     "result": {
                         "type": "object",
                         "properties": {
@@ -489,7 +510,7 @@ fn tool_output_schema(name: &str) -> Value {
                         "additionalProperties": false
                     }
                 },
-                "required": ["tabId", "executionMode", "result"],
+                "required": ["tabId", "executionMode", "agent", "result"],
                 "additionalProperties": false
             })
         }
@@ -500,9 +521,10 @@ fn tool_output_schema(name: &str) -> Value {
                 "executionMode": { "type": "string", "const": "background" },
                 "commandId": { "type": "string" },
                 "startedAt": { "type": "integer", "minimum": 0 },
-                "status": { "type": "string", "const": "running" }
+                "status": { "type": "string", "const": "running" },
+                "agent": { "type": "object" }
             },
-            "required": ["tabId", "executionMode", "commandId", "startedAt", "status"],
+            "required": ["tabId", "executionMode", "commandId", "startedAt", "status", "agent"],
             "additionalProperties": false
         }),
         "fileterm_read_remote_command" | "fileterm_terminate_remote_command" => json!({
@@ -519,9 +541,10 @@ fn tool_output_schema(name: &str) -> Value {
                 "cancelled": { "type": "boolean" },
                 "outputTruncated": { "type": "boolean" },
                 "startedAt": { "type": "integer", "minimum": 0 },
-                "finishedAt": { "type": ["integer", "null"], "minimum": 0 }
+                "finishedAt": { "type": ["integer", "null"], "minimum": 0 },
+                "agent": { "type": "object" }
             },
-            "required": ["commandId", "tabId", "output", "nextOffset", "running", "exitCode", "exitSignal", "timedOut", "cancelled", "outputTruncated", "startedAt", "finishedAt"],
+            "required": ["commandId", "tabId", "output", "nextOffset", "running", "exitCode", "exitSignal", "timedOut", "cancelled", "outputTruncated", "startedAt", "finishedAt", "agent"],
             "additionalProperties": false
         }),
         "fileterm_close_remote_command" => json!({
@@ -529,9 +552,10 @@ fn tool_output_schema(name: &str) -> Value {
             "properties": {
                 "tabId": { "type": "string" },
                 "commandId": { "type": "string" },
-                "closed": { "type": "boolean", "const": true }
+                "closed": { "type": "boolean", "const": true },
+                "agent": { "type": "object" }
             },
-            "required": ["tabId", "commandId", "closed"],
+            "required": ["tabId", "commandId", "closed", "agent"],
             "additionalProperties": false
         }),
         "fileterm_execute_visible_command" => {
@@ -541,6 +565,7 @@ fn tool_output_schema(name: &str) -> Value {
                     "tabId": { "type": "string" },
                     "executionMode": { "type": "string", "const": "visible-terminal" },
                     "accepted": { "type": "boolean" },
+                    "agent": { "type": "object" },
                     "result": {
                         "type": "object",
                         "properties": {
@@ -556,7 +581,7 @@ fn tool_output_schema(name: &str) -> Value {
                         "additionalProperties": false
                     }
                 },
-                "required": ["tabId", "executionMode", "accepted", "result"],
+                "required": ["tabId", "executionMode", "accepted", "agent", "result"],
                 "additionalProperties": false
             })
         }
@@ -588,9 +613,10 @@ fn tool_output_schema(name: &str) -> Value {
                 "connectionOperationId": { "type": "string" },
                 "connectionStatus": { "type": "string", "enum": ["connecting", "connected"] },
                 "executionMode": { "type": "string", "enum": ["background", "visible-terminal"] },
-                "timedOut": { "type": "boolean" }
+                "timedOut": { "type": "boolean" },
+                "agent": { "type": "object" }
             },
-            "required": ["connectionOperationId", "connectionStatus", "timedOut"],
+            "required": ["connectionOperationId", "connectionStatus", "timedOut", "agent"],
             "additionalProperties": true
         }),
         "fileterm_list_connections"
@@ -663,6 +689,14 @@ fn jsonrpc_error(id: Value, code: i32, message: &str) -> Value {
         "jsonrpc": "2.0",
         "id": id,
         "error": { "code": code, "message": message },
+    })
+}
+
+fn jsonrpc_error_with_data(id: Value, code: i32, message: &str, data: Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": { "code": code, "message": message, "data": data },
     })
 }
 

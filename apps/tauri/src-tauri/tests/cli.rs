@@ -71,7 +71,130 @@ fn cli_jsonl_help_documents_one_process_and_cancellation() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("persistent FileTerm CLI JSONL bridge"));
     assert!(stdout.contains("cancel_request"));
+    assert!(stdout.contains("get_agent_contract"));
     assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn cli_agent_contract_is_available_without_the_desktop_app() {
+    let output = run_fileterm(&["cli", "agent-contract"], None);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let contract: Value =
+        serde_json::from_slice(&output.stdout).expect("one-shot CLI agent contract should be JSON");
+    assert_eq!(contract["contractVersion"], 2);
+    assert_eq!(contract["transport"]["cliJsonl"]["reuseProcess"], true);
+    assert_eq!(
+        contract["identifiers"]["commandId"]["scope"],
+        "one accepted background remote command"
+    );
+}
+
+#[test]
+fn cli_jsonl_agent_contract_is_available_without_the_desktop_app() {
+    let missing_runtime = std::env::temp_dir().join(format!(
+        "fileterm-cli-contract-{}-agent-runtime.json",
+        std::process::id()
+    ));
+    let mut command = Command::new(fileterm_binary());
+    command
+        .args(["cli", "--jsonl"])
+        .env("FILETERM_MCP_RUNTIME_FILE", missing_runtime)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .expect("FileTerm CLI JSONL process should start");
+    let mut child_stdin = child.stdin.take().expect("CLI JSONL stdin should be piped");
+    child_stdin
+        .write_all(
+            br#"{"id":"contract-1","action":"get_agent_contract","params":{}}
+"#,
+        )
+        .expect("CLI JSONL request should reach FileTerm");
+    child_stdin
+        .flush()
+        .expect("CLI JSONL request should be flushed");
+    let child_stdout = child
+        .stdout
+        .take()
+        .expect("CLI JSONL stdout should be piped");
+    let mut child_stdout = BufReader::new(child_stdout);
+    let mut response_line = String::new();
+    child_stdout
+        .read_line(&mut response_line)
+        .expect("CLI JSONL should emit a response before stdin closes");
+    drop(child_stdout);
+    drop(child_stdin);
+    let status = child
+        .wait()
+        .expect("FileTerm CLI JSONL process should exit cleanly");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("CLI JSONL stderr should be piped")
+        .read_to_string(&mut stderr)
+        .expect("CLI JSONL stderr should be readable");
+    assert!(status.success());
+    assert!(stderr.is_empty());
+    let response: Value =
+        serde_json::from_str(&response_line).expect("CLI JSONL contract response should be JSON");
+    assert_eq!(response["id"], "contract-1");
+    assert_eq!(response["ok"], true);
+    assert_eq!(response["result"]["contractVersion"], 2);
+}
+
+#[test]
+fn mcp_agent_contract_is_available_without_the_desktop_app() {
+    let missing_runtime = std::env::temp_dir().join(format!(
+        "fileterm-mcp-contract-{}-missing-runtime.json",
+        std::process::id()
+    ));
+    let mut command = Command::new(fileterm_binary());
+    command
+        .args(["mcp"])
+        .env("FILETERM_MCP_RUNTIME_FILE", missing_runtime)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().expect("FileTerm MCP process should start");
+    let mut child_stdin = child.stdin.take().expect("MCP stdin should be piped");
+    child_stdin
+        .write_all(
+            br#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"fileterm_get_agent_contract","arguments":{}}}
+"#,
+        )
+        .expect("MCP request should reach FileTerm");
+    child_stdin.flush().expect("MCP request should be flushed");
+    let child_stdout = child.stdout.take().expect("MCP stdout should be piped");
+    let mut child_stdout = BufReader::new(child_stdout);
+    let mut response_line = String::new();
+    child_stdout
+        .read_line(&mut response_line)
+        .expect("MCP should emit a response before stdin closes");
+    drop(child_stdout);
+    drop(child_stdin);
+    let status = child
+        .wait()
+        .expect("FileTerm MCP process should exit cleanly");
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("MCP stderr should be piped")
+        .read_to_string(&mut stderr)
+        .expect("MCP stderr should be readable");
+    assert!(status.success());
+    assert!(stderr.is_empty());
+    let contract_response: Value =
+        serde_json::from_str(&response_line).expect("MCP response should be JSON");
+    assert_eq!(contract_response["id"], 2);
+    assert_eq!(
+        contract_response["result"]["structuredContent"]["contractVersion"],
+        2
+    );
 }
 
 #[test]

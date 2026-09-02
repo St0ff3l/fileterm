@@ -17,7 +17,30 @@ This document explains how end users integrate with FileTerm. It applies to vers
 
 There is no separate `fileterm agent` command. AI Agents use `fileterm cli --jsonl`; do not restart the one-shot CLI for every action.
 
-Within each persistent `mcp` or `cli --jsonl` process, FileTerm creates one authenticated local bridge session and shares it across all workers. Requests are multiplexed by an internal request ID, so progress and out-of-order responses return to the correct caller without opening a new local TCP connection for every action. A dead session is recovered by one bounded recovery flow; in-flight requests are not replayed, which prevents deployments or other side effects from running twice. If recovery is unavailable, the client returns a retryable bridge error and the next explicit request can try again after the short cooldown.
+Within each persistent `mcp` or `cli --jsonl` process, FileTerm creates one authenticated local bridge session and shares it across all workers. Requests are multiplexed by an internal request ID, so progress and out-of-order responses return to the correct caller without opening a new local TCP connection for every action. A dead session is recovered by one bounded recovery flow; in-flight requests are not replayed, which prevents deployments or other side effects from running twice. If recovery is unavailable, the client returns a retryable bridge error; retry the same request automatically only when its `errorInfo.safeToRetry` is `true`, otherwise inspect state first.
+
+## Agent contract: follow returned state
+
+The transport and the remote-session workflow are separate contracts. The MCP server returns the global rules in `initialize.instructions` and repeats the relevant rules in each `tools/list` description. MCP Agents do not need to manage the private bridge session or its request IDs. The CLI has the same contract in this Skill, in `fileterm cli --help`, and in the read-only `fileterm cli agent-contract` command. If an Agent is unsure, it should read the contract before performing a remote action.
+
+The following rules are mandatory for both MCP and CLI JSONL:
+
+1. Open one session, save `sessionId`/`tabId`, and reuse that `tabId`. `open_connection` is not a per-command connect operation.
+2. If `open_connection` returns `connectionStatus=connecting` or a bounded wait times out, call `wait_for_connection` with the same `connectionOperationId`; never open a second connection. If the open response is lost during a bridge error, inspect the session state before opening anything else.
+3. Use `execute_remote_command` for a short bounded command. Use `start_remote_command` exactly once for a deployment, build, migration, or other long job.
+4. Save the long-job `commandId`. Read with the same `tabId` and `commandId`, starting at `offset=0` and then using exactly the previous `nextOffset`. When `running=false`, collect the final output and close the command.
+5. A read timeout can be retried with the same read arguments. A timeout or bridge disconnect during a mutating action does not prove that the action was not accepted; inspect state before retrying and never blindly replay it.
+6. Prefer the returned `agent.next` action and arguments. For MCP use `next.mcpTool`; for CLI JSONL use `next.cliJsonlAction`; use `next.cliCommand` only with one-shot shell syntax. In errors, `retryable` describes transport retryability; `safeToRetry` describes whether repeating the action is safe and worthwhile. `safeToRetry=false` wins.
+
+The key successful responses contain explicit continuation metadata. A connected `open` response tells the Agent to reuse the returned tab. A `start_remote_command` response contains an `agent.next` read request. A background-command read contains the next read request while `running=true`, or the close request after completion. This metadata is advisory workflow guidance; FileTerm still enforces argument validation, access scope, approval, and command ownership in the desktop process.
+
+The read-only contract can also be requested directly. In MCP call `fileterm_get_agent_contract`; in CLI JSONL send the `get_agent_contract` action; for a shell-readable response use:
+
+```text
+fileterm cli agent-contract
+```
+
+It returns the same machine-readable workflow rules for clients that cannot load this Skill.
 
 The FileTerm desktop app must already be running. The CLI and MCP are local bridge clients that connect to the running FileTerm app; they are not standalone SSH clients, do not export connection credentials, and do not automatically change external-client configuration. CLI arguments are processed before the Tauri GUI initializes, so a CLI call does not open another FileTerm window. A one-shot CLI call still creates its own short-lived operating-system process; only JSONL mode reuses the same CLI process.
 
@@ -49,6 +72,14 @@ Example successful result:
 ```json
 { "id": "request-1", "ok": true, "result": { "connections": [] } }
 ```
+
+For a machine-readable workflow description, send this request through the same persistent process:
+
+```json
+{ "id": "contract-1", "action": "get_agent_contract", "params": {} }
+```
+
+For MCP, read the structured tool value at `result.structuredContent`; for CLI JSONL, read the successful value at `response.result`. Successful connection and long-command results may include an `agent` object with an explicit `next` action. Follow its tool/action and arguments, preserving every returned ID and offset. JSONL failures keep the human-readable `error` string and may also include `errorInfo`; when `errorInfo.safeToRetry` is `false`, do not repeat the request. If `errorInfo.outcome` is `unknown`, first inspect the remote state because the action may already have been accepted.
 
 While waiting for the user to confirm an action or enter a password in the main FileTerm window, you may first receive a progress line with the same request ID, followed by the result line. To cancel a request that is still waiting:
 

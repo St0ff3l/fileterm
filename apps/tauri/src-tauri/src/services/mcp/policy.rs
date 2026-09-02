@@ -18,6 +18,7 @@ async fn dispatch_bridge_request(
     }
 
     match request.action.as_str() {
+        "get_agent_contract" => Ok(agent_contract()),
         "list_connections" => list_connections(app, &request.params).await,
         "get_session_context" => get_session_context(app, &request.params).await,
         "list_remote_commands" => list_remote_commands(app, &request.params).await,
@@ -151,7 +152,8 @@ async fn enforce_selected_connection_scope(
 ) -> Result<(), String> {
     if matches!(
         request.action.as_str(),
-        "get_command_templates"
+        "get_agent_contract"
+            | "get_command_templates"
             | "list_transfers"
             | "wait_for_transfer"
             | "pause_transfer"
@@ -307,7 +309,8 @@ fn action_requires_approval(action: &str, params: &Value) -> bool {
 fn action_is_read_only(action: &str, _params: &Value) -> bool {
     matches!(
         action,
-        "list_connections"
+        "get_agent_contract"
+            | "list_connections"
             | "get_session_context"
             | "list_remote_commands"
             | "get_command_templates"

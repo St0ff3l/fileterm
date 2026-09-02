@@ -15,7 +15,7 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
         .iter()
         .any(|argument| argument == "--help" || argument == "-h")
     {
-        println!("Usage: fileterm mcp\n\nRun the FileTerm MCP server over stdio. FileTerm must be running.");
+        println!("Usage: fileterm mcp\n\nRun the persistent FileTerm MCP server over stdio. Keep this process alive for the whole Agent task; reuse returned sessionId/tabId and commandId instead of opening a new MCP process or restarting a long command. Call fileterm_get_agent_contract for the machine-readable workflow and recovery rules. FileTerm must be running for remote actions.");
         return Ok(());
     }
 
@@ -104,12 +104,18 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
         };
         match job_sender.try_send(Some(job)) {
             Ok(()) => {}
-            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+            Err(std::sync::mpsc::TrySendError::Full(_job)) => {
                 controls.remove(&id);
-                let response = jsonrpc_error(
+                let error_info = agent_error_metadata(
+                    "mcp_request",
+                    &json!({}),
+                    FILETERM_REQUEST_QUEUE_FULL,
+                );
+                let response = jsonrpc_error_with_data(
                     id,
                     MCP_SERVER_BUSY_ERROR_CODE,
                     "FileTerm MCP request queue is full; retry shortly",
+                    json!({ "errorInfo": error_info }),
                 );
                 write_mcp_stdio_value(&stdout, &response).map_err(|error| {
                     format!("Unable to write MCP response: {error}")
@@ -188,6 +194,9 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
     {
         println!(
             "Usage: fileterm cli --jsonl\n\nRun the persistent FileTerm CLI JSONL bridge over stdin/stdout. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nCancel a pending request:\n  {{\"id\":\"cancel-1\",\"action\":\"cancel_request\",\"params\":{{\"request_id\":\"request-1\"}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. CLI JSONL requests always use the in-app approval policy; the incoming requiresApproval field cannot disable approval. Cancellation stops waiting for the request result, but cannot roll back work already accepted by the desktop app. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and {MCP_MAX_QUEUED_REQUESTS} queued requests; it cancels pending work when stdin closes."
+        );
+        println!(
+            "Agent rules: keep this process alive; reuse the returned tabId/sessionId; use start_remote_command once for long jobs and read with the same commandId and nextOffset; never repeat a mutating action after a timeout without inspecting state. Send {{\"id\":\"contract-1\",\"action\":\"get_agent_contract\",\"params\":{{}}}} for the full machine-readable contract."
         );
         return Ok(());
     }
@@ -328,14 +337,27 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
         };
         match job_sender.try_send(Some(job)) {
             Ok(()) => {}
-            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+            Err(std::sync::mpsc::TrySendError::Full(job)) => {
                 controls.remove(&request_id);
+                let error_info = job
+                    .as_ref()
+                    .map(|queued_job| {
+                        agent_error_metadata(
+                            &queued_job.request.action,
+                            &queued_job.request.params,
+                            FILETERM_REQUEST_QUEUE_FULL,
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        agent_error_metadata("cli_request", &json!({}), FILETERM_REQUEST_QUEUE_FULL)
+                    });
                 write_cli_jsonl_value(
                     &stdout,
                     &json!({
                         "id": request_id,
                         "ok": false,
-                        "error": FILETERM_REQUEST_QUEUE_FULL
+                        "error": FILETERM_REQUEST_QUEUE_FULL,
+                        "errorInfo": error_info
                     }),
                 )
                 .map_err(|error| {
@@ -407,6 +429,12 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
         controls.remove(&request_id);
         return;
     }
+    if request.action == "get_agent_contract" {
+        let response = json!({ "id": id, "ok": true, "result": agent_contract() });
+        let _ = write_cli_jsonl_value(stdout, &response);
+        controls.remove(&request_id);
+        return;
+    }
     let bridge_request = cli_jsonl_bridge_request(&request);
     let mut on_progress = |progress: &BridgeProgress| {
         if cancellation.load(Ordering::Acquire) {
@@ -439,7 +467,12 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
             json!({ "id": id, "ok": false, "error": FILETERM_CLI_JSONL_REQUEST_CANCELLED })
         }
         Ok(_) => json!({ "id": id, "ok": false, "error": FILETERM_CLI_JSONL_REQUEST_CANCELLED }),
-        Err(error) => json!({ "id": id, "ok": false, "error": error }),
+        Err(error) => json!({
+            "id": id,
+            "ok": false,
+            "error": error,
+            "errorInfo": agent_error_metadata(&request.action, &request.params, &error)
+        }),
     };
     let _ = write_cli_jsonl_value(stdout, &response);
     controls.remove(&request_id);
