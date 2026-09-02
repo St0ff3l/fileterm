@@ -451,6 +451,7 @@ pub fn run() {
             crate::commands::app_download_update,
             crate::commands::app_install_update,
             crate::commands::app_open_logs_directory,
+            crate::commands::app_write_diagnostic_log,
             crate::commands::app_list_serial_ports,
             crate::commands::app_serial_control,
             crate::commands::app_serial_transfer,

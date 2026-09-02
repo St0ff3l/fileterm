@@ -2,6 +2,9 @@ pub fn build_posix_metrics_command(platform: &str) -> String {
     let complete_marker = "__FILETERM_METRICS_COMPLETE__";
     format!(
         r#"cd / >/dev/null 2>&1 || true
+# Keep procps/coreutils output stable on localized CentOS/RHEL 7 hosts.
+# The parser consumes command output rather than translated table headers.
+export LC_ALL=C
 sleep_interval="0.15"
 sleep "$sleep_interval" >/dev/null 2>&1 || sleep_interval="1"
 run_bounded() {{

@@ -136,6 +136,7 @@ export function useAppWorkspace({
   const [isWorkspaceTransitionActive, setIsWorkspaceTransitionActive] = useState(true)
   const [isWorkspaceSwitching, setIsWorkspaceSwitching] = useState(false)
   const hasRenderedWorkspaceRef = useRef(false)
+  const lastResourceMonitoringDiagnosticRef = useRef('')
 
   const {
     localTabs,
@@ -259,6 +260,39 @@ export function useAppWorkspace({
   const aiCopilotTargetSession = activePaneSession ?? activeSession
   const isAiCopilotAvailable = Boolean(activeTab)
   const shouldShowAiCopilot = isAiCopilotOpen && !isHomeWorkspaceVisible
+
+  useEffect(() => {
+    if (!desktopApi || !activeTab) {
+      return
+    }
+    const resourceMonitoring = activeSession?.capabilities?.resourceMonitoring
+    const collapseReason = !activeSshResourceMonitoring
+      ? 'profile-disabled'
+      : resourceMonitoring === false
+        ? 'remote-capability-disabled'
+        : isWorkspaceFocusMode
+          ? 'workspace-focus'
+          : isSystemSidebarUserCollapsed
+            ? 'user-collapsed'
+            : 'none'
+    const diagnostic = `resource monitoring UI state tab_id=${activeTab.id} connected=${activeSession?.connected === true} configured=${activeSshResourceMonitoring} capability=${resourceMonitoring === undefined ? 'unknown' : resourceMonitoring} available=${isResourceMonitoringAvailable} sidebar_rendered=${shouldShowSystemSidebar} sidebar_collapsed=${isSystemSidebarCollapsed} collapse_reason=${collapseReason}`
+    if (lastResourceMonitoringDiagnosticRef.current === diagnostic) {
+      return
+    }
+    lastResourceMonitoringDiagnosticRef.current = diagnostic
+    void desktopApi.writeDiagnosticLog('DEBUG', 'renderer:workspace', diagnostic).catch(() => undefined)
+  }, [
+    activeSession?.capabilities?.resourceMonitoring,
+    activeSession?.connected,
+    activeSshResourceMonitoring,
+    activeTab,
+    desktopApi,
+    isResourceMonitoringAvailable,
+    isSystemSidebarCollapsed,
+    isSystemSidebarUserCollapsed,
+    isWorkspaceFocusMode,
+    shouldShowSystemSidebar
+  ])
 
   const setActiveFilePanelHeight = useCallback(
     (next: SetStateAction<number>) => {

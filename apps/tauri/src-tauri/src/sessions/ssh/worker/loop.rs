@@ -172,7 +172,7 @@ async fn run_worker_loop(
     });
 
     // ── Probe platform ─────────────────────────────────────────────────────
-    // 加 timeout：probe 内部最多 4 次串行 exec_command，每次都用
+    // 加 timeout：probe 内部最多 6 次串行 exec_command，每次都用
     // channel.wait() 循环读取且无内层 timeout。服务器在 exec 模式下卡住
     // 时整个 probe 会永久 await，worker 永远起不来。超时后回落到
     // "unknown"，shell CWD 注入会被 fail-closed 门控跳过，终端仍可用。
@@ -186,9 +186,22 @@ async fn run_worker_loop(
         );
         "unknown".to_string()
     } else if exec_channel_enabled {
+        crate::services::logging::session(
+            app,
+            "DEBUG",
+            "metrics",
+            tab_id,
+            format!(
+                "platform probe started exec_enabled=true timeout_secs={}",
+                PLATFORM_PROBE_TIMEOUT.as_secs()
+            ),
+        );
         match timeout(
             PLATFORM_PROBE_TIMEOUT,
-            crate::sessions::system_metrics::probe_remote_platform(&handle),
+            crate::sessions::system_metrics::probe_remote_platform_for_session(
+                &handle,
+                Some(tab_id),
+            ),
         )
         .await
         {

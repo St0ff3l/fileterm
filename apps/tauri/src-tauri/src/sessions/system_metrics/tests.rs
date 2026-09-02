@@ -51,6 +51,7 @@ mod tests {
         // 进程输出格式：pid|user|rss(M)|pcpu(已归一化)|pmem|args
         assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n"#));
         assert!(command.contains("getconf _NPROCESSORS_ONLN"));
+        assert!(command.contains("export LC_ALL=C"));
         assert!(command.contains("for (row_index = 1; row_index <= model_count; row_index++)"));
         assert!(!command.contains("for (index = 1; index <= model_count; index++)"));
         assert!(!command.contains(r#"printf "%s|%sK/%sK\\n"#));
@@ -96,6 +97,7 @@ mod tests {
         assert!(command.contains("hw.physmem"));
         assert!(command.contains("swapinfo -k"));
         assert!(command.contains("df -kP"));
+        assert!(command.contains("export LC_ALL=C"));
         assert!(command.contains("ps -axo pid=,user=,rss=,pcpu=,pmem=,command="));
         assert!(command.contains("rctl -u"));
         assert!(command.contains("rctl -l"));
@@ -477,6 +479,14 @@ devil() {{
         // CRLF pollution is normalized by the caller, but the classifier is
         // tolerant of stray case differences.
         assert_eq!(classify_posix_probe_body("LINUX\n"), Some("linux"));
+        assert_eq!(
+            classify_posix_probe_body("CentOS Linux release 7.9.2009 (Core)\n"),
+            Some("linux")
+        );
+        assert_eq!(
+            classify_posix_probe_body("Red Hat Enterprise Linux Server release 7.9\n"),
+            Some("linux")
+        );
         assert_eq!(classify_posix_probe_body("busybox\n"), Some("busybox"));
         assert_eq!(classify_posix_probe_body("OpenWrt\n"), Some("busybox"));
     }
