@@ -520,7 +520,7 @@ export function InterfaceSettingsPanel() {
                   </span>
                   <button
                     type="button"
-                    className="flat-button compact danger theme-config-font-delete-btn"
+                    className="flat-button danger theme-config-font-delete-btn"
                     title={`${t.themeDeleteFont}: ${font.family}`}
                     aria-label={`${t.themeDeleteFont}: ${font.family}`}
                     onClick={() => setFontToDelete(font)}
