@@ -1454,7 +1454,6 @@
 .update-check-preference-select.ft-select-shell select {
   box-sizing: border-box;
   height: 36px;
-  padding: 0 28px 0 12px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm, 4px);
   background: var(--input-bg);
@@ -1906,7 +1905,6 @@
   width: 100%;
   height: 36px;
   box-sizing: border-box;
-  padding: 0 32px 0 12px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm, 4px);
   background: var(--input-bg, var(--bg-card));
@@ -1919,10 +1917,6 @@
 .theme-config-select.ft-select-shell {
   width: 100%;
   height: 36px;
-}
-
-.theme-config-select.ft-select-shell .ft-select-shell__icon {
-  right: 10px;
 }
 
 .theme-config-name-input {
