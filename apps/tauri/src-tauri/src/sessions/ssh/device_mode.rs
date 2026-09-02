@@ -280,6 +280,8 @@ fn effective_resource_monitoring_enabled(profile: &Value) -> bool {
     effective_exec_channel_enabled(profile) && resource_monitoring_enabled(profile)
 }
 
+const RESOURCE_MONITORING_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(5);
+
 async fn disable_resource_monitoring_capability(
     app: &AppHandle,
     tab_id: &str,
@@ -295,13 +297,29 @@ async fn disable_resource_monitoring_capability(
             if changed {
                 session.system_metrics = None;
             }
-            changed
+            Some(changed)
         } else {
-            false
+            None
         }
     };
 
+    let Some(changed) = changed else {
+        crate::services::logging::session(
+            app,
+            "WARN",
+            "metrics",
+            tab_id,
+            format!("resource monitoring disable skipped session_not_found reason={reason}"),
+        );
+        return;
+    };
+
     if !changed {
+        crate::services::logging::debug(
+            app,
+            &format!("metrics:{tab_id}"),
+            format!("resource monitoring already disabled reason={reason}"),
+        );
         return;
     }
 
@@ -310,10 +328,69 @@ async fn disable_resource_monitoring_capability(
         "WARN",
         "metrics",
         tab_id,
-        format!("resource monitoring disabled: {reason}"),
+        format!(
+            "resource monitoring capability transition from=true to=false reason={reason}"
+        ),
     );
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    crate::services::logging::session(
+        app,
+        "DEBUG",
+        "metrics",
+        tab_id,
+        "resource monitoring snapshot build started capability=false",
+    );
+    match timeout(
+        RESOURCE_MONITORING_SNAPSHOT_TIMEOUT,
+        crate::commands::get_workspace_snapshot(app.clone()),
+    )
+    .await
+    {
+        Ok(Ok(snapshot)) => {
+            let workspace_revision = snapshot
+                .get("workspaceRevision")
+                .and_then(Value::as_u64)
+                .map(|revision| revision.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            match app.emit("workspace:snapshot", snapshot) {
+                Ok(()) => crate::services::logging::session(
+                    app,
+                    "INFO",
+                    "metrics",
+                    tab_id,
+                    format!(
+                        "resource monitoring disabled snapshot emitted resource_monitoring=false workspace_revision={workspace_revision}"
+                    ),
+                ),
+                Err(error) => crate::services::logging::session(
+                    app,
+                    "WARN",
+                    "metrics",
+                    tab_id,
+                    format!(
+                        "resource monitoring disabled snapshot emission failed resource_monitoring=false workspace_revision={workspace_revision} error={error}"
+                    ),
+                ),
+            }
+        }
+        Ok(Err(error)) => crate::services::logging::session(
+            app,
+            "WARN",
+            "metrics",
+            tab_id,
+            format!(
+                "resource monitoring disabled snapshot build failed resource_monitoring=false error={error}"
+            ),
+        ),
+        Err(_) => crate::services::logging::session(
+            app,
+            "WARN",
+            "metrics",
+            tab_id,
+            format!(
+                "resource monitoring disabled snapshot build timed out resource_monitoring=false timeout_secs={}",
+                RESOURCE_MONITORING_SNAPSHOT_TIMEOUT.as_secs()
+            ),
+        ),
     }
 }
 

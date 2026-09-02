@@ -1,24 +1,30 @@
 pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
-    // 1. Try POSIX probe
-    let posix_cmd = "sh -lc 'printf \"__FILETERM_PROBE_START__\\n\"; uname -s 2>/dev/null; shell_exe=$(readlink /proc/$$/exe 2>/dev/null || readlink /bin/sh 2>/dev/null || true); case \"$shell_exe\" in *busybox*) printf \"busybox\\n\" ;; esac; if [ -f /etc/openwrt_release ]; then printf \"openwrt\\n\"; fi; printf \"__FILETERM_PROBE_END__\\n\"'";
+    probe_remote_platform_for_session(handle, None).await
+}
 
-    let posix_result = exec_command(handle, posix_cmd).await;
-    eprintln!(
-        "[SSH probe] posix exec_command result_ok={} len={}",
-        posix_result.is_ok(),
-        posix_result.as_ref().map(|s| s.len()).unwrap_or(0)
-    );
-    if let Ok(output) = &posix_result {
+/// Probe the remote platform while attaching the tab id to diagnostic lines.
+/// The context-free wrapper above keeps the pure protocol tests and other
+/// callers stable; worker sessions use this variant so concurrent tabs can be
+/// separated in the exported app log.
+pub(crate) async fn probe_remote_platform_for_session<H: Handler>(
+    handle: &Handle<H>,
+    tab_id: Option<&str>,
+) -> String {
+    // 1. Try POSIX probe
+    let posix_cmd = "sh -lc 'printf \"__FILETERM_PROBE_START__\\n\"; uname -s 2>/dev/null; shell_exe=$(readlink /proc/$$/exe 2>/dev/null || readlink /bin/sh 2>/dev/null || true); case \"$shell_exe\" in *busybox*) printf \"busybox\\n\" ;; esac; if [ -f /etc/openwrt_release ]; then printf \"openwrt\\n\"; fi; if [ -r /etc/centos-release ] || [ -r /etc/redhat-release ] || [ -r /etc/fedora-release ]; then printf \"linux\\n\"; fi; printf \"__FILETERM_PROBE_END__\\n\"'";
+
+    let posix_result = exec_command_with_status_detailed(handle, posix_cmd).await;
+    log_probe_result("posix", &posix_result, tab_id);
+    if let Ok(result) = &posix_result {
         // CRLF normalization — Windows remotes emit `\r\n` which would
         // pollute platform detection (e.g. `linux\r` fails `contains`).
-        let output = output.replace("\r\n", "\n").replace('\r', "\n");
-        eprintln!(
-            "[SSH probe] posix normalized output (first 300): {:?}",
-            output.chars().take(300).collect::<String>()
-        );
+        let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
         if let Some(body) = extract_probe_body(&output) {
-            eprintln!("[SSH probe] body='{}'", body);
             if let Some(platform) = classify_posix_probe_body(&body) {
+                log_probe_message(
+                    tab_id,
+                    format!("probe=posix classified platform={platform}"),
+                );
                 return platform.to_string();
             }
         }
@@ -28,9 +34,37 @@ pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
     // shell (`sh -lc`) or print an unexpected login banner around it. Keep a
     // bare POSIX fallback so platform detection does not depend on shell
     // startup files. This is especially useful for hosted Debian 12 images.
-    if let Ok(output) = exec_command(handle, "uname -s 2>/dev/null").await {
-        let output = output.replace("\r\n", "\n").replace('\r', "\n");
+    let fallback_probe = "uname -s 2>/dev/null; if [ -r /etc/centos-release ] || [ -r /etc/redhat-release ] || [ -r /etc/fedora-release ]; then cat /etc/centos-release /etc/redhat-release /etc/fedora-release 2>/dev/null; fi";
+    let fallback_result = exec_command_with_status_detailed(handle, fallback_probe).await;
+    log_probe_result("posix-fallback", &fallback_result, tab_id);
+    if let Ok(result) = &fallback_result {
+        let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
         if let Some(platform) = classify_posix_probe_body(&output) {
+            log_probe_message(
+                tab_id,
+                format!("probe=posix-fallback classified platform={platform}"),
+            );
+            return platform.to_string();
+        }
+    }
+
+    // RHEL/CentOS 7 documents `/etc/redhat-release` as the release identity
+    // source. Keep a direct `cat` probe after the generic POSIX probes so a
+    // restricted login shell (or an image without a usable `sh -lc`) can
+    // still be recognized without depending on `/etc/os-release`.
+    let release_result = exec_command_with_status_detailed(
+        handle,
+        "cat /etc/redhat-release /etc/centos-release /etc/fedora-release /etc/os-release 2>/dev/null",
+    )
+    .await;
+    log_probe_result("release-files", &release_result, tab_id);
+    if let Ok(result) = &release_result {
+        let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
+        if let Some(platform) = classify_posix_probe_body(&output) {
+            log_probe_message(
+                tab_id,
+                format!("probe=release-files classified platform={platform}"),
+            );
             return platform.to_string();
         }
     }
@@ -42,21 +76,58 @@ pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
         "cmd /c ver",
     ];
     for cmd in &windows_cmds {
-        if let Ok(output) = exec_command(handle, cmd).await {
+        let result = exec_command_with_status_detailed(handle, cmd).await;
+        log_probe_result(cmd, &result, tab_id);
+        if let Ok(result) = &result {
+            let output = &result.output;
             let output = output.replace("\r\n", "\n").replace('\r', "\n");
-            eprintln!(
-                "[SSH probe] windows cmd='{}' output='{}'",
-                cmd,
-                output.chars().take(100).collect::<String>()
-            );
             if let Some(platform) = classify_windows_probe_output(&output) {
+                log_probe_message(tab_id, format!("probe={cmd} classified platform={platform}"));
                 return platform.to_string();
             }
         }
     }
 
-    eprintln!("[SSH probe] all probes failed — returning 'unknown'");
+    log_probe_message(tab_id, "all probes failed; returning platform=unknown");
     "unknown".to_string()
+}
+
+fn log_probe_scope(tab_id: Option<&str>) -> String {
+    tab_id
+        .map(|tab_id| format!("ssh-probe:{tab_id}"))
+        .unwrap_or_else(|| "ssh-probe".to_string())
+}
+
+fn log_probe_message(tab_id: Option<&str>, message: impl AsRef<str>) {
+    let scope = log_probe_scope(tab_id);
+    crate::services::logging::debug_global(&scope, message);
+}
+
+fn log_probe_result(
+    label: &str,
+    result: &Result<ExecCommandResult, String>,
+    tab_id: Option<&str>,
+) {
+    let scope = log_probe_scope(tab_id);
+    match result {
+        Ok(result) => crate::services::logging::debug_global(
+            &scope,
+            format!(
+                "probe={label} result=ok exit_code={} timed_out={} output_truncated={} output={:?}",
+                result
+                    .exit_code
+                    .map(|status| status.to_string())
+                    .unwrap_or_else(|| "none".to_string()),
+                result.timed_out,
+                result.output_truncated,
+                result.output.chars().take(300).collect::<String>(),
+            ),
+        ),
+        Err(error) => crate::services::logging::debug_global(
+            &scope,
+            format!("probe={label} result=error error={error}"),
+        ),
+    }
 }
 
 /// Classify the body of the POSIX probe (the text between
@@ -71,7 +142,14 @@ fn classify_posix_probe_body(body: &str) -> Option<&'static str> {
     if normalized.contains("openwrt") || normalized.contains("busybox") {
         return Some("busybox");
     }
-    if normalized.contains("linux") {
+    if normalized.contains("linux")
+        || normalized.contains("centos")
+        || normalized.contains("red hat")
+        || normalized.contains("rhel")
+        || normalized.contains("fedora")
+        || normalized.contains("rocky linux")
+        || normalized.contains("almalinux")
+    {
         return Some("linux");
     }
     if normalized.contains("freebsd") {

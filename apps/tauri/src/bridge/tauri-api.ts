@@ -502,6 +502,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       }),
     openExternalUrl: (url: string) => invoke<void>('app_open_external_url', { url }),
     openLogsDirectory: () => invoke<void>('app_open_logs_directory'),
+    writeDiagnosticLog: (level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', scope: string, message: string) =>
+      invoke<void>('app_write_diagnostic_log', { level, scope, message }),
     listSerialPorts: () => invoke<SerialPortInfo[]>('app_list_serial_ports'),
     onSerialPortsChanged: (listener: (ports: SerialPortInfo[]) => void) => subscribe('serial:ports-changed', listener),
     serialControl: (tabId: string, action: SerialControlAction, value?: boolean, durationMs?: number) =>
@@ -815,7 +817,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onTransferUpdate: (listener: (transfer: TransferTask) => void) => subscribe('transfer:update', listener),
     onSerialTransferProgress: (listener: (progress: SerialTransferProgress) => void) =>
       subscribe('serial:transfer-progress', listener),
-    onWorkspaceSnapshot: (listener: (snapshot: WorkspaceSnapshot) => void) => subscribe('workspace:snapshot', listener),
+    onWorkspaceSnapshot: (listener: (snapshot: WorkspaceSnapshot) => void) =>
+      subscribeReady('workspace:snapshot', listener),
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
     onRemoteFilesChanged: (listener: (payload: RemoteFilesUpdate) => void) =>

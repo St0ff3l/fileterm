@@ -2437,6 +2437,7 @@ export interface FileTermDesktopApi {
   openFileEditorWindow(input: FileEditorWindowInput): Promise<void>
   openExternalUrl(url: string): Promise<void>
   openLogsDirectory(): Promise<void>
+  writeDiagnosticLog(level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', scope: string, message: string): Promise<void>
   listSerialPorts(): Promise<SerialPortInfo[]>
   onSerialPortsChanged(listener: (ports: SerialPortInfo[]) => void): () => void
   serialControl(
@@ -2650,7 +2651,8 @@ export interface FileTermDesktopApi {
   onTerminalState(listener: (payload: TerminalStatePayload) => void): () => void
   onTransferUpdate(listener: (transfer: TransferTask) => void): () => void
   onSerialTransferProgress(listener: (progress: SerialTransferProgress) => void): () => void
-  onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
+  /** Resolves only after the native snapshot listener is registered. */
+  onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): Promise<() => void>
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onRemoteFilesChanged(listener: (payload: RemoteFilesUpdate) => void): () => void
   /** Resolves only after the SSH interaction listener is registered in Tauri. */

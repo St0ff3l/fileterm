@@ -38,6 +38,8 @@ import {
   type SshConnectionDefaults
 } from './workspace-ipc-sync-utils'
 
+const SNAPSHOT_LISTENER_READY_TIMEOUT_MS = 5_000
+
 export type WorkspaceWindowCloseRequest = {
   id: number
   isQuit: boolean
@@ -94,7 +96,7 @@ export type UseWorkspaceIpcSyncOptions = {
 export type UseWorkspaceIpcSyncResult = {
   workspace: WorkspaceSnapshot
   setWorkspace: Dispatch<SetStateAction<WorkspaceSnapshot>>
-  applySnapshot(snapshot: WorkspaceSnapshot): void
+  applySnapshot(snapshot: WorkspaceSnapshot): boolean
   localPath: string
   setLocalPath: Dispatch<SetStateAction<string>>
   localItems: LocalFileItem[]
@@ -192,17 +194,46 @@ export function useWorkspaceIpcSync({
   const nextPaneFocusRequestIdRef = useRef(0)
   const notifiedTransferFailuresRef = useRef(new Map<string, string>())
 
-  const applySnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
-    const incomingRevision = snapshot.workspaceRevision
-    const latestRevision = latestWorkspaceRevisionRef.current
-    if (typeof incomingRevision === 'number' && latestRevision !== null && incomingRevision < latestRevision) {
-      return
-    }
-    if (typeof incomingRevision === 'number') {
-      latestWorkspaceRevisionRef.current = incomingRevision
-    }
-    setWorkspace(snapshot)
-  }, [])
+  const logWorkspaceDiagnostic = useCallback(
+    (level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', message: string) => {
+      if (!desktopApi) {
+        return
+      }
+      // Diagnostics must never make a workspace event handler fail. The
+      // backend logger is best-effort and also performs secret redaction and
+      // size bounding before writing app.log.
+      void desktopApi.writeDiagnosticLog(level, 'renderer:workspace', message).catch(() => undefined)
+    },
+    [desktopApi]
+  )
+
+  const applySnapshot = useCallback(
+    (snapshot: WorkspaceSnapshot): boolean => {
+      const incomingRevision = snapshot.workspaceRevision
+      const latestRevision = latestWorkspaceRevisionRef.current
+      if (typeof incomingRevision === 'number' && latestRevision !== null && incomingRevision < latestRevision) {
+        logWorkspaceDiagnostic(
+          'DEBUG',
+          `workspace snapshot ignored reason=stale-revision incoming_revision=${incomingRevision} latest_revision=${latestRevision}`
+        )
+        return false
+      }
+      if (typeof incomingRevision === 'number') {
+        latestWorkspaceRevisionRef.current = incomingRevision
+      }
+      setWorkspace(snapshot)
+      const disabledResourceMonitoringSessions = Object.values(snapshot.sessions).filter(
+        (session) => session.capabilities?.resourceMonitoring === false
+      ).length
+      const activeSession = snapshot.activeTabId ? snapshot.sessions[snapshot.activeTabId] : undefined
+      logWorkspaceDiagnostic(
+        'INFO',
+        `workspace snapshot applied workspace_revision=${typeof incomingRevision === 'number' ? incomingRevision : 'none'} sessions=${Object.keys(snapshot.sessions).length} resource_monitoring_disabled_sessions=${disabledResourceMonitoringSessions} active_tab_id=${snapshot.activeTabId ?? 'none'} active_tab_resource_monitoring_disabled=${activeSession?.capabilities?.resourceMonitoring === false}`
+      )
+      return true
+    },
+    [logWorkspaceDiagnostic]
+  )
 
   const applySessionMetrics = useCallback(({ tabId, systemMetrics, mode }: SessionMetricsUpdate) => {
     startTransition(() => {
@@ -540,6 +571,15 @@ export function useWorkspaceIpcSync({
     const pendingMetrics: SessionMetricsUpdate[] = []
     const pendingTransfers: TransferTask[] = []
     const pendingRemoteFiles: RemoteFilesUpdate[] = []
+    let unsubscribeSnapshot: (() => void) | null = null
+    let snapshotListenerReadyTimer: ReturnType<typeof window.setTimeout> | null = null
+    const clearSnapshotListenerReadyTimer = () => {
+      if (snapshotListenerReadyTimer === null) {
+        return
+      }
+      window.clearTimeout(snapshotListenerReadyTimer)
+      snapshotListenerReadyTimer = null
+    }
 
     const processTransferUpdate = (transfer: TransferTask) => {
       const banner = uploadFailureBanner(transfer)
@@ -577,14 +617,47 @@ export function useWorkspaceIpcSync({
       flushPendingUpdates()
     }
 
-    const unsubscribeSnapshot = desktopApi.onWorkspaceSnapshot((snapshot) => {
-      if (canceled) {
-        return
-      }
-      receivedSnapshotEvent = true
-      applySnapshot(snapshot)
-      finishHydration()
-    })
+    const snapshotListenerRegistration = desktopApi
+      .onWorkspaceSnapshot((snapshot) => {
+        if (canceled) {
+          return
+        }
+        logWorkspaceDiagnostic(
+          'DEBUG',
+          `workspace snapshot event received workspace_revision=${typeof snapshot.workspaceRevision === 'number' ? snapshot.workspaceRevision : 'none'} sessions=${Object.keys(snapshot.sessions).length} active_tab_id=${snapshot.activeTabId ?? 'none'}`
+        )
+        receivedSnapshotEvent = applySnapshot(snapshot) || receivedSnapshotEvent
+        finishHydration()
+      })
+      .then((unsubscribe) => {
+        if (canceled) {
+          unsubscribe()
+          return
+        }
+        unsubscribeSnapshot = unsubscribe
+        logWorkspaceDiagnostic('DEBUG', 'workspace snapshot listener registered')
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          logWorkspaceDiagnostic('WARN', `workspace snapshot listener registration failed error=${String(error)}`)
+        }
+      })
+      .finally(clearSnapshotListenerReadyTimer)
+    const snapshotListenerReady = Promise.race([
+      snapshotListenerRegistration,
+      new Promise<void>((resolve) => {
+        snapshotListenerReadyTimer = window.setTimeout(() => {
+          snapshotListenerReadyTimer = null
+          if (!canceled) {
+            logWorkspaceDiagnostic(
+              'WARN',
+              `workspace snapshot listener registration timeout timeout_ms=${SNAPSHOT_LISTENER_READY_TIMEOUT_MS}`
+            )
+          }
+          resolve()
+        }, SNAPSHOT_LISTENER_READY_TIMEOUT_MS)
+      })
+    ])
     const unsubscribeSessionMetrics = isMainWorkspaceWindow
       ? desktopApi.onSessionMetrics((payload) => {
           if (canceled) {
@@ -624,12 +697,22 @@ export function useWorkspaceIpcSync({
 
     const hydrateWorkspace = async () => {
       try {
+        // Tauri event registration is asynchronous. Wait for the snapshot
+        // listener before taking the initial snapshot so a fast connection
+        // cannot emit the capability=false update into an unregistered
+        // WebView callback. getSnapshot below reconciles events emitted while
+        // the listener handshake was in flight.
+        await snapshotListenerReady
+        if (canceled) {
+          return
+        }
         // A standalone connection editor only needs persisted profiles and
         // folders. Do not couple it to the full workspace snapshot: that
         // snapshot initializes transfer/session state first and can fail or
         // race while a child window opens, leaving the editor unable to find
         // the profile selected in the manager.
         if (isConnectionManagerWindow || isConnectionFormWindow) {
+          logWorkspaceDiagnostic('DEBUG', 'workspace library hydration started')
           const snapshot = await desktopApi.getConnectionLibrary()
           if (canceled || receivedSnapshotEvent) {
             return
@@ -639,15 +722,21 @@ export function useWorkspaceIpcSync({
             profiles: snapshot.profiles,
             folders: snapshot.folders
           }))
+          logWorkspaceDiagnostic(
+            'DEBUG',
+            `workspace library hydration applied profiles=${snapshot.profiles.length} folders=${snapshot.folders.length}`
+          )
           return
         }
 
+        logWorkspaceDiagnostic('DEBUG', 'workspace snapshot hydration started')
         const snapshot = await desktopApi.getSnapshot()
         if (!canceled && !receivedSnapshotEvent) {
           applySnapshot(snapshot)
         }
       } catch (error) {
         if (!canceled && !receivedSnapshotEvent) {
+          logWorkspaceDiagnostic('WARN', `workspace hydration failed error=${String(error)}`)
           onErrorRef.current(
             isConnectionManagerWindow || isConnectionFormWindow ? '获取连接列表' : '获取工作区快照',
             error
@@ -688,7 +777,8 @@ export function useWorkspaceIpcSync({
       pendingMetrics.length = 0
       pendingTransfers.length = 0
       pendingRemoteFiles.length = 0
-      unsubscribeSnapshot()
+      clearSnapshotListenerReadyTimer()
+      unsubscribeSnapshot?.()
       unsubscribeSessionMetrics()
       unsubscribeTransferUpdate()
       unsubscribeRemoteFilesChanged()
@@ -701,7 +791,8 @@ export function useWorkspaceIpcSync({
     desktopApi,
     isConnectionFormWindow,
     isConnectionManagerWindow,
-    isMainWorkspaceWindow
+    isMainWorkspaceWindow,
+    logWorkspaceDiagnostic
   ])
 
   const clearWindowCloseRequest = useCallback(() => {

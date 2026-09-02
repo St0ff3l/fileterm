@@ -507,6 +507,37 @@ pub fn app_open_logs_directory(app: AppHandle) -> Result<(), AppError> {
     open::that(log_directory).map_err(|error| AppError::Command(error.to_string()))
 }
 
+/// Write a bounded renderer-side diagnostic into the same local app log as
+/// backend session events. This is intentionally limited to the four levels
+/// understood by the structured logger so a stale or malformed WebView cannot
+/// create an unparseable log stream. The logger performs the final secret
+/// redaction and one-line/size bounding.
+#[tauri::command]
+pub fn app_write_diagnostic_log(
+    app: AppHandle,
+    level: String,
+    scope: String,
+    message: String,
+) -> Result<(), AppError> {
+    let normalized_level = level.trim().to_ascii_uppercase();
+    let level = match normalized_level.as_str() {
+        "DEBUG" => "DEBUG",
+        "INFO" => "INFO",
+        "WARN" => "WARN",
+        "ERROR" => "ERROR",
+        _ => {
+            return Err(AppError::Command(
+                "诊断日志级别无效，仅支持 DEBUG/INFO/WARN/ERROR".to_string(),
+            ));
+        }
+    };
+    if scope.trim().is_empty() {
+        return Err(AppError::Command("诊断日志 scope 不能为空".to_string()));
+    }
+    crate::services::logging::write(&app, level, &scope, message);
+    Ok(())
+}
+
 pub use crate::services::serial_ports::SerialPortSnapshot as SerialPortListItem;
 
 #[tauri::command]

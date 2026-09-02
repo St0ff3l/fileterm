@@ -9,6 +9,8 @@
 /// match the POSIX parser so the renderer does not need a second protocol.
 pub fn build_freebsd_metrics_command() -> String {
     r#"cd / >/dev/null 2>&1 || true
+# Keep sysctl/ps/df/swapinfo output stable on localized legacy hosts.
+export LC_ALL=C
 sleep_interval="0.15"
 
 read_number() {
