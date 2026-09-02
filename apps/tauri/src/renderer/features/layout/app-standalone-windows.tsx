@@ -10,6 +10,7 @@ import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 import { SshInteractionPortal } from './modal-portal-manager'
 import { StandaloneWindowFrame } from './standalone-window-frame'
 import type { AppViewModel } from './app-view-model'
+import { isDarkTheme } from '../../app/theme-config'
 import { t } from '../../i18n'
 
 const FileEditorModal = lazy(() =>
@@ -301,7 +302,7 @@ export function AppStandaloneWindows({ model }: { model: AppViewModel }) {
       >
         <div aria-busy={!fileEditorError} className="standalone-shell file-editor-window">
           <div
-            className={`modal-card file-editor-modal ${shell.themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}
+            className={`modal-card file-editor-modal ${isDarkTheme(shell.themeMode) ? 'file-editor-modal--dark' : ''} standalone`}
           >
             <div className="modal-header" data-tauri-drag-region="deep">
               <div className="file-editor-title">

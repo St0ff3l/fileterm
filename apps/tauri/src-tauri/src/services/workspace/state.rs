@@ -21,6 +21,9 @@ impl Default for WorkspaceState {
             pending_sudo_passwords: Arc::new(RwLock::new(HashMap::new())),
             sudo_password_renderer_registration: Arc::new(RwLock::new(None)),
             pending_action_approvals: Arc::new(RwLock::new(HashMap::new())),
+            background_remote_commands: Arc::new(
+                crate::services::mcp::BackgroundRemoteCommandRegistry::default(),
+            ),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
             transfers: Arc::new(RwLock::new(Vec::new())),
             transfer_runs: Arc::new(RwLock::new(HashMap::new())),

@@ -162,7 +162,7 @@
 }
 
 .sidebar-nav-link.active {
-  background: var(--bg-active, rgba(255, 255, 255, 0.08));
+  background: var(--surface-active);
   border-radius: 8px;
   color: var(--text-main);
   font-weight: 500;
@@ -330,6 +330,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 /* Remove the separate header - now part of pages */
@@ -346,6 +347,11 @@
   margin-bottom: 12px;
   padding: 18px 24px 20px;
   box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.home-content-body::-webkit-scrollbar {
+  display: none;
 }
 
 .home-content-body:has(.manager-inline) {
@@ -361,22 +367,9 @@
   padding-top: 0;
 }
 
-/* Custom Scrollbar */
-.home-content-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.home-content-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.home-content-body::-webkit-scrollbar-thumb {
-  background: var(--surface-chip);
-  border-radius: 3px;
-}
-
-.home-content-body::-webkit-scrollbar-thumb:hover {
-  background: var(--surface-hover);
+.home-main-content > .vertical-scrollbar {
+  bottom: 42px;
+  right: 2px;
 }
 
 /* Page switch fly-in: direction follows sidebar nav (down/up) */
@@ -950,10 +943,12 @@
 
 /* Layout overrides when Home tab is active (hiding topbar and bottom bar) */
 .fs-shell.is-home-active {
+  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) 0 !important;
   grid-template-rows: 0px minmax(0, 1fr) 0px !important;
 }
 
 .fs-shell.has-window-menubar.is-home-active {
+  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) 0 !important;
   grid-template-rows: 32px 0px minmax(0, 1fr) 0px !important;
 }
 
@@ -1002,7 +997,7 @@
   left: var(--sidebar-width, 214px);
   right: 0;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-md);
   border-bottom: 1px solid var(--border-light);
   border-left: 1px solid var(--border-light);
 }

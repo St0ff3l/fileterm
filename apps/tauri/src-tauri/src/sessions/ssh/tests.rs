@@ -31,6 +31,8 @@ mod tests {
         KeyboardInteractiveMode, KeyboardInteractiveRequest, ResolvedSshDeviceMode, RootFileAccessMethod,
         ShellSetupEchoSuppression, SshDeviceModeResolution, SshTunnelRule, TunnelCommand,
         SshInteractionContext, SshInteractionFlow, SshAuthenticationTarget,
+        SshInteractionWaitResult, wait_for_ssh_interaction,
+        SshDisconnectInfo, SshDisconnectKind, SshWorkerExit,
         BUSYBOX_SHELL_CWD_SETUP, SHELL_CWD_SETUP, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
@@ -67,6 +69,32 @@ mod tests {
             response.await.unwrap(),
             Err("远程文件操作已取消".to_string())
         );
+    }
+
+    #[test]
+    fn shell_close_does_not_enter_the_reconnect_policy() {
+        let shell_exit = SshWorkerExit::shell_closed(true);
+        assert!(!shell_exit.should_reconnect());
+        assert!(shell_exit.description().contains("shell channel closed"));
+
+        let transport_exit = SshWorkerExit::transport_closed(
+            SshDisconnectInfo {
+                kind: SshDisconnectKind::Transport,
+                message: "connection reset".to_string(),
+            },
+            false,
+        );
+        assert!(transport_exit.should_reconnect());
+        assert!(transport_exit.description().contains("connection reset"));
+
+        let remote_exit = SshWorkerExit::transport_closed(
+            SshDisconnectInfo {
+                kind: SshDisconnectKind::Remote,
+                message: "administratively prohibited".to_string(),
+            },
+            false,
+        );
+        assert!(!remote_exit.should_reconnect());
     }
 
     #[test]
@@ -649,6 +677,29 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error, "SSH password authentication timed out after 1 ms");
+    }
+
+    #[tokio::test]
+    async fn ssh_interaction_wait_stops_immediately_when_session_is_cancelled() {
+        let cancellation = CancellationToken::new();
+        let flow = SshInteractionFlow::new();
+        let context = SshInteractionContext::from_profile(
+            &flow,
+            "tab-1",
+            &serde_json::json!({"id": "profile-1", "name": "Test"}),
+            "example.test",
+            22,
+            SshAuthenticationTarget::Direct,
+            Some("main".to_string()),
+            cancellation.clone(),
+        );
+        let (_sender, receiver) = oneshot::channel();
+        cancellation.cancel();
+
+        let result =
+            wait_for_ssh_interaction(&context, receiver, Duration::from_secs(60)).await;
+
+        assert!(matches!(result, SshInteractionWaitResult::Cancelled));
     }
 
     #[tokio::test]
@@ -2198,6 +2249,7 @@ mod tests {
             22,
             SshAuthenticationTarget::JumpHost,
             Some("main".to_string()),
+            CancellationToken::new(),
         );
         let target = SshInteractionContext::from_profile(
             &flow,
@@ -2207,6 +2259,7 @@ mod tests {
             2222,
             SshAuthenticationTarget::Target,
             Some("main".to_string()),
+            CancellationToken::new(),
         );
 
         assert_eq!(jump.flow.flow_id, target.flow.flow_id);
@@ -2648,6 +2701,40 @@ mod tests {
         assert_eq!(result.output, "partial-diagnostic");
         assert_eq!(result.exit_code, None);
         assert!(!result.output_truncated);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancellable_exec_returns_promptly_after_request_cancellation() {
+        let fixture = start_openssh_fixture();
+        wait_for_openssh(fixture.port).await;
+
+        let profile = serde_json::json!({ "proxy": { "type": "none" } });
+        let handle = authenticate_openssh_fixture(&fixture, &profile).await;
+        let cancellation = CancellationToken::new();
+        let command_cancellation = cancellation.clone();
+        let task = tokio::spawn(async move {
+            crate::sessions::system_metrics::exec_command_with_stdin_status_timeout_detailed_cancellable(
+                &handle,
+                "sleep 30",
+                "",
+                false,
+                Duration::from_secs(30),
+                Some(&command_cancellation),
+            )
+            .await
+        });
+
+        sleep(Duration::from_millis(100)).await;
+        cancellation.cancel();
+        let result = timeout(Duration::from_secs(3), task)
+            .await
+            .expect("cancellation should not wait for the remote sleep")
+            .expect("cancellable exec task should not panic");
+        assert!(matches!(
+            result,
+            Err(error) if error == "AI_REQUEST_CANCELLED"
+        ));
     }
 
     #[cfg(unix)]

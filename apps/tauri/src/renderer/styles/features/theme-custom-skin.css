@@ -241,7 +241,7 @@
 :root[data-theme-base='codex'] .settings-modal .connection-manager-footer,
 :root[data-theme-base='codex'] .settings-modal .theme-config-preview,
 :root[data-theme-base='codex'] .settings-modal .theme-config-select.dropdown-select-trigger,
-:root[data-theme-base='codex'] .settings-modal .theme-config-select.ft-select-shell select,
+:root[data-theme-base='codex'] .settings-modal .theme-config-select.ft-select-shell,
 :root[data-theme-base='codex'] .settings-modal .theme-color-text {
   background: var(--theme-surface-elevated) !important;
 }
@@ -256,30 +256,27 @@
  * the AppKit vibrancy view must also be transparent. The Home content panel,
  * title/tab bar, and settings navigation remain opaque surfaces.
  */
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'],
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] body,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] #root {
-  --codex-glass-divider: #363636;
-  --codex-glass-surface: color-mix(in srgb, var(--theme-surface-elevated) 50%, transparent);
-  --codex-glass-unfocused-surface: rgb(27, 27, 27);
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light']),
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light']) body,
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light']) #root {
   background: transparent !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] .fs-shell.is-home-active,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] .fs-shell.is-home-active .fs-main,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light']) .fs-shell.is-home-active,
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light']) .fs-shell.is-home-active .fs-main,
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .workspace-stage,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .workspace-stage-transition,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-workspace {
   background: transparent !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-sidebar {
   background: var(--codex-glass-surface) !important;
@@ -288,7 +285,7 @@
   transition: none !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-sidebar
   .sidebar-resizer {
@@ -296,7 +293,7 @@
   transition: none !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-sidebar
   .sidebar-resizer::after {
@@ -307,11 +304,11 @@
 
 /* Keep the two sides of the title-bar/rail corner on one static divider
  * color. The resize hit area must not add a second animated line. */
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-tabs-bar
   .fs-tabbar,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-tabs-bar
   .titlebar-brand {
@@ -319,18 +316,18 @@
   transition: none !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-tabs-bar
   .fs-tabbar {
   background: transparent !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-tabs-bar
   .fs-tabbar::after,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-tabs-bar
   .titlebar-brand::after {
@@ -338,13 +335,13 @@
   transition: none !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-main-content {
   background: var(--bg-main) !important;
 }
 
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .settings-modal
   .connection-manager-sidebar {
@@ -355,15 +352,15 @@
 
 /* Native window blur should not expose the desktop or another window through
  * the Codex glass. Keep the unfocused glass regions on the requested solid
- * #1b1b1b surface while preserving the focused vibrancy treatment. */
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+ * solid dark surface while preserving the focused vibrancy treatment. */
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])[data-window-focused='false']
   .fs-shell.is-home-active
   .home-sidebar,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])[data-window-focused='false']
   .fs-shell.is-home-active
   .home-tabs-bar
   .titlebar-brand,
-:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+:root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])[data-window-focused='false']
   .fs-shell.is-home-active
   .home-tabs-bar
   .fs-tabbar {

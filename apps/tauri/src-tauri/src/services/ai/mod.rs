@@ -34,6 +34,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(25);
 const CHAT_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_PROVIDER_NAME_LENGTH: usize = 120;
 const MAX_MODEL_LENGTH: usize = 240;
+const MAX_REASONING_BUDGET: u32 = 1_000_000;
 const MAX_BASE_URL_LENGTH: usize = 2_048;
 const MAX_CONVERSATIONS: usize = 50;
 const MAX_CONVERSATION_MESSAGES: usize = 200;

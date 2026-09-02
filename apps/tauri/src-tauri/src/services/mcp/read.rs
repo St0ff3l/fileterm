@@ -65,6 +65,17 @@ async fn get_session_context(app: &AppHandle, params: &Value) -> Result<Value, S
     Ok(json!({ "items": items }))
 }
 
+async fn list_remote_commands(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let (limit, offset) = pagination(params)?;
+    let page = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .background_remote_commands
+        .list(&tab_id, limit, offset)
+        .await;
+    serde_json::to_value(page).map_err(|error| error.to_string())
+}
+
 async fn get_command_templates(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let (limit, offset) = pagination(params)?;
     let snapshot = crate::commands::get_workspace_snapshot(app.clone())

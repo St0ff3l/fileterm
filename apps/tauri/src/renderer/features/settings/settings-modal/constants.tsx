@@ -166,17 +166,17 @@ export function localTerminalShellOptionsFor(detectedOptions: LocalTerminalShell
 export const THEME_PRESETS: Array<{
   id: ThemePresetFamily
   labelKey: 'themePresetFileTerm' | 'themePresetCodex'
-  config: Record<ThemePresetVariant, ThemeConfig>
+  getConfig: (variant: ThemePresetVariant) => ThemeConfig
 }> = [
   {
     id: 'fileterm',
     labelKey: 'themePresetFileTerm',
-    config: { dark: createDefaultThemeConfig('dark'), light: createDefaultThemeConfig('light') }
+    getConfig: (variant) => createDefaultThemeConfig(variant)
   },
   {
     id: 'codex',
     labelKey: 'themePresetCodex',
-    config: { dark: createCodexThemeConfig('dark'), light: createCodexThemeConfig('light') }
+    getConfig: (variant) => createCodexThemeConfig(variant)
   }
 ]
 
@@ -184,7 +184,6 @@ export function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME
   if (!themeConfig) return undefined
   const normalizedTheme = normalizeThemeConfig(themeConfig, themeConfig.variant ?? 'dark')
   return THEME_PRESETS.find((preset) => {
-    const candidate = preset.config[normalizedTheme.variant]
     const matchesId =
       preset.id === 'fileterm'
         ? normalizedTheme.codeThemeId === 'fileterm' ||
@@ -193,51 +192,10 @@ export function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME
         : normalizedTheme.codeThemeId === 'codex' ||
           normalizedTheme.codeThemeId === 'codex-dark' ||
           normalizedTheme.codeThemeId === 'codex-light'
-    if (!matchesId) return false
-    const colorValues = [
-      candidate.theme.accent,
-      candidate.theme.surface,
-      candidate.theme.surfaceSecondary,
-      candidate.theme.surfaceElevated,
-      candidate.theme.ink,
-      candidate.theme.semanticColors.secondary,
-      candidate.theme.semanticColors.textSecondary,
-      candidate.theme.semanticColors.total,
-      candidate.theme.semanticColors.telnet,
-      candidate.theme.semanticColors.ftp,
-      candidate.theme.semanticColors.networkRx,
-      candidate.theme.semanticColors.networkTx,
-      candidate.theme.semanticColors.info,
-      candidate.theme.semanticColors.warning,
-      candidate.theme.semanticColors.error,
-      candidate.theme.semanticColors.success
-    ]
-    const themeColorValues = [
-      normalizedTheme.theme.accent,
-      normalizedTheme.theme.surface,
-      normalizedTheme.theme.surfaceSecondary,
-      normalizedTheme.theme.surfaceElevated,
-      normalizedTheme.theme.ink,
-      normalizedTheme.theme.semanticColors.secondary,
-      normalizedTheme.theme.semanticColors.textSecondary,
-      normalizedTheme.theme.semanticColors.total,
-      normalizedTheme.theme.semanticColors.telnet,
-      normalizedTheme.theme.semanticColors.ftp,
-      normalizedTheme.theme.semanticColors.networkRx,
-      normalizedTheme.theme.semanticColors.networkTx,
-      normalizedTheme.theme.semanticColors.info,
-      normalizedTheme.theme.semanticColors.warning,
-      normalizedTheme.theme.semanticColors.error,
-      normalizedTheme.theme.semanticColors.success
-    ]
-    return (
-      colorValues.every(
-        (value, index) =>
-          typeof value === 'string' &&
-          typeof themeColorValues[index] === 'string' &&
-          value.toUpperCase() === themeColorValues[index].toUpperCase()
-      ) && candidate.theme.contrast === normalizedTheme.theme.contrast
-    )
+    // Preset identity is authoritative. User edits and saved/imported custom
+    // themes are assigned `custom`, while legacy FileTerm/Codex color tokens
+    // can legitimately differ from the current renderer defaults.
+    return matchesId
   })
 }
 
@@ -340,9 +298,46 @@ export function sameOverviewSectionOrder(left: OverviewSectionId[], right: Overv
 }
 
 export const DEFAULT_MODELS_BY_KIND: Record<AiProviderKind, string[]> = {
-  'openai-compatible-chat': ['deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.6-sol', 'kimi-k3', 'qwen-max'],
-  'openai-responses': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.5-pro', 'o3', 'o4-mini'],
-  'anthropic-messages': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4.5']
+  'openai-compatible-chat': [
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'deepseek-v4-flash-vision-exp',
+    'kimi-k3',
+    'kimi-k2.7-code',
+    'kimi-k2.7-code-highspeed',
+    'kimi-k2.6',
+    'glm-5.2',
+    'glm-5.1',
+    'glm-5',
+    'glm-4.7',
+    'doubao-seed-2-0-pro-260215',
+    'doubao-seed-2-0-code-260215'
+  ],
+  'openai-responses': [
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+    'gpt-5.5',
+    'gpt-5.5-pro',
+    'gpt-5.4',
+    'gpt-5.4-pro',
+    'gpt-5.4-mini',
+    'gpt-5.3-codex',
+    'gpt-5.2'
+  ],
+  'anthropic-messages': [
+    'claude-fable-5',
+    'claude-opus-5',
+    'claude-opus-4-8',
+    'claude-opus-4-7',
+    'claude-opus-4-6',
+    'claude-opus-4-5-20251101',
+    'claude-sonnet-5',
+    'claude-sonnet-4-6',
+    'claude-sonnet-4-5-20250929',
+    'claude-haiku-4-5-20251001'
+  ]
 }
 
 export function createAiProviderDraft(isDefault = true): AiProviderDraft {
@@ -351,6 +346,7 @@ export function createAiProviderDraft(isDefault = true): AiProviderDraft {
     kind: 'openai-compatible-chat',
     baseUrl: '',
     model: '',
+    modelCapabilities: {},
     enabled: true,
     isDefault,
     allowNoAuth: false,
@@ -367,8 +363,8 @@ export type AiProviderPreset = {
     kind: AiProviderKind
     baseUrl: string
     model: string
-    // When non-empty, the form renders a DropdownSelect letting the user pick
-    // from this provider's latest model batch instead of typing an ID by hand.
+    // When non-empty, the form offers these as suggestions while still keeping
+    // manual model ID entry as the primary path.
     models?: string[]
     allowNoAuth: boolean
     allowInsecureHttp: boolean
@@ -385,8 +381,19 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'Anthropic',
       kind: 'anthropic-messages',
       baseUrl: 'https://api.anthropic.com/v1',
-      model: 'claude-opus-5',
-      models: ['claude-opus-5', 'claude-sonnet-5', 'claude-fable-5', 'claude-haiku-4.5'],
+      model: 'claude-fable-5',
+      models: [
+        'claude-fable-5',
+        'claude-opus-5',
+        'claude-opus-4-8',
+        'claude-opus-4-7',
+        'claude-opus-4-6',
+        'claude-opus-4-5-20251101',
+        'claude-sonnet-5',
+        'claude-sonnet-4-6',
+        'claude-sonnet-4-5-20250929',
+        'claude-haiku-4-5-20251001'
+      ],
       allowNoAuth: false,
       allowInsecureHttp: false
     }
@@ -400,14 +407,18 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-5.6-sol',
       models: [
+        'gpt-5.6',
         'gpt-5.6-sol',
         'gpt-5.6-terra',
         'gpt-5.6-luna',
+        'gpt-5.5',
         'gpt-5.5-pro',
+        'gpt-5.4',
         'gpt-5.4-pro',
         'gpt-5.4-mini',
-        'o3',
-        'o4-mini'
+        'gpt-5.3-codex',
+        'gpt-5.2',
+        'o3'
       ],
       allowNoAuth: false,
       allowInsecureHttp: false
@@ -419,9 +430,9 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     draft: {
       name: 'DeepSeek',
       kind: 'openai-compatible-chat',
-      baseUrl: 'https://api.deepseek.com/v1',
+      baseUrl: 'https://api.deepseek.com',
       model: 'deepseek-v4-flash',
-      models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+      models: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-v4-flash-vision-exp'],
       allowNoAuth: false,
       allowInsecureHttp: false
     }
@@ -432,9 +443,9 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     draft: {
       name: 'Kimi (Moonshot)',
       kind: 'openai-compatible-chat',
-      baseUrl: 'https://api.moonshot.cn/v1',
+      baseUrl: 'https://api.moonshot.ai/v1',
       model: 'kimi-k3',
-      models: ['kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6'],
+      models: ['kimi-k3', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k2.6'],
       allowNoAuth: false,
       allowInsecureHttp: false
     }
@@ -447,7 +458,24 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       kind: 'openai-compatible-chat',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
       model: 'glm-5.2',
-      models: ['glm-5.2', 'glm-5.1', 'glm-5', 'glm-4.7'],
+      models: [
+        'glm-5.2',
+        'glm-5.1',
+        'glm-5-turbo',
+        'glm-5',
+        'glm-5v-turbo',
+        'glm-4.7',
+        'glm-4.6',
+        'glm-4.6v',
+        'glm-4.6v-flash',
+        'glm-4.1v-thinking-flashx',
+        'glm-4.1v-thinking-flash',
+        'glm-4.5-air',
+        'glm-4.5-airx',
+        'glm-4.5-flash',
+        'glm-4v-flash',
+        'glm-ocr'
+      ],
       allowNoAuth: false,
       allowInsecureHttp: false
     }
@@ -459,13 +487,14 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: '火山方舟 (Ark)',
       kind: 'openai-compatible-chat',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-      model: 'doubao-seed-1-6-251015',
+      model: 'doubao-seed-2-0-pro-260215',
       models: [
-        'doubao-seed-1-6-251015',
-        'doubao-seed-1-6-250615',
-        'doubao-seed-1-6-flash-250828',
-        'doubao-seed-1-6-thinking-250715',
-        'deepseek-v3-1-250821'
+        'doubao-seed-2-1-pro-260628',
+        'doubao-seed-2-1-turbo-260628',
+        'doubao-seed-2-0-pro-260215',
+        'doubao-seed-2-0-lite-260215',
+        'doubao-seed-2-0-mini-260215',
+        'doubao-seed-2-0-code-260215'
       ],
       allowNoAuth: false,
       allowInsecureHttp: false
@@ -478,14 +507,18 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: '硅基流动 (SiliconFlow)',
       kind: 'openai-compatible-chat',
       baseUrl: 'https://api.siliconflow.cn/v1',
-      // SiliconFlow 文档示例的原始 model id；Pro 前缀为付费加速版。
-      model: 'deepseek-ai/DeepSeek-V3',
+      // SiliconFlow's model directory changes independently of FileTerm.
+      // Keep these as suggestions only; the input above accepts any current ID.
+      model: 'deepseek-ai/DeepSeek-V3.2',
       models: [
-        'deepseek-ai/DeepSeek-V3',
-        'Pro/deepseek-ai/DeepSeek-V3',
+        'deepseek-ai/DeepSeek-V3.2',
+        'deepseek-ai/DeepSeek-V3.1-Terminus',
         'deepseek-ai/DeepSeek-R1',
-        'Pro/deepseek-ai/DeepSeek-R1',
-        'Qwen/Qwen2.5-72B-Instruct'
+        'moonshotai/Kimi-K2.6',
+        'zai-org/GLM-5.1',
+        'zai-org/GLM-4.7',
+        'MiniMaxAI/MiniMax-M2.5',
+        'Qwen/Qwen3-VL-235B-A22B-Instruct'
       ],
       allowNoAuth: false,
       allowInsecureHttp: false
@@ -498,7 +531,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'Ollama (本地)',
       kind: 'openai-compatible-chat',
       baseUrl: 'http://127.0.0.1:11434/v1',
-      model: 'llama3.2',
+      model: '',
       allowNoAuth: true,
       allowInsecureHttp: true
     }
@@ -510,12 +543,25 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'LM Studio (本地)',
       kind: 'openai-compatible-chat',
       baseUrl: 'http://127.0.0.1:1234/v1',
-      model: 'loaded-model',
+      model: '',
       allowNoAuth: true,
       allowInsecureHttp: true
     }
   }
 ]
+
+const MANUAL_CAPABILITY_PRESET_IDS = new Set(['ollama-local', 'lm-studio-local'])
+
+/** Local and custom sources keep the detailed per-model capability editor. */
+export function isAiManualCapabilityProvider(draft: Pick<AiProviderDraft, 'name' | 'baseUrl'>) {
+  const normalizedName = draft.name.trim().toLowerCase()
+  const normalizedBaseUrl = draft.baseUrl.trim()
+  const preset = AI_PROVIDER_PRESETS.find(
+    (candidate) =>
+      candidate.draft.baseUrl === normalizedBaseUrl || candidate.draft.name.toLowerCase() === normalizedName
+  )
+  return !preset || MANUAL_CAPABILITY_PRESET_IDS.has(preset.id)
+}
 
 export function aiProviderToDraft(provider: AiProviderSummary): AiProviderDraft {
   return {
@@ -525,6 +571,7 @@ export function aiProviderToDraft(provider: AiProviderSummary): AiProviderDraft 
     baseUrl: provider.baseUrl,
     model: provider.model,
     models: provider.models,
+    modelCapabilities: provider.modelCapabilities,
     enabled: provider.enabled,
     isDefault: provider.isDefault,
     allowNoAuth: provider.allowNoAuth,

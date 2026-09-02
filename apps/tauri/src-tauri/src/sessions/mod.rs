@@ -38,6 +38,16 @@ pub enum WorkerCmd {
         cancellation: Option<tokio_util::sync::CancellationToken>,
         respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
     },
+    StartBackgroundRemoteCommand {
+        command: String,
+        cwd: Option<String>,
+        timeout_ms: u64,
+        stdin: Option<String>,
+        request_pty: bool,
+        start_cancellation: Option<tokio_util::sync::CancellationToken>,
+        lifetime_cancellation: tokio_util::sync::CancellationToken,
+        respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
+    },
     ListRemoteFiles {
         path: String,
         cancellation: tokio_util::sync::CancellationToken,

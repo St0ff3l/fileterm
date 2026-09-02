@@ -124,12 +124,13 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
             let initial_tab_id = tab_id.to_string();
             let initial_cancellation = cancellation.clone();
             let initial_listing_timeout = operation_timeout.min(INITIAL_SFTP_LISTING_TIMEOUT);
+            let initial_operation_id = uuid::Uuid::new_v4().to_string();
             tokio::spawn(async move {
                 crate::services::logging::ssh_debug(
                     &initial_app,
                     &initial_tab_id,
                     format!(
-                        "initial directory listing started path={initial_remote_path} timeout_secs={}",
+                        "initial directory listing started operation_id={initial_operation_id} path={initial_remote_path} timeout_secs={}",
                         initial_listing_timeout.as_secs()
                     ),
                 );
@@ -147,7 +148,9 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                         crate::services::logging::ssh_debug(
                             &initial_app,
                             &initial_tab_id,
-                            "initial directory listing cancelled",
+                            format!(
+                                "initial directory listing cancelled operation_id={initial_operation_id}"
+                            ),
                         );
                         return;
                     },
@@ -206,7 +209,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                         &initial_app,
                         &initial_tab_id,
                         format!(
-                            "initial directory listing completed path={initial_remote_path} entries={} current={initial_listing_is_current} fallback={initial_listing_fallback_used}",
+                            "initial directory listing completed operation_id={initial_operation_id} path={initial_remote_path} entries={} current={initial_listing_is_current} fallback={initial_listing_fallback_used}",
                             files.len()
                         ),
                     ),
@@ -216,7 +219,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                         "sftp",
                         &initial_tab_id,
                         format!(
-                            "initial directory listing failed path={initial_remote_path} current={initial_listing_is_current}: {error}"
+                            "initial directory listing failed operation_id={initial_operation_id} path={initial_remote_path} current={initial_listing_is_current}: {error}"
                         ),
                     ),
                 }
@@ -248,6 +251,13 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                 }
 
                 if initial_cancellation.is_cancelled() {
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial capability probes canceled operation_id={initial_operation_id}"
+                        ),
+                    );
                     return;
                 }
 
@@ -255,7 +265,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                     &initial_app,
                     &initial_tab_id,
                     format!(
-                        "initial capability probes started path={initial_remote_path} exec_enabled={exec_enabled} timeout_secs={}",
+                        "initial capability probes started operation_id={initial_operation_id} path={initial_remote_path} exec_enabled={exec_enabled} timeout_secs={}",
                         operation_timeout
                             .min(INITIAL_CAPABILITY_PROBE_TIMEOUT)
                             .as_secs()
@@ -264,7 +274,14 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                 let capability_timeout =
                     operation_timeout.min(INITIAL_CAPABILITY_PROBE_TIMEOUT);
                 let mut remote_capabilities = tokio::select! {
-                    _ = initial_cancellation.cancelled() => return,
+                    _ = initial_cancellation.cancelled() => {
+                        crate::services::logging::ssh_debug(
+                            &initial_app,
+                            &initial_tab_id,
+                            format!("initial capability probes canceled operation_id={initial_operation_id}"),
+                        );
+                        return;
+                    },
                     result = timeout(capability_timeout, async {
                         let sftp = initial_sftp.write().await;
                         inspect_sftp_capabilities(&sftp, &initial_remote_path).await
@@ -277,7 +294,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                                 "sftp",
                                 &initial_tab_id,
                                 format!(
-                                    "initial SFTP capability probe timed out path={initial_remote_path} timeout_secs={}",
+                                    "initial SFTP capability probe timed out operation_id={initial_operation_id} path={initial_remote_path} timeout_secs={}",
                                     capability_timeout.as_secs()
                                 ),
                             );
@@ -287,7 +304,14 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                 };
                 let (server_copy, checksum_algorithms) = if exec_enabled {
                     tokio::select! {
-                        _ = initial_cancellation.cancelled() => return,
+                        _ = initial_cancellation.cancelled() => {
+                            crate::services::logging::ssh_debug(
+                                &initial_app,
+                                &initial_tab_id,
+                                format!("initial capability probes canceled operation_id={initial_operation_id}"),
+                            );
+                            return;
+                        },
                         result = inspect_ssh_exec_capabilities(&initial_handle, capability_timeout) => result,
                     }
                 } else {
@@ -302,6 +326,13 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                 // tab close. Otherwise a slow old SFTP probe can overwrite
                 // the snapshot of the replacement session.
                 if initial_cancellation.is_cancelled() {
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial capability probes canceled operation_id={initial_operation_id}"
+                        ),
+                    );
                     return;
                 }
 
@@ -313,7 +344,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                     &initial_app,
                     &initial_tab_id,
                     format!(
-                        "initial capability probes completed path={initial_remote_path} server_copy={} checksums={}",
+                        "initial capability probes completed operation_id={initial_operation_id} path={initial_remote_path} server_copy={} checksums={}",
                         remote_capabilities.server_copy,
                         remote_capabilities.checksum_algorithms.len()
                     ),

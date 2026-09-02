@@ -3,6 +3,7 @@
 mod tests {
     use super::{
         ai_error, anthropic_history_messages_with_tools, anthropic_tool_schema, apply_secret_patch,
+        apply_openai_compatible_reasoning,
         cancellation_or_request_error, classify_command_risk, command_has_unsafe_input,
         conservative_command_risk, context_mode_reads_terminal_transcript,
         copilot_mode_state_is_current, copilot_tool_blocked_after_failure,
@@ -13,6 +14,7 @@ mod tests {
         process_anthropic_payload, process_openai_payload, process_openai_responses_payload,
         provider_history_messages, provider_history_messages_with_tools, provider_is_usable,
         provider_safe_tool_arguments, provider_summary, prune_expired_context_snapshots,
+        extract_model_ids, models_url,
         public_mode_state, repair_default_provider, responses_input_items_with_tools,
         responses_tool_schema, sanitize_recent_terminal_output, stream_anthropic_messages,
         stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
@@ -22,7 +24,9 @@ mod tests {
         title_summary_history_items, validate_context_for_mode, validate_message_id,
         write_json_file, AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
         AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage,
-        AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary,
+        AiMessageRole, AiModelCapabilities, AiModelInputModality, AiModelReasoningConfig,
+        AiModelReasoningMode, AiModelReasoningParameter, AiPromptContext, AiProviderKind,
+        AiProviderSecretPatch, AiProviderSummary, AiReasoningEffort,
         AiStreamEvent, ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot,
         StoredAiModeState, StoredAiProvider, StoredConversation, StoredProviderConfig,
         StoredProviderSecret, StoredProviderSecrets, ToolLoopResult, ToolLoopTurn,
@@ -50,11 +54,73 @@ mod tests {
             base_url: base_url.to_string(),
             model: "test-model".to_string(),
             models: vec!["test-model".to_string()],
+            model_capabilities: BTreeMap::new(),
             enabled: true,
             is_default: false,
             allow_no_auth: false,
             allow_insecure_http: false,
         }
+    }
+
+    #[test]
+    fn model_catalog_urls_follow_provider_shape() {
+        let generic_provider = provider("https://provider.test/v1");
+        assert_eq!(
+            models_url(&generic_provider)
+                .expect("generic model URL should build")
+                .as_str(),
+            "https://provider.test/v1/models"
+        );
+
+        let ollama = provider("http://127.0.0.1:11434/v1");
+        assert_eq!(
+            models_url(&ollama)
+                .expect("Ollama model URL should build")
+                .as_str(),
+            "http://127.0.0.1:11434/api/tags"
+        );
+
+        let lm_studio = provider("http://127.0.0.1:1234/v1");
+        assert_eq!(
+            models_url(&lm_studio)
+                .expect("LM Studio model URL should build")
+                .as_str(),
+            "http://127.0.0.1:1234/api/v1/models"
+        );
+    }
+
+    #[test]
+    fn model_catalog_parser_accepts_openai_and_local_shapes() {
+        let openai_payload = json!({
+            "data": [
+                {"id": "gpt-5.6-sol"},
+                {"id": "text-embedding-3-small", "type": "embedding"},
+                {"id": "gpt-5.6-sol"}
+            ]
+        });
+        let openai_models = extract_model_ids(&openai_payload);
+        assert_eq!(
+            openai_models
+                .iter()
+                .map(|model| model.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["gpt-5.6-sol"]
+        );
+
+        let local_payload = json!({
+            "models": [
+                {"name": "llama3.2", "model": "llama3.2:latest"},
+                {"key": "qwen/qwen3-vl", "type": "llm"}
+            ]
+        });
+        let local_models = extract_model_ids(&local_payload);
+        assert_eq!(
+            local_models
+                .iter()
+                .map(|model| model.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["llama3.2", "qwen/qwen3-vl"]
+        );
     }
 
     fn conversation(messages: Vec<AiMessage>) -> StoredConversation {
@@ -67,6 +133,216 @@ mod tests {
             updated_at: "2".to_string(),
             messages,
         }
+    }
+
+    #[test]
+    fn maps_siliconflow_budget_models_without_openai_effort_field() {
+        let mut provider = provider("https://api.siliconflow.cn/v1");
+        provider.model = "Pro/zai-org/GLM-5".to_string();
+        let mut payload = json!({"model": provider.model});
+
+        apply_openai_compatible_reasoning(
+            &mut payload,
+            &provider,
+            Some(AiReasoningEffort::Max),
+        );
+
+        assert_eq!(payload["enable_thinking"], true);
+        assert_eq!(payload["thinking_budget"], 32_768);
+        assert!(payload.get("reasoning_effort").is_none());
+
+        let mut disabled_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut disabled_payload,
+            &provider,
+            Some(AiReasoningEffort::None),
+        );
+        assert_eq!(disabled_payload["enable_thinking"], false);
+        assert!(disabled_payload.get("thinking_budget").is_none());
+    }
+
+    #[test]
+    fn custom_model_capability_mapping_controls_reasoning_payload() {
+        let mut provider = provider("https://provider.test/v1");
+        provider.model_capabilities.insert(
+            provider.model.clone(),
+            AiModelCapabilities {
+                input_modalities: vec![AiModelInputModality::Text, AiModelInputModality::Image],
+                reasoning: AiModelReasoningConfig {
+                    mode: AiModelReasoningMode::Budget,
+                    parameter: AiModelReasoningParameter::ThinkingBudget,
+                    efforts: vec![AiReasoningEffort::Low, AiReasoningEffort::High],
+                    budgets: BTreeMap::from([(String::from("low"), 1_234)]),
+                },
+            },
+        );
+
+        let mut budget_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut budget_payload,
+            &provider,
+            Some(AiReasoningEffort::Low),
+        );
+        assert_eq!(budget_payload["enable_thinking"], true);
+        assert_eq!(budget_payload["thinking_budget"], 1_234);
+        assert!(budget_payload.get("reasoning_effort").is_none());
+
+        let mut unsupported_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut unsupported_payload,
+            &provider,
+            Some(AiReasoningEffort::Max),
+        );
+        assert!(unsupported_payload.get("enable_thinking").is_none());
+        assert!(unsupported_payload.get("thinking_budget").is_none());
+        assert!(unsupported_payload.get("reasoning_effort").is_none());
+
+        provider
+            .model_capabilities
+            .get_mut(&provider.model)
+            .expect("custom model capabilities should exist")
+            .reasoning
+            .mode = AiModelReasoningMode::None;
+        let mut disabled_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut disabled_payload,
+            &provider,
+            Some(AiReasoningEffort::Low),
+        );
+        assert!(disabled_payload.get("enable_thinking").is_none());
+        assert!(disabled_payload.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn custom_model_capability_mapping_supports_protocol_specific_parameters() {
+        let mut provider = provider("https://provider.test/v1");
+        provider.model_capabilities.insert(
+            provider.model.clone(),
+            AiModelCapabilities {
+                input_modalities: vec![AiModelInputModality::Text],
+                reasoning: AiModelReasoningConfig {
+                    mode: AiModelReasoningMode::Effort,
+                    parameter: AiModelReasoningParameter::ReasoningObject,
+                    efforts: vec![AiReasoningEffort::High],
+                    budgets: BTreeMap::new(),
+                },
+            },
+        );
+
+        let mut object_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut object_payload,
+            &provider,
+            Some(AiReasoningEffort::High),
+        );
+        assert_eq!(object_payload["reasoning"]["effort"], "high");
+        assert!(object_payload.get("reasoning_effort").is_none());
+
+        provider
+            .model_capabilities
+            .get_mut(&provider.model)
+            .expect("custom model capabilities should exist")
+            .reasoning
+            .parameter = AiModelReasoningParameter::ChatTemplateReasoningEffort;
+        let mut template_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut template_payload,
+            &provider,
+            Some(AiReasoningEffort::High),
+        );
+        assert_eq!(
+            template_payload["chat_template_kwargs"]["reasoning_effort"],
+            "high"
+        );
+        assert!(template_payload.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn glm_toggle_models_use_thinking_type_without_effort_field() {
+        let mut provider = provider("https://provider.test/v1");
+        provider.model = "glm-5.1".to_string();
+        let mut enabled_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut enabled_payload,
+            &provider,
+            Some(AiReasoningEffort::Low),
+        );
+        assert_eq!(enabled_payload["thinking"]["type"], "enabled");
+        assert!(enabled_payload.get("reasoning_effort").is_none());
+
+        let mut disabled_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut disabled_payload,
+            &provider,
+            Some(AiReasoningEffort::None),
+        );
+        assert_eq!(disabled_payload["thinking"]["type"], "disabled");
+        assert!(disabled_payload.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn deepseek_v4_maps_none_to_toggle_and_effort_to_official_values() {
+        let mut provider = provider("https://api.deepseek.com");
+        provider.model = "deepseek-v4-flash-vision-exp".to_string();
+
+        let mut low_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut low_payload,
+            &provider,
+            Some(AiReasoningEffort::Low),
+        );
+        assert_eq!(low_payload["thinking"]["type"], "enabled");
+        assert_eq!(low_payload["reasoning_effort"], "low");
+
+        let mut medium_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut medium_payload,
+            &provider,
+            Some(AiReasoningEffort::Medium),
+        );
+        assert_eq!(medium_payload["reasoning_effort"], "high");
+
+        let mut none_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut none_payload,
+            &provider,
+            Some(AiReasoningEffort::None),
+        );
+        assert_eq!(none_payload["thinking"]["type"], "disabled");
+        assert!(none_payload.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn custom_model_capability_mapping_supports_thinking_toggle() {
+        let mut provider = provider("https://provider.test/v1");
+        provider.model_capabilities.insert(
+            provider.model.clone(),
+            AiModelCapabilities {
+                input_modalities: vec![AiModelInputModality::Text],
+                reasoning: AiModelReasoningConfig {
+                    mode: AiModelReasoningMode::Toggle,
+                    parameter: AiModelReasoningParameter::ThinkingToggle,
+                    efforts: vec![AiReasoningEffort::None, AiReasoningEffort::Low],
+                    budgets: BTreeMap::new(),
+                },
+            },
+        );
+
+        let mut enabled_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut enabled_payload,
+            &provider,
+            Some(AiReasoningEffort::Low),
+        );
+        assert_eq!(enabled_payload["thinking"]["type"], "enabled");
+
+        let mut disabled_payload = json!({"model": provider.model});
+        apply_openai_compatible_reasoning(
+            &mut disabled_payload,
+            &provider,
+            Some(AiReasoningEffort::None),
+        );
+        assert_eq!(disabled_payload["thinking"]["type"], "disabled");
     }
 
     fn context_target() -> AiContextTarget {
@@ -492,6 +768,7 @@ mod tests {
             let body: Value = serde_json::from_str(body).expect("body should be json");
             assert_eq!(body["stream"], true);
             assert_eq!(body["tool_choice"], "auto");
+            assert_eq!(body["reasoning_effort"], "high");
             assert_eq!(body["tools"][0]["type"], "function");
             assert_eq!(
                 body["tools"][0]["function"]["name"],
@@ -537,6 +814,7 @@ mod tests {
             &conversation,
             None,
             AiChatResponseMode::Chat,
+            Some(AiReasoningEffort::High),
             &[],
             true,
             &stream_channel(Arc::new(Mutex::new(Vec::new()))),
@@ -580,6 +858,7 @@ mod tests {
             assert_eq!(body["stream"], true);
             assert_eq!(body["store"], false);
             assert_eq!(body["tool_choice"], "auto");
+            assert_eq!(body["reasoning"]["effort"], "high");
             assert_eq!(body["tools"][0]["type"], "function");
             assert_eq!(
                 body["tools"][0]["name"],
@@ -631,6 +910,7 @@ mod tests {
             &conversation,
             None,
             AiChatResponseMode::Chat,
+            Some(AiReasoningEffort::High),
             &[],
             true,
             &stream_channel(Arc::new(Mutex::new(Vec::new()))),
@@ -677,6 +957,7 @@ mod tests {
             let body: Value = serde_json::from_str(body).expect("body should be json");
             assert_eq!(body["stream"], true);
             assert_eq!(body["tool_choice"]["type"], "auto");
+            assert_eq!(body["output_config"]["effort"], "high");
             assert_eq!(
                 body["tools"][0]["name"],
                 COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
@@ -730,6 +1011,7 @@ mod tests {
             &conversation,
             None,
             AiChatResponseMode::Chat,
+            Some(AiReasoningEffort::High),
             &[],
             true,
             &stream_channel(Arc::new(Mutex::new(Vec::new()))),
@@ -1409,6 +1691,7 @@ mod tests {
             &conversation,
             None,
             AiChatResponseMode::Chat,
+            None,
             &stream_channel(Arc::clone(&events)),
             &CancellationToken::new(),
         )
@@ -1471,6 +1754,7 @@ mod tests {
                 &conversation,
                 None,
                 AiChatResponseMode::Chat,
+                None,
                 &stream_channel(events),
                 &request_cancellation,
             )
@@ -1564,6 +1848,7 @@ mod tests {
             &conversation,
             None,
             AiChatResponseMode::Chat,
+            None,
             &stream_channel(Arc::clone(&events)),
             &CancellationToken::new(),
         )
@@ -1659,6 +1944,7 @@ mod tests {
             &conversation,
             None,
             AiChatResponseMode::Chat,
+            None,
             &stream_channel(Arc::clone(&events)),
             &CancellationToken::new(),
         )

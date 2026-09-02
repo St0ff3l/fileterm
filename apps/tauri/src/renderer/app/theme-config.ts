@@ -9,7 +9,8 @@ import {
   type SavedTheme
 } from '@fileterm/core'
 
-export type ThemeMode = 'default-dark' | 'default-light'
+export type ThemeMode =
+  'fileterm-dark' | 'fileterm-light' | 'codex-dark' | 'codex-light' | 'default-dark' | 'default-light'
 
 const ANSI_VARIABLE_NAMES: Array<[TerminalAnsiColorName, string]> = [
   ['black', '--terminal-black'],
@@ -32,8 +33,14 @@ const ANSI_VARIABLE_NAMES: Array<[TerminalAnsiColorName, string]> = [
 
 const appliedThemeVariableNames = new Set<string>()
 
-function themeVariantForMode(themeMode: ThemeMode): ThemeVariant {
-  return themeMode === 'default-light' ? 'light' : 'dark'
+export function themeVariantForMode(themeMode: ThemeMode): ThemeVariant {
+  return themeMode === 'default-light' || themeMode === 'fileterm-light' || themeMode === 'codex-light'
+    ? 'light'
+    : 'dark'
+}
+
+export function isDarkTheme(themeMode: ThemeMode): boolean {
+  return themeVariantForMode(themeMode) === 'dark'
 }
 
 // Blend an overlay color into a base color with a given percentage (0-100)
@@ -76,9 +83,6 @@ function resolveCompactUiVariables(
   const card = surfaceSecondary
   const elevated = surfaceElevated
   const input = isCodex ? surfaceElevated : isLight ? surfaceElevated : '#1a1a1a'
-  // Codex uses the same quiet neutral hover/active treatment as its native
-  // sidebar. Keep the primary blue for actions and status semantics instead
-  // of tinting every navigation interaction blue.
   const hover =
     isCodex && !isLight
       ? '#2a2a2a'
@@ -104,15 +108,18 @@ function resolveCompactUiVariables(
   const strongBorder = alpha(ink, isLight ? 22 : 18)
   const subtleBorder = alpha(ink, isLight ? 8 : 6)
 
-  // The secondary semantic color is the focus/outline accent in the built-in
-  // dark skins. Keep Codex aligned with the default dark theme instead of
-  // silently switching its outlines back to the primary blue.
   const focus = secondaryAccent
   const accentHover = isLight ? blend(accent, '#000000', 12) : blend(accent, '#FFFFFF', 15)
   const secondaryHover = isLight ? blend(secondaryAccent, '#000000', 12) : blend(secondaryAccent, '#FFFFFF', 15)
   const accentText = isLight ? blend(accent, ink, 35) : blend(accent, '#FFFFFF', 70)
 
+  const primaryAction = theme.semanticColors.primaryAction ?? accent
+  const primaryActionHover = isLight ? blend(primaryAction, '#000000', 12) : blend(primaryAction, '#FFFFFF', 15)
+  const dangerAction = theme.semanticColors.dangerAction ?? (isLight ? '#d32f2f' : '#c93b3b')
+  const dangerActionHover = blend(dangerAction, '#000000', 12)
+
   const danger = theme.semanticColors.error
+  const dangerHover = blend(danger, '#000000', 12)
   const success = theme.semanticColors.success
   const warning = theme.semanticColors.warning
   const info = theme.semanticColors.info
@@ -136,6 +143,17 @@ function resolveCompactUiVariables(
 
   const sidebarGlassActive = !theme.opaqueWindows && sidebarGlassSupported()
   const sidebarBackground = sidebarGlassActive ? alpha(sidebar, isLight ? 88 : 82) : sidebar
+  const contextMenuSurface = isCodex && !isLight ? '#242424' : surfaceElevated
+  const contextMenuShadow = isLight
+    ? '0 12px 32px rgba(15, 23, 42, 0.12)'
+    : isCodex
+      ? '0 20px 40px rgba(0, 0, 0, 0.4)'
+      : '0 16px 40px rgba(0, 0, 0, 0.34)'
+
+  const folderAccent = isCodex ? (isLight ? '#3b82f6' : '#fbbf24') : isLight ? '#3b82f6' : '#65a9ff'
+  const kernelAccent = isCodex ? accent : isLight ? '#2563eb' : '#65a9ff'
+  const copyLink = isCodex ? (isLight ? '#0284c7' : '#38bdf8') : isLight ? '#4f7cff' : '#65a9ff'
+  const copyLinkHover = isCodex ? (isLight ? '#0369a1' : '#7dd3fc') : isLight ? '#2f5fef' : '#8bbfff'
 
   return {
     '--bg-main': surface,
@@ -155,6 +173,7 @@ function resolveCompactUiVariables(
     '--surface-raised': elevated,
     '--surface-secondary': surfaceSecondary,
     '--surface-elevated': surfaceElevated,
+    '--ref-surface-context-menu': contextMenuSurface,
     '--surface-hover': alpha(ink, isLight ? 5 : 7),
     '--surface-chip': alpha(ink, isLight ? 8 : 14),
     '--surface-inset': alpha(ink, isLight ? 3 : 5),
@@ -166,6 +185,7 @@ function resolveCompactUiVariables(
     '--border-dark': strongBorder,
     '--border': border,
     '--border-subtle': subtleBorder,
+    '--ref-border-context-menu': border,
     '--text-main': ink,
     '--text-primary': ink,
     '--text-secondary': secondaryText,
@@ -192,16 +212,18 @@ function resolveCompactUiVariables(
     '--theme-semantic-network-tx': networkTx,
     '--theme-warning': warning,
     '--theme-error': danger,
+    '--theme-error-hover': dangerHover,
     '--theme-success': success,
     '--focus-outline': focus,
+    '--border-focus': focus,
     '--accent-highlight': secondaryAccent,
     '--accent-text': accentText,
     '--sidebar-active-accent': ink,
     '--selection-bg': active,
-    '--accent-tint-weak': alpha(accent, isLight ? 8 : 10),
-    '--accent-tint': alpha(accent, isLight ? 14 : 16),
-    '--accent-focus-ring': alpha(accent, isLight ? 24 : 28),
-    '--input-focus-ring': alpha(accent, isLight ? 18 : 22),
+    '--accent-tint-weak': alpha(focus, isLight ? 8 : 12),
+    '--accent-tint': alpha(focus, isLight ? 14 : 20),
+    '--accent-focus-ring': alpha(focus, isLight ? 24 : 28),
+    '--input-focus-ring': alpha(focus, isLight ? 18 : 22),
     '--danger': danger,
     '--danger-text': danger,
     '--danger-surface': dangerSurface,
@@ -215,19 +237,22 @@ function resolveCompactUiVariables(
     '--info-text': secondaryHover,
     '--info-surface': infoSurface,
     '--info-border': alpha(info, isLight ? 20 : 30),
-    '--folder-accent': isCodex ? (isLight ? '#3b82f6' : '#fbbf24') : isLight ? '#3b82f6' : '#65a9ff',
-    '--kernel-accent': isCodex ? accent : isLight ? '#2563eb' : '#65a9ff',
-    '--copy-link': isCodex ? (isLight ? '#0284c7' : '#38bdf8') : isLight ? '#4f7cff' : '#65a9ff',
-    '--copy-link-hover': isCodex ? (isLight ? '#0369a1' : '#7dd3fc') : isLight ? '#2f5fef' : '#8bbfff',
+    '--folder-accent': folderAccent,
+    '--kernel-accent': kernelAccent,
+    '--copy-link': copyLink,
+    '--copy-link-hover': copyLinkHover,
     '--mini-tab-active-bg': secondarySurface,
     '--mini-tab-active-text': secondaryHover,
     '--memory-warn': warning,
     '--network-tx': networkTx,
     '--network-rx': networkRx,
-    '--button-primary-bg': isLight ? accent : blend(accent, '#000000', 25),
-    '--button-primary-hover': isLight ? accentHover : blend(accent, '#000000', 12),
+    '--button-primary-bg': isLight ? primaryAction : blend(primaryAction, '#000000', 25),
+    '--button-primary-hover': isLight ? primaryActionHover : blend(primaryAction, '#000000', 12),
     '--button-primary-border': border,
     '--button-primary-text': '#FFFFFF',
+    '--action-primary-bg': primaryAction,
+    '--action-primary-hover': primaryActionHover,
+    '--action-primary-text': '#FFFFFF',
     '--floating-drawer-expanded-bg': isLight ? alpha('#FFFFFF', 94) : alpha(surface, 92),
     '--floating-drawer-expanded-border': border,
     '--floating-drawer-shadow': isLight
@@ -245,6 +270,8 @@ function resolveCompactUiVariables(
     '--system-sidebar-toggle-hover-shadow': isLight
       ? '0 6px 16px rgba(0, 0, 0, 0.08)'
       : '0 10px 22px rgba(15, 23, 42, 0.16)',
+    '--ref-text-context-menu': ink,
+    '--ref-shadow-context-menu': contextMenuShadow,
     '--popover-bg': elevated,
     '--popover-border': border,
     '--popover-shadow': isLight ? '0 12px 32px rgba(15, 23, 42, 0.12)' : '0 20px 40px rgba(0, 0, 0, 0.4)',
@@ -273,12 +300,19 @@ function resolveCompactUiVariables(
     '--dialog-button-primary-text': ink,
     '--dialog-button-primary-hover-bg': active,
     '--dialog-button-primary-hover-border': strongBorder,
-    '--dialog-button-danger-bg': danger,
+    '--dialog-button-danger-bg': dangerAction,
     '--dialog-button-danger-border': 'transparent',
     '--dialog-button-danger-text': '#ffffff',
-    '--dialog-button-danger-hover-bg': accentHover,
+    '--dialog-button-danger-hover-bg': dangerActionHover,
     '--dialog-button-danger-hover-border': 'transparent',
     '--dialog-button-danger-hover-text': '#ffffff',
+    '--action-danger-bg': dangerAction,
+    '--action-danger-hover': dangerActionHover,
+    '--action-danger-text': '#ffffff',
+    '--theme-action-primary': primaryAction,
+    '--theme-action-primary-hover': primaryActionHover,
+    '--theme-action-danger': dangerAction,
+    '--theme-action-danger-hover': dangerActionHover,
     '--theme-sidebar-background': sidebarBackground,
     '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
     '--window-control-surface': elevated,
@@ -294,6 +328,11 @@ function resolveCompactUiVariables(
     '--file-editor-primary-shadow': `0 2px 10px ${alpha(accent, 35)}`,
     '--terminal-cmd-bg': alpha(ink, isLight ? 8 : 16),
     '--terminal-cmd-text': ink,
+    '--terminal-frame-gradient':
+      isCodex || isLight
+        ? 'none'
+        : 'linear-gradient(to bottom, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to top, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to right, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to left, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px)',
+    '--terminal-frame-shadow': isCodex || isLight ? 'none' : 'inset 0 0 14px rgba(0, 0, 0, 0.3)',
     '--terminal-right-frame-outer': sidebar,
     '--terminal-right-frame-accent': border,
     '--theme-terminal-dock-surface': surfaceElevated,
@@ -347,12 +386,17 @@ function applyThemeOverrides(variables: Record<string, string>, overrides: Recor
 
 function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boolean {
   const defaultConfig = createDefaultThemeConfig(variant)
-  // A custom configuration created directly from FileTerm starts with the
-  // exact default values. Keep that no-op custom preset on the historical
-  // FileTerm skin until the user actually changes a theme value.
+  // The built-in FileTerm id is authoritative. Older releases persisted the
+  // same id with a few legacy token values; comparing every color here would
+  // incorrectly route those preferences through the custom/Codex skin. Keep
+  // the built-in id on the historical CSS skin and only inspect values for a
+  // configuration explicitly marked as custom.
   const isFileTermPreset = config.codeThemeId === defaultConfig.codeThemeId
   const isUnmodifiedFileTermCustom = config.codeThemeId === 'custom' && config.baseThemeId === 'fileterm'
-  if (!isFileTermPreset && !isUnmodifiedFileTermCustom) return false
+  if (isFileTermPreset) {
+    return !config.theme.overrides || Object.keys(config.theme.overrides).length === 0
+  }
+  if (!isUnmodifiedFileTermCustom) return false
   if (config.theme.overrides && Object.keys(config.theme.overrides).length > 0) return false
   const semanticColorKeys: Array<keyof ThemeConfig['theme']['semanticColors']> = [
     'diffAdded',
@@ -369,7 +413,9 @@ function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boo
     'info',
     'warning',
     'error',
-    'success'
+    'success',
+    'primaryAction',
+    'dangerAction'
   ]
   return (
     config.theme.accent.toUpperCase() === defaultConfig.theme.accent.toUpperCase() &&
@@ -379,9 +425,12 @@ function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boo
     config.theme.ink.toUpperCase() === defaultConfig.theme.ink.toUpperCase() &&
     config.theme.contrast === defaultConfig.theme.contrast &&
     config.theme.opaqueWindows === defaultConfig.theme.opaqueWindows &&
-    semanticColorKeys.every(
-      (key) => config.theme.semanticColors[key].toUpperCase() === defaultConfig.theme.semanticColors[key].toUpperCase()
-    )
+    semanticColorKeys.every((key) => {
+      const currentVal = config.theme.semanticColors[key] ?? defaultConfig.theme.semanticColors[key]
+      const defaultVal = defaultConfig.theme.semanticColors[key]
+      if (!currentVal || !defaultVal) return true
+      return currentVal.toUpperCase() === defaultVal.toUpperCase()
+    })
   )
 }
 
@@ -494,6 +543,8 @@ function buildThemeVariables(
     '--theme-warning': theme.semanticColors.warning,
     '--theme-error': theme.semanticColors.error,
     '--theme-success': theme.semanticColors.success,
+    '--theme-action-primary': theme.semanticColors.primaryAction ?? theme.accent,
+    '--theme-action-danger': theme.semanticColors.dangerAction ?? (variant === 'light' ? '#d32f2f' : '#c93b3b'),
     '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
     '--theme-font-ui': theme.fonts.ui ?? 'var(--font-ui)',
     '--theme-font-code': theme.fonts.code ?? 'var(--font-mono)',
@@ -571,7 +622,16 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
     }
   }
 
-  root.dataset.theme = themeMode
+  const actualThemeMode =
+    current.normalized.baseThemeId === 'codex'
+      ? variant === 'light'
+        ? 'codex-light'
+        : 'codex-dark'
+      : variant === 'light'
+        ? 'fileterm-light'
+        : 'fileterm-dark'
+
+  root.dataset.theme = actualThemeMode
   root.dataset.themeBase = current.normalized.baseThemeId ?? 'fileterm'
   root.style.colorScheme = variant
   // Keep the untouched FileTerm preset on its historical skin. Every
@@ -597,6 +657,7 @@ export function clearThemeVariables() {
     root.style.removeProperty(name)
   }
   appliedThemeVariableNames.clear()
+  delete root.dataset.theme
   delete root.dataset.themeCustom
   delete root.dataset.themeBase
 }

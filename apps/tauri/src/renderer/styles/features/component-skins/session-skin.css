@@ -1,0 +1,583 @@
+/* session.css */
+:root:not([data-theme]) .session-workspace,
+:root:not([data-theme*='light']) .session-workspace,
+:root[data-theme='default'] .session-workspace {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .terminal-area,
+:root:not([data-theme*='light']) .terminal-area,
+:root[data-theme='default'] .terminal-area {
+  background: var(--terminal-bg);
+  box-shadow: var(--terminal-frame-shadow);
+}
+
+:root:not([data-theme]) .session-split-resizer,
+:root:not([data-theme*='light']) .session-split-resizer,
+:root[data-theme='default'] .session-split-resizer {
+  background: transparent;
+}
+
+:root:not([data-theme]) .session-split-resizer:hover,
+:root:not([data-theme*='light']) .session-split-resizer:hover,
+:root[data-theme='default'] .session-split-resizer:hover {
+  background: transparent;
+}
+
+:root:not([data-theme]) .file-manager,
+:root:not([data-theme*='light']) .file-manager,
+:root[data-theme='default'] .file-manager {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .file-tabs,
+:root:not([data-theme*='light']) .file-tabs,
+:root[data-theme='default'] .file-tabs {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .file-tabs button,
+:root:not([data-theme*='light']) .file-tabs button,
+:root[data-theme='default'] .file-tabs button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .file-tabs button:hover:not(.active),
+:root:not([data-theme*='light']) .file-tabs button:hover:not(.active),
+:root[data-theme='default'] .file-tabs button:hover:not(.active) {
+  background: var(--bg-active);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .file-tabs button.active,
+:root:not([data-theme*='light']) .file-tabs button.active,
+:root[data-theme='default'] .file-tabs button.active {
+  background: var(--bg-card);
+  border-bottom-color: var(--bg-card);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .file-toolbar,
+:root:not([data-theme*='light']) .file-toolbar,
+:root[data-theme='default'] .file-toolbar {
+  color: var(--text-muted);
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .file-toolbar button,
+:root:not([data-theme*='light']) .file-toolbar button,
+:root[data-theme='default'] .file-toolbar button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .file-toolbar button:hover,
+:root:not([data-theme*='light']) .file-toolbar button:hover,
+:root[data-theme='default'] .file-toolbar button:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .local-pane,
+:root:not([data-theme*='light']) .local-pane,
+:root[data-theme='default'] .local-pane,
+:root:not([data-theme]) .remote-pane,
+:root:not([data-theme*='light']) .remote-pane,
+:root[data-theme='default'] .remote-pane {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .local-pane,
+:root:not([data-theme*='light']) .local-pane,
+:root[data-theme='default'] .local-pane {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .file-split-resizer,
+:root:not([data-theme*='light']) .file-split-resizer,
+:root[data-theme='default'] .file-split-resizer {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .file-split-resizer:hover,
+:root:not([data-theme*='light']) .file-split-resizer:hover,
+:root[data-theme='default'] .file-split-resizer:hover {
+  background: var(--bg-active);
+}
+
+:root:not([data-theme]) .pane-title,
+:root:not([data-theme*='light']) .pane-title,
+:root[data-theme='default'] .pane-title {
+  color: var(--text-main);
+  background: transparent;
+}
+
+:root:not([data-theme]) .pane-path-bar,
+:root:not([data-theme*='light']) .pane-path-bar,
+:root[data-theme='default'] .pane-path-bar {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .pane-path-bar input,
+:root:not([data-theme*='light']) .pane-path-bar input,
+:root[data-theme='default'] .pane-path-bar input {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .pane-path-bar input:hover,
+:root:not([data-theme*='light']) .pane-path-bar input:hover,
+:root[data-theme='default'] .pane-path-bar input:hover,
+:root:not([data-theme]) .pane-path-bar input:focus,
+:root:not([data-theme*='light']) .pane-path-bar input:focus,
+:root[data-theme='default'] .pane-path-bar input:focus,
+:root:not([data-theme]) .pane-filter-input-wrapper:hover,
+:root:not([data-theme*='light']) .pane-filter-input-wrapper:hover,
+:root[data-theme='default'] .pane-filter-input-wrapper:hover,
+:root:not([data-theme]) .pane-filter-input-wrapper:focus-within,
+:root:not([data-theme*='light']) .pane-filter-input-wrapper:focus-within,
+:root[data-theme='default'] .pane-filter-input-wrapper:focus-within {
+  border-color: var(--border-light);
+  background: var(--bg-main);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .pane-path-bar span,
+:root:not([data-theme*='light']) .pane-path-bar span,
+:root[data-theme='default'] .pane-path-bar span {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .pane-title span,
+:root:not([data-theme*='light']) .pane-title span,
+:root[data-theme='default'] .pane-title span {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .fs-file-table th,
+:root:not([data-theme*='light']) .fs-file-table th,
+:root[data-theme='default'] .fs-file-table th {
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .fs-file-table tbody tr.is-selected,
+:root:not([data-theme*='light']) .fs-file-table tbody tr.is-selected,
+:root[data-theme='default'] .fs-file-table tbody tr.is-selected {
+  background: var(--selection-bg) !important;
+}
+
+:root:not([data-theme]) .fs-file-table tbody tr.is-selected:nth-child(even),
+:root:not([data-theme*='light']) .fs-file-table tbody tr.is-selected:nth-child(even),
+:root[data-theme='default'] .fs-file-table tbody tr.is-selected:nth-child(even) {
+  background: var(--selection-bg) !important;
+}
+
+:root:not([data-theme]) .file-drag-preview,
+:root:not([data-theme*='light']) .file-drag-preview,
+:root[data-theme='default'] .file-drag-preview {
+  background: color-mix(in srgb, var(--surface-card) 96%, transparent);
+  color: var(--text-main);
+  box-shadow: var(--shadow-lg);
+}
+
+:root:not([data-theme]) .file-drag-preview-icon,
+:root:not([data-theme*='light']) .file-drag-preview-icon,
+:root[data-theme='default'] .file-drag-preview-icon {
+  color: var(--accent-text);
+}
+
+:root:not([data-theme]) .transfer-strip,
+:root:not([data-theme*='light']) .transfer-strip,
+:root[data-theme='default'] .transfer-strip {
+  color: var(--text-muted);
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .transfer-summary-button,
+:root:not([data-theme*='light']) .transfer-summary-button,
+:root[data-theme='default'] .transfer-summary-button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .transfer-summary-button:hover,
+:root:not([data-theme*='light']) .transfer-summary-button:hover,
+:root[data-theme='default'] .transfer-summary-button:hover {
+  border-color: var(--border-light);
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .transfer-popover,
+:root:not([data-theme*='light']) .transfer-popover,
+:root[data-theme='default'] .transfer-popover {
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+:root:not([data-theme]) .transfer-segments button,
+:root:not([data-theme*='light']) .transfer-segments button,
+:root[data-theme='default'] .transfer-segments button {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-sidebar);
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .transfer-segments button:hover,
+:root:not([data-theme*='light']) .transfer-segments button:hover,
+:root[data-theme='default'] .transfer-segments button:hover,
+:root:not([data-theme]) .transfer-segments button.active,
+:root:not([data-theme*='light']) .transfer-segments button.active,
+:root[data-theme='default'] .transfer-segments button.active {
+  background: var(--selection-bg);
+  color: var(--text-main);
+  border-color: var(--border-dark);
+}
+
+:root:not([data-theme]) .transfer-segments-sub button,
+:root:not([data-theme*='light']) .transfer-segments-sub button,
+:root[data-theme='default'] .transfer-segments-sub button {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .transfer-row,
+:root:not([data-theme*='light']) .transfer-row,
+:root[data-theme='default'] .transfer-row {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .transfer-row:hover,
+:root:not([data-theme*='light']) .transfer-row:hover,
+:root[data-theme='default'] .transfer-row:hover {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .transfer-row-main span,
+:root:not([data-theme*='light']) .transfer-row-main span,
+:root[data-theme='default'] .transfer-row-main span,
+:root:not([data-theme]) .transfer-row small,
+:root:not([data-theme*='light']) .transfer-row small,
+:root[data-theme='default'] .transfer-row small,
+:root:not([data-theme]) .transfer-row time,
+:root:not([data-theme*='light']) .transfer-row time,
+:root[data-theme='default'] .transfer-row time,
+:root:not([data-theme]) .transfer-row-meta span,
+:root:not([data-theme*='light']) .transfer-row-meta span,
+:root[data-theme='default'] .transfer-row-meta span {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .transfer-cancel,
+:root:not([data-theme*='light']) .transfer-cancel,
+:root[data-theme='default'] .transfer-cancel {
+  border: 1px solid var(--border-default);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .transfer-cancel:hover,
+:root:not([data-theme*='light']) .transfer-cancel:hover,
+:root[data-theme='default'] .transfer-cancel:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .transfer-progress,
+:root:not([data-theme*='light']) .transfer-progress,
+:root[data-theme='default'] .transfer-progress {
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+:root:not([data-theme]) .transfer-progress b,
+:root:not([data-theme*='light']) .transfer-progress b,
+:root[data-theme='default'] .transfer-progress b {
+  background: var(--primary);
+}
+
+:root:not([data-theme]) .transfer-failed .transfer-progress b,
+:root:not([data-theme*='light']) .transfer-failed .transfer-progress b,
+:root[data-theme='default'] .transfer-failed .transfer-progress b {
+  background: var(--danger);
+}
+
+:root:not([data-theme]) .transfer-done .transfer-progress b,
+:root:not([data-theme*='light']) .transfer-done .transfer-progress b,
+:root[data-theme='default'] .transfer-done .transfer-progress b {
+  background: var(--success);
+}
+
+:root:not([data-theme]) .transfer-empty,
+:root:not([data-theme*='light']) .transfer-empty,
+:root[data-theme='default'] .transfer-empty {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .context-menu,
+:root:not([data-theme*='light']) .context-menu,
+:root[data-theme='default'] .context-menu {
+  border: 1px solid var(--border-context-menu);
+  background: var(--surface-context-menu);
+  box-shadow: var(--shadow-context-menu);
+  color: var(--text-context-menu);
+}
+
+:root:not([data-theme]) .context-menu button,
+:root:not([data-theme*='light']) .context-menu button,
+:root[data-theme='default'] .context-menu button {
+  background: transparent;
+  color: inherit;
+}
+
+:root:not([data-theme]) .context-menu button:hover:not(:disabled),
+:root:not([data-theme*='light']) .context-menu button:hover:not(:disabled),
+:root[data-theme='default'] .context-menu button:hover:not(:disabled) {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .context-menu button:disabled,
+:root:not([data-theme*='light']) .context-menu button:disabled,
+:root[data-theme='default'] .context-menu button:disabled {
+  color: color-mix(in srgb, var(--text-secondary) 42%, transparent);
+}
+
+:root:not([data-theme]) .context-menu button.is-danger:not(:disabled),
+:root:not([data-theme*='light']) .context-menu button.is-danger:not(:disabled),
+:root[data-theme='default'] .context-menu button.is-danger:not(:disabled) {
+  color: var(--status-danger);
+}
+
+:root:not([data-theme]) .context-menu button.is-danger:hover:not(:disabled),
+:root:not([data-theme*='light']) .context-menu button.is-danger:hover:not(:disabled),
+:root[data-theme='default'] .context-menu button.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--status-danger) 18%, transparent);
+  color: var(--status-danger);
+}
+
+:root:not([data-theme]) .context-menu-separator,
+:root:not([data-theme*='light']) .context-menu-separator,
+:root[data-theme='default'] .context-menu-separator {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+:root:not([data-theme]) .context-menu.tools-menu,
+:root:not([data-theme*='light']) .context-menu.tools-menu,
+:root[data-theme='default'] .context-menu.tools-menu {
+  border-color: var(--border-default);
+  background: var(--surface-panel);
+  box-shadow: none;
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .context-menu.tools-menu button:hover:not(:disabled),
+:root:not([data-theme*='light']) .context-menu.tools-menu button:hover:not(:disabled),
+:root[data-theme='default'] .context-menu.tools-menu button:hover:not(:disabled) {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .context-menu.tools-menu button:disabled,
+:root:not([data-theme*='light']) .context-menu.tools-menu button:disabled,
+:root[data-theme='default'] .context-menu.tools-menu button:disabled {
+  color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+}
+
+:root:not([data-theme]) .context-menu.tools-menu .context-menu-separator,
+:root:not([data-theme*='light']) .context-menu.tools-menu .context-menu-separator,
+:root[data-theme='default'] .context-menu.tools-menu .context-menu-separator {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+:root:not([data-theme]) .file-editor-modal--dark,
+:root:not([data-theme*='light']) .file-editor-modal--dark,
+:root[data-theme='default'] .file-editor-modal--dark {
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-modal);
+}
+
+:root:not([data-theme]) .file-editor-window,
+:root:not([data-theme*='light']) .file-editor-window,
+:root[data-theme='default'] .file-editor-window {
+  background: var(--surface-panel);
+}
+
+:root:not([data-theme]) .file-editor-modal--dark .modal-header,
+:root:not([data-theme*='light']) .file-editor-modal--dark .modal-header,
+:root[data-theme='default'] .file-editor-modal--dark .modal-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+:root:not([data-theme]) .file-editor-title span,
+:root:not([data-theme*='light']) .file-editor-title span,
+:root[data-theme='default'] .file-editor-title span {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .file-editor-title strong,
+:root:not([data-theme*='light']) .file-editor-title strong,
+:root[data-theme='default'] .file-editor-title strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .file-editor-title b,
+:root:not([data-theme*='light']) .file-editor-title b,
+:root[data-theme='default'] .file-editor-title b {
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  color: var(--accent-secondary);
+}
+
+:root:not([data-theme]) .file-editor-menubar,
+:root:not([data-theme*='light']) .file-editor-menubar,
+:root[data-theme='default'] .file-editor-menubar {
+  border-bottom-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+:root:not([data-theme]) .file-editor-menubar-button,
+:root:not([data-theme*='light']) .file-editor-menubar-button,
+:root[data-theme='default'] .file-editor-menubar-button,
+:root:not([data-theme]) .file-editor-status-button,
+:root:not([data-theme*='light']) .file-editor-status-button,
+:root[data-theme='default'] .file-editor-status-button {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .file-editor-menubar-button:hover,
+:root:not([data-theme*='light']) .file-editor-menubar-button:hover,
+:root[data-theme='default'] .file-editor-menubar-button:hover,
+:root:not([data-theme]) .file-editor-status-button:hover,
+:root:not([data-theme*='light']) .file-editor-status-button:hover,
+:root[data-theme='default'] .file-editor-status-button:hover,
+:root:not([data-theme]) .file-editor-menubar-button.is-open,
+:root:not([data-theme*='light']) .file-editor-menubar-button.is-open,
+:root[data-theme='default'] .file-editor-menubar-button.is-open,
+:root:not([data-theme]) .file-editor-status-button.is-open,
+:root:not([data-theme*='light']) .file-editor-status-button.is-open,
+:root[data-theme='default'] .file-editor-status-button.is-open,
+:root:not([data-theme]) .file-editor-menu button:hover,
+:root:not([data-theme*='light']) .file-editor-menu button:hover,
+:root[data-theme='default'] .file-editor-menu button:hover,
+:root:not([data-theme]) .file-editor-menu button.is-active,
+:root:not([data-theme*='light']) .file-editor-menu button.is-active,
+:root[data-theme='default'] .file-editor-menu button.is-active {
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .file-editor-path,
+:root:not([data-theme*='light']) .file-editor-path,
+:root[data-theme='default'] .file-editor-path,
+:root:not([data-theme]) .file-editor-statusbar,
+:root:not([data-theme*='light']) .file-editor-statusbar,
+:root[data-theme='default'] .file-editor-statusbar {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .file-editor-body,
+:root:not([data-theme*='light']) .file-editor-body,
+:root[data-theme='default'] .file-editor-body {
+  border-color: var(--border-subtle);
+  background: var(--surface-canvas);
+}
+
+:root:not([data-theme]) .file-editor-menu,
+:root:not([data-theme*='light']) .file-editor-menu,
+:root[data-theme='default'] .file-editor-menu {
+  background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-lg);
+}
+
+:root:not([data-theme]) .file-editor-menu button,
+:root:not([data-theme*='light']) .file-editor-menu button,
+:root[data-theme='default'] .file-editor-menu button {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+:root:not([data-theme]) .file-editor-menu-separator,
+:root:not([data-theme*='light']) .file-editor-menu-separator,
+:root[data-theme='default'] .file-editor-menu-separator {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+:root:not([data-theme]) .file-editor-statusbar,
+:root:not([data-theme*='light']) .file-editor-statusbar,
+:root[data-theme='default'] .file-editor-statusbar {
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+:root:not([data-theme]) .manager-window,
+:root:not([data-theme*='light']) .manager-window,
+:root[data-theme='default'] .manager-window {
+  background: var(--dialog-surface);
+}
+
+:root:not([data-theme]) .modal-card.manager-modal.standalone,
+:root:not([data-theme*='light']) .modal-card.manager-modal.standalone,
+:root[data-theme='default'] .modal-card.manager-modal.standalone {
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .modal-card.manager-modal.standalone .modal-header,
+:root:not([data-theme*='light']) .modal-card.manager-modal.standalone .modal-header,
+:root[data-theme='default'] .modal-card.manager-modal.standalone .modal-header {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .manager-table,
+:root:not([data-theme*='light']) .manager-table,
+:root[data-theme='default'] .manager-table {
+  background: var(--dialog-surface) !important;
+}
+
+:root:not([data-theme]) .manager-head,
+:root:not([data-theme*='light']) .manager-head,
+:root[data-theme='default'] .manager-head {
+  background: var(--manager-head-bg);
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .manager-row,
+:root:not([data-theme*='light']) .manager-row,
+:root[data-theme='default'] .manager-row {
+  background: transparent;
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .manager-row:hover,
+:root:not([data-theme*='light']) .manager-row:hover,
+:root[data-theme='default'] .manager-row:hover {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .manager-row.dragging,
+:root:not([data-theme*='light']) .manager-row.dragging,
+:root[data-theme='default'] .manager-row.dragging {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .manager-row.drop-inside,
+:root:not([data-theme*='light']) .manager-row.drop-inside,
+:root[data-theme='default'] .manager-row.drop-inside {
+  background: var(--selection-bg);
+  box-shadow: inset 3px 0 0 var(--focus-outline);
+}
+
+:root:not([data-theme]) .folder-row,
+:root:not([data-theme*='light']) .folder-row,
+:root[data-theme='default'] .folder-row {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+
+:root:not([data-theme]) .flat-button.danger,
+:root:not([data-theme*='light']) .flat-button.danger,
+:root[data-theme='default'] .flat-button.danger {
+  color: var(--danger);
+}

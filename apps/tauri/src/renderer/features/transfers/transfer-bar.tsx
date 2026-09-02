@@ -7,10 +7,17 @@ function sessionSourceLabel(source: WorkspaceSessionSource) {
   return source === 'mcp' ? t.sessionSourceMcp : t.sessionSourceCli
 }
 
+type JumpHostSummary = {
+  name: string
+  host: string
+  port: number
+}
+
 export function TransferBar({
   activeCount,
   activeTabId,
   activeTabStatus,
+  activeJumpHost,
   activeTabSource,
   fullWidth = false,
   isPending,
@@ -20,6 +27,7 @@ export function TransferBar({
   activeCount: number
   activeTabId?: string | null
   activeTabStatus?: StatusIndicatorStatus | null
+  activeJumpHost?: JumpHostSummary | null
   activeTabSource?: WorkspaceSessionSource | null
   fullWidth?: boolean
   isPending: boolean
@@ -58,6 +66,16 @@ export function TransferBar({
                 <AppIcon name="eye-off" size={11} />
               </button>
             ) : null}
+          </span>
+        ) : null}
+        {activeTabId && activeJumpHost ? (
+          <span
+            aria-label={`${t.viaJumpHost}: ${activeJumpHost.name}`}
+            className="transfer-session-jump"
+            title={`${t.viaJumpHost}: ${activeJumpHost.name} (${activeJumpHost.host}:${activeJumpHost.port})`}
+          >
+            <span className="transfer-session-jump-label">{t.viaJumpHost}</span>
+            <span className="transfer-session-jump-name">{activeJumpHost.name}</span>
           </span>
         ) : null}
       </div>

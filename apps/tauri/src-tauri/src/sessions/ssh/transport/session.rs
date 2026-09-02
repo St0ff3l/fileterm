@@ -33,6 +33,7 @@ fn build_legacy_preferred() -> russh::Preferred {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Recursive jump-host setup keeps transport and interaction policy explicit.
 async fn open_session(
     profile: &Value,
     app: &AppHandle,
@@ -41,6 +42,7 @@ async fn open_session(
     interaction_window_label: Option<String>,
     authentication_target: SshAuthenticationTarget,
     flow: SshInteractionFlow,
+    cancellation: CancellationToken,
 ) -> Result<OpenSshSession, String> {
     let mut effective_profile = profile.clone();
     let has_jump_host = effective_profile
@@ -61,6 +63,20 @@ async fn open_session(
         port,
         authentication_target,
         interaction_window_label.clone(),
+        cancellation.clone(),
+    );
+    interaction.log_interaction(
+        app,
+        "DEBUG",
+        "-",
+        "session",
+        "open",
+        0,
+        format!(
+            "started jump_configured={} interaction_timeout_secs={}",
+            has_jump_host,
+            interaction_timeout.as_secs(),
+        ),
     );
     // A jump-host flow must authenticate the jump first. Defer a missing
     // target password until that flow has completed so the renderer never
@@ -164,7 +180,15 @@ async fn open_session(
             );
         }
 
-        crate::services::logging::session(app, "INFO", "ssh", tab_id, "resolving jump host");
+        interaction.log_interaction(
+            app,
+            "INFO",
+            "-",
+            "session",
+            "jump-host",
+            0,
+            "resolving jump host",
+        );
         // Load the jump profile from disk (same directory as profiles.json)
         let jump_profile = load_jump_profile(app, &jpid)?;
 
@@ -181,11 +205,13 @@ async fn open_session(
             return Err("Jump Host cannot itself reference another Jump Host".to_string());
         }
 
-        crate::services::logging::session(
+        interaction.log_interaction(
             app,
             "INFO",
-            "ssh",
-            tab_id,
+            "-",
+            "session",
+            "jump-host",
+            0,
             "connecting through jump host",
         );
 
@@ -202,6 +228,7 @@ async fn open_session(
             interaction_window_label.clone(),
             SshAuthenticationTarget::JumpHost,
             flow.clone(),
+            cancellation.clone(),
         ))
         .await?;
         let jump_handle = jump_session.handle;
@@ -215,6 +242,7 @@ async fn open_session(
             port,
             SshAuthenticationTarget::Target,
             interaction_window_label.clone(),
+            cancellation.clone(),
         );
         ensure_password_credentials(
             &mut target_profile,
@@ -234,11 +262,13 @@ async fn open_session(
             .unwrap_or("password")
             .to_string();
 
-        crate::services::logging::session(
+        interaction.log_interaction(
             app,
             "INFO",
-            "ssh",
-            tab_id,
+            "-",
+            "session",
+            "target",
+            0,
             "jump host connected; opening target channel",
         );
 
@@ -250,6 +280,7 @@ async fn open_session(
         // MaxStartups 统计可能虚高，极端情况下导致后续连接被拒绝。
         let target_result: Result<OpenSshSession, String> = async {
             let remote_sshid = Arc::new(StdMutex::new(None));
+            let disconnect_reason = Arc::new(StdMutex::new(None));
             let target_host_verification_waiting = Arc::new(AtomicBool::new(false));
             let mut target_handle = connect_target_through_jump(
                 &jump_handle,
@@ -266,6 +297,7 @@ async fn open_session(
                     interaction_window_label.clone(),
                     target_interaction.clone(),
                     remote_sshid.clone(),
+                    disconnect_reason.clone(),
                 ),
                 &host,
                 port,
@@ -287,6 +319,7 @@ async fn open_session(
                 Ok(OpenSshSession {
                     handle: target_handle,
                     remote_sshid: read_shared_remote_sshid(&remote_sshid),
+                    disconnect_reason,
                 })
             } else {
                 let _ = timeout(
@@ -336,6 +369,7 @@ async fn open_session(
         format!("socket connected target={host}:{port}"),
     );
     let remote_sshid = Arc::new(StdMutex::new(None));
+    let disconnect_reason = Arc::new(StdMutex::new(None));
     let host_verification_waiting = Arc::new(AtomicBool::new(false));
     let mut handle = wait_for_ssh_handshake_with_network_timeout(
         "SSH protocol handshake",
@@ -358,6 +392,7 @@ async fn open_session(
                     interaction_window_label.clone(),
                     interaction.clone(),
                     remote_sshid.clone(),
+                    disconnect_reason.clone(),
                 ),
             )
             .await
@@ -380,6 +415,7 @@ async fn open_session(
         Ok(OpenSshSession {
             handle,
             remote_sshid: read_shared_remote_sshid(&remote_sshid),
+            disconnect_reason,
         })
     } else {
         let _ = timeout(
@@ -401,18 +437,35 @@ pub async fn test_connection(
     tab_id: &str,
     interaction_window_label: String,
 ) -> Result<(), String> {
-    crate::services::logging::session(app, "INFO", "ssh", tab_id, "connection test started");
-    let session = match open_session(
+    let flow = SshInteractionFlow::new();
+    let cancellation = CancellationToken::new();
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!(
+            "connection test started flow_id={} interaction_timeout_secs={}",
+            flow.flow_id,
+            SSH_CONNECTION_TEST_INTERACTION_TIMEOUT.as_secs(),
+        ),
+    );
+    let session_result = open_session(
         profile,
         app,
         tab_id,
         SSH_CONNECTION_TEST_INTERACTION_TIMEOUT,
         Some(interaction_window_label),
         SshAuthenticationTarget::Direct,
-        SshInteractionFlow::new(),
+        flow.clone(),
+        cancellation.clone(),
     )
-    .await
-    {
+    .await;
+    // A connection test is transient. Cancel its interaction boundary as
+    // soon as the open attempt returns so a late handler future cannot leave
+    // a credentials/MFA sender behind while the form is already closing.
+    cancellation.cancel();
+    let session = match session_result {
         Ok(handle) => handle,
         Err(error) => {
             crate::services::logging::session(
@@ -420,7 +473,10 @@ pub async fn test_connection(
                 "ERROR",
                 "ssh",
                 tab_id,
-                format!("connection test failed stage=open_session error={error}"),
+                format!(
+                    "connection test failed flow_id={} stage=open_session error={error}",
+                    flow.flow_id
+                ),
             );
             return Err(error);
         }
@@ -434,6 +490,12 @@ pub async fn test_connection(
         handle.disconnect(Disconnect::ByApplication, "connection test complete", "en"),
     )
     .await;
-    crate::services::logging::session(app, "INFO", "ssh", tab_id, "connection test completed");
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!("connection test completed flow_id={}", flow.flow_id),
+    );
     Ok(())
 }

@@ -1,21 +1,126 @@
 // SSH interaction, password, approval, and AI handoff commands.
+fn summarize_ssh_interaction_response(response: &serde_json::Value) -> String {
+    let kind = response
+        .get("kind")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let canceled = response
+        .get("canceled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let mut fields = vec![format!("kind={}", kind.escape_default()), format!("canceled={canceled}")];
+    match kind {
+        "keyboard-interactive" => fields.push(format!(
+            "answers={}",
+            response
+                .get("answers")
+                .and_then(serde_json::Value::as_array)
+                .map_or(0, Vec::len)
+        )),
+        "host-verification" => fields.push(format!(
+            "decision={}",
+            response
+                .get("decision")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("missing")
+                .escape_default()
+        )),
+        "credentials" => fields.extend([
+            format!(
+                "username_present={}",
+                response
+                    .get("username")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|value| !value.trim().is_empty())
+            ),
+            format!(
+                "password_present={}",
+                response
+                    .get("password")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|value| !value.is_empty())
+            ),
+        ]),
+        "key-passphrase" => fields.extend([
+            format!(
+                "passphrase_present={}",
+                response
+                    .get("passphrase")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|value| !value.is_empty())
+            ),
+            format!(
+                "save_passphrase={}",
+                response
+                    .get("savePassphrase")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+            ),
+        ]),
+        _ => {}
+    }
+    fields.join(" ")
+}
+
 #[tauri::command]
 pub async fn app_resolve_ssh_interaction(
     app: AppHandle,
     request_id: String,
     response: serde_json::Value,
 ) -> Result<(), AppError> {
+    let response_summary = summarize_ssh_interaction_response(&response);
+    crate::services::logging::debug(
+        &app,
+        "ssh-interaction",
+        format!(
+            "resolve requested request_id={} {}",
+            request_id.escape_default(),
+            response_summary
+        ),
+    );
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let sender = {
+    let (sender, pending_after) = {
         let mut pending = state.pending_interactions.write().await;
-        pending.remove(&request_id)
+        let sender = pending.remove(&request_id);
+        (sender, pending.len())
     };
-    let tx = sender.ok_or_else(|| {
-        AppError::Command("SSH interaction request is no longer pending".to_string())
-    })?;
-    tx.send(response).map_err(|_| {
-        AppError::Command("SSH interaction receiver is no longer available".to_string())
-    })?;
+    let Some(tx) = sender else {
+        crate::services::logging::warn(
+            &app,
+            "ssh-interaction",
+            format!(
+                "resolve rejected request_id={} reason=no-longer-pending pending={pending_after} {}",
+                request_id.escape_default(),
+                response_summary
+            ),
+        );
+        return Err(AppError::Command(
+            "SSH interaction request is no longer pending".to_string(),
+        ));
+    };
+    if tx.send(response).is_err() {
+        crate::services::logging::warn(
+            &app,
+            "ssh-interaction",
+            format!(
+                "resolve rejected request_id={} reason=receiver-closed pending={pending_after} {}",
+                request_id.escape_default(),
+                response_summary
+            ),
+        );
+        return Err(AppError::Command(
+            "SSH interaction receiver is no longer available".to_string(),
+        ));
+    }
+    crate::services::logging::info(
+        &app,
+        "ssh-interaction",
+        format!(
+            "resolve delivered request_id={} pending={pending_after} {}",
+            request_id.escape_default(),
+            response_summary
+        ),
+    );
     Ok(())
 }
 

@@ -1225,6 +1225,8 @@ interface SshInteractionEnvelope {
   stage: SshInteractionStage
   /** Monotonic order within the connection flow. */
   sequence: number
+  /** Unix epoch milliseconds after which the renderer should dismiss it. */
+  expiresAt?: number
 }
 
 export interface SshHostVerificationRequest extends SshInteractionEnvelope {
@@ -1521,6 +1523,8 @@ export interface ThemeSemanticColors {
   warning: string
   error: string
   success: string
+  primaryAction?: string
+  dangerAction?: string
 }
 
 /**
@@ -1651,7 +1655,9 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
         info: isLight ? '#339cff' : '#38bdf8',
         warning: isLight ? '#b45309' : '#f59e0b',
         error: isLight ? '#ba2623' : '#f43f5e',
-        success: isLight ? '#059669' : '#34d399'
+        success: isLight ? '#059669' : '#34d399',
+        primaryAction: isLight ? '#339cff' : '#0169cc',
+        dangerAction: isLight ? '#dc2626' : '#c93b3b'
       },
       surface: isLight ? '#ffffff' : '#111111',
       surfaceSecondary: isLight ? '#ffffff' : '#181818',
@@ -1705,7 +1711,9 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         info: isLight ? '#3b82f6' : '#38bdf8',
         warning: isLight ? '#d97706' : '#f59e0b',
         error: isLight ? '#d94e4e' : '#ff5f57',
-        success: isLight ? '#168a53' : '#34d399'
+        success: isLight ? '#168a53' : '#34d399',
+        primaryAction: isLight ? '#3b82f6' : '#1687e8',
+        dangerAction: isLight ? '#d32f2f' : '#c93b3b'
       },
       surface: isLight ? '#F4F4F6' : '#151515',
       surfaceSecondary: isLight ? '#ffffff' : '#1e1e1e',
@@ -1714,6 +1722,8 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
     }
   }
 }
+
+export const createFileTermThemeConfig = createDefaultThemeConfig
 
 function asThemeRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -1871,7 +1881,15 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
         info: normalizeThemeColor(rawSemanticColors.info, variantFallback.theme.semanticColors.info),
         warning: normalizeThemeColor(rawSemanticColors.warning, variantFallback.theme.semanticColors.warning),
         error: normalizeThemeColor(rawSemanticColors.error, variantFallback.theme.semanticColors.error),
-        success: normalizedSuccess
+        success: normalizedSuccess,
+        primaryAction: normalizeThemeColor(
+          rawSemanticColors.primaryAction,
+          variantFallback.theme.semanticColors.primaryAction ?? variantFallback.theme.accent
+        ),
+        dangerAction: normalizeThemeColor(
+          rawSemanticColors.dangerAction,
+          variantFallback.theme.semanticColors.dangerAction ?? (variant === 'light' ? '#d32f2f' : '#c93b3b')
+        )
       },
       surface: normalizedSurface,
       surfaceSecondary: normalizedSurfaceSecondary,
@@ -1904,10 +1922,14 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
   }
 }
 
+export type ThemeMode =
+  'fileterm-dark' | 'fileterm-light' | 'codex-dark' | 'codex-light' | 'default-dark' | 'default-light'
+
 export interface UiPreferences {
-  theme: 'default-dark' | 'default-light'
+  theme: ThemeMode
   locale: 'zhCN' | 'enUS'
   themeConfig: ThemeConfig
+  filetermThemeResetAppVersion: string | null
   customThemes: SavedTheme[]
   autoCheckUpdates: boolean
   updateChannel: AppUpdateChannel
@@ -1975,6 +1997,40 @@ export interface RemoteFileAccessOptions {
 
 export type AiProviderKind = 'openai-compatible-chat' | 'openai-responses' | 'anthropic-messages'
 
+/** Input modalities a configured model can accept from the Copilot composer. */
+export type AiModelInputModality = 'text' | 'image' | 'audio' | 'video' | 'pdf'
+
+/** The family of control exposed by a model's reasoning API. */
+export type AiModelReasoningMode = 'none' | 'effort' | 'budget' | 'toggle'
+
+/**
+ * Request mapping for a model's reasoning control. `auto` delegates to the
+ * provider/model adapter; the other values describe common upstream fields.
+ */
+export type AiModelReasoningParameter =
+  | 'auto'
+  | 'reasoning-effort'
+  | 'reasoning-object'
+  | 'output-config-effort'
+  | 'thinking-toggle'
+  | 'thinking-budget'
+  | 'chat-template-reasoning-effort'
+
+export interface AiModelReasoningConfig {
+  mode: AiModelReasoningMode
+  parameter: AiModelReasoningParameter
+  /** Supported values for this model; `auto` is implicit and is not persisted. */
+  efforts: Array<Exclude<AiReasoningEffort, 'auto'>>
+  /** Optional token-budget overrides keyed by the selected effort. */
+  budgets?: Partial<Record<Exclude<AiReasoningEffort, 'auto' | 'none'>, number>>
+}
+
+/** Explicit per-model capability metadata, modeled after OpenCode capabilities/variants. */
+export interface AiModelCapabilities {
+  inputModalities: AiModelInputModality[]
+  reasoning: AiModelReasoningConfig
+}
+
 export interface AiProviderSummary {
   id: string
   name: string
@@ -1982,6 +2038,8 @@ export interface AiProviderSummary {
   baseUrl: string
   model: string
   models?: string[]
+  /** Keyed by the exact upstream model ID. Missing entries remain fail-closed. */
+  modelCapabilities?: Record<string, AiModelCapabilities>
   enabled: boolean
   hasApiKey: boolean
   usable: boolean
@@ -1997,6 +2055,8 @@ export interface AiProviderDraft {
   baseUrl: string
   model: string
   models?: string[]
+  /** Keyed by the exact upstream model ID. */
+  modelCapabilities?: Record<string, AiModelCapabilities>
   enabled: boolean
   isDefault: boolean
   allowNoAuth: boolean
@@ -2021,6 +2081,17 @@ export interface TestAiProviderInput {
   secrets?: AiProviderSecretPatch
 }
 
+/** A model returned by a Provider's live model directory. */
+export interface AiModelInfo {
+  id: string
+}
+
+/** Request used by the settings model picker to refresh a Provider catalog. */
+export interface ListAiModelsInput {
+  provider: AiProviderDraft
+  secrets?: AiProviderSecretPatch
+}
+
 export interface AiProviderTestResult {
   ok: true
   message: string
@@ -2028,6 +2099,9 @@ export interface AiProviderTestResult {
 
 /** The user-visible Copilot execution mode. */
 export type AiCopilotMode = 'pure-conversation' | 'semi-automatic' | 'fully-automatic'
+
+/** Provider-neutral reasoning preference; `auto` leaves the provider default untouched. */
+export type AiReasoningEffort = 'auto' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 /** The only context levels exposed by the new Copilot contract. */
 export type AiContextLevel = 'L0' | 'L2'
@@ -2219,6 +2293,8 @@ export interface StartAiChatInput {
   contextSnapshotId?: string
   /** Optional for callers that need to pin the active mode. */
   mode?: AiCopilotMode
+  /** Optional per-request reasoning preference; `auto` is omitted on the wire. */
+  reasoningEffort?: AiReasoningEffort
 }
 
 /** Retries the latest user turn without duplicating it in local history. */
@@ -2228,6 +2304,7 @@ export interface RetryAiChatInput {
   modelOverride?: string
   contextSnapshotId?: string
   mode?: AiCopilotMode
+  reasoningEffort?: AiReasoningEffort
 }
 
 export interface AiChatRequest {
@@ -2326,6 +2403,7 @@ export interface FileTermDesktopApi {
   listLocalTerminalShells(): Promise<LocalTerminalShellOption[]>
   getMcpAgentSetup(): Promise<McpAgentSetup>
   listAiProviders(): Promise<AiProviderSummary[]>
+  listAiModels(input: ListAiModelsInput): Promise<AiModelInfo[]>
   saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
   deleteAiProvider(providerId: string): Promise<AiProviderSummary[]>
   testAiProvider(input: TestAiProviderInput): Promise<AiProviderTestResult>
@@ -2605,6 +2683,8 @@ export interface AppUpdateStatus {
   state: AppUpdateState
   currentVersion: string
   updateMode?: AppUpdateMode
+  /** Whether this status came from the self-contained Windows portable build. */
+  isPortable?: boolean
   updateChannel?: AppUpdateChannel
   availableVersion?: string
   releaseTag?: string

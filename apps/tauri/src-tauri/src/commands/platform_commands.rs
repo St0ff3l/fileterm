@@ -328,14 +328,37 @@ fn push_unique_cli_search_path(
     search_paths.push(path);
 }
 
+fn resolve_fileterm_executable_path() -> Result<std::path::PathBuf, AppError> {
+    #[cfg(target_os = "macos")]
+    {
+        let standard_app =
+            std::path::PathBuf::from("/Applications/FileTerm.app/Contents/MacOS/fileterm");
+        if standard_app.exists() {
+            if let Ok(current) = std::env::current_exe() {
+                let current_str = current.to_string_lossy();
+                if current_str.contains("/target/debug/")
+                    || current_str.contains("/target/release/")
+                    || !current_str.contains(".app/Contents/MacOS")
+                {
+                    return Ok(standard_app);
+                }
+                return Ok(current);
+            }
+            return Ok(standard_app);
+        }
+    }
+
+    std::env::current_exe().map_err(|error| {
+        AppError::Command(format!("Unable to locate the FileTerm executable: {error}"))
+    })
+}
+
 /// Discover locally installed Agent CLIs without launching them. This keeps
 /// setup responsive and avoids invoking arbitrary shell startup files on all
 /// three desktop platforms.
 #[tauri::command]
 pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
-    let fileterm_path = std::env::current_exe().map_err(|error| {
-        AppError::Command(format!("Unable to locate the FileTerm executable: {error}"))
-    })?;
+    let fileterm_path = resolve_fileterm_executable_path()?;
     let fileterm_command = shell_quote_path(&fileterm_path);
     let make_client = |id: &str, label: &str, command: &str, registration_command: String| {
         let path = resolve_local_cli(command);

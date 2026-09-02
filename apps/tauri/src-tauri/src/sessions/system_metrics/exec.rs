@@ -129,7 +129,7 @@ pub async fn exec_command_with_status_detailed<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,
 ) -> Result<ExecCommandResult, String> {
-    exec_command_internal(handle, cmd, None, false, None).await
+    exec_command_internal(handle, cmd, None, false, None, None).await
 }
 
 /// Like [`exec_command_with_status_detailed`], but bounds the remote command
@@ -141,7 +141,7 @@ pub async fn exec_command_with_status_timeout_detailed<H: Handler>(
     cmd: &str,
     command_timeout: Duration,
 ) -> Result<ExecCommandResult, String> {
-    exec_command_internal(handle, cmd, None, false, Some(command_timeout)).await
+    exec_command_internal(handle, cmd, None, false, Some(command_timeout), None).await
 }
 
 /// Run a command via the exec channel, write `stdin`, and retain the SSH
@@ -151,7 +151,7 @@ pub async fn exec_command_with_stdin_status<H: Handler>(
     cmd: &str,
     stdin: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), false, None)
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), false, None, None)
         .await
         .map(|result| (result.output, result.exit_code))
 }
@@ -163,7 +163,7 @@ pub async fn exec_command_with_status_pty<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, None, true, None)
+    exec_command_internal(handle, cmd, None, true, None, None)
         .await
         .map(|result| (result.output, result.exit_code))
 }
@@ -177,7 +177,7 @@ pub async fn exec_command_with_stdin_status_pty<H: Handler>(
     cmd: &str,
     stdin: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), true, None)
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), true, None, None)
         .await
         .map(|result| (result.output, result.exit_code))
 }
@@ -199,8 +199,107 @@ pub async fn exec_command_with_stdin_status_timeout_detailed<H: Handler>(
         Some(stdin.as_bytes()),
         request_pty,
         Some(command_timeout),
+        None,
     )
     .await
+}
+
+/// Like [`exec_command_with_stdin_status_timeout_detailed`], but keeps the
+/// channel alive long enough to make a best-effort remote termination request
+/// when the caller cancels. The signal ladder is deliberately performed on
+/// the existing SSH channel; the command is never re-run on a replacement
+/// channel.
+pub async fn exec_command_with_stdin_status_timeout_detailed_cancellable<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+    stdin: &str,
+    request_pty: bool,
+    command_timeout: Duration,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<ExecCommandResult, String> {
+    exec_command_internal(
+        handle,
+        cmd,
+        Some(stdin.as_bytes()),
+        request_pty,
+        Some(command_timeout),
+        cancellation,
+    )
+    .await
+}
+
+/// Open and start an exec channel for a command whose output will be consumed
+/// asynchronously by the MCP background-command registry. The request timeout
+/// only covers channel setup; the command timeout is enforced by the registry
+/// after this function returns.
+pub(crate) async fn open_background_exec_channel<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+    stdin: Option<&str>,
+    request_pty: bool,
+    startup_timeout: Duration,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<BackgroundExecChannel, String> {
+    let deadline = Some(tokio::time::Instant::now() + startup_timeout);
+    let channel = open_exec_channel_with_retry(handle, deadline, cancellation).await?;
+    if request_pty {
+        if let Err(error) = await_exec_stage(
+            channel.request_pty(
+                true,
+                "xterm-256color",
+                80,
+                24,
+                0,
+                0,
+                &[
+                    (russh::Pty::ECHO, 0),
+                    (russh::Pty::ECHOE, 0),
+                    (russh::Pty::ECHOK, 0),
+                    (russh::Pty::ECHONL, 0),
+                    (russh::Pty::TTY_OP_ISPEED, 115200),
+                    (russh::Pty::TTY_OP_OSPEED, 115200),
+                ],
+            ),
+            deadline,
+            cancellation,
+        )
+        .await
+        {
+            let _ = terminate_remote_exec(&channel).await;
+            return Err(error);
+        }
+    }
+    if let Err(error) = await_exec_stage(channel.exec(true, cmd), deadline, cancellation).await {
+        let _ = terminate_remote_exec(&channel).await;
+        return Err(error);
+    }
+
+    let pending_pty_stdin = if request_pty {
+        stdin.map(str::as_bytes).map(ToOwned::to_owned)
+    } else if let Some(stdin) = stdin {
+        if let Err(error) = await_exec_stage(channel.data(stdin.as_bytes()), deadline, cancellation).await {
+            let _ = terminate_remote_exec(&channel).await;
+            return Err(error);
+        }
+        if let Err(error) = await_exec_stage(channel.eof(), deadline, cancellation).await {
+            let _ = terminate_remote_exec(&channel).await;
+            return Err(error);
+        }
+        None
+    } else {
+        None
+    };
+
+    if cancellation.is_some_and(|token| token.is_cancelled()) {
+        let _ = terminate_remote_exec(&channel).await;
+        return Err("AI_REQUEST_CANCELLED".to_string());
+    }
+    let (reader, writer) = channel.split();
+    Ok(BackgroundExecChannel {
+        reader,
+        writer,
+        pending_pty_stdin,
+    })
 }
 
 async fn exec_command_internal<H: Handler>(
@@ -209,15 +308,16 @@ async fn exec_command_internal<H: Handler>(
     stdin: Option<&[u8]>,
     request_pty: bool,
     command_timeout: Option<Duration>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<ExecCommandResult, String> {
+    if cancellation.is_some_and(|token| token.is_cancelled()) {
+        return Err("AI_REQUEST_CANCELLED".to_string());
+    }
     let deadline = command_timeout.map(|duration| tokio::time::Instant::now() + duration);
-    let mut channel = handle
-        .channel_open_session()
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut channel = open_exec_channel_with_retry(handle, deadline, cancellation).await?;
     if request_pty {
-        channel
-            .request_pty(
+        let result = await_exec_stage(
+            channel.request_pty(
                 true,
                 "xterm-256color",
                 80,
@@ -235,11 +335,20 @@ async fn exec_command_internal<H: Handler>(
                     (russh::Pty::TTY_OP_ISPEED, 115200),
                     (russh::Pty::TTY_OP_OSPEED, 115200),
                 ],
-            )
-            .await
-            .map_err(|e| e.to_string())?;
+            ),
+            deadline,
+            cancellation,
+        )
+        .await;
+        if let Err(error) = result {
+            let _ = terminate_remote_exec(&channel).await;
+            return Err(error);
+        }
     }
-    channel.exec(true, cmd).await.map_err(|e| e.to_string())?;
+    if let Err(error) = await_exec_stage(channel.exec(true, cmd), deadline, cancellation).await {
+        let _ = terminate_remote_exec(&channel).await;
+        return Err(error);
+    }
     // `su` reads its password from the controlling PTY only after it has
     // emitted the prompt. Sending the password immediately after `exec`
     // races PAM on several OpenSSH/PAM combinations and leaves `su -c`
@@ -247,8 +356,14 @@ async fn exec_command_internal<H: Handler>(
     // non-PTY execs (notably `sudo -S`) continue to use pipe semantics.
     let mut pending_pty_stdin = if request_pty { stdin } else { None };
     if let Some(stdin) = stdin.filter(|_| !request_pty) {
-        channel.data(stdin).await.map_err(|e| e.to_string())?;
-        channel.eof().await.map_err(|e| e.to_string())?;
+        if let Err(error) = await_exec_stage(channel.data(stdin), deadline, cancellation).await {
+            let _ = terminate_remote_exec(&channel).await;
+            return Err(error);
+        }
+        if let Err(error) = await_exec_stage(channel.eof(), deadline, cancellation).await {
+            let _ = terminate_remote_exec(&channel).await;
+            return Err(error);
+        }
     }
 
     let mut output: Vec<u8> = Vec::new();
@@ -267,24 +382,50 @@ async fn exec_command_internal<H: Handler>(
                     },
                     _ = tokio::time::sleep_until(deadline) => {
                         timed_out = true;
+                        let _ = terminate_remote_exec(&channel).await;
                         break;
+                    }
+                    _ = wait_for_exec_cancellation(cancellation) => {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err("AI_REQUEST_CANCELLED".to_string());
                     }
                 }
             }
-            (true, None) => match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
-                Ok(message) => message,
-                Err(_) => break,
-            },
+            (true, None) => {
+                tokio::select! {
+                    message = timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()) => match message {
+                        Ok(message) => message,
+                        Err(_) => break,
+                    },
+                    _ = wait_for_exec_cancellation(cancellation) => {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err("AI_REQUEST_CANCELLED".to_string());
+                    }
+                }
+            }
             (false, Some(deadline)) => {
                 tokio::select! {
                     message = channel.wait() => message,
                     _ = tokio::time::sleep_until(deadline) => {
                         timed_out = true;
+                        let _ = terminate_remote_exec(&channel).await;
                         break;
+                    }
+                    _ = wait_for_exec_cancellation(cancellation) => {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err("AI_REQUEST_CANCELLED".to_string());
                     }
                 }
             }
-            (false, None) => channel.wait().await,
+            (false, None) => {
+                tokio::select! {
+                    message = channel.wait() => message,
+                    _ = wait_for_exec_cancellation(cancellation) => {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err("AI_REQUEST_CANCELLED".to_string());
+                    }
+                }
+            }
         };
         match message {
             Some(ChannelMsg::Data { data }) => {
@@ -296,15 +437,26 @@ async fn exec_command_internal<H: Handler>(
                     let stdin = pending_pty_stdin
                         .take()
                         .expect("pending PTY input was checked above");
-                    channel.data(stdin).await.map_err(|e| e.to_string())?;
+                    if let Err(error) =
+                        await_exec_stage(channel.data(stdin), deadline, cancellation).await
+                    {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err(error);
+                    }
                     // A PTY is a terminal, not a pipe: SSH channel EOF does
                     // not reliably become stdin EOF. Send the terminal's VEOF
                     // byte after the password's newline so `su -c` observes
                     // the same end-of-input as Ctrl+D if it needs it.
-                    channel
-                        .data_bytes(vec![0x04])
-                        .await
-                        .map_err(|e| e.to_string())?;
+                    if let Err(error) = await_exec_stage(
+                        channel.data_bytes(vec![0x04]),
+                        deadline,
+                        cancellation,
+                    )
+                    .await
+                    {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err(error);
+                    }
                 }
             }
             Some(ChannelMsg::ExtendedData { data, .. }) => {
@@ -316,11 +468,22 @@ async fn exec_command_internal<H: Handler>(
                     let stdin = pending_pty_stdin
                         .take()
                         .expect("pending PTY input was checked above");
-                    channel.data(stdin).await.map_err(|e| e.to_string())?;
-                    channel
-                        .data_bytes(vec![0x04])
-                        .await
-                        .map_err(|e| e.to_string())?;
+                    if let Err(error) =
+                        await_exec_stage(channel.data(stdin), deadline, cancellation).await
+                    {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err(error);
+                    }
+                    if let Err(error) = await_exec_stage(
+                        channel.data_bytes(vec![0x04]),
+                        deadline,
+                        cancellation,
+                    )
+                    .await
+                    {
+                        let _ = terminate_remote_exec(&channel).await;
+                        return Err(error);
+                    }
                 }
             }
             Some(ChannelMsg::ExitStatus {
@@ -344,6 +507,140 @@ async fn exec_command_internal<H: Handler>(
     })
 }
 
+/// Keep cancellation responsive even for the non-cancellable legacy helper:
+/// the `None` branch is a pending future and therefore never wins the select.
+async fn wait_for_exec_cancellation(
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) {
+    if let Some(cancellation) = cancellation {
+        cancellation.cancelled().await;
+    } else {
+        std::future::pending::<()>().await;
+    }
+}
+
+/// Open one SSH exec channel with the bounded retry used by ssh-mcp's channel
+/// retry layer. Only `channel_open_session` is retried: no PTY request, stdin
+/// write, or command execution has happened yet, so this cannot duplicate a
+/// command that the server may already have accepted.
+async fn open_exec_channel_with_retry<H: Handler>(
+    handle: &Handle<H>,
+    deadline: Option<tokio::time::Instant>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<russh::Channel<russh::client::Msg>, String> {
+    let mut last_error = None;
+    for attempt in 0..EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS {
+        match await_exec_stage(handle.channel_open_session(), deadline, cancellation).await {
+            Ok(channel) => return Ok(channel),
+            Err(error) => {
+                if !is_retryable_exec_channel_open_error(&error)
+                    || attempt + 1 >= EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS
+                {
+                    return Err(error);
+                }
+                last_error = Some(error);
+                let delay = EXEC_CHANNEL_OPEN_RETRY_DELAY
+                    .checked_mul((attempt + 1) as u32)
+                    .unwrap_or(EXEC_CHANNEL_OPEN_RETRY_DELAY);
+                wait_for_exec_channel_retry(delay, deadline, cancellation).await?;
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "SSH exec channel open failed".to_string()))
+}
+
+fn is_retryable_exec_channel_open_error(error: &str) -> bool {
+    !matches!(error, "AI_REQUEST_TIMEOUT" | "AI_REQUEST_CANCELLED")
+}
+
+async fn wait_for_exec_channel_retry(
+    delay: Duration,
+    deadline: Option<tokio::time::Instant>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<(), String> {
+    if let Some(deadline) = deadline {
+        tokio::select! {
+            _ = tokio::time::sleep_until(deadline) => Err("AI_REQUEST_TIMEOUT".to_string()),
+            _ = tokio::time::sleep(delay) => Ok(()),
+            _ = wait_for_exec_cancellation(cancellation) => Err("AI_REQUEST_CANCELLED".to_string()),
+        }
+    } else {
+        tokio::select! {
+            _ = tokio::time::sleep(delay) => Ok(()),
+            _ = wait_for_exec_cancellation(cancellation) => Err("AI_REQUEST_CANCELLED".to_string()),
+        }
+    }
+}
+
+async fn await_exec_stage<F, T, E>(
+    future: F,
+    deadline: Option<tokio::time::Instant>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<T, String>
+where
+    F: std::future::Future<Output = Result<T, E>>,
+    E: std::fmt::Display,
+{
+    let operation = async move {
+        match deadline {
+            Some(deadline) => timeout_at(deadline, future)
+                .await
+                .map_err(|_| "AI_REQUEST_TIMEOUT".to_string())?
+                .map_err(|error| error.to_string()),
+            None => future.await.map_err(|error| error.to_string()),
+        }
+    };
+    tokio::select! {
+        _ = wait_for_exec_cancellation(cancellation) => Err("AI_REQUEST_CANCELLED".to_string()),
+        result = operation => result,
+    }
+}
+
+/// Request termination on the channel that owns the command. SSH servers may
+/// reject signal requests or interpret them differently, so this function
+/// makes no claim that the remote process has already exited. Closing the
+/// channel is the final cleanup step when the signal requests fail.
+async fn terminate_remote_exec(
+    channel: &russh::Channel<russh::client::Msg>,
+) -> (usize, bool) {
+    let mut signals_dispatched = 0;
+    for signal in [russh::Sig::INT, russh::Sig::TERM, russh::Sig::KILL] {
+        if matches!(
+            timeout(EXEC_TERMINATION_SIGNAL_TIMEOUT, channel.signal(signal)).await,
+            Ok(Ok(()))
+        ) {
+            signals_dispatched += 1;
+        }
+    }
+    let channel_closed = matches!(
+        timeout(EXEC_TERMINATION_SIGNAL_TIMEOUT, channel.close()).await,
+        Ok(Ok(()))
+    );
+    (signals_dispatched, channel_closed)
+}
+
+/// The split-channel counterpart used after a background command has handed
+/// its reader to the output pump. It deliberately uses the same bounded
+/// INT→TERM→KILL→close ladder as the synchronous command path.
+pub(crate) async fn terminate_exec_channel_writer(
+    writer: &russh::ChannelWriteHalf<russh::client::Msg>,
+) -> (usize, bool) {
+    let mut signals_dispatched = 0;
+    for signal in [russh::Sig::INT, russh::Sig::TERM, russh::Sig::KILL] {
+        if matches!(
+            timeout(EXEC_TERMINATION_SIGNAL_TIMEOUT, writer.signal(signal)).await,
+            Ok(Ok(()))
+        ) {
+            signals_dispatched += 1;
+        }
+    }
+    let channel_closed = matches!(
+        timeout(EXEC_TERMINATION_SIGNAL_TIMEOUT, writer.close()).await,
+        Ok(Ok(()))
+    );
+    (signals_dispatched, channel_closed)
+}
+
 const PTY_PROMPT_WINDOW_BYTES: usize = 2 * 1024;
 
 fn append_pty_prompt_window(window: &mut Vec<u8>, chunk: &[u8]) {
@@ -354,7 +651,7 @@ fn append_pty_prompt_window(window: &mut Vec<u8>, chunk: &[u8]) {
     }
 }
 
-fn pty_password_prompt_detected(window: &[u8]) -> bool {
+pub(crate) fn pty_password_prompt_detected(window: &[u8]) -> bool {
     let visible = String::from_utf8_lossy(window);
     let lower = visible.to_ascii_lowercase();
     lower.contains("password") || visible.contains("密码")

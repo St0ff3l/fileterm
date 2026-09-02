@@ -63,7 +63,20 @@ pub fn start_ssh_worker(
             crate::services::logging::session(&app, "INFO", "ssh", &tid, "worker cancelled");
             return;
         }
-        if run_result.is_ok() {
+        let should_reconnect = match &run_result {
+            // Startup failures do not have a live worker exit classification,
+            // so preserve the existing retry behavior for those failures.
+            Err(_) => true,
+            Ok(exit) => exit.should_reconnect(),
+        };
+        let connection_was_stable = run_result
+            .as_ref()
+            .ok()
+            .is_some_and(|exit| exit.connection_was_stable);
+        if connection_was_stable {
+            // Reset only after a connection was genuinely usable for a while.
+            // An accept-then-drop loop must keep its attempt count so the
+            // configured limit and exponential backoff remain effective.
             app.state::<crate::services::workspace::WorkspaceState>()
                 .serial_reconnect_attempts
                 .write()
@@ -71,15 +84,19 @@ pub fn start_ssh_worker(
                 .remove(&tid);
         }
         let final_status = match run_result {
-            Ok(()) => {
+            Ok(exit) => {
                 crate::services::logging::session(
                     &app,
                     "INFO",
                     "ssh",
                     &tid,
-                    "worker exited cleanly",
+                    format!("worker exited: {}", exit.description()),
                 );
-                emit_terminal_data(&app, &tid, "连接已断开\r\n").await;
+                if exit.should_reconnect() {
+                    emit_terminal_data(&app, &tid, "SSH 连接中断，正在准备重连...\r\n").await;
+                } else {
+                    emit_terminal_data(&app, &tid, "连接已断开\r\n").await;
+                }
                 WorkspaceTabStatus::Closed
             }
             Err(e) => {
@@ -119,12 +136,13 @@ pub fn start_ssh_worker(
                 .or_else(|| crate::services::workspace::reconnect_mode_for_profile(&profile));
             mode.unwrap_or_else(|| "none".to_string())
         };
-        if reconnect_mode == "auto" {
+        if should_reconnect && reconnect_mode == "auto" {
             let next_attempt = {
                 let state = app.state::<crate::services::workspace::WorkspaceState>();
                 let mut attempts = state.serial_reconnect_attempts.write().await;
                 let current = attempts.get(&tid).copied().unwrap_or(0);
-                let next = reconnect_policy.next_attempt(current);
+                let next = reconnect_policy
+                    .next_attempt_after_connection(current, connection_was_stable);
                 if let Some(attempt) = next {
                     attempts.insert(tid.clone(), attempt);
                 }
@@ -222,16 +240,74 @@ fn emit_ssh_interaction(
     interaction_window_label: Option<&str>,
     payload: &Value,
 ) -> Result<(), tauri::Error> {
-    match interaction_window_label
+    let request_id = payload
+        .get("requestId")
+        .and_then(Value::as_str)
+        .unwrap_or("-");
+    let flow_id = payload
+        .get("flowId")
+        .and_then(Value::as_str)
+        .unwrap_or("-");
+    let tab_id = payload
+        .get("tabId")
+        .and_then(Value::as_str)
+        .unwrap_or("-");
+    let kind = payload
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let stage = payload
+        .get("stage")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let target = payload
+        .get("authenticationTarget")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let hop = payload
+        .get("hopIndex")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let sequence = payload
+        .get("sequence")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let (result, route) = match interaction_window_label
         .and_then(|label| app.get_webview_window(label))
     {
-        Some(window) => app.emit_to(
-            EventTarget::webview_window(window.label()),
-            "ssh:interaction",
-            payload,
+        Some(window) => (
+            app.emit_to(
+                EventTarget::webview_window(window.label()),
+                "ssh:interaction",
+                payload,
+            ),
+            format!("window:{}", window.label()),
         ),
-        None => app.emit("ssh:interaction", payload),
-    }
+        None => (app.emit("ssh:interaction", payload), "broadcast".to_string()),
+    };
+    crate::services::logging::session(
+        app,
+        if result.is_ok() { "DEBUG" } else { "WARN" },
+        "ssh",
+        tab_id,
+        format!(
+            "interaction emitted flow_id={} request_id={} kind={} stage={} target={} hop={} sequence={} route={} result={}",
+            flow_id,
+            request_id.escape_default(),
+            kind,
+            stage,
+            target,
+            hop,
+            sequence,
+            route,
+            result
+                .as_ref()
+                .err()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "ok".to_string()),
+        ),
+    );
+    result
 }
 
 pub struct ClientHandler {
@@ -251,10 +327,64 @@ pub struct ClientHandler {
     /// the emitter below still falls back to the app-wide event for recovery.
     interaction_window_label: Option<String>,
     interaction: SshInteractionContext,
+    disconnect_reason: SharedSshDisconnectReason,
 }
 
 impl Handler for ClientHandler {
     type Error = russh::Error;
+
+    async fn disconnected(
+        &mut self,
+        reason: russh::client::DisconnectReason<Self::Error>,
+    ) -> Result<(), Self::Error> {
+        let (info, transport_error) = match reason {
+            russh::client::DisconnectReason::ReceivedDisconnect(info) => (
+                SshDisconnectInfo {
+                    kind: SshDisconnectKind::Remote,
+                    message: format!(
+                        "code={:?} message={}",
+                        info.reason_code, info.message
+                    ),
+                },
+                None,
+            ),
+            russh::client::DisconnectReason::Error(error) => {
+                let message = error.to_string();
+                (
+                    SshDisconnectInfo {
+                        kind: SshDisconnectKind::Transport,
+                        message,
+                    },
+                    Some(error),
+                )
+            }
+        };
+        if let Ok(mut slot) = self.disconnect_reason.lock() {
+            if slot.is_none() {
+                *slot = Some(info.clone());
+            }
+        }
+        crate::services::logging::session(
+            &self.app,
+            if matches!(info.kind, SshDisconnectKind::Transport) {
+                "ERROR"
+            } else {
+                "WARN"
+            },
+            "ssh",
+            &self.tab_id,
+            format!(
+                "SSH transport disconnected kind={} reason={}",
+                info.kind.as_str(),
+                info.message
+            ),
+        );
+        if let Some(error) = transport_error {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
 
     async fn kex_done(
         &mut self,
@@ -307,16 +437,38 @@ impl Handler for ClientHandler {
         }
         let known = self.trusted_fingerprint.clone();
         let request_id = uuid::Uuid::new_v4().to_string();
+        let sequence = self.interaction.next_sequence();
+        let expires_at = ssh_interaction_expires_at(self.interaction_timeout);
         let (tx, rx) = oneshot::channel::<Value>();
-        {
+        let pending_count = {
             let state = self
                 .app
                 .state::<crate::services::workspace::WorkspaceState>();
             let mut pending = state.pending_interactions.write().await;
             pending.insert(request_id.clone(), tx);
-        }
+            pending.len()
+        };
+        let _pending_cleanup = PendingSshInteractionGuard::new(
+            &self.app,
+            &self.interaction.tab_id,
+            &request_id,
+        );
         self.host_verification_waiting
             .store(true, Ordering::Release);
+        self.interaction.log_interaction(
+            &self.app,
+            "DEBUG",
+            &request_id,
+            "host-verification",
+            "host-key",
+            sequence,
+            format!(
+                "queued known_fingerprint={} pending={} timeout_secs={}",
+                known.is_some(),
+                pending_count,
+                self.interaction_timeout.as_secs(),
+            ),
+        );
         // Emit a `host-verification` interaction request. The payload shape
         // matches `SshHostVerificationRequest` in packages/core so the
         // renderer's `useSshInteractions` hook recognises it and shows the
@@ -333,68 +485,107 @@ impl Handler for ClientHandler {
             "authenticationTarget": self.interaction.authentication_target.as_str(),
             "hopIndex": self.interaction.hop_index,
             "stage": "host-key",
-            "sequence": self.interaction.next_sequence(),
+            "sequence": sequence,
+            "expiresAt": expires_at,
             "host": self.host,
             "port": self.port,
             "fingerprint": fp,
             "knownFingerprint": known,
         });
-        let (emit_result, route) = match self
-            .interaction_window_label
-            .as_deref()
-            .and_then(|label| self.app.get_webview_window(label))
-        {
-            Some(window) => (
-                self.app.emit_to(
-                    EventTarget::webview_window(window.label()),
-                    "ssh:interaction",
-                    &payload,
-                ),
-                format!("window:{}", window.label()),
-            ),
-            None => (
-                self.app.emit("ssh:interaction", &payload),
-                "broadcast".to_string(),
-            ),
-        };
-        crate::services::logging::session(
+        let emit_result = emit_ssh_interaction(
             &self.app,
-            "DEBUG",
-            "ssh",
-            &self.tab_id,
-            format!("host-key request emitted route={route}"),
+            self.interaction_window_label.as_deref(),
+            &payload,
         );
         if emit_result.is_err() {
             self.host_verification_waiting
                 .store(false, Ordering::Release);
-            self.app
-                .state::<crate::services::workspace::WorkspaceState>()
-                .pending_interactions
-                .write()
-                .await
-                .remove(&request_id);
+            let (_, pending_after) =
+                remove_pending_ssh_interaction(&self.app, &request_id).await;
+            self.interaction.log_interaction(
+                &self.app,
+                "WARN",
+                &request_id,
+                "host-verification",
+                "host-key",
+                sequence,
+                format!("event emission failed pending={pending_after}"),
+            );
             return Ok(false);
         }
-        let response = timeout(self.interaction_timeout, rx).await;
+        let response = wait_for_ssh_interaction(
+            &self.interaction,
+            rx,
+            self.interaction_timeout,
+        )
+        .await;
         // The renderer normally removes this entry when it resolves the
         // interaction. A timeout has no renderer response, so clean it up
         // here to prevent stale host-key requests from affecting later
         // connection attempts.
-        self.app
-            .state::<crate::services::workspace::WorkspaceState>()
-            .pending_interactions
-            .write()
-            .await
-            .remove(&request_id);
+        let (_, pending_after) =
+            remove_pending_ssh_interaction(&self.app, &request_id).await;
         self.host_verification_waiting
             .store(false, Ordering::Release);
         let decision = match response {
-            Ok(Ok(response)) => response
-                .get("decision")
-                .and_then(|v| v.as_str())
-                .unwrap_or("cancel")
-                .to_string(),
-            Ok(Err(_)) | Err(_) => "cancel".to_string(),
+            SshInteractionWaitResult::Response(response) => {
+                let decision = response
+                    .get("decision")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("cancel")
+                    .to_string();
+                self.interaction.log_interaction(
+                    &self.app,
+                    "INFO",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!("resolved decision={} pending={pending_after}", decision),
+                );
+                decision
+            }
+            SshInteractionWaitResult::ReceiverClosed => {
+                self.interaction.log_interaction(
+                    &self.app,
+                    "WARN",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!("renderer receiver closed pending={pending_after}"),
+                );
+                "cancel".to_string()
+            }
+            SshInteractionWaitResult::Timeout => {
+                self.interaction.log_interaction(
+                    &self.app,
+                    "WARN",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!(
+                        "expired reason=interaction-timeout timeout_secs={} pending={pending_after}",
+                        self.interaction_timeout.as_secs()
+                    ),
+                );
+                "cancel".to_string()
+            }
+            SshInteractionWaitResult::Cancelled => {
+                self.interaction.log_interaction(
+                    &self.app,
+                    "INFO",
+                    &request_id,
+                    "host-verification",
+                    "host-key",
+                    sequence,
+                    format!(
+                        "canceled reason=connection-cancelled pending={pending_after}"
+                    ),
+                );
+                "cancel".to_string()
+            }
         };
         match decision.as_str() {
             "accept-and-save" => {

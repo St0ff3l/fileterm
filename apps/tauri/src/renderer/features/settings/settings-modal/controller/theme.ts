@@ -6,7 +6,13 @@ import {
   type TerminalAnsiColorName,
   type ThemeConfig
 } from '@fileterm/core'
-import { deriveThemeVariant, getSavedThemeConfig, normalizeSavedTheme } from '../../../../app/theme-config'
+import {
+  deriveThemeVariant,
+  getSavedThemeConfig,
+  normalizeSavedTheme,
+  themeVariantForMode,
+  type ThemeMode
+} from '../../../../app/theme-config'
 import { registerImportedFont, unregisterImportedFont } from '../../../../app/imported-fonts'
 import { t } from '../../../../i18n'
 import {
@@ -23,6 +29,13 @@ import {
 } from '../constants'
 import type { SettingsModalControllerOptions } from './types'
 import type { SettingsModalState } from './state'
+
+function resolveThemeModeForConfig(config: ThemeConfig): ThemeMode {
+  const isLight = config.variant === 'light'
+  const isCodex =
+    config.baseThemeId === 'codex' || config.codeThemeId === 'codex' || config.codeThemeId.startsWith('codex-')
+  return isCodex ? (isLight ? 'codex-light' : 'codex-dark') : isLight ? 'fileterm-light' : 'fileterm-dark'
+}
 
 export function useThemeSettingsController({
   state,
@@ -58,7 +71,7 @@ export function useThemeSettingsController({
     setShowDeleteThemeConfirm
   } = state
 
-  const themeVariant = theme === 'default-light' ? 'light' : 'dark'
+  const themeVariant = themeVariantForMode(theme)
   const normalizedThemeConfig = normalizeThemeConfig(themeConfig, themeVariant)
 
   const setThemeConfigValue = (nextValue: ThemeConfig) => {
@@ -191,7 +204,7 @@ export function useThemeSettingsController({
         variant
       )
       onSetThemeConfig(nextThemeConfig)
-      onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+      onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
       setEditingCustomThemeId(null)
       setCustomThemeName('')
       setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
@@ -204,7 +217,7 @@ export function useThemeSettingsController({
       if (!savedTheme) return
       const nextThemeConfig = getSavedThemeConfig(savedTheme, variant)
       onSetThemeConfig(nextThemeConfig)
-      onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+      onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
       setEditingCustomThemeId(savedTheme.id)
       setCustomThemeName(savedTheme.name)
       setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
@@ -213,9 +226,9 @@ export function useThemeSettingsController({
 
     const preset = THEME_PRESETS.find((candidate) => candidate.id === presetId)
     if (!preset) return
-    const nextThemeConfig = normalizeThemeConfig(preset.config[variant], variant)
+    const nextThemeConfig = normalizeThemeConfig(preset.getConfig(variant), variant)
     onSetThemeConfig(nextThemeConfig)
-    onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+    onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
     setEditingCustomThemeId(null)
     setCustomThemeName('')
     setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
@@ -253,7 +266,7 @@ export function useThemeSettingsController({
 
     onSetCustomThemes(nextCustomThemes)
     onSetThemeConfig(nextThemeConfig)
-    onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+    onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
     setEditingCustomThemeId(id)
     setCustomThemeName(name)
     setThemeConfigMessage({ text: existingTheme ? t.themeUpdated : t.themeSaved, kind: 'success' })
@@ -272,7 +285,7 @@ export function useThemeSettingsController({
   }
 
   const switchThemeVariant = (nextVariant: ThemePresetVariant) => {
-    if (themeConfig.variant === nextVariant) return
+    if (themeVariant === nextVariant && themeConfig.variant === nextVariant) return
 
     const matchingPreset = findMatchingThemePreset(themeConfig)
     if (matchingPreset) {
@@ -298,17 +311,17 @@ export function useThemeSettingsController({
       (editingCustomThemeId ? customThemes.find((candidate) => candidate.id === editingCustomThemeId) : undefined) ??
       findSavedThemeForConfig(customThemes, themeConfig)
     if (savedTheme) {
-      const currentSavedVariant = getSavedThemeConfig(savedTheme, themeConfig.variant)
+      const currentSavedVariant = getSavedThemeConfig(savedTheme, themeVariant)
       const nextThemeConfig = sameThemeConfig(currentSavedVariant, themeConfig)
         ? getSavedThemeConfig(savedTheme, nextVariant)
         : deriveThemeVariant(themeConfig, nextVariant)
-      onSetTheme(nextVariant === 'light' ? 'default-light' : 'default-dark')
+      onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
       onSetThemeConfig(nextThemeConfig)
       return
     }
 
     const nextThemeConfig = deriveThemeVariant(themeConfig, nextVariant)
-    onSetTheme(nextVariant === 'light' ? 'default-light' : 'default-dark')
+    onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
     onSetThemeConfig(nextThemeConfig)
   }
 
@@ -403,7 +416,7 @@ export function useThemeSettingsController({
       const clipboardText = await readThemeClipboard()
       const importedTheme = normalizeThemeConfig(parseImportedTheme(clipboardText), themeVariant)
       onSetThemeConfig(importedTheme)
-      onSetTheme(importedTheme.variant === 'light' ? 'default-light' : 'default-dark')
+      onSetTheme(resolveThemeModeForConfig(importedTheme))
       setEditingCustomThemeId(null)
       setCustomThemeName('')
       setThemeConfigMessage({ text: t.themeImported, kind: 'success' })

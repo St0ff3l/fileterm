@@ -75,13 +75,6 @@ struct RuntimeDescriptor {
     token: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BridgeEnvelope {
-    token: String,
-    request: BridgeRequest,
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 struct BridgeRequest {
@@ -113,6 +106,7 @@ struct CliJsonlJob {
     request: CliJsonlRequest,
     cancellation: Arc<AtomicBool>,
     controls: CliJsonlRequestControls,
+    bridge: Arc<BridgeClient>,
 }
 
 #[derive(Clone, Default)]
@@ -155,6 +149,14 @@ impl CliJsonlRequestControls {
         };
         if let Ok(mut active) = self.active.lock() {
             active.remove(&key);
+        }
+    }
+
+    fn cancel_all(&self) {
+        if let Ok(active) = self.active.lock() {
+            for cancellation in active.values() {
+                cancellation.store(true, Ordering::Release);
+            }
         }
     }
 }

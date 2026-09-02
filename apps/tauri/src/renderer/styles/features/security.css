@@ -470,7 +470,7 @@
   color: var(--accent-highlight);
   box-shadow:
     0 8px 20px color-mix(in srgb, var(--accent-highlight) 14%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 15%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--action-primary-text) 15%, transparent);
 }
 
 .session-lock-card h1 {
@@ -625,10 +625,10 @@
   gap: 6px;
   margin: 2px 0 0;
   padding: 6px 12px;
-  border: 1px solid color-mix(in srgb, var(--danger-color, #ef4444) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 25%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--danger-color, #ef4444) 10%, transparent);
-  color: var(--danger-text, var(--danger-color, #ef4444));
+  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+  color: var(--status-danger);
   font-size: 12px;
   line-height: 1.4;
 }

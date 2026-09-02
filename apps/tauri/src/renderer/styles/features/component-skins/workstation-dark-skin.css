@@ -1,0 +1,1035 @@
+/* workstation-skin.css */
+:root:not([data-theme]) html,
+:root:not([data-theme*='light']) html,
+:root[data-theme='default'] html,
+:root:not([data-theme]) body,
+:root:not([data-theme*='light']) body,
+:root[data-theme='default'] body,
+:root:not([data-theme]) #root,
+:root:not([data-theme*='light']) #root,
+:root[data-theme='default'] #root {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) button,
+:root:not([data-theme*='light']) button,
+:root[data-theme='default'] button,
+:root:not([data-theme]) input,
+:root:not([data-theme*='light']) input,
+:root[data-theme='default'] input,
+:root:not([data-theme]) select,
+:root:not([data-theme*='light']) select,
+:root[data-theme='default'] select,
+:root:not([data-theme]) textarea,
+:root:not([data-theme*='light']) textarea,
+:root[data-theme='default'] textarea {
+  color: inherit;
+}
+
+:root:not([data-theme]) .fs-shell,
+:root:not([data-theme*='light']) .fs-shell,
+:root[data-theme='default'] .fs-shell {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .fs-sidebar,
+:root:not([data-theme*='light']) .fs-sidebar,
+:root[data-theme='default'] .fs-sidebar {
+  background: var(--bg-card);
+  border-right: 1px solid var(--border-default);
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .fs-main,
+:root:not([data-theme*='light']) .fs-main,
+:root[data-theme='default'] .fs-main {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .fs-tabbar,
+:root:not([data-theme*='light']) .fs-tabbar,
+:root[data-theme='default'] .fs-tabbar {
+  background: var(--titlebar-background);
+  --titlebar-divider: var(--border-default);
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .titlebar-brand,
+:root:not([data-theme*='light']) .titlebar-brand,
+:root[data-theme='default'] .titlebar-brand {
+  background: var(--bg-sidebar);
+  --titlebar-brand-divider: var(--border-default);
+}
+
+:root:not([data-theme]) .titlebar-brand strong,
+:root:not([data-theme*='light']) .titlebar-brand strong,
+:root[data-theme='default'] .titlebar-brand strong {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .titlebar-tabarea,
+:root:not([data-theme*='light']) .titlebar-tabarea,
+:root[data-theme='default'] .titlebar-tabarea {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .tabbar-folder-button,
+:root:not([data-theme*='light']) .tabbar-folder-button,
+:root[data-theme='default'] .tabbar-folder-button {
+  border-right: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .tabbar-folder-button:hover,
+:root:not([data-theme*='light']) .tabbar-folder-button:hover,
+:root[data-theme='default'] .tabbar-folder-button:hover {
+  background: var(--surface-hover);
+  color: var(--accent-secondary);
+}
+
+:root:not([data-theme]) .fs-tab,
+:root:not([data-theme*='light']) .fs-tab,
+:root[data-theme='default'] .fs-tab {
+  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .fs-tab span:first-child,
+:root:not([data-theme*='light']) .fs-tab span:first-child,
+:root[data-theme='default'] .fs-tab span:first-child {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .fs-tab.home-tab.active,
+:root:not([data-theme*='light']) .fs-tab.home-tab.active,
+:root[data-theme='default'] .fs-tab.home-tab.active {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .fs-tab.system-tab.active,
+:root:not([data-theme*='light']) .fs-tab.system-tab.active,
+:root[data-theme='default'] .fs-tab.system-tab.active,
+:root:not([data-theme]) .fs-tab.session-tab.active,
+:root:not([data-theme*='light']) .fs-tab.session-tab.active,
+:root[data-theme='default'] .fs-tab.session-tab.active {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .fs-tab:hover:not(.active),
+:root:not([data-theme*='light']) .fs-tab:hover:not(.active),
+:root[data-theme='default'] .fs-tab:hover:not(.active),
+:root:not([data-theme]) .add-tab:hover,
+:root:not([data-theme*='light']) .add-tab:hover,
+:root[data-theme='default'] .add-tab:hover,
+:root:not([data-theme]) .tabbar-folder-button:hover,
+:root:not([data-theme*='light']) .tabbar-folder-button:hover,
+:root[data-theme='default'] .tabbar-folder-button:hover,
+:root:not([data-theme]) .window-tools span:hover,
+:root:not([data-theme*='light']) .window-tools span:hover,
+:root[data-theme='default'] .window-tools span:hover,
+:root:not([data-theme]) .window-tools button:hover,
+:root:not([data-theme*='light']) .window-tools button:hover,
+:root[data-theme='default'] .window-tools button:hover {
+  background: var(--surface-hover);
+}
+
+:root:not([data-theme]) .add-tab,
+:root:not([data-theme*='light']) .add-tab,
+:root[data-theme='default'] .add-tab {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .window-tools span,
+:root:not([data-theme*='light']) .window-tools span,
+:root[data-theme='default'] .window-tools span,
+:root:not([data-theme]) .window-tools button,
+:root:not([data-theme*='light']) .window-tools button,
+:root[data-theme='default'] .window-tools button {
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .status-message,
+:root:not([data-theme*='light']) .status-message,
+:root[data-theme='default'] .status-message {
+  border-bottom-color: color-mix(in srgb, var(--status-warning) 28%, var(--surface-canvas));
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
+  color: var(--status-warning);
+}
+
+:root:not([data-theme]) .workspace-stage,
+:root:not([data-theme*='light']) .workspace-stage,
+:root[data-theme='default'] .workspace-stage {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .sys-card,
+:root:not([data-theme*='light']) .sys-card,
+:root[data-theme='default'] .sys-card {
+  background: transparent;
+}
+
+:root:not([data-theme]) .connection-summary,
+:root:not([data-theme*='light']) .connection-summary,
+:root[data-theme='default'] .connection-summary {
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 18%, transparent);
+  background: transparent;
+}
+
+:root:not([data-theme]) .sync-row,
+:root:not([data-theme*='light']) .sync-row,
+:root[data-theme='default'] .sync-row {
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .connection-status,
+:root:not([data-theme*='light']) .connection-status,
+:root[data-theme='default'] .connection-status {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .sync-dot.online,
+:root:not([data-theme*='light']) .sync-dot.online,
+:root[data-theme='default'] .sync-dot.online {
+  background: var(--status-success);
+  box-shadow:
+    0 0 4px color-mix(in srgb, var(--status-success) 90%, transparent),
+    0 0 10px color-mix(in srgb, var(--status-success) 68%, transparent);
+}
+
+:root:not([data-theme]) .sync-dot.offline,
+:root:not([data-theme*='light']) .sync-dot.offline,
+:root[data-theme='default'] .sync-dot.offline {
+  background: var(--status-danger);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--status-danger) 48%, transparent);
+}
+
+:root:not([data-theme]) .address-row,
+:root:not([data-theme*='light']) .address-row,
+:root[data-theme='default'] .address-row,
+:root:not([data-theme]) .metric-line,
+:root:not([data-theme*='light']) .metric-line,
+:root[data-theme='default'] .metric-line,
+:root:not([data-theme]) .meter-row,
+:root:not([data-theme*='light']) .meter-row,
+:root[data-theme='default'] .meter-row {
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .address-row,
+:root:not([data-theme*='light']) .address-row,
+:root[data-theme='default'] .address-row {
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .address-row strong,
+:root:not([data-theme*='light']) .address-row strong,
+:root[data-theme='default'] .address-row strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .metric-line strong,
+:root:not([data-theme*='light']) .metric-line strong,
+:root[data-theme='default'] .metric-line strong,
+:root:not([data-theme]) .meter-row strong,
+:root:not([data-theme*='light']) .meter-row strong,
+:root[data-theme='default'] .meter-row strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .copy-link,
+:root:not([data-theme*='light']) .copy-link,
+:root[data-theme='default'] .copy-link {
+  color: var(--copy-link);
+}
+
+:root:not([data-theme]) .system-title,
+:root:not([data-theme*='light']) .system-title,
+:root[data-theme='default'] .system-title {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .system-title:hover,
+:root:not([data-theme*='light']) .system-title:hover,
+:root[data-theme='default'] .system-title:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+:root:not([data-theme]) .meter-track,
+:root:not([data-theme*='light']) .meter-track,
+:root[data-theme='default'] .meter-track {
+  background: var(--meter-track);
+}
+
+:root:not([data-theme]) .meter-fill.tone-success,
+:root:not([data-theme*='light']) .meter-fill.tone-success,
+:root[data-theme='default'] .meter-fill.tone-success {
+  background: var(--status-success);
+}
+
+:root:not([data-theme]) .meter-fill.tone-warning,
+:root:not([data-theme*='light']) .meter-fill.tone-warning,
+:root[data-theme='default'] .meter-fill.tone-warning,
+:root:not([data-theme]) .meter-fill.yellow,
+:root:not([data-theme*='light']) .meter-fill.yellow,
+:root[data-theme='default'] .meter-fill.yellow {
+  background: var(--memory-warn);
+}
+
+:root:not([data-theme]) .meter-fill.tone-danger,
+:root:not([data-theme*='light']) .meter-fill.tone-danger,
+:root[data-theme='default'] .meter-fill.tone-danger {
+  background: var(--metric-status-red);
+}
+
+:root:not([data-theme]) .mini-tabs span,
+:root:not([data-theme*='light']) .mini-tabs span,
+:root[data-theme='default'] .mini-tabs span {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+:root:not([data-theme]) .mini-tabs span.active,
+:root:not([data-theme*='light']) .mini-tabs span.active,
+:root[data-theme='default'] .mini-tabs span.active {
+  background: var(--mini-tab-active-bg);
+  color: var(--mini-tab-active-text);
+}
+
+:root:not([data-theme]) .process-table,
+:root:not([data-theme*='light']) .process-table,
+:root[data-theme='default'] .process-table {
+  height: 96px;
+  min-height: 96px;
+  max-height: 96px;
+  background: var(--surface-panel);
+}
+
+:root:not([data-theme]) .process-row,
+:root:not([data-theme*='light']) .process-row,
+:root[data-theme='default'] .process-row {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .process-row span:nth-child(2),
+:root:not([data-theme*='light']) .process-row span:nth-child(2),
+:root[data-theme='default'] .process-row span:nth-child(2) {
+  color: var(--accent-text);
+}
+
+:root:not([data-theme]) .up,
+:root:not([data-theme*='light']) .up,
+:root[data-theme='default'] .up {
+  color: var(--network-tx);
+}
+
+:root:not([data-theme]) .down,
+:root:not([data-theme*='light']) .down,
+:root[data-theme='default'] .down {
+  color: var(--network-rx);
+}
+
+:root:not([data-theme]) .network-select,
+:root:not([data-theme*='light']) .network-select,
+:root[data-theme='default'] .network-select {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .network-scale,
+:root:not([data-theme*='light']) .network-scale,
+:root[data-theme='default'] .network-scale {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .grid-chart,
+:root:not([data-theme*='light']) .grid-chart,
+:root[data-theme='default'] .grid-chart {
+  background: transparent;
+}
+
+:root:not([data-theme]) .network-guide,
+:root:not([data-theme*='light']) .network-guide,
+:root[data-theme='default'] .network-guide {
+  stroke: color-mix(in srgb, var(--text-primary) 16%, transparent);
+}
+
+:root:not([data-theme]) .network-guide.minor,
+:root:not([data-theme*='light']) .network-guide.minor,
+:root[data-theme='default'] .network-guide.minor {
+  stroke: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+:root:not([data-theme]) .tx-path,
+:root:not([data-theme*='light']) .tx-path,
+:root[data-theme='default'] .tx-path {
+  stroke: var(--network-tx);
+}
+
+:root:not([data-theme]) .rx-path,
+:root:not([data-theme*='light']) .rx-path,
+:root[data-theme='default'] .rx-path {
+  stroke: var(--network-rx);
+}
+
+:root:not([data-theme]) .disk-table,
+:root:not([data-theme*='light']) .disk-table,
+:root[data-theme='default'] .disk-table {
+  background: var(--surface-panel);
+}
+
+:root:not([data-theme]) .disk-head,
+:root:not([data-theme*='light']) .disk-head,
+:root[data-theme='default'] .disk-head {
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .disk-row,
+:root:not([data-theme*='light']) .disk-row,
+:root[data-theme='default'] .disk-row {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .session-workspace,
+:root:not([data-theme*='light']) .session-workspace,
+:root[data-theme='default'] .session-workspace {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .terminal-area,
+:root:not([data-theme*='light']) .terminal-area,
+:root[data-theme='default'] .terminal-area {
+  background: var(--terminal-bg);
+  box-shadow: var(--terminal-frame-shadow);
+}
+
+:root:not([data-theme]) .session-split-resizer,
+:root:not([data-theme*='light']) .session-split-resizer,
+:root[data-theme='default'] .session-split-resizer {
+  background: transparent;
+}
+
+:root:not([data-theme]) .session-split-resizer:hover,
+:root:not([data-theme*='light']) .session-split-resizer:hover,
+:root[data-theme='default'] .session-split-resizer:hover {
+  background: transparent;
+}
+
+:root:not([data-theme]) .terminal-host .xterm-viewport,
+:root:not([data-theme*='light']) .terminal-host .xterm-viewport,
+:root[data-theme='default'] .terminal-host .xterm-viewport {
+  background: transparent !important;
+}
+
+:root:not([data-theme]) .terminal-host .xterm-screen,
+:root:not([data-theme*='light']) .terminal-host .xterm-screen,
+:root[data-theme='default'] .terminal-host .xterm-screen {
+  background: transparent;
+}
+
+:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element > .scrollbar,
+:root:not([data-theme*='light']) .terminal-host .xterm .xterm-scrollable-element > .scrollbar,
+:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar {
+  background: transparent !important;
+}
+
+:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider,
+:root:not([data-theme*='light']) .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider,
+:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: var(--border, var(--border-light)) !important;
+}
+
+:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+:root:not([data-theme*='light']) .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
+  background: var(--muted-foreground, var(--text-muted)) !important;
+}
+
+:root:not([data-theme]) .terminal-find,
+:root:not([data-theme*='light']) .terminal-find,
+:root[data-theme='default'] .terminal-find {
+  border: 1px solid transparent;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+:root:not([data-theme]) .terminal-find input,
+:root:not([data-theme*='light']) .terminal-find input,
+:root[data-theme='default'] .terminal-find input {
+  border: 1px solid var(--border-dark);
+  background: var(--bg-main);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .terminal-find button,
+:root:not([data-theme*='light']) .terminal-find button,
+:root[data-theme='default'] .terminal-find button {
+  background: var(--bg-elevated);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .terminal-find .terminal-find-actions,
+:root:not([data-theme*='light']) .terminal-find .terminal-find-actions,
+:root[data-theme='default'] .terminal-find .terminal-find-actions {
+  --terminal-find-action-divider: transparent;
+  background: transparent;
+}
+
+:root:not([data-theme]) .terminal-find .terminal-find-actions > button,
+:root:not([data-theme*='light']) .terminal-find .terminal-find-actions > button,
+:root[data-theme='default'] .terminal-find .terminal-find-actions > button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .terminal-find button:hover,
+:root:not([data-theme*='light']) .terminal-find button:hover,
+:root[data-theme='default'] .terminal-find button:hover {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .terminal-find .terminal-find-actions > button:hover,
+:root:not([data-theme*='light']) .terminal-find .terminal-find-actions > button:hover,
+:root[data-theme='default'] .terminal-find .terminal-find-actions > button:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .terminal-find button.is-active,
+:root:not([data-theme*='light']) .terminal-find button.is-active,
+:root[data-theme='default'] .terminal-find button.is-active {
+  background: color-mix(in srgb, var(--text-main) 16%, var(--bg-elevated));
+  color: var(--text-main);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-main) 22%, transparent) inset;
+}
+
+:root:not([data-theme]) .terminal-find .terminal-find-submit,
+:root:not([data-theme*='light']) .terminal-find .terminal-find-submit,
+:root[data-theme='default'] .terminal-find .terminal-find-submit {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .terminal-find-status,
+:root:not([data-theme*='light']) .terminal-find-status,
+:root[data-theme='default'] .terminal-find-status {
+  color: var(--status-danger);
+}
+
+:root:not([data-theme]) .terminal-find-status.is-match,
+:root:not([data-theme*='light']) .terminal-find-status.is-match,
+:root[data-theme='default'] .terminal-find-status.is-match {
+  color: var(--accent-secondary);
+}
+
+:root:not([data-theme]) .file-manager,
+:root:not([data-theme*='light']) .file-manager,
+:root[data-theme='default'] .file-manager,
+:root:not([data-theme]) .command-center,
+:root:not([data-theme*='light']) .command-center,
+:root[data-theme='default'] .command-center {
+  background: var(--surface-panel);
+}
+
+:root:not([data-theme]) .file-manager,
+:root:not([data-theme*='light']) .file-manager,
+:root[data-theme='default'] .file-manager {
+  border-top: 0;
+}
+
+:root:not([data-theme]) .file-tabs,
+:root:not([data-theme*='light']) .file-tabs,
+:root[data-theme='default'] .file-tabs {
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+:root:not([data-theme]) .file-tabs button,
+:root:not([data-theme*='light']) .file-tabs button,
+:root[data-theme='default'] .file-tabs button {
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .file-tabs button.active,
+:root:not([data-theme*='light']) .file-tabs button.active,
+:root[data-theme='default'] .file-tabs button.active {
+  border: 0;
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .file-current-path,
+:root:not([data-theme*='light']) .file-current-path,
+:root[data-theme='default'] .file-current-path {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .file-current-path.is-status-hint,
+:root:not([data-theme*='light']) .file-current-path.is-status-hint,
+:root[data-theme='default'] .file-current-path.is-status-hint {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .file-tab-actions button,
+:root:not([data-theme*='light']) .file-tab-actions button,
+:root[data-theme='default'] .file-tab-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .file-tab-actions button:hover,
+:root:not([data-theme*='light']) .file-tab-actions button:hover,
+:root[data-theme='default'] .file-tab-actions button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .file-tab-actions button[aria-pressed],
+:root:not([data-theme*='light']) .file-tab-actions button[aria-pressed],
+:root[data-theme='default'] .file-tab-actions button[aria-pressed] {
+  border: 1px solid var(--border-subtle);
+}
+
+:root:not([data-theme]) .file-tab-actions button.active,
+:root:not([data-theme*='light']) .file-tab-actions button.active,
+:root[data-theme='default'] .file-tab-actions button.active {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .file-toolbar,
+:root:not([data-theme*='light']) .file-toolbar,
+:root[data-theme='default'] .file-toolbar {
+  background: linear-gradient(180deg, var(--surface-toolbar) 0%, var(--surface-panel) 100%);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .file-toolbar button,
+:root:not([data-theme*='light']) .file-toolbar button,
+:root[data-theme='default'] .file-toolbar button {
+  border-color: var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .local-pane,
+:root:not([data-theme*='light']) .local-pane,
+:root[data-theme='default'] .local-pane,
+:root:not([data-theme]) .remote-pane,
+:root:not([data-theme*='light']) .remote-pane,
+:root[data-theme='default'] .remote-pane,
+:root:not([data-theme]) .command-pane-preview,
+:root:not([data-theme*='light']) .command-pane-preview,
+:root[data-theme='default'] .command-pane-preview {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .local-pane,
+:root:not([data-theme*='light']) .local-pane,
+:root[data-theme='default'] .local-pane {
+  background: var(--surface-panel);
+}
+
+:root:not([data-theme]) .command-pane-list,
+:root:not([data-theme*='light']) .command-pane-list,
+:root[data-theme='default'] .command-pane-list {
+  background: transparent;
+}
+
+:root:not([data-theme]) .file-split-resizer,
+:root:not([data-theme*='light']) .file-split-resizer,
+:root[data-theme='default'] .file-split-resizer {
+  background: transparent;
+}
+
+:root:not([data-theme]) .file-split-resizer::before,
+:root:not([data-theme*='light']) .file-split-resizer::before,
+:root[data-theme='default'] .file-split-resizer::before {
+  background: var(--border-default);
+}
+
+:root:not([data-theme]) .file-split-resizer:hover,
+:root:not([data-theme*='light']) .file-split-resizer:hover,
+:root[data-theme='default'] .file-split-resizer:hover {
+  background: transparent;
+}
+
+:root:not([data-theme]) .file-split-resizer:hover::before,
+:root:not([data-theme*='light']) .file-split-resizer:hover::before,
+:root[data-theme='default'] .file-split-resizer:hover::before {
+  background: var(--border-strong);
+}
+
+:root:not([data-theme]) .pane-title,
+:root:not([data-theme*='light']) .pane-title,
+:root[data-theme='default'] .pane-title {
+  border-bottom-color: var(--border-subtle);
+  background: linear-gradient(180deg, var(--surface-hover) 0%, var(--surface-panel) 100%);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .pane-title span,
+:root:not([data-theme*='light']) .pane-title span,
+:root[data-theme='default'] .pane-title span {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .fs-file-table,
+:root:not([data-theme*='light']) .fs-file-table,
+:root[data-theme='default'] .fs-file-table {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .fs-file-table th,
+:root:not([data-theme*='light']) .fs-file-table th,
+:root[data-theme='default'] .fs-file-table th,
+:root:not([data-theme]) .fs-file-table td,
+:root:not([data-theme*='light']) .fs-file-table td,
+:root[data-theme='default'] .fs-file-table td {
+  border-bottom-color: color-mix(in srgb, var(--text-primary) 4.5%, transparent);
+}
+
+:root:not([data-theme]) .fs-file-table th,
+:root:not([data-theme*='light']) .fs-file-table th,
+:root[data-theme='default'] .fs-file-table th {
+  background: var(--surface-canvas);
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme]) .process-row:nth-child(even),
+:root:not([data-theme*='light']) .process-row:nth-child(even),
+:root[data-theme='default'] .process-row:nth-child(even),
+:root:not([data-theme]) .fs-file-table tbody tr:nth-child(even),
+:root:not([data-theme*='light']) .fs-file-table tbody tr:nth-child(even),
+:root[data-theme='default'] .fs-file-table tbody tr:nth-child(even) {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .process-row:nth-child(odd),
+:root:not([data-theme*='light']) .process-row:nth-child(odd),
+:root[data-theme='default'] .process-row:nth-child(odd),
+:root:not([data-theme]) .fs-file-table tbody tr:nth-child(odd),
+:root:not([data-theme*='light']) .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme='default'] .fs-file-table tbody tr:nth-child(odd) {
+  background: var(--bg-card);
+}
+
+/* disk-row: odd=dark(深), even=light(浅) */
+:root:not([data-theme]) .disk-row:nth-child(odd),
+:root:not([data-theme*='light']) .disk-row:nth-child(odd),
+:root[data-theme='default'] .disk-row:nth-child(odd) {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .disk-row:nth-child(even),
+:root:not([data-theme*='light']) .disk-row:nth-child(even),
+:root[data-theme='default'] .disk-row:nth-child(even) {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .quick-row:hover,
+:root:not([data-theme*='light']) .quick-row:hover,
+:root[data-theme='default'] .quick-row:hover,
+:root:not([data-theme]) .fs-file-table tbody tr:hover,
+:root:not([data-theme*='light']) .fs-file-table tbody tr:hover,
+:root[data-theme='default'] .fs-file-table tbody tr:hover {
+  background: var(--selection-bg);
+}
+
+:root:not([data-theme]) .file-icon,
+:root:not([data-theme*='light']) .file-icon,
+:root[data-theme='default'] .file-icon {
+  color: var(--folder-accent);
+}
+
+:root:not([data-theme]) .transfer-strip,
+:root:not([data-theme*='light']) .transfer-strip,
+:root[data-theme='default'] .transfer-strip {
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-main);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .home-workspace,
+:root:not([data-theme*='light']) .home-workspace,
+:root[data-theme='default'] .home-workspace {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .system-info-workspace,
+:root:not([data-theme*='light']) .system-info-workspace,
+:root[data-theme='default'] .system-info-workspace {
+  background: linear-gradient(180deg, var(--surface-canvas) 0%, var(--surface-terminal) 100%);
+}
+
+:root:not([data-theme]) .system-info-empty,
+:root:not([data-theme*='light']) .system-info-empty,
+:root[data-theme='default'] .system-info-empty {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .system-info-empty p,
+:root:not([data-theme*='light']) .system-info-empty p,
+:root[data-theme='default'] .system-info-empty p {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .system-info-header strong,
+:root:not([data-theme*='light']) .system-info-header strong,
+:root[data-theme='default'] .system-info-header strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .system-info-header p,
+:root:not([data-theme*='light']) .system-info-header p,
+:root[data-theme='default'] .system-info-header p {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .system-info-card,
+:root:not([data-theme*='light']) .system-info-card,
+:root[data-theme='default'] .system-info-card {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+}
+
+:root:not([data-theme]) .system-info-card-head,
+:root:not([data-theme*='light']) .system-info-card-head,
+:root[data-theme='default'] .system-info-card-head {
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+:root:not([data-theme]) .system-info-card-head strong,
+:root:not([data-theme*='light']) .system-info-card-head strong,
+:root[data-theme='default'] .system-info-card-head strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .system-description-row,
+:root:not([data-theme*='light']) .system-description-row,
+:root[data-theme='default'] .system-description-row {
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+:root:not([data-theme]) .system-description-row span,
+:root:not([data-theme*='light']) .system-description-row span,
+:root[data-theme='default'] .system-description-row span {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .system-description-row strong,
+:root:not([data-theme*='light']) .system-description-row strong,
+:root[data-theme='default'] .system-description-row strong {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .system-table th,
+:root:not([data-theme*='light']) .system-table th,
+:root[data-theme='default'] .system-table th,
+:root:not([data-theme]) .system-table td,
+:root:not([data-theme*='light']) .system-table td,
+:root[data-theme='default'] .system-table td {
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+:root:not([data-theme]) .system-table th,
+:root:not([data-theme*='light']) .system-table th,
+:root[data-theme='default'] .system-table th {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+
+:root:not([data-theme]) .system-table td,
+:root:not([data-theme*='light']) .system-table td,
+:root[data-theme='default'] .system-table td {
+  color: var(--text-primary);
+}
+
+:root:not([data-theme]) .system-table tbody tr:nth-child(even),
+:root:not([data-theme*='light']) .system-table tbody tr:nth-child(even),
+:root[data-theme='default'] .system-table tbody tr:nth-child(even) {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .system-table tbody tr:nth-child(odd),
+:root:not([data-theme*='light']) .system-table tbody tr:nth-child(odd),
+:root[data-theme='default'] .system-table tbody tr:nth-child(odd) {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) .quick-panel,
+:root:not([data-theme*='light']) .quick-panel,
+:root[data-theme='default'] .quick-panel,
+:root:not([data-theme]) .modal-card,
+:root:not([data-theme*='light']) .modal-card,
+:root[data-theme='default'] .modal-card,
+:root:not([data-theme]) .manager-table,
+:root:not([data-theme*='light']) .manager-table,
+:root[data-theme='default'] .manager-table {
+  border-color: var(--border-default);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-modal);
+}
+
+:root:not([data-theme]) .quick-header,
+:root:not([data-theme*='light']) .quick-header,
+:root[data-theme='default'] .quick-header,
+:root:not([data-theme]) .modal-header,
+:root:not([data-theme*='light']) .modal-header,
+:root[data-theme='default'] .modal-header {
+  background: transparent;
+}
+
+:root:not([data-theme]) .quick-panel,
+:root:not([data-theme*='light']) .quick-panel,
+:root[data-theme='default'] .quick-panel {
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .host-icon .app-icon,
+:root:not([data-theme*='light']) .host-icon .app-icon,
+:root[data-theme='default'] .host-icon .app-icon {
+  color: var(--accent-secondary);
+}
+
+:root:not([data-theme]) *::-webkit-scrollbar-track,
+:root:not([data-theme*='light']) *::-webkit-scrollbar-track,
+:root[data-theme='default'] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* File manager pane scrollbar track */
+:root:not([data-theme]) .file-table-shell::-webkit-scrollbar-track,
+:root:not([data-theme*='light']) .file-table-shell::-webkit-scrollbar-track,
+:root[data-theme='default'] .file-table-shell::-webkit-scrollbar-track {
+  background: var(--bg-card);
+}
+
+:root:not([data-theme]) *::-webkit-scrollbar-thumb,
+:root:not([data-theme*='light']) *::-webkit-scrollbar-thumb,
+:root[data-theme='default'] *::-webkit-scrollbar-thumb {
+  background: var(--border, var(--border-light));
+}
+
+:root:not([data-theme]) .scrollbar-hover::-webkit-scrollbar-thumb,
+:root:not([data-theme*='light']) .scrollbar-hover::-webkit-scrollbar-thumb,
+:root[data-theme='default'] .scrollbar-hover::-webkit-scrollbar-thumb,
+:root:not([data-theme]) .scrollbar-scroll::-webkit-scrollbar-thumb,
+:root:not([data-theme*='light']) .scrollbar-scroll::-webkit-scrollbar-thumb,
+:root[data-theme='default'] .scrollbar-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+:root:not([data-theme]) .group:hover .scrollbar-hover::-webkit-scrollbar-thumb,
+:root:not([data-theme*='light']) .group:hover .scrollbar-hover::-webkit-scrollbar-thumb,
+:root[data-theme='default'] .group:hover .scrollbar-hover::-webkit-scrollbar-thumb,
+:root:not([data-theme]) .scrollbar-scroll:hover::-webkit-scrollbar-thumb,
+:root:not([data-theme*='light']) .scrollbar-scroll:hover::-webkit-scrollbar-thumb,
+:root[data-theme='default'] .scrollbar-scroll:hover::-webkit-scrollbar-thumb,
+:root:not([data-theme]) .scrollbar-scroll.is-scrolling::-webkit-scrollbar-thumb,
+:root:not([data-theme*='light']) .scrollbar-scroll.is-scrolling::-webkit-scrollbar-thumb,
+:root[data-theme='default'] .scrollbar-scroll.is-scrolling::-webkit-scrollbar-thumb {
+  background: var(--border, var(--border-light));
+}
+
+:root:not([data-theme]) *::-webkit-scrollbar-thumb:hover,
+:root:not([data-theme*='light']) *::-webkit-scrollbar-thumb:hover,
+:root[data-theme='default'] *::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground, var(--text-muted));
+}
+
+:root:not([data-theme]) .flat-button,
+:root:not([data-theme*='light']) .flat-button,
+:root[data-theme='default'] .flat-button {
+  background: var(--surface-elevated);
+  border-color: var(--border-strong);
+}
+
+:root:not([data-theme]) .primary-button,
+:root:not([data-theme*='light']) .primary-button,
+:root[data-theme='default'] .primary-button {
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-border);
+}
+
+:root:not([data-theme]) .primary-button:hover:not(:disabled),
+:root:not([data-theme*='light']) .primary-button:hover:not(:disabled),
+:root[data-theme='default'] .primary-button:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+}
+
+:root:not([data-theme]) .manager-toolbar .flat-button,
+:root:not([data-theme*='light']) .manager-toolbar .flat-button,
+:root[data-theme='default'] .manager-toolbar .flat-button,
+:root:not([data-theme]) .manager-toolbar .primary-button,
+:root:not([data-theme*='light']) .manager-toolbar .primary-button,
+:root[data-theme='default'] .manager-toolbar .primary-button {
+  min-width: 120px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+:root:not([data-theme]) .modal-backdrop,
+:root:not([data-theme*='light']) .modal-backdrop,
+:root[data-theme='default'] .modal-backdrop {
+  background: var(--modal-backdrop-bg);
+}
+
+:root:not([data-theme]) .ssh-form-shell,
+:root:not([data-theme*='light']) .ssh-form-shell,
+:root[data-theme='default'] .ssh-form-shell,
+:root:not([data-theme]) .ssh-fieldset,
+:root:not([data-theme*='light']) .ssh-fieldset,
+:root[data-theme='default'] .ssh-fieldset,
+:root:not([data-theme]) .terminal-key-box,
+:root:not([data-theme*='light']) .terminal-key-box,
+:root[data-theme='default'] .terminal-key-box,
+:root:not([data-theme]) .ssh-placeholder,
+:root:not([data-theme*='light']) .ssh-placeholder,
+:root[data-theme='default'] .ssh-placeholder {
+  background: var(--dialog-surface);
+  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+:root:not([data-theme]) .ssh-grid input,
+:root:not([data-theme*='light']) .ssh-grid input,
+:root[data-theme='default'] .ssh-grid input,
+:root:not([data-theme]) .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme*='light']) .ssh-grid .dropdown-select-trigger,
+:root[data-theme='default'] .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme]) .ssh-grid .ft-select-shell,
+:root:not([data-theme*='light']) .ssh-grid .ft-select-shell,
+:root[data-theme='default'] .ssh-grid .ft-select-shell,
+:root:not([data-theme]) .ssh-grid textarea,
+:root:not([data-theme*='light']) .ssh-grid textarea,
+:root[data-theme='default'] .ssh-grid textarea,
+:root:not([data-theme]) .connection-form input,
+:root:not([data-theme*='light']) .connection-form input,
+:root[data-theme='default'] .connection-form input,
+:root:not([data-theme]) .connection-form .dropdown-select-trigger,
+:root:not([data-theme*='light']) .connection-form .dropdown-select-trigger,
+:root[data-theme='default'] .connection-form .dropdown-select-trigger,
+:root:not([data-theme]) .connection-form .ft-select-shell,
+:root:not([data-theme*='light']) .connection-form .ft-select-shell,
+:root[data-theme='default'] .connection-form .ft-select-shell {
+  background: var(--input-bg);
+  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  color: var(--text-main);
+}

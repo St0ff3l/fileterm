@@ -1,3 +1,46 @@
+const METRICS_MAX_BLOCK_BYTES: usize = 256 * 1024;
+const METRICS_MAX_BUFFER_BYTES: usize = 1_000_000;
+const METRICS_BUFFER_TARGET_BYTES: usize = 500_000;
+const METRICS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+
+fn should_log_metrics_anomaly(count: u64) -> bool {
+    count <= 3 || count.is_power_of_two()
+}
+
+async fn close_metrics_channel(
+    channel: &mut Channel<russh::client::Msg>,
+    app: &AppHandle,
+    tab_id: &str,
+    reason: &str,
+) {
+    match timeout(METRICS_CLOSE_TIMEOUT, channel.close()).await {
+        Ok(Ok(())) => crate::services::logging::session(
+            app,
+            "DEBUG",
+            "metrics",
+            tab_id,
+            format!("collector channel closed reason={reason}"),
+        ),
+        Ok(Err(error)) => crate::services::logging::session(
+            app,
+            "WARN",
+            "metrics",
+            tab_id,
+            format!("collector channel close failed reason={reason} error={error}"),
+        ),
+        Err(_) => crate::services::logging::session(
+            app,
+            "WARN",
+            "metrics",
+            tab_id,
+            format!(
+                "collector channel close timed out reason={reason} timeout_secs={}",
+                METRICS_CLOSE_TIMEOUT.as_secs()
+            ),
+        ),
+    }
+}
+
 /// Start the persistent system-metrics collector for an SSH session.
 ///
 /// Metrics are intentionally detached from the terminal event loop: a slow
@@ -26,6 +69,15 @@ if effective_resource_monitoring_enabled(profile) {
     let metrics_tid = tab_id.to_string();
     let metrics_plat = platform.to_string();
     let metrics_interval_seconds = resource_monitoring_interval_seconds(profile);
+    // A healthy collector emits at least one marker per configured interval.
+    // Give the server three intervals (and never less than 15s) before
+    // declaring the channel stalled, so a silent jump-host path cannot leave
+    // the sidebar waiting forever with no diagnostic.
+    let metrics_idle_timeout = Duration::from_secs(
+        metrics_interval_seconds
+            .saturating_mul(3)
+            .max(15),
+    );
     let metrics_cancellation = cancellation.clone();
     tokio::spawn(async move {
         crate::services::logging::session(
@@ -119,6 +171,13 @@ if effective_resource_monitoring_enabled(profile) {
         let collector_start = match collector_start {
             Ok(inner) => inner,
             Err(_) => {
+                close_metrics_channel(
+                    &mut channel,
+                    &metrics_app,
+                    &metrics_tid,
+                    "collector-start-timeout",
+                )
+                .await;
                 disable_resource_monitoring_capability(
                     &metrics_app,
                     &metrics_tid,
@@ -129,6 +188,13 @@ if effective_resource_monitoring_enabled(profile) {
             }
         };
         if let Err(e) = collector_start {
+            close_metrics_channel(
+                &mut channel,
+                &metrics_app,
+                &metrics_tid,
+                "collector-start-error",
+            )
+            .await;
             disable_resource_monitoring_capability(
                 &metrics_app,
                 &metrics_tid,
@@ -144,6 +210,13 @@ if effective_resource_monitoring_enabled(profile) {
             match timeout(SHELL_INIT_STEP_TIMEOUT, channel.data(script.as_bytes())).await {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => {
+                    close_metrics_channel(
+                        &mut channel,
+                        &metrics_app,
+                        &metrics_tid,
+                        "collector-script-write-error",
+                    )
+                    .await;
                     disable_resource_monitoring_capability(
                         &metrics_app,
                         &metrics_tid,
@@ -153,6 +226,13 @@ if effective_resource_monitoring_enabled(profile) {
                     return;
                 }
                 Err(_) => {
+                    close_metrics_channel(
+                        &mut channel,
+                        &metrics_app,
+                        &metrics_tid,
+                        "collector-script-write-timeout",
+                    )
+                    .await;
                     disable_resource_monitoring_capability(
                         &metrics_app,
                         &metrics_tid,
@@ -169,7 +249,10 @@ if effective_resource_monitoring_enabled(profile) {
             "INFO",
             "metrics",
             &metrics_tid,
-            "collector started; waiting for first sample",
+            format!(
+                "collector started; waiting for first sample idle_timeout_secs={}",
+                metrics_idle_timeout.as_secs()
+            ),
         );
 
         // Stream reader: accumulate data, split on the marker, parse
@@ -177,21 +260,45 @@ if effective_resource_monitoring_enabled(profile) {
         let mut buffer: Vec<u8> = Vec::new();
         let marker_bytes = marker.as_bytes();
         let mut sample_count = 0_u64;
-
-        loop {
+        let mut malformed_block_count = 0_u64;
+        let mut oversized_block_count = 0_u64;
+        let mut dropped_buffer_bytes = 0_u64;
+        let close_reason = loop {
             tokio::select! {
                 biased;
                 _ = metrics_shutdown_clone.notified() => {
-                    let _ = channel.close().await;
-                    break;
+                    break "shutdown-notify";
                 }
                 _ = metrics_cancellation.cancelled() => {
-                    let _ = channel.close().await;
-                    break;
+                    break "session-cancelled";
                 }
-                msg = channel.wait() => {
+                msg = timeout(metrics_idle_timeout, channel.wait()) => {
                     match msg {
-                        Some(ChannelMsg::Data { data }) => {
+                        Err(_) => {
+                            crate::services::logging::session(
+                                &metrics_app,
+                                "WARN",
+                                "metrics",
+                                &metrics_tid,
+                                format!(
+                                    "collector idle timeout timeout_secs={} samples={} buffer_bytes={}",
+                                    metrics_idle_timeout.as_secs(),
+                                    sample_count,
+                                    buffer.len(),
+                                ),
+                            );
+                            disable_resource_monitoring_capability(
+                                &metrics_app,
+                                &metrics_tid,
+                                format!(
+                                    "collector idle timeout after {} seconds",
+                                    metrics_idle_timeout.as_secs()
+                                ),
+                            )
+                            .await;
+                            break "idle-timeout";
+                        }
+                        Ok(Some(ChannelMsg::Data { data })) => {
                             buffer.extend_from_slice(data.as_ref());
                             // Drain all complete blocks from the buffer.
                             while let Some(idx) = find_subsequence(&buffer, marker_bytes) {
@@ -199,7 +306,25 @@ if effective_resource_monitoring_enabled(profile) {
                                 // monopolize the Tokio worker and freeze the native webview.
                                 // Keep one bounded metrics sample; the next marker resumes
                                 // normal streaming collection.
-                                if idx > 256 * 1024 {
+                                if idx > METRICS_MAX_BLOCK_BYTES {
+                                    oversized_block_count += 1;
+                                    dropped_buffer_bytes = dropped_buffer_bytes.saturating_add(
+                                        (idx + marker_bytes.len()) as u64,
+                                    );
+                                    if should_log_metrics_anomaly(oversized_block_count) {
+                                        crate::services::logging::session(
+                                            &metrics_app,
+                                            "WARN",
+                                            "metrics",
+                                            &metrics_tid,
+                                            format!(
+                                                "oversized sample dropped count={} block_bytes={} total_dropped_bytes={}",
+                                                oversized_block_count,
+                                                idx,
+                                                dropped_buffer_bytes,
+                                            ),
+                                        );
+                                    }
                                     buffer.drain(..idx + marker_bytes.len());
                                     continue;
                                 }
@@ -214,6 +339,21 @@ if effective_resource_monitoring_enabled(profile) {
                                 let mem_pct = val.get("memoryPercent").and_then(|v| v.as_f64()).unwrap_or(-1.0);
                                 if cpu_pct < 0.0 && mem_pct < 0.0 {
                                     // Probably garbage / incomplete block
+                                    malformed_block_count += 1;
+                                    if should_log_metrics_anomaly(malformed_block_count) {
+                                        crate::services::logging::session(
+                                            &metrics_app,
+                                            "WARN",
+                                            "metrics",
+                                            &metrics_tid,
+                                            format!(
+                                                "malformed sample dropped count={} block_bytes={} buffer_bytes={}",
+                                                malformed_block_count,
+                                                block.len(),
+                                                buffer.len(),
+                                            ),
+                                        );
+                                    }
                                     continue;
                                 }
                                 sample_count += 1;
@@ -224,6 +364,18 @@ if effective_resource_monitoring_enabled(profile) {
                                         "metrics",
                                         &metrics_tid,
                                         format!("first sample cpu_percent={cpu_pct:.1} memory_percent={mem_pct:.1}"),
+                                    );
+                                } else if sample_count.is_multiple_of(60) {
+                                    crate::services::logging::session(
+                                        &metrics_app,
+                                        "DEBUG",
+                                        "metrics",
+                                        &metrics_tid,
+                                        format!(
+                                            "sample heartbeat count={} cpu_percent={cpu_pct:.1} memory_percent={mem_pct:.1} buffer_bytes={}",
+                                            sample_count,
+                                            buffer.len(),
+                                        ),
                                     );
                                 }
                                 {
@@ -243,17 +395,61 @@ if effective_resource_monitoring_enabled(profile) {
                                     "systemMetrics": val,
                                     "mode": "append",
                                 });
-                                let _ = metrics_app.emit("workspace:sessionMetrics", payload);
+                                if let Err(error) = metrics_app.emit("workspace:sessionMetrics", payload) {
+                                    crate::services::logging::session(
+                                        &metrics_app,
+                                        "WARN",
+                                        "metrics",
+                                        &metrics_tid,
+                                        format!(
+                                            "metrics event emission failed samples={} error={error}",
+                                            sample_count,
+                                        ),
+                                    );
+                                }
                             }
                             // Cap buffer to prevent unbounded growth
-                            if buffer.len() > 1_000_000 {
-                                buffer.drain(..buffer.len() - 500_000);
+                            if buffer.len() > METRICS_MAX_BUFFER_BYTES {
+                                let dropped = buffer.len() - METRICS_BUFFER_TARGET_BYTES;
+                                buffer.drain(..dropped);
+                                dropped_buffer_bytes =
+                                    dropped_buffer_bytes.saturating_add(dropped as u64);
+                                crate::services::logging::session(
+                                    &metrics_app,
+                                    "WARN",
+                                    "metrics",
+                                    &metrics_tid,
+                                    format!(
+                                        "collector buffer capped dropped_bytes={} total_dropped_bytes={} buffer_bytes={}",
+                                        dropped,
+                                        dropped_buffer_bytes,
+                                        buffer.len(),
+                                    ),
+                                );
                             }
                         }
-                        Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        Ok(Some(ChannelMsg::ExtendedData { data, .. })) => {
                             buffer.extend_from_slice(data.as_ref());
+                            if buffer.len() > METRICS_MAX_BUFFER_BYTES {
+                                let dropped = buffer.len() - METRICS_BUFFER_TARGET_BYTES;
+                                buffer.drain(..dropped);
+                                dropped_buffer_bytes =
+                                    dropped_buffer_bytes.saturating_add(dropped as u64);
+                                crate::services::logging::session(
+                                    &metrics_app,
+                                    "WARN",
+                                    "metrics",
+                                    &metrics_tid,
+                                    format!(
+                                        "collector stderr buffer capped dropped_bytes={} total_dropped_bytes={} buffer_bytes={}",
+                                        dropped,
+                                        dropped_buffer_bytes,
+                                        buffer.len(),
+                                    ),
+                                );
+                            }
                         }
-                        Some(ChannelMsg::ExitStatus { .. }) | None => {
+                        Ok(Some(ChannelMsg::ExitStatus { .. })) | Ok(None) => {
                             if !metrics_cancellation.is_cancelled() {
                                 disable_resource_monitoring_capability(
                                     &metrics_app,
@@ -262,21 +458,27 @@ if effective_resource_monitoring_enabled(profile) {
                                 )
                                 .await;
                             }
-                            break;
+                            break "channel-closed";
                         }
                         _ => {}
                     }
                 }
             }
-        }
+        };
 
-        let _ = channel.close().await;
+        close_metrics_channel(&mut channel, &metrics_app, &metrics_tid, close_reason).await;
         crate::services::logging::session(
             &metrics_app,
             "INFO",
             "metrics",
             &metrics_tid,
-            "collector stopped",
+            format!(
+                "collector stopped reason={close_reason} samples={} malformed_samples={} oversized_samples={} dropped_buffer_bytes={}",
+                sample_count,
+                malformed_block_count,
+                oversized_block_count,
+                dropped_buffer_bytes,
+            ),
         );
     });
 } else {

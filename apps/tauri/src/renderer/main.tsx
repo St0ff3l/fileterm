@@ -6,7 +6,7 @@ import { createTauriApi } from '../bridge/tauri-api'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { defaultLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
-import { applyThemeVariables } from './app/theme-config'
+import { applyThemeVariables, type ThemeMode } from './app/theme-config'
 import './styles/index.css'
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
@@ -83,12 +83,19 @@ void createTauriApi()
       .then((initialUiPreferences) => {
         const searchParams = new URLSearchParams(window.location.search)
         const queryTheme = searchParams.get('theme')
-        const initialTheme =
-          queryTheme === 'default-light' || queryTheme === 'default-dark'
-            ? queryTheme
-            : initialUiPreferences?.theme === 'default-light' || initialUiPreferences?.theme === 'default-dark'
-              ? initialUiPreferences.theme
-              : 'default-dark'
+        const isThemeMode = (val: unknown): val is ThemeMode =>
+          val === 'fileterm-dark' ||
+          val === 'fileterm-light' ||
+          val === 'codex-dark' ||
+          val === 'codex-light' ||
+          val === 'default-dark' ||
+          val === 'default-light'
+
+        const initialTheme: ThemeMode = isThemeMode(queryTheme)
+          ? queryTheme
+          : initialUiPreferences && isThemeMode(initialUiPreferences.theme)
+            ? initialUiPreferences.theme
+            : 'fileterm-dark'
         const queryLocale = searchParams.get('locale')
         const initialLocale =
           queryLocale === 'enUS' || queryLocale === 'zhCN'

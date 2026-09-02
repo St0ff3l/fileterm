@@ -54,7 +54,7 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 
 ### 4. CLI JSONL 解决重复 CLI 进程问题
 
-桌面 GUI 进程负责持有连接、会话、秘密和审批队列。`fileterm cli --jsonl` 是一个不启动 GUI 的常驻 JSONL 进程，通过同一个本地 authenticated desktop bridge 处理多个 request ID；每个请求拥有独立 progress 和最终结果，输出按行原子化写出。CLI JSONL 请求可通过 `cancel_request` 按 request ID 取消仍在等待的结果，取消不回滚桌面端已经接受或开始执行的操作。
+桌面 GUI 进程负责持有连接、会话、秘密和审批队列。`fileterm cli --jsonl` 是一个不启动 GUI 的常驻 JSONL 进程，通过同一个本地 authenticated desktop bridge 处理多个 request ID；每个请求拥有独立 progress 和最终结果，输出按行原子化写出。CLI JSONL 请求可通过 `cancel_request` 按 request ID 取消；如果对应操作已经进入 SSH exec，则在原通道上尽力发送 INT、TERM、KILL 并关闭通道，不在新通道上重跑命令，也不回滚桌面端已经接受的其他操作。
 
 一次性 CLI 保留用于 shell 脚本和手动调试，不承诺“零进程”。外部 Agent 的接入契约固定使用常驻 MCP 或 `fileterm cli --jsonl`，不得为每个动作重新 spawn 一次性 CLI；设置页和客户端接入说明必须把一次性 CLI 标为手动/脚本入口。
 
@@ -66,7 +66,13 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 - token 使用常时比较；非 loopback peer、非法 descriptor、超大消息和超出并发上限的请求直接拒绝。
 - bridge 结果、CLI JSONL progress、CLI 输出和 workspace snapshot 不包含 profile secret、私钥、密码或完整 terminal transcript。
 - CLI JSONL 请求只能调用已注册 action；参数仍经过严格 schema、长度和路径校验。
-- CLI JSONL 请求的 `requiresApproval` 仅为请求字段，桌面端收到请求时始终强制使用审批策略；`cancel_request` 只影响 CLI JSONL 等待与输出，不撤销桌面端已经开始的远程操作。
+- CLI JSONL 请求的 `requiresApproval` 仅为请求字段，桌面端收到请求时始终强制使用审批策略；`cancel_request` 影响请求等待/输出，并对正在执行的 SSH exec 触发有界的 best-effort 终止清理，但不保证远程进程已经退出，也不撤销桌面端已经接受的其他操作。
+
+### 6. 长命令使用独立的后台命令会话
+
+MCP/CLI 不把部署、镜像构建、迁移或 `docker compose` 这类长任务塞进一个有界的同步 tool call。`start_remote_command` 只在一个 SSH exec channel 上接受一次命令并返回 `commandId`；`read_remote_command` 使用递增 byte offset 读取同一命令的输出增量，`terminate_remote_command` 在原 channel 上按 INT → TERM → KILL → close 做有界的 best-effort 清理，`close_remote_command` 在调用方收尾后释放 FileTerm 保留的输出。连接重建不会把已接受的命令重新提交到新 channel。
+
+后台命令只保留有界输出（最多 256 KiB，单次读取最多 64 KiB），最长运行 6 小时；它不提供通用 PTY 输入，也不支持把新提供的 sudo/su 密码保存到 profile。已保存凭据或本次调用明确提供的特权凭据仍可用于启动命令，MFA、安装器确认、REPL 等通用交互继续返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`。
 
 ## 影响
 
@@ -76,12 +82,14 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 - 缺少 SSH 登录密码时，原始调用不会在弹框后丢失；用户输入后能收到最终结果。
 - AI 并行操作可以复用 CLI JSONL 和同一 profile 的连接任务，减少重复 GUI 启动与重复凭据交互。
 - 旧的 MCP JSON-RPC 和一次性 CLI 保持兼容；CLI JSONL 作为同一 CLI 的显式持久模式提供。
+- 长时间远程任务不再受单次 MCP bridge 请求的 120 秒执行边界影响；调用方拥有稳定的 command ID、增量输出和显式终止语义。
 
 ### 限制与非目标
 
 - 手动一次性 CLI 本身仍是一个进程；要让外部 Agent 复用进程必须使用 `fileterm cli --jsonl` 或 MCP。
 - FileTerm 不通过后台 bridge 自动回答 MFA、验证码、安装器确认或任意终端输入。
-- CLI JSONL 取消是 best-effort 的请求生命周期控制，不是远程命令回滚机制。
+- CLI JSONL 取消是 best-effort 的请求生命周期与 SSH exec 清理控制，不是远程命令回滚机制；FileTerm 不声称 INT/TERM/KILL 已让远程进程退出。
+- 后台命令的 command ID 只绑定创建它的 tab；读/终止/关闭必须携带相同 tab ID，重连只影响原通道的存活，不会触发隐式重跑。
 - macOS 打包产物的 application type、Dock 图标行为以及真实 SSH/FTP/网络设备连接仍需要目标环境人工验收。
 
 ## 实现位置
@@ -89,6 +97,7 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 - `packages/core/src/index.ts`：共享的 MCP/CLI 偏好类型。
 - `apps/tauri/src-tauri/src/commands/mod.rs`：偏好规范化、迁移和设置命令。
 - `apps/tauri/src-tauri/src/services/mcp/mod.rs`：MCP、CLI、CLI JSONL 协议、bridge route 和策略评估。
+- `apps/tauri/src-tauri/src/services/mcp/background.rs`：后台 SSH exec channel、增量输出缓冲、取消/终止和 command ID registry。
 - `apps/tauri/src-tauri/src/services/connection_operations.rs`：连接 single-flight 与可等待状态。
 - `apps/tauri/src-tauri/src/main.rs`：GUI、MCP、CLI JSONL 和一次性 CLI 入口分发。
 - `apps/tauri/src/renderer/features/settings/settings-modal.tsx`：策略和 Agent 设置界面。

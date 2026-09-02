@@ -52,6 +52,7 @@ fn new_client_handler(
     interaction_window_label: Option<String>,
     interaction: SshInteractionContext,
     remote_sshid: SharedRemoteSshId,
+    disconnect_reason: SharedSshDisconnectReason,
 ) -> ClientHandler {
     ClientHandler {
         app: app.clone(),
@@ -65,5 +66,6 @@ fn new_client_handler(
         interaction_window_label,
         interaction,
         remote_sshid,
+        disconnect_reason,
     }
 }

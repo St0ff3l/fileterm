@@ -130,7 +130,7 @@ pub struct WorkspaceState {
     /// remote metrics payload or waiting on an SSH operation.
     pub worker_controls: Arc<RwLock<HashMap<String, CancellationToken>>>,
     /// Number of consecutive automatic serial reconnect attempts per tab.
-    /// This is runtime-only state; a successful connection or an explicit
+    /// This is runtime-only state; a stable connection or an explicit
     /// disconnect clears it so a later outage starts with the initial delay.
     pub serial_reconnect_attempts: Arc<RwLock<HashMap<String, u32>>>,
     /// Cancellation tokens for the one active serial transfer per tab.
@@ -169,6 +169,11 @@ pub struct WorkspaceState {
     /// Dropping or timing out a request denies it, so there is no durable
     /// approval state.
     pub pending_action_approvals: Arc<RwLock<HashMap<String, PendingActionApproval>>>,
+    /// Long-running external-Agent commands keep their SSH channel and bounded
+    /// output buffer here instead of tying the remote process lifetime to one
+    /// short MCP loopback request.
+    pub background_remote_commands:
+        Arc<crate::services::mcp::BackgroundRemoteCommandRegistry>,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
     /// Transfer snapshots are durable domain state. Run handles are
     /// runtime-only and never serialized to the renderer or journal. A

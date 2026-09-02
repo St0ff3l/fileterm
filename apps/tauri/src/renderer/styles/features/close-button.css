@@ -79,9 +79,9 @@
 }
 
 :root:not([data-theme]) .terminal-find .app-close-button,
-:root[data-theme='default-dark'] .terminal-find .app-close-button,
+:root:not([data-theme*='light']) .terminal-find .app-close-button,
 :root[data-theme='default'] .terminal-find .app-close-button,
-:root[data-theme='default-light'] .terminal-find .app-close-button {
+:root[data-theme*='light'] .terminal-find .app-close-button {
   width: 24px;
   height: 24px;
   min-width: 24px;
@@ -91,9 +91,9 @@
 }
 
 :root:not([data-theme]) .terminal-find .app-close-button:hover:not(:disabled),
-:root[data-theme='default-dark'] .terminal-find .app-close-button:hover:not(:disabled),
+:root:not([data-theme*='light']) .terminal-find .app-close-button:hover:not(:disabled),
 :root[data-theme='default'] .terminal-find .app-close-button:hover:not(:disabled),
-:root[data-theme='default-light'] .terminal-find .app-close-button:hover:not(:disabled) {
+:root[data-theme*='light'] .terminal-find .app-close-button:hover:not(:disabled) {
   background: var(--danger-surface);
   color: var(--danger-text);
 }

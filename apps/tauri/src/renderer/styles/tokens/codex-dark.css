@@ -1,0 +1,111 @@
+/*
+ * Codex Dark Theme Reference Values
+ * This is the single source of truth for Codex Dark raw color values.
+ */
+
+:root[data-theme='codex-dark'],
+:root[data-theme-base='codex']:not([data-theme*='light']) {
+  color-scheme: dark;
+
+  /* Surfaces & Canvas */
+  --ref-surface-canvas: #111111;
+  --ref-surface-sidebar: #181818;
+  --ref-surface-panel: #181818;
+  --ref-surface-card: #181818;
+  --ref-surface-elevated: #222222;
+  --ref-surface-modal: #181818;
+  --ref-surface-context-menu: #242424;
+  --ref-surface-overlay: rgba(0, 0, 0, 0.7);
+  --ref-surface-hover: #2a2a2a;
+  --ref-surface-active: #333338;
+  --ref-surface-input: #0d0d0d;
+  --ref-surface-input-focus: #111111;
+  --ref-surface-toolbar: #181818;
+  --ref-surface-titlebar: #0e0e0e;
+  --ref-surface-terminal: #111111;
+  --ref-surface-chip: rgba(252, 252, 252, 0.05);
+  --ref-surface-inset: rgba(252, 252, 252, 0.05);
+  --ref-surface-inset-border: rgba(252, 252, 252, 0.08);
+
+  /* Text & Ink */
+  --ref-text-primary: #fcfcfc;
+  --ref-text-secondary: #a1a1aa;
+  --ref-text-muted: #71717a;
+  --ref-text-disabled: #52525b;
+  --ref-text-inverse: #111111;
+  --ref-text-context-menu: #fcfcfc;
+
+  /* Borders & Dividers */
+  --ref-border-subtle: rgba(252, 252, 252, 0.1);
+  --ref-border-default: rgba(252, 252, 252, 0.18);
+  --ref-border-strong: rgba(252, 252, 252, 0.28);
+  --ref-border-glass: rgba(252, 252, 252, 0.08);
+  --ref-border-context-menu: rgba(252, 252, 252, 0.1);
+
+  /* Accents & Brand Actions */
+  --ref-accent: #0169cc;
+  --ref-accent-hover: #147be0;
+  --ref-accent-active: #0154a3;
+  --ref-accent-muted: rgba(139, 191, 255, 0.12);
+  --ref-accent-focus: rgba(139, 191, 255, 0.28);
+  --ref-accent-secondary: #8bbfff;
+  --ref-focus-outline: #8bbfff;
+
+  /* Status Colors */
+  --ref-status-success: #00a240;
+  --ref-status-success-bg: rgba(0, 162, 64, 0.12);
+  --ref-status-warning: #f59e0b;
+  --ref-status-warning-bg: rgba(245, 158, 11, 0.12);
+  --ref-status-danger: #ff5f57;
+  --ref-status-danger-hover: #e04b44;
+  --ref-status-danger-bg: rgba(255, 95, 87, 0.12);
+  --ref-status-info: #38bdf8;
+  --ref-status-info-bg: rgba(56, 189, 248, 0.12);
+
+  /* Functional Feature Colors (Codex Dark uses warm yellow #fbbf24 for folders) */
+  --ref-color-folder: #fbbf24;
+  --ref-color-skill: #0169cc;
+  --ref-color-total: #0169cc;
+  --ref-color-telnet: #0169cc;
+  --ref-color-ftp: #0169cc;
+  --ref-color-network-rx: #8bbfff;
+  --ref-color-network-tx: #ff7474;
+  --ref-color-diff-added: #00a240;
+  --ref-color-diff-removed: #ff5f57;
+  --ref-color-keyword: #fbbf24;
+
+  /* Controls & System */
+  --ref-action-primary-bg: #0169cc;
+  --ref-action-primary-hover: #147be0;
+  --ref-action-primary-active: #0154a3;
+  --ref-action-primary-text: #ffffff;
+  --ref-action-danger-bg: #c93b3b;
+  --ref-action-danger-hover: #b13434;
+  --ref-action-danger-active: #9e2d2d;
+  --ref-action-danger-text: #ffffff;
+  --ref-control-inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  --ref-shadow-context-menu: 0 20px 40px rgba(0, 0, 0, 0.4);
+  /* Dedicated macOS Codex dark glass values. */
+  --ref-codex-glass-divider: #363636;
+  --ref-codex-glass-unfocused-surface: #1b1b1b;
+  --ref-traffic-close: #ff5f57;
+  --ref-traffic-minimize: #ffbd2e;
+  --ref-traffic-maximize: #27c93f;
+  --ref-window-control-danger-bg: #c42b1c;
+  --ref-window-control-danger-text: #ffffff;
+  --ref-file-editor-primary-shadow: 0 2px 10px rgba(1, 105, 204, 0.26);
+  --ref-terminal-frame-gradient: none;
+  --ref-terminal-frame-shadow: none;
+
+  /* Static swatches used by the light/dark theme picker preview. */
+  --ref-preview-dark-canvas: #141414;
+  --ref-preview-light-canvas: #f5f5f5;
+  --ref-preview-dark-header: #1e1e1e;
+  --ref-preview-dark-divider: #2e2e2e;
+  --ref-preview-light-header: #e8e8e8;
+  --ref-preview-light-divider: #dcdcdc;
+  --ref-preview-dark-sidebar: #1a1a1a;
+  --ref-preview-light-sidebar: #f0f0f0;
+  --ref-preview-dark-content: #2e2e2e;
+  --ref-preview-light-content: #dcdcdc;
+}

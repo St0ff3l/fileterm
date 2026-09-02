@@ -1,8 +1,13 @@
 import type { MutableRefObject } from 'react'
-import type { AiCopilotMode, AiProviderSummary } from '@fileterm/core'
+import type { AiCopilotMode, AiProviderSummary, AiReasoningEffort } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon, type AppIconName } from '../common/app-icon'
 import { DropdownSelect } from '../common/dropdown-select'
+import { getAiReasoningOptions } from './ai-reasoning'
+
+function reasoningEffortLabel(effort: AiReasoningEffort) {
+  return effort
+}
 
 export function AiCopilotComposer({
   canChat,
@@ -17,10 +22,12 @@ export function AiCopilotComposer({
   onComposerKeyDown,
   providers,
   referenceTerminal,
+  reasoningEffort,
   requiresTerminalContext,
   selectCopilotMode,
   selectModel,
   selectProvider,
+  selectReasoningEffort,
   selectedModel,
   selectedProviderId,
   send,
@@ -41,10 +48,12 @@ export function AiCopilotComposer({
   onComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void
   providers: AiProviderSummary[]
   referenceTerminal: boolean
+  reasoningEffort: AiReasoningEffort
   requiresTerminalContext: boolean
   selectCopilotMode(nextMode: AiCopilotMode): void
   selectModel(model: string | null): void
   selectProvider(providerId: string | null): void
+  selectReasoningEffort(effort: AiReasoningEffort): void
   selectedModel: string | null
   selectedProviderId: string | null
   send(): Promise<void>
@@ -53,6 +62,14 @@ export function AiCopilotComposer({
   toggleTerminalReference(): void
   composerCompositionRef: MutableRefObject<boolean>
 }) {
+  const reasoningModel = selectedModel || currentProvider?.model || ''
+  const reasoningOptions: AiReasoningEffort[] = currentProvider
+    ? getAiReasoningOptions(currentProvider, reasoningModel)
+    : []
+  const visibleReasoningEffort = reasoningOptions.includes(reasoningEffort)
+    ? reasoningEffort
+    : (reasoningOptions[0] ?? '')
+
   return (
     <footer className="ai-copilot-composer-area">
       <div className="ai-copilot-composer-zone">
@@ -125,6 +142,10 @@ export function AiCopilotComposer({
                   <DropdownSelect
                     className="ai-copilot-composer-select ai-copilot-provider-select"
                     disabled={isStreaming}
+                    forceCustomMenu
+                    menuClassName="ai-copilot-toolbar-menu"
+                    menuPlacement="above"
+                    menuWidth="auto"
                     options={providers.map((provider) => ({ value: provider.id, label: provider.name }))}
                     value={selectedProviderId ?? ''}
                     onChange={(value) => selectProvider(value || null)}
@@ -135,6 +156,10 @@ export function AiCopilotComposer({
                       <DropdownSelect
                         className="ai-copilot-composer-select ai-copilot-model-select"
                         disabled={isStreaming}
+                        forceCustomMenu
+                        menuClassName="ai-copilot-toolbar-menu"
+                        menuPlacement="above"
+                        menuWidth="auto"
                         options={(currentProvider.models && currentProvider.models.length > 0
                           ? currentProvider.models
                           : [currentProvider.model]
@@ -142,6 +167,26 @@ export function AiCopilotComposer({
                         value={selectedModel ?? currentProvider.model}
                         onChange={(value) => selectModel(value || null)}
                       />
+                      {reasoningOptions.length > 0 ? (
+                        <>
+                          <span aria-hidden="true" className="ai-copilot-composer-model-divider" />
+                          <DropdownSelect
+                            ariaLabel={t.aiCopilotReasoningEffortLabel}
+                            className="ai-copilot-composer-select ai-copilot-reasoning-select"
+                            disabled={isStreaming || reasoningOptions.length <= 1}
+                            forceCustomMenu
+                            menuClassName="ai-copilot-toolbar-menu"
+                            menuPlacement="above"
+                            menuWidth="auto"
+                            options={reasoningOptions.map((effort) => ({
+                              value: effort,
+                              label: reasoningEffortLabel(effort)
+                            }))}
+                            value={visibleReasoningEffort}
+                            onChange={(value) => selectReasoningEffort(value as AiReasoningEffort)}
+                          />
+                        </>
+                      ) : null}
                       <span aria-hidden="true" className="ai-copilot-composer-model-divider ai-copilot-mode-divider" />
                       <DropdownSelect
                         ariaLabel={t.aiCopilotModeLabel}

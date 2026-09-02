@@ -1,0 +1,285 @@
+/*
+ * Semantic Token Layer
+ * Maps raw --ref-* values to functional UI roles.
+ * NO direct hex or rgb values are permitted in this file.
+ */
+
+:root {
+  /* Surface Semantics */
+  --surface-app: var(--ref-surface-canvas);
+  --surface-canvas: var(--ref-surface-canvas);
+  --surface-sidebar: var(--ref-surface-sidebar);
+  --surface-panel: var(--ref-surface-panel);
+  --surface-card: var(--ref-surface-card);
+  --surface-elevated: var(--ref-surface-elevated);
+  --surface-modal: var(--ref-surface-modal);
+  --surface-context-menu: var(--ref-surface-context-menu, var(--surface-modal));
+  --surface-overlay: var(--ref-surface-overlay);
+  --surface-hover: var(--ref-surface-hover);
+  --surface-active: var(--ref-surface-active);
+  --surface-input: var(--ref-surface-input);
+  --surface-input-focus: var(--ref-surface-input-focus);
+  --surface-toolbar: var(--ref-surface-toolbar);
+  --surface-titlebar: var(--ref-surface-titlebar);
+  --surface-terminal: var(--ref-surface-terminal);
+  --surface-chip: var(--ref-surface-chip);
+  --surface-inset: var(--ref-surface-inset);
+  --surface-inset-border: var(--ref-surface-inset-border);
+  --surface-raised: var(--surface-elevated);
+  --surface-table-head: var(--surface-chip);
+  --surface-nested: var(--surface-chip);
+  --codex-glass-surface: color-mix(in srgb, var(--surface-elevated) 50%, transparent);
+  --codex-glass-divider: var(--ref-codex-glass-divider, var(--border-default));
+  --codex-glass-unfocused-surface: var(--ref-codex-glass-unfocused-surface, var(--surface-panel));
+
+  /* Theme picker preview semantics (fixed swatches, independent of active theme). */
+  --theme-preview-dark-canvas: var(--ref-preview-dark-canvas);
+  --theme-preview-light-canvas: var(--ref-preview-light-canvas);
+  --theme-preview-dark-header: var(--ref-preview-dark-header);
+  --theme-preview-dark-divider: var(--ref-preview-dark-divider);
+  --theme-preview-light-header: var(--ref-preview-light-header);
+  --theme-preview-light-divider: var(--ref-preview-light-divider);
+  --theme-preview-dark-sidebar: var(--ref-preview-dark-sidebar);
+  --theme-preview-light-sidebar: var(--ref-preview-light-sidebar);
+  --theme-preview-dark-content: var(--ref-preview-dark-content);
+  --theme-preview-light-content: var(--ref-preview-light-content);
+
+  /* Text Semantics */
+  --text-primary: var(--ref-text-primary);
+  --text-secondary: var(--ref-text-secondary);
+  --text-muted: var(--ref-text-muted);
+  --text-disabled: var(--ref-text-disabled);
+  --text-inverse: var(--ref-text-inverse);
+  --text-context-menu: var(--ref-text-context-menu, var(--text-primary));
+
+  /* Border Semantics */
+  --border-subtle: var(--ref-border-subtle);
+  --border-default: var(--ref-border-default);
+  --border-strong: var(--ref-border-strong);
+  --border-glass: var(--ref-border-glass);
+  --border-context-menu: var(--ref-border-context-menu, var(--border-subtle));
+  --border-focus: var(--ref-focus-outline, var(--ref-accent-secondary));
+
+  /* Action & Interactive Semantics */
+  --action-primary-bg: var(--theme-action-primary, var(--ref-action-primary-bg, var(--ref-accent)));
+  --action-primary-hover: var(--theme-action-primary-hover, var(--ref-action-primary-hover, var(--ref-accent-hover)));
+  --action-primary-active: var(--ref-action-primary-active, var(--ref-accent-active));
+  --action-primary-text: var(--ref-action-primary-text, var(--ref-text-inverse));
+  --action-secondary-bg: var(--surface-panel);
+  --action-secondary-hover: var(--surface-hover);
+  --action-secondary-active: var(--surface-active);
+  --action-secondary-text: var(--text-primary);
+  --action-ghost-hover: var(--surface-hover);
+  --action-ghost-active: var(--surface-active);
+  --action-ghost-text: var(--text-secondary);
+  --action-danger-bg: var(--theme-action-danger, var(--ref-action-danger-bg, var(--ref-status-danger)));
+  --action-danger-hover: var(
+    --theme-action-danger-hover,
+    var(--ref-action-danger-hover, var(--ref-status-danger-hover))
+  );
+  --action-danger-active: var(--ref-action-danger-active, var(--ref-action-danger-hover));
+  --action-danger-text: var(--ref-action-danger-text, var(--ref-text-inverse));
+
+  /* Status Semantics */
+  --status-success: var(--ref-status-success);
+  --status-success-bg: var(--ref-status-success-bg);
+  --status-warning: var(--ref-status-warning);
+  --status-warning-bg: var(--ref-status-warning-bg);
+  --status-danger: var(--ref-status-danger);
+  --status-danger-bg: var(--ref-status-danger-bg);
+  --status-info: var(--ref-status-info);
+  --status-info-bg: var(--ref-status-info-bg);
+  --status-error: var(--status-danger);
+  --danger-color: var(--status-danger);
+  --warning-text: var(--status-warning);
+
+  /* Focus and Glow Rings */
+  --accent-focus-ring: var(--ref-accent-focus);
+  --input-focus-ring: var(--ref-accent-focus);
+  --focus-outline: var(--ref-focus-outline, var(--ref-accent-secondary));
+  --accent-secondary: var(--ref-accent-secondary);
+  --accent-tint: var(--ref-accent-focus);
+  --accent-tint-weak: var(--ref-accent-muted);
+
+  /* =========================================================================
+   * Comprehensive Backward Compatibility Bridge:
+   * Maps historical CSS variable names to the new semantic tokens
+   * ========================================================================= */
+  --sidebar-width: 214px;
+  --bg-main: var(--surface-canvas);
+  --bg-sidebar: var(--surface-sidebar);
+  --bg-card: var(--surface-card);
+  --bg-elevated: var(--surface-elevated);
+  --bg-primary: var(--surface-canvas);
+  --bg-secondary: var(--surface-panel);
+  --bg-hover: var(--surface-hover);
+  --bg-active: var(--surface-active);
+  --bg-input: var(--surface-input);
+  --input-bg: var(--surface-input);
+  --input-border: var(--border-subtle);
+  --input-text: var(--text-primary);
+  --dialog-surface: var(--surface-modal);
+  --titlebar-background: var(--surface-titlebar);
+  --manager-head-bg: var(--surface-toolbar);
+  --command-history-head-bg: var(--surface-canvas);
+
+  --text-main: var(--text-primary);
+  --text-soft: var(--text-muted);
+  --muted-foreground: var(--text-muted);
+  --sidebar-active-accent: var(--text-primary);
+
+  --border-light: var(--border-subtle);
+  --border-dark: var(--border-default);
+  --border: var(--border-subtle);
+
+  --primary: var(--action-primary-bg);
+  --primary-hover: var(--action-primary-hover);
+  --accent-highlight: var(--ref-accent-secondary);
+  --accent-text: var(--action-primary-text);
+  --selection-bg: var(--surface-active);
+
+  /* Buttons */
+  --button-primary-bg: var(--action-primary-bg);
+  --button-primary-hover: var(--action-primary-hover);
+  --button-primary-border: transparent;
+  --button-primary-text: var(--action-primary-text);
+
+  /* Accents */
+  --folder-accent: var(--ref-color-folder, var(--ref-accent-secondary));
+  --kernel-accent: var(--action-primary-bg);
+  --copy-link: var(--ref-status-info);
+  --copy-link-hover: var(--ref-accent-secondary);
+
+  /* Status Colors */
+  --success: var(--ref-status-success);
+  --success-text: var(--ref-status-success);
+  --success-surface: var(--ref-status-success-bg);
+  --success-border: var(--ref-status-success);
+  --danger: var(--ref-status-danger);
+  --danger-text: var(--ref-status-danger);
+  --danger-surface: var(--ref-status-danger-bg);
+  --danger-border: var(--ref-status-danger);
+  --warning: var(--ref-status-warning);
+  --info: var(--ref-status-info);
+  --info-text: var(--ref-status-info);
+  --info-surface: var(--ref-status-info-bg);
+  --info-border: var(--ref-status-info);
+
+  /* Dialogs */
+  --dialog-border: var(--border-subtle);
+  --dialog-shadow: var(--shadow-modal);
+  --dialog-title: var(--text-primary);
+  --dialog-description: var(--text-secondary);
+  --dialog-footer-border: var(--border-subtle);
+  --dialog-button-secondary-bg: var(--surface-hover);
+  --dialog-button-secondary-border: var(--border-subtle);
+  --dialog-button-secondary-text: var(--text-primary);
+  --dialog-button-secondary-hover-bg: var(--surface-active);
+  --dialog-button-secondary-hover-border: var(--border-default);
+  --dialog-button-primary-bg: var(--action-primary-bg);
+  --dialog-button-primary-border: transparent;
+  --dialog-button-primary-text: var(--action-primary-text);
+  --dialog-button-primary-hover-bg: var(--action-primary-hover);
+  --dialog-button-primary-hover-border: var(--border-default);
+  --dialog-button-danger-bg: var(--action-danger-bg);
+  --dialog-button-danger-border: transparent;
+  --dialog-button-danger-text: var(--action-danger-text);
+  --dialog-button-danger-hover-bg: var(--action-danger-hover);
+  --dialog-button-danger-hover-border: transparent;
+  --dialog-button-danger-hover-text: var(--action-danger-text);
+  --dialog-focus-ring: 0 0 0 2px var(--surface-canvas), 0 0 0 4px var(--accent-focus-ring);
+  --dialog-warning-text: var(--status-danger);
+
+  /* Types */
+  --type-total: var(--ref-color-total);
+  --type-total-surface: var(--ref-status-info-bg);
+  --type-ssh: var(--ref-status-success);
+  --type-ssh-surface: var(--ref-status-success-bg);
+  --type-telnet: var(--ref-color-telnet);
+  --type-telnet-surface: var(--ref-status-info-bg);
+  --type-sftp: var(--ref-color-telnet);
+  --type-sftp-surface: var(--ref-status-info-bg);
+  --type-ftp: var(--ref-color-ftp);
+  --type-ftp-surface: var(--ref-status-info-bg);
+  --type-folder: var(--ref-color-folder, var(--ref-status-warning));
+  --type-folder-surface: var(--ref-status-warning-bg);
+  --type-muted: var(--text-muted);
+
+  /* Metrics */
+  --metric-app: var(--ref-status-warning);
+  --metric-cache: var(--ref-status-success);
+  --metric-kernel: var(--ref-status-info);
+  --metric-status-green: var(--ref-status-success);
+  --metric-status-yellow: var(--ref-status-warning);
+  --metric-status-red: var(--ref-status-danger);
+  --meter-track: var(--surface-hover);
+  --memory-warn: var(--status-warning);
+  --network-tx: var(--theme-semantic-network-tx, var(--ref-color-network-tx));
+  --network-rx: var(--theme-semantic-network-rx, var(--ref-color-network-rx));
+
+  /* Terminal */
+  --terminal-bg: var(--surface-terminal);
+  --terminal-text: var(--text-primary);
+  --terminal-selection-bg: var(--ref-accent-focus);
+  --terminal-frame-shadow: var(--ref-terminal-frame-shadow, none);
+  --terminal-frame-gradient: var(--ref-terminal-frame-gradient, none);
+  --terminal-right-frame-outer: var(--surface-toolbar);
+  --terminal-right-frame-accent: var(--border-subtle);
+  --terminal-dock-shadow: var(--shadow-lg);
+  --terminal-dock-header-shadow: var(--shadow-md);
+
+  /* Controls & Modals */
+  --control-shadow: var(--shadow-xs);
+  --control-focus-shadow: 0 0 0 2px var(--accent-focus-ring);
+  --control-inset-shadow: var(--ref-control-inset-shadow);
+  --modal-card-shadow: var(--shadow-modal);
+  --modal-backdrop-bg: var(--surface-overlay);
+  --shadow-context-menu: var(--ref-shadow-context-menu, var(--shadow-lg));
+  --popover-bg: var(--surface-panel);
+  --popover-border: var(--border-subtle);
+  --popover-shadow: var(--shadow-lg);
+
+  /* Window & System Controls */
+  --traffic-close: var(--ref-traffic-close);
+  --traffic-minimize: var(--ref-traffic-minimize);
+  --traffic-maximize: var(--ref-traffic-maximize);
+  --window-control-surface: transparent;
+  --window-control-hover-surface: var(--surface-hover);
+  --window-control-foreground: var(--text-secondary);
+  --window-control-hover-foreground: var(--text-primary);
+  --window-control-danger-bg: var(--ref-window-control-danger-bg);
+  --window-control-danger-text: var(--ref-window-control-danger-text);
+  --brand-title-shadow: none;
+  --file-editor-button-bg: var(--surface-hover);
+  --file-editor-primary-shadow: var(--ref-file-editor-primary-shadow);
+
+  /* Floating Drawer & Tabs */
+  --floating-drawer-expanded-bg: var(--surface-modal);
+  --floating-drawer-expanded-border: var(--border-subtle);
+  --floating-drawer-shadow: var(--shadow-lg);
+  --floating-drawer-trigger-hover-bg: var(--surface-hover);
+  --system-sidebar-frame: var(--border-subtle);
+  --system-sidebar-control-border: var(--border-subtle);
+  --system-sidebar-divider: var(--border-subtle);
+  --system-sidebar-toggle-shadow: var(--shadow-sm);
+  --system-sidebar-toggle-hover-shadow: var(--shadow-md);
+  --mini-tab-active-bg: var(--surface-active);
+  --mini-tab-active-text: var(--text-primary);
+
+  /* Theme Bridge */
+  --theme-surface: var(--surface-canvas);
+  --theme-surface-secondary: var(--surface-sidebar);
+  --theme-surface-elevated: var(--surface-elevated);
+  --theme-sidebar-background: var(--surface-sidebar);
+  --theme-terminal-dock-surface: var(--surface-panel);
+  --theme-sidebar-backdrop-filter: none;
+  --theme-text-primary: var(--text-primary);
+  --theme-text-secondary: var(--text-secondary);
+  --theme-accent: var(--action-primary-bg);
+
+  --total-connections-color: var(--ref-color-total);
+  --telnet-connections-color: var(--ref-color-telnet);
+  --ftp-connections-color: var(--ref-color-ftp);
+  --network-rx-color: var(--ref-color-network-rx);
+  --network-tx-color: var(--ref-color-network-tx);
+}

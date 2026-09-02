@@ -20,23 +20,15 @@ fn spawn_remote_command(
         .unwrap_or(command);
     let timeout_duration = Duration::from_millis(timeout_ms);
     tokio::spawn(async move {
-        let exec = crate::sessions::system_metrics::exec_command_with_stdin_status_timeout_detailed(
+        let result = crate::sessions::system_metrics::exec_command_with_stdin_status_timeout_detailed_cancellable(
             &handle,
             &command,
             stdin.as_deref().unwrap_or(""),
             request_pty,
             timeout_duration,
-        );
-        let result = match cancellation {
-            Some(cancellation) if cancellation.is_cancelled() => {
-                Err("AI_REQUEST_CANCELLED".to_string())
-            }
-            Some(cancellation) => tokio::select! {
-                _ = cancellation.cancelled() => Err("AI_REQUEST_CANCELLED".to_string()),
-                result = exec => result,
-            },
-            None => exec.await,
-        };
+            cancellation.as_ref(),
+        )
+        .await;
         let result = match result {
             Ok(result) => {
                 let input_kind =
@@ -59,6 +51,69 @@ fn spawn_remote_command(
         };
         let _ = respond_to.send(result);
     });
+}
+
+/// Start a long-running command without tying its lifetime to the MCP bridge
+/// response. The SSH channel is opened once and handed to the registry; later
+/// reads and termination requests address that same command id, so a polling
+/// timeout can never cause the deployment to be submitted a second time.
+#[allow(clippy::too_many_arguments)]
+fn spawn_background_remote_command(
+    handle: &Arc<Handle<ClientHandler>>,
+    tab_id: &str,
+    command: String,
+    cwd: Option<String>,
+    timeout_ms: u64,
+    stdin: Option<String>,
+    request_pty: bool,
+    start_cancellation: Option<tokio_util::sync::CancellationToken>,
+    lifetime_cancellation: tokio_util::sync::CancellationToken,
+    registry: Arc<crate::services::mcp::BackgroundRemoteCommandRegistry>,
+    respond_to: oneshot::Sender<Result<Value, String>>,
+) {
+    let handle = Arc::clone(handle);
+    let tab_id = tab_id.to_string();
+    let command = cwd
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| format!("cd -- {} && {command}", shell_quote(path.trim())))
+        .unwrap_or(command);
+    tokio::spawn(async move {
+        let result = async {
+            let channel = crate::sessions::system_metrics::open_background_exec_channel(
+                &handle,
+                &command,
+                stdin.as_deref(),
+                request_pty,
+                Duration::from_secs(30),
+                start_cancellation.as_ref(),
+            )
+            .await?;
+            let started = registry
+                .register(
+                    tab_id,
+                    now_millis(),
+                    Duration::from_millis(timeout_ms),
+                    channel.reader,
+                    channel.writer,
+                    channel.pending_pty_stdin,
+                    lifetime_cancellation,
+                )
+                .await?;
+            serde_json::to_value(started).map_err(|error| error.to_string())
+        }
+        .await;
+        let _ = respond_to.send(result);
+    });
+}
+
+fn now_millis() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u64::MAX as u128) as u64
 }
 
 fn remote_exec_input_kind(prompt: &str) -> &'static str {

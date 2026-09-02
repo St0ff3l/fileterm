@@ -89,6 +89,35 @@ async fn dispatch_terminal_cmd(
             }
             Ok(false)
         }
+        WorkerCmd::StartBackgroundRemoteCommand {
+            command,
+            cwd,
+            timeout_ms,
+            stdin,
+            request_pty,
+            start_cancellation,
+            lifetime_cancellation,
+            respond_to,
+        } => {
+            if exec_channel_enabled {
+                spawn_background_remote_command(
+                    handle,
+                    tab_id,
+                    command,
+                    cwd,
+                    timeout_ms,
+                    stdin,
+                    request_pty,
+                    start_cancellation,
+                    lifetime_cancellation,
+                    state.background_remote_commands.clone(),
+                    respond_to,
+                );
+            } else {
+                let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法启动后台远程命令。".to_string()));
+            }
+            Ok(false)
+        }
         WorkerCmd::ListSshTunnels { respond_to } => {
             enqueue_tunnel_command(tunnel_commands, TunnelCommand::List { respond_to });
             Ok(false)

@@ -74,6 +74,76 @@ fn normalize_base_url(value: &str, allow_insecure_http: bool) -> Result<String, 
     Ok(url.to_string().trim_end_matches('/').to_string())
 }
 
+fn normalize_model_capabilities(
+    capabilities_by_model: &BTreeMap<String, AiModelCapabilities>,
+    models: &[String],
+) -> BTreeMap<String, AiModelCapabilities> {
+    let mut normalized = BTreeMap::new();
+    for (raw_model, capabilities) in capabilities_by_model {
+        let Ok(model) = normalize_text(raw_model, "模型名称", MAX_MODEL_LENGTH) else {
+            continue;
+        };
+        if !models.contains(&model) {
+            continue;
+        }
+
+        let mut input_modalities = capabilities
+            .input_modalities
+            .iter()
+            .copied()
+            .fold(Vec::new(), |mut modalities, modality| {
+                if !input_modalities_contains(&modalities, &modality) {
+                    modalities.push(modality);
+                }
+                modalities
+            });
+        if input_modalities.is_empty() {
+            input_modalities.push(AiModelInputModality::Text);
+        }
+
+        let mut reasoning = capabilities.reasoning.clone();
+        reasoning.efforts = reasoning
+            .efforts
+            .iter()
+            .copied()
+            .filter(|effort| *effort != AiReasoningEffort::Auto)
+            .fold(Vec::new(), |mut efforts, effort| {
+                if !efforts.contains(&effort) {
+                    efforts.push(effort);
+                }
+                efforts
+            });
+        reasoning.budgets.retain(|effort, budget| {
+            *budget > 0
+                && *budget <= MAX_REASONING_BUDGET
+                && reasoning.efforts.iter().any(|supported| {
+                    supported.request_value() == Some(effort.as_str())
+                })
+        });
+        if reasoning.mode == AiModelReasoningMode::None {
+            reasoning.parameter = AiModelReasoningParameter::Auto;
+            reasoning.efforts.clear();
+            reasoning.budgets.clear();
+        }
+
+        normalized.insert(
+            model,
+            AiModelCapabilities {
+                input_modalities,
+                reasoning,
+            },
+        );
+    }
+    normalized
+}
+
+fn input_modalities_contains(
+    modalities: &[AiModelInputModality],
+    candidate: &AiModelInputModality,
+) -> bool {
+    modalities.iter().any(|modality| modality == candidate)
+}
+
 fn is_trusted_loopback(url: &Url) -> bool {
     match url.host() {
         Some(Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
@@ -107,6 +177,7 @@ fn normalize_provider(draft: AiProviderDraft, id: String) -> Result<StoredAiProv
     if !model.is_empty() && !models.contains(&model) {
         models.push(model.clone());
     }
+    let model_capabilities = normalize_model_capabilities(&draft.model_capabilities, &models);
 
     Ok(StoredAiProvider {
         id,
@@ -115,6 +186,7 @@ fn normalize_provider(draft: AiProviderDraft, id: String) -> Result<StoredAiProv
         base_url,
         model,
         models,
+        model_capabilities,
         enabled: draft.enabled,
         is_default: draft.is_default,
         allow_no_auth: draft.allow_no_auth,
@@ -181,6 +253,7 @@ fn provider_summary(
         base_url: provider.base_url.clone(),
         model: provider.model.clone(),
         models: provider.models.clone(),
+        model_capabilities: provider.model_capabilities.clone(),
         enabled: provider.enabled,
         has_api_key: has_api_key(secrets, &provider.id),
         usable: provider_is_usable(provider, secrets),

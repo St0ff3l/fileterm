@@ -81,7 +81,7 @@
 .serial-toolbar__error {
   flex: 1 0 100%;
   overflow: hidden;
-  color: var(--status-error, #d85858);
+  color: var(--status-danger);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -186,7 +186,7 @@
 }
 
 .serial-transfer-panel__warning {
-  color: var(--status-warning, #d99b42);
+  color: var(--status-warning);
 }
 
 .serial-transfer-panel__progress {

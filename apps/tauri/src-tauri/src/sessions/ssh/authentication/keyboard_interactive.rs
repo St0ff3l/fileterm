@@ -31,12 +31,38 @@ async fn try_keyboard_interactive(
         let interaction_timeout = interaction_timeout;
         async move {
             let request_id = uuid::Uuid::new_v4().to_string();
+            let sequence = interaction.next_sequence();
+            let expires_at = ssh_interaction_expires_at(interaction_timeout);
+            let prompt_count = request.prompts.len();
+            let echo_prompt_count = request.prompts.iter().filter(|prompt| prompt.echo).count();
             let (tx, rx) = oneshot::channel::<Value>();
-            {
+            let pending_count = {
                 let state = app.state::<crate::services::workspace::WorkspaceState>();
                 let mut pending = state.pending_interactions.write().await;
                 pending.insert(request_id.clone(), tx);
-            }
+                pending.len()
+            };
+            let _pending_cleanup = PendingSshInteractionGuard::new(
+                &app,
+                &interaction.tab_id,
+                &request_id,
+            );
+            interaction.log_interaction(
+                &app,
+                "DEBUG",
+                &request_id,
+                "keyboard-interactive",
+                "keyboard-interactive",
+                sequence,
+                format!(
+                    "queued round={} prompt_count={} echo_prompts={} pending={} timeout_secs={}",
+                    request.round,
+                    prompt_count,
+                    echo_prompt_count,
+                    pending_count,
+                    interaction_timeout.as_secs(),
+                ),
+            );
             let payload = serde_json::json!({
                 "requestId": request_id.clone(),
                 "kind": "keyboard-interactive",
@@ -47,7 +73,8 @@ async fn try_keyboard_interactive(
                 "authenticationTarget": interaction.authentication_target.as_str(),
                 "hopIndex": interaction.hop_index,
                 "stage": "keyboard-interactive",
-                "sequence": interaction.next_sequence(),
+                "sequence": sequence,
+                "expiresAt": expires_at,
                 "host": interaction.host,
                 "port": interaction.port,
                 "round": request.round,
@@ -65,35 +92,114 @@ async fn try_keyboard_interactive(
             )
             .is_err()
             {
-                app.state::<crate::services::workspace::WorkspaceState>()
-                    .pending_interactions
-                    .write()
-                    .await
-                    .remove(&request_id);
+                let (_, pending_after) =
+                    remove_pending_ssh_interaction(&app, &request_id).await;
+                interaction.log_interaction(
+                    &app,
+                    "WARN",
+                    &request_id,
+                    "keyboard-interactive",
+                    "keyboard-interactive",
+                    sequence,
+                    format!("event emission failed pending={pending_after}"),
+                );
                 return None;
             }
-            match timeout(interaction_timeout, rx).await {
-                Ok(Ok(response))
-                    if !response
+            match wait_for_ssh_interaction(&interaction, rx, interaction_timeout).await {
+                SshInteractionWaitResult::Response(response) => {
+                    let canceled = response
                         .get("canceled")
                         .and_then(|value| value.as_bool())
-                        .unwrap_or(false) =>
-                {
-                    response.get("answers").and_then(|answers| {
-                        answers.as_array().map(|answers| {
-                            answers
-                                .iter()
-                                .map(|answer| answer.as_str().unwrap_or("").to_string())
-                                .collect()
-                        })
-                    })
+                        .unwrap_or(false);
+                    let answers = response.get("answers").and_then(|value| value.as_array());
+                    let answers_count = answers.map_or(0, Vec::len);
+                    let (_, pending_after) =
+                        remove_pending_ssh_interaction(&app, &request_id).await;
+                    if canceled {
+                        interaction.log_interaction(
+                            &app,
+                            "INFO",
+                            &request_id,
+                            "keyboard-interactive",
+                            "keyboard-interactive",
+                            sequence,
+                            format!("resolved canceled=true answers={} pending={pending_after}", answers_count),
+                        );
+                        return None;
+                    }
+                    let Some(answers) = answers else {
+                        interaction.log_interaction(
+                            &app,
+                            "WARN",
+                            &request_id,
+                            "keyboard-interactive",
+                            "keyboard-interactive",
+                            sequence,
+                            format!("resolved without answers pending={pending_after}"),
+                        );
+                        return None;
+                    };
+                    interaction.log_interaction(
+                        &app,
+                        "INFO",
+                        &request_id,
+                        "keyboard-interactive",
+                        "keyboard-interactive",
+                        sequence,
+                        format!("resolved canceled=false answers={} pending={pending_after}", answers.len()),
+                    );
+                    Some(
+                        answers
+                            .iter()
+                            .map(|answer| answer.as_str().unwrap_or("").to_string())
+                            .collect(),
+                    )
                 }
-                _ => {
-                    app.state::<crate::services::workspace::WorkspaceState>()
-                        .pending_interactions
-                        .write()
-                        .await
-                        .remove(&request_id);
+                SshInteractionWaitResult::ReceiverClosed => {
+                    let (_, pending_after) =
+                        remove_pending_ssh_interaction(&app, &request_id).await;
+                    interaction.log_interaction(
+                        &app,
+                        "WARN",
+                        &request_id,
+                        "keyboard-interactive",
+                        "keyboard-interactive",
+                        sequence,
+                        format!("renderer receiver closed pending={pending_after}"),
+                    );
+                    None
+                }
+                SshInteractionWaitResult::Timeout => {
+                    let (_, pending_after) =
+                        remove_pending_ssh_interaction(&app, &request_id).await;
+                    interaction.log_interaction(
+                        &app,
+                        "WARN",
+                        &request_id,
+                        "keyboard-interactive",
+                        "keyboard-interactive",
+                        sequence,
+                        format!(
+                            "expired reason=interaction-timeout timeout_secs={} pending={pending_after}",
+                            interaction_timeout.as_secs()
+                        ),
+                    );
+                    None
+                }
+                SshInteractionWaitResult::Cancelled => {
+                    let (_, pending_after) =
+                        remove_pending_ssh_interaction(&app, &request_id).await;
+                    interaction.log_interaction(
+                        &app,
+                        "INFO",
+                        &request_id,
+                        "keyboard-interactive",
+                        "keyboard-interactive",
+                        sequence,
+                        format!(
+                            "canceled reason=connection-cancelled pending={pending_after}"
+                        ),
+                    );
                     None
                 }
             }

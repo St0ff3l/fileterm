@@ -1,0 +1,137 @@
+/*
+ * Standard Common Button Styles
+ * Strictly consumes semantic tokens. Zero hardcoded colors.
+ */
+
+.ft-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  outline: none;
+  transition:
+    background-color var(--transition-normal),
+    border-color var(--transition-normal),
+    color var(--transition-normal),
+    box-shadow var(--transition-normal);
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* Sizes */
+.ft-btn--sm,
+.ft-btn--compact {
+  height: var(--control-height-sm);
+  padding: 0 var(--control-padding-x-sm);
+  font-size: var(--font-size-xs);
+}
+
+.ft-btn--md,
+.ft-btn--regular {
+  height: var(--control-height-md);
+  padding: 0 var(--control-padding-x-md);
+  font-size: var(--font-size-sm);
+}
+
+.ft-btn--lg,
+.ft-btn--prominent {
+  height: var(--control-height-lg);
+  padding: 0 var(--control-padding-x-lg);
+  font-size: var(--font-size-md);
+}
+
+/* Variants */
+.ft-btn--primary {
+  background-color: var(--action-primary-bg);
+  color: var(--action-primary-text);
+  border-color: transparent;
+}
+
+.ft-btn--primary:hover:not(:disabled) {
+  background-color: var(--action-primary-hover);
+}
+
+.ft-btn--primary:active:not(:disabled) {
+  background-color: var(--action-primary-active);
+}
+
+.ft-btn--secondary {
+  background-color: var(--action-secondary-bg);
+  color: var(--action-secondary-text);
+  border-color: var(--border-subtle);
+}
+
+.ft-btn--secondary:hover:not(:disabled) {
+  background-color: var(--action-secondary-hover);
+  border-color: var(--border-default);
+}
+
+.ft-btn--secondary:active:not(:disabled) {
+  background-color: var(--action-secondary-active);
+}
+
+.ft-btn--ghost {
+  background-color: transparent;
+  color: var(--action-ghost-text);
+  border-color: transparent;
+}
+
+.ft-btn--ghost:hover:not(:disabled) {
+  background-color: var(--action-ghost-hover);
+  color: var(--text-primary);
+}
+
+.ft-btn--ghost:active:not(:disabled) {
+  background-color: var(--action-ghost-active);
+}
+
+.ft-btn--danger {
+  background-color: var(--action-danger-bg);
+  color: var(--action-danger-text);
+  border-color: transparent;
+}
+
+.ft-btn--danger:hover:not(:disabled) {
+  background-color: var(--action-danger-hover);
+}
+
+/* State Modifiers */
+.ft-btn:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--surface-canvas),
+    0 0 0 4px var(--accent-focus-ring);
+}
+
+.ft-btn:disabled,
+.ft-btn--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ft-btn--loading {
+  cursor: wait;
+  opacity: 0.8;
+}
+
+.ft-btn__spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ft-btn-spin 0.6s linear infinite;
+}
+
+@keyframes ft-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

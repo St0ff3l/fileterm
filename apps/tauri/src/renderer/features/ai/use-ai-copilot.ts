@@ -11,10 +11,12 @@ import type {
   ActionApprovalRequest,
   AiToolActivity,
   AiProviderSummary,
+  AiReasoningEffort,
   AiStreamEvent,
   CreateAiContextPreviewInput
 } from '@fileterm/core'
 import { handleAiStreamEvent, type AiCopilotStreamState } from './ai-copilot-stream'
+import { getAiReasoningOptions, supportsAiReasoningEffort } from './ai-reasoning'
 import {
   isChatProvider,
   preserveLocalConversationTitle,
@@ -25,6 +27,42 @@ import {
   type RetryMessageOptions,
   type SendMessageOptions
 } from './ai-copilot-utils'
+
+const AI_COPILOT_MODE_UI_STATE_KEY = 'ai-copilot.last-mode.v1'
+const AI_COPILOT_REASONING_UI_STATE_KEY = 'ai-copilot.reasoning-effort.v1'
+
+function parseAiCopilotMode(value: string | null): AiCopilotMode | null {
+  switch (value) {
+    case 'pure-conversation':
+    case 'semi-automatic':
+    case 'fully-automatic':
+      return value
+    default:
+      return null
+  }
+}
+
+function parseAiReasoningEffort(value: string | null): AiReasoningEffort | null {
+  switch (value) {
+    case 'auto':
+    case 'none':
+    case 'minimal':
+    case 'low':
+    case 'medium':
+    case 'high':
+    case 'xhigh':
+    case 'max':
+      return value
+    default:
+      return null
+  }
+}
+
+function persistAiCopilotPreference(key: string, value: string) {
+  const desktopApi = window.fileterm
+  if (!desktopApi) return
+  void desktopApi.setUiStateItem(key, value).catch(() => undefined)
+}
 
 export function useAiCopilot() {
   const [providers, setProviders] = useState<AiProviderSummary[]>([])
@@ -42,6 +80,7 @@ export function useAiCopilot() {
   const [contextPreview, setContextPreview] = useState<AiContextPreview | null>(null)
   const [isContextPreviewing, setIsContextPreviewing] = useState(false)
   const [modeState, setModeState] = useState<AiCopilotModeState | null>(null)
+  const [reasoningEffort, setReasoningEffort] = useState<AiReasoningEffort>('auto')
   const conversationRef = useRef<AiConversation | null>(null)
   const selectedProviderIdRef = useRef<string | null>(null)
   const selectedModelRef = useRef<string | null>(null)
@@ -53,6 +92,7 @@ export function useAiCopilot() {
   const cancelRequestedRef = useRef(false)
   const unmountedRef = useRef(false)
   const modeStateRef = useRef<AiCopilotModeState | null>(null)
+  const reasoningEffortRef = useRef<AiReasoningEffort>('auto')
   const mountedRef = useRef(true)
   const toolApprovalRequestsRef = useRef<ActionApprovalRequest[]>([])
   const resolvingToolApprovalIdsRef = useRef(new Set<string>())
@@ -76,6 +116,28 @@ export function useAiCopilot() {
     selectedModelRef.current = model
     setSelectedModel(model)
   }, [])
+
+  const selectReasoningEffort = useCallback(
+    (effort: AiReasoningEffort) => {
+      if (isStreaming) return
+      reasoningEffortRef.current = effort
+      setReasoningEffort(effort)
+      persistAiCopilotPreference(AI_COPILOT_REASONING_UI_STATE_KEY, effort)
+    },
+    [isStreaming]
+  )
+
+  const requestReasoningEffort = useCallback(
+    (providerId: string, modelOverride?: string) => {
+      const provider = providers.find((item) => item.id === providerId)
+      const model = modelOverride || provider?.model
+      if (!provider || !model || !supportsAiReasoningEffort(provider, model, reasoningEffortRef.current)) {
+        return undefined
+      }
+      return reasoningEffortRef.current === 'auto' ? undefined : reasoningEffortRef.current
+    },
+    [providers]
+  )
 
   const loadConversation = useCallback(
     async (conversationId: string) => {
@@ -110,14 +172,32 @@ export function useAiCopilot() {
       return
     }
     try {
-      const [nextProviders, nextConversations, nextModeState] = await Promise.all([
-        desktopApi.listAiProviders(),
-        desktopApi.listAiConversations(),
-        desktopApi.getAiCopilotModeState()
-      ])
+      const [nextProviders, nextConversations, nextModeState, rememberedModeValue, rememberedEffortValue] =
+        await Promise.all([
+          desktopApi.listAiProviders(),
+          desktopApi.listAiConversations(),
+          desktopApi.getAiCopilotModeState(),
+          desktopApi.getUiStateItem(AI_COPILOT_MODE_UI_STATE_KEY).catch(() => null),
+          desktopApi.getUiStateItem(AI_COPILOT_REASONING_UI_STATE_KEY).catch(() => null)
+        ])
+      let effectiveModeState = nextModeState
+      const rememberedMode = parseAiCopilotMode(rememberedModeValue)
+      if (rememberedMode && rememberedMode !== 'fully-automatic' && rememberedMode !== nextModeState.mode) {
+        try {
+          effectiveModeState = await desktopApi.setAiCopilotMode({ mode: rememberedMode })
+        } catch {
+          // Preferences are best effort. Keep the Rust mode if restoration is
+          // unavailable, and never let it prevent the Copilot from opening.
+        }
+      }
+      const rememberedEffort = parseAiReasoningEffort(rememberedEffortValue)
       if (!mountedRef.current) return
-      modeStateRef.current = nextModeState
-      setModeState(nextModeState)
+      modeStateRef.current = effectiveModeState
+      setModeState(effectiveModeState)
+      if (rememberedEffort) {
+        reasoningEffortRef.current = rememberedEffort
+        setReasoningEffort(rememberedEffort)
+      }
       const availableProviders = nextProviders.filter(isChatProvider)
       setProviders(availableProviders)
       setConversations(sortConversations(nextConversations))
@@ -400,6 +480,7 @@ export function useAiCopilot() {
         }
         applyConversation(optimisticConversation)
         const modelOverride = selectedModelRef.current || undefined
+        const activeReasoningEffort = requestReasoningEffort(providerId, modelOverride)
         const result = await startRequest(
           (conversationId, requestProviderId, onEvent) =>
             desktopApi.startAiChat(
@@ -409,7 +490,8 @@ export function useAiCopilot() {
                 modelOverride,
                 userMessage: content,
                 contextSnapshotId: options.contextSnapshotId,
-                mode
+                mode,
+                reasoningEffort: activeReasoningEffort
               },
               onEvent
             ),
@@ -466,6 +548,7 @@ export function useAiCopilot() {
       contextPreview,
       createConversation,
       isStreaming,
+      requestReasoningEffort,
       startRequest
     ]
   )
@@ -519,6 +602,7 @@ export function useAiCopilot() {
       setIsStreaming(true)
       try {
         const modelOverride = selectedModelRef.current || undefined
+        const activeReasoningEffort = requestReasoningEffort(providerId, modelOverride)
         await startRequest(
           (conversationId, requestProviderId, onEvent) =>
             desktopApi.retryAiChat(
@@ -527,7 +611,8 @@ export function useAiCopilot() {
                 providerId: requestProviderId,
                 modelOverride,
                 contextSnapshotId: options.contextSnapshotId,
-                mode
+                mode,
+                reasoningEffort: activeReasoningEffort
               },
               onEvent
             ),
@@ -547,7 +632,7 @@ export function useAiCopilot() {
         return false
       }
     },
-    [clearToolApprovalState, isStreaming, startRequest]
+    [clearToolApprovalState, isStreaming, requestReasoningEffort, startRequest]
   )
 
   const setCopilotMode = useCallback(
@@ -562,6 +647,7 @@ export function useAiCopilot() {
           setModeState(next)
           setContextPreview(null)
         }
+        persistAiCopilotPreference(AI_COPILOT_MODE_UI_STATE_KEY, next.mode)
         return next
       } catch (error) {
         if (mountedRef.current) setErrorMessage(toMessage(error))
@@ -738,6 +824,16 @@ export function useAiCopilot() {
   // Effective model: user-selected override > provider's default model
   const effectiveModel = selectedModel || currentProvider?.model || null
 
+  useEffect(() => {
+    if (!currentProvider || !effectiveModel) return
+    const availableEfforts = getAiReasoningOptions(currentProvider, effectiveModel)
+    if (availableEfforts.length === 0 || availableEfforts.includes(reasoningEffortRef.current)) return
+    const nextEffort = availableEfforts[0]
+    reasoningEffortRef.current = nextEffort
+    setReasoningEffort(nextEffort)
+    persistAiCopilotPreference(AI_COPILOT_REASONING_UI_STATE_KEY, nextEffort)
+  }, [currentProvider, effectiveModel])
+
   return {
     providers,
     conversations,
@@ -756,8 +852,10 @@ export function useAiCopilot() {
     contextPreview,
     isContextPreviewing,
     modeState,
+    reasoningEffort,
     selectProvider,
     selectModel,
+    selectReasoningEffort,
     loadConversation,
     refresh,
     newChat,

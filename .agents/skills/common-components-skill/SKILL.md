@@ -1,442 +1,331 @@
-# FileTerm 通用组件技能指南
-
-## 概述
-
-本指南详细介绍 FileTerm 项目中的通用组件架构、CSS 主题系统，以及独立窗口在亮暗主题下的落地方式。
-
+---
+name: common-components-skill
+description: FileTerm renderer 通用组件与主题 CSS 的强制规范。只要任务涉及新增或修改 React/TSX 组件、组件 CSS、styles/tokens、主题切换、按钮、输入框、下拉框、弹窗、状态指示器、独立窗口或 UI 颜色，就必须使用本 skill。严格执行 --ref-* 主题值 → 语义变量 → 组件 CSS 的边界，并在完成前运行 CSS contract check。
 ---
 
-## 一、通用组件架构
+# FileTerm 通用组件与 CSS 主题规范
 
-### 1.1 组件目录结构
+这是一份执行规范，不是设计建议。目标是让组件结构、主题颜色和平台行为各自有明确归属，并让自定义主题可以通过同一条变量链路生效。
 
-```
-renderer/
-├── components/           # 核心通用组件
-│   └── terminal-view.tsx  # 终端视图组件
-└── features/
-    └── common/           # 通用功能组件
-        ├── app-icon.tsx           # 图标组件
-        ├── context-menu.tsx       # 右键菜单组件
-        ├── status-indicator.tsx    # 连接状态指示点
-        └── horizontal-scroll.ts  # 水平滚动工具函数
-```
+## 0. 开始改动前
 
-### 1.2 核心组件说明
+1. 先读取仓库根目录的 AGENTS.md，并以当前源码为准，不要沿用本文件中的历史路径。
+2. 涉及颜色、阴影、圆角、按钮、输入框、弹窗、下拉框、状态点或独立窗口时，先查看 apps/tauri/src/renderer/styles/tokens/ 和对应组件。
+3. 先运行一次：
 
-#### TerminalView（终端组件）
+   ```bash
+   bash .agents/skills/common-components-skill/scripts/check-css-contract.sh
+   ```
 
-**文件路径**：`apps/tauri/src/renderer/components/terminal-view.tsx`
+   记录已有债务；不要把旧文件中的问题误认为本次新增问题。
 
-**功能特性**：
+4. 修改完成后再次运行检查，并说明仍存在的历史债务或有明确理由的例外。
 
-- 基于 `@xterm/xterm` 构建的终端视图
-- 支持主题颜色定制（通过 CSS 变量）
-- 快捷键支持：复制(⌘C/Ctrl+Shift+C)、粘贴(⌘V/Ctrl+Shift+V)、查找(⌘F/Ctrl+F)
-- 右键上下文菜单集成
-- 自动适配容器尺寸
-- 国际化文本支持
+## 1. 当前真实目录和归属
 
-**关键依赖**：
+Renderer 的规范目录如下：
 
-```typescript
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { ContextMenu } from '../features/common/context-menu'
-```
-
-#### AppIcon（图标组件）
-
-**文件路径**：`apps/tauri/src/renderer/features/common/app-icon.tsx`
-
-**支持的图标类型**：
-
-| 图标名        | 用途       |
-| ------------- | ---------- |
-| `grid`        | 网格视图   |
-| `menu`        | 菜单按钮   |
-| `server`      | 服务器连接 |
-| `connections` | 连接管理   |
-| `folder`      | 文件夹     |
-| `file`        | 文件       |
-| `history`     | 历史记录   |
-| `refresh`     | 刷新       |
-| `upload`      | 上传       |
-| `download`    | 下载       |
-| `flash`       | 快速操作   |
-
-**使用方式**：
-
-```tsx
-<AppIcon name="folder" size={16} />
+```text
+apps/tauri/src/renderer/
+├── components/
+│   └── common/
+│       └── <component-name>/
+│           ├── <component-name>.tsx
+│           └── <component-name>.css
+├── features/
+│   ├── <feature>/
+│   │   ├── <feature-component>.tsx
+│   │   └── <feature-component>.css       # 新代码优先就地共址
+│   └── common/                            # 行为工具、辅助组件和兼容 re-export
+└── styles/
+    ├── index.css                          # 全局入口
+    ├── reset.css                          # 浏览器重置
+    ├── tokens/
+    │   ├── index.css                      # token 入口
+    │   ├── foundations.css                # 字体、尺寸、圆角、阴影等基础值
+    │   ├── semantic.css                   # 语义映射，不写具体色值
+    │   ├── fileterm-dark.css              # FileTerm 暗色具体值
+    │   ├── fileterm-light.css             # FileTerm 亮色具体值
+    │   ├── codex-dark.css                 # Codex 暗色具体值
+    │   └── codex-light.css                # Codex 亮色具体值
+    └── features/                          # 现有遗留全局/皮肤样式，禁止新增组件样式
 ```
 
-**特性**：
+归属规则：
 
-- 统一 SVG 图标系统
-- 可自定义尺寸（默认 14px）
-- 颜色继承父元素 `currentColor`
+- 可被多个功能复用的视觉组件放在 components/common/<name>/。
+- 只服务一个业务域的组件放在 features/<feature>/，新 CSS 与组件共址。
+- features/common/ 中已有的行为工具、辅助组件和兼容导出可以继续存在；新建的 Button、Card、Dialog、Input、DropdownSelect 等视觉组件以 components/common/ 为唯一实现。
+- styles/features/ 中的旧皮肤和全局样式属于迁移区。修改旧文件时顺手迁移触及的规则，但不要继续往里面新增一套组件皮肤。
 
-#### StatusIndicator（连接状态指示组件）
+## 2. 三层颜色模型
 
-**文件路径**：`apps/tauri/src/renderer/features/common/status-indicator.tsx`
+颜色必须按下面顺序流动：
 
-**功能特性**：
-
-- 统一顶部标签页和底部会话上下文的连接状态点
-- 支持 `connected`、`connecting`、`disconnected`、`idle` 四种状态
-- `sm` 尺寸保持标签页原有的 5px 状态点；`md` 尺寸用于需要更强存在感的场景
-- 视觉样式集中在 `apps/tauri/src/renderer/styles/features/common-controls.css`
-- 顶部标签页抽取时必须保持原有颜色、尺寸和光晕，不在公共组件中擅自增加动画或改色
-
-**使用方式**：
-
-```tsx
-<StatusIndicator aria-hidden="true" status="connected" />
+```text
+主题配置或主题文件的具体值
+        ↓
+--ref-* 参考值层
+        ↓
+semantic.css 的语义变量
+        ↓
+组件和 feature CSS
 ```
 
-底部会话徽标应传入当前标签页的真实状态，不要固定传 `connected`；装饰性状态点使用 `aria-hidden="true"`，可读状态则由相邻文本提供语义。
+### 2.1 参考值层：--ref-*
 
-#### ContextMenu（右键菜单组件）
+参考值层保存真正的颜色、透明色和主题相关派生值。允许出现 hex、rgb、rgba 或 color-mix。
 
-**文件路径**：`apps/tauri/src/renderer/features/common/context-menu.tsx`
+静态内置主题的位置：
 
-**功能特性**：
+- styles/tokens/fileterm-dark.css
+- styles/tokens/fileterm-light.css
+- styles/tokens/codex-dark.css
+- styles/tokens/codex-light.css
 
-- 点击外部区域自动关闭
-- Esc 键关闭
-- 位置自动调整（避免超出视口）
-- 支持禁用状态和危险操作样式
+运行时自定义主题的位置：
 
-**接口定义**：
+- apps/tauri/src/renderer/app/theme-config.ts
+- 主题配置类型和默认值在 packages/core/src/index.ts
 
-```typescript
-type ContextMenuEntry = {
-  label?: string
-  shortcut?: string
-  disabled?: boolean
-  danger?: boolean
-  action?(): void
-  separator?: boolean
-}
-```
-
-**使用方式**：
-
-```tsx
-<ContextMenu
-  items={[
-    { label: '复制', shortcut: '⌘C', action: handleCopy },
-    { separator: true },
-    { label: '删除', danger: true, action: handleDelete }
-  ]}
-  onClose={closeMenu}
-  position={{ x: 100, y: 100 }}
-/>
-```
-
-#### handleHorizontalWheelScroll（水平滚动工具）
-
-**文件路径**：`apps/tauri/src/renderer/features/common/horizontal-scroll.ts`
-
-**功能**：支持鼠标滚轮水平滚动容器
-
-**特性**：
-
-- 兼容不同浏览器的 deltaMode
-- 边界检测（不滚动超出内容范围）
-
-**使用方式**：
-
-```tsx
-<div onWheel={handleHorizontalWheelScroll}>{/* 可水平滚动内容 */}</div>
-```
-
----
-
-## 二、CSS 主题系统
-
-### 2.1 样式目录结构
-
-```
-renderer/styles/
-├── themes/               # 主题定义
-│   ├── index.css         # 主题入口
-│   ├── tokens.css        # 设计令牌
-│   ├── default-dark.css  # 暗色主题
-│   └── default-light.css # 亮色主题
-├── features/             # 功能模块样式
-│   ├── session.css       # 会话样式
-│   ├── shell.css         # 终端样式
-│   ├── home.css          # 首页样式
-│   └── ...
-├── app.css               # 应用主样式
-├── global.css            # 全局样式
-└── index.css             # 样式入口
-```
-
-### 2.2 设计令牌（Tokens）
-
-主题样式采用 `token -> theme vars -> component skins` 的层级结构。
-
-**核心 CSS 变量**：
-
-| 变量名            | 用途       | 示例值    |
-| ----------------- | ---------- | --------- |
-| `--terminal-bg`   | 终端背景色 | `#1e1e1e` |
-| `--terminal-text` | 终端文字色 | `#e0e0e0` |
-| `--success`       | 成功状态色 | `#39d98a` |
-| `--accent-text`   | 强调文字色 | `#c8d0da` |
-| `--text-main`     | 主文字色   | `#f1f5f9` |
-
-**终端主题变量**：
+示例：
 
 ```css
+/* fileterm-dark.css */
 :root {
-  --terminal-bg: #1e1e1e;
-  --terminal-text: #e0e0e0;
-  --terminal-cmd-bg: rgba(148, 163, 184, 0.24);
-  --terminal-search-highlight: rgba(236, 255, 71, 0.82);
+  --ref-accent: #1687e8;
 }
 ```
 
-### 2.3 主题切换机制
+### 2.2 语义层：semantic.css
 
-项目支持亮色/暗色主题切换，但当前仓库不是通过 `.theme-dark/.theme-light` 类名控制，而是通过 `document.documentElement.dataset.theme` 控制（Tauri 窗口在创建时按该属性初始化主题）。
-
-```css
-/* 默认暗色：未声明主题时也会走暗色 */
-:root:not([data-theme]),
-:root[data-theme='default-dark'],
-:root[data-theme='default'] {
-  color-scheme: dark;
-}
-
-/* 亮色主题 */
-:root[data-theme='default-light'] {
-  color-scheme: light;
-}
-```
-
-**实现方式**：
-
-- 在 `html` 根元素上设置 `data-theme="default-dark|default-light"`
-- 通过 `apps/tauri/src/renderer/hooks/use-theme-mode.ts` 同步 `dataset.theme` 与 `color-scheme`
-- 通过 `apps/tauri/src/renderer/app.tsx` 持久化 `theme` / `locale`
-- 通过 `apps/tauri/src/renderer/main.tsx` 在挂载前读取窗口 query 和 UI 偏好，并应用主题变量；原生窗口创建与生命周期由 Tauri backend 处理
-- 组件通过 CSS 变量获取颜色值，终端再从 CSS 变量映射到 xterm theme
-
-### 2.3.1 启动阶段防闪色
-
-独立窗口的亮色主题有一个额外约束：不能等 React 挂载后才决定背景色，否则白窗会先闪一下黑底。
-
-当前仓库的处理链路是：
-
-1. `apps/tauri/src/renderer/main.tsx`
-   - 读取持久化的 UI 偏好
-   - 在 React 挂载前按 query / 持久化偏好设置 `data-theme`、`lang` 和 `color-scheme`
-2. `apps/tauri/index.html`
-   - 提供 Tauri renderer 入口和启动骨架
-3. `apps/tauri/src/renderer/app.tsx`
-   - 接收已解析的 UI 偏好并初始化应用状态
-
-如果未来再加新独立窗口，必须沿用这条链路，否则很容易出现“窗口本体是亮色，但出生先黑一下”的问题。
-
-### 2.4 样式规范
-
-1. **避免硬编码**：颜色、阴影、圆角应通过 CSS 变量引用
-2. **主题优先**：所有视觉属性应支持主题切换
-3. **组件隔离**：功能模块样式应独立，避免全局污染
-4. **确认按钮同高**：`flat-button` 与 `primary-button` 默认共享一套中号按钮尺寸，统一走 `tokens.css` 中的按钮变量；如果某处需要更小尺寸，必须显式使用 `compact` 等修饰类，而不是让蓝色确认按钮单独更高、更宽。
-5. **异步确认必有反馈**：凡是会触发 IPC、网络、远端命令或文件写入的确认按钮，组件层必须提供 `isSubmitting`/`isBusy` 态，至少覆盖三件事：禁用重复提交、显示按钮内 spinner、保留并更新失败反馈区域。
-6. **响应式设计**：使用 `@media` 查询适配不同屏幕尺寸
-
-### 2.5 组件结构与 CSS 主题颜色分离
-
-#### 分离原则
-
-组件的结构样式（layout）与主题颜色（theme）必须分离，遵循以下规则：
-
-| 分类         | 内容                   | 示例                                               |
-| ------------ | ---------------------- | -------------------------------------------------- |
-| **结构样式** | 布局、尺寸、间距、定位 | `display`, `flex`, `margin`, `padding`, `position` |
-| **主题颜色** | 颜色、背景色、边框色   | `color`, `background-color`, `border-color`        |
-
-#### 分离实现
-
-**结构样式**应直接写在组件的 CSS 文件中：
+语义层回答“这个颜色用于什么”，不回答“颜色具体是多少”。
 
 ```css
-/* Button.css */
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  outline: none;
-  transition: all 0.2s ease;
-}
-```
-
-**主题颜色**应通过 CSS 变量引用：
-
-```css
-/* Button.css */
-.button {
-  background-color: var(--primary-bg);
-  color: var(--primary-text);
-  border: 1px solid var(--primary-border);
-}
-
-.button:hover {
-  background-color: var(--primary-hover);
-}
-
-.button:active {
-  background-color: var(--primary-active);
-}
-```
-
-#### 主题变量定义
-
-主题颜色集中定义在 `apps/tauri/src/renderer/styles/themes/tokens.css` 中：
-
-```css
-/* themes/tokens.css */
+/* semantic.css */
 :root {
-  /* 主色调 */
-  --primary-bg: #3b82f6;
-  --primary-text: #ffffff;
-  --primary-border: #2563eb;
-  --primary-hover: #2563eb;
-  --primary-active: #1d4ed8;
-
-  /* 成功状态 */
-  --success-bg: #22c55e;
-  --success-text: #ffffff;
-
-  /* 警告状态 */
-  --warning-bg: #f59e0b;
-  --warning-text: #ffffff;
-
-  /* 危险状态 */
-  --danger-bg: #ef4444;
-  --danger-text: #ffffff;
+  --action-primary-bg: var(--ref-accent);
+  --action-primary-hover: var(--ref-accent-hover);
+  --text-primary: var(--ref-text-primary);
+  --surface-card: var(--ref-surface-card);
 }
 ```
 
-#### 暗色主题覆盖
+semantic.css 禁止出现具体 hex、rgb、rgba。也不要在这里写一个具体颜色作为 fallback。
 
-在暗色主题中优先覆盖颜色变量和组件皮肤，无需复制布局结构：
+### 2.3 组件层
+
+组件只使用语义变量：
 
 ```css
-/* apps/tauri/src/renderer/styles/themes/default-dark.css */
-:root[data-theme='default-dark'] {
-  --primary-bg: #60a5fa;
-  --primary-text: #0f172a;
-  --primary-border: #93c5fd;
-  --primary-hover: #93c5fd;
-  --primary-active: #bfdbfe;
+/* components/common/button/button.css */
+.button--primary {
+  background: var(--action-primary-bg);
+  color: var(--action-primary-text);
 }
 ```
 
-#### 组件编写规范
+组件不得直接使用 --ref-accent、--ref-surface-card 等参考值，因为这样会让组件知道主题实现细节。
 
-1. **结构与颜色分离**：组件 CSS 文件中，结构样式直接写值，颜色样式使用 CSS 变量
-2. **变量命名规范**：使用 `--[category]-[property]-[state]` 命名规则
-3. **变量复用**：相同语义的颜色应复用同一个变量（如按钮禁用态统一使用 `--disabled-bg`）
-4. **主题完整性**：确保所有主题变量在亮色/暗色主题中都有定义
-5. **避免内联样式**：颜色值不应写在 JSX 中，应通过 CSS 类名或 CSS 变量引用
+## 3. 变量命名和选择规则
 
-### 2.6 独立窗口主题约束
+### 3.1 常用参考值
 
-连接管理器、连接表单、命令管理器、命令编辑器、文件编辑器都存在 standalone 形态。处理这类窗口时，额外遵循：
+- 主品牌色：--ref-accent
+- 主品牌 hover/active：--ref-accent-hover、--ref-accent-active
+- 辅助品牌色：--ref-accent-secondary
+- 焦点光环：--ref-accent-focus、--ref-focus-outline
+- 画布和表面：--ref-surface-canvas、--ref-surface-panel、--ref-surface-card、--ref-surface-input
+- 文字：--ref-text-primary、--ref-text-secondary、--ref-text-muted
+- 边框：--ref-border-subtle、--ref-border-default、--ref-border-strong
+- 状态：--ref-status-success、--ref-status-warning、--ref-status-danger、--ref-status-info
+- 功能颜色：--ref-color-folder、--ref-color-skill、--ref-color-total 等
 
-1. **窗口出生底色**：由 Tauri backend 的窗口配置和 renderer 的主题变量共同决定，不要在业务组件里写死背景色。
-2. **入口预设主题**：如果窗口首屏可能是亮色，必须在 `apps/tauri/index.html` 挂载前预设 `data-theme`。
-3. **基础层不要写死 dark**：像 `.standalone-shell`、`.command-editor-window` 这类壳层不要直接写 `#1b1b1b`，优先用 `var(--bg-main)` 或透明，再交给主题层覆盖。
-4. **暗色专用类按需挂载**：类似 `file-editor-modal--dark` 只能在暗色主题下添加，不能在组件里永久写死。
-5. **终端主题要主动重刷**：`TerminalView` 这类非纯 CSS 组件要监听根节点主题变化并主动同步内部渲染主题。
+### 3.2 常用语义变量
 
----
+- 表面：--surface-*
+- 文字：--text-*
+- 边框：--border-*
+- 操作：--action-primary-_、--action-secondary-_、--action-ghost-_、--action-danger-_
+- 状态：--status-success*、--status-warning*、--status-danger*、--status-info*
+- 焦点：--focus-outline、--accent-focus-ring
 
-## 三、组件协作关系
+不要使用含义不清的 --secondary。以下概念必须分开：
 
-```
-TerminalView
-    └── ContextMenu（右键菜单）
-    └── xterm.js（终端渲染）
+- theme.accent：主题主色
+- theme.semanticColors.secondary：辅助品牌/焦点色
+- theme.semanticColors.textSecondary：次要文字色
+- --action-secondary-*：次要按钮层级，不等于辅助品牌色
 
-TabBar
-    └── AppIcon（标签图标）
-    └── StatusIndicator（连接状态）
-    └── ContextMenu（右键菜单）
+## 4. 新颜色的处理流程
 
-TransferBar
-    └── StatusIndicator（当前会话状态）
+遇到一个新颜色，例如 #1265d8，必须先问“它是什么用途”：
 
-FileManager
-    └── AppIcon（文件/文件夹图标）
-    └── ContextMenu（右键菜单）
-    └── handleHorizontalWheelScroll（水平滚动）
+1. 如果它是主题主色，使用已有的 --ref-accent，不要新建 --ref-abcdccent。
+2. 如果它是文件夹颜色，使用或新增 --ref-color-folder。
+3. 如果它是危险状态，使用或新增 --ref-status-danger。
+4. 如果它只是某个组件的主按钮背景，仍然通过 --action-primary-bg 使用，不为每个组件创建一个颜色变量。
+5. 如果确实是全新的可复用用途，按用途命名新的 --ref-*，同时：
+   - 在四个内置主题文件中补齐值；
+   - 在 theme-config.ts 的运行时映射中补齐自定义主题值；
+   - 在 semantic.css 中增加语义映射；
+   - 组件只使用这个语义变量。
 
-CommandCenter
-    └── AppIcon（命令图标）
-```
+不要按色号、随机缩写或某个页面命名，例如 --ref-blue2、--ref-abcdccent。
 
----
+## 5. 自定义主题规则
 
-## 四、扩展指南
+ThemeConfig.theme.accent 已经是主题配置的一部分。用户自定义 #1265d8 时，正确链路是：
 
-### 4.0 系统指标条颜色约定
-
-系统信息侧栏里的 CPU、交换、内存相关组件有一条现有约定，后续改 UI 时不要随手改回固定色：
-
-1. `CPU` 条
-   - 走风险阈值色，不是永久绿色
-   - 阈值函数在 `apps/tauri/src/renderer/features/system/system-sidebar.tsx` 的 `getMetricTone()`
-   - 当前规则：
-     - `< 60%` 绿色
-     - `>= 60%` 黄色
-     - `>= 85%` 红色
-2. `交换` 条和点
-   - 和 CPU 使用同一套 `getMetricTone()` 阈值
-3. `内存` 点
-   - 也走同一套 `getMetricTone()` 阈值
-4. `内存` 条
-   - 默认不是风险色条，而是 `app / cache / kernel` 的分段语义色
-   - 如果要改成风险色，先明确是否保留分段信息，不要直接覆盖掉分段语义
-
-如果未来抽公共组件，优先保留“风险色阈值函数”和“分段条语义色”这两个概念分离。
-
-### 4.1 添加新图标
-
-在 `app-icon.tsx` 中添加新的图标类型：
-
-```tsx
-{
-  name === 'new-icon' ? <path {...commonProps} d="M..." /> : null
-}
+```text
+theme.accent = '#1265d8'
+        ↓
+runtime 写入 --ref-accent
+        ↓
+--action-primary-bg: var(--ref-accent)
+        ↓
+Button 使用 --action-primary-bg
 ```
 
-### 4.2 添加新主题
+运行时应把规范化后的主题值写到根元素：
 
-1. 在 `themes/` 目录下创建新的主题文件
-2. 在 `themes/index.css` 中引入
-3. 在 `use-theme-mode.ts`、`app.tsx`、`main.tsx` 的窗口 query 初始化与 Tauri backend UI 偏好持久化中补齐新主题分支
-4. 如果新主题需要独立窗口支持，同时更新 `apps/tauri/index.html` 入口和 Tauri backend 的窗口配置
+```ts
+root.style.setProperty('--ref-accent', normalized.theme.accent)
+```
 
-### 4.3 创建新通用组件
+同时写入由主色派生的 --ref-accent-hover、--ref-accent-active、--ref-accent-focus 等参考值。
 
-1. 根据组件类型选择放置位置：
-   - 核心视图组件 → `renderer/components/`
-   - 功能辅助组件 → `renderer/features/common/`
-2. 遵循现有组件的命名和编码规范
-3. 添加相应的样式文件到 `styles/features/`
-4. 如果组件会出现在独立窗口或使用内置渲染器（如 xterm、Monaco），额外检查主题切换和首屏加载是否会闪错色
-5. 已有跨功能视觉状态应优先复用公共组件；公共组件的结构样式与主题颜色分别维护，不在业务组件中复制状态点样式
+如果用户没有提供 accent，使用 normalizeThemeConfig 的基础主题 fallback；不要在 Button.css 或 feature CSS 中偷偷补一个颜色。
+
+旧的 --primary、--bg-card 等变量只允许作为 semantic.css 中的临时兼容别名。新代码不得继续使用它们。
+
+## 6. CSS 允许和禁止的写法
+
+### 6.1 允许
+
+- 在组件 CSS 中直接写布局、尺寸、间距、定位和排版数值。
+- 在组件 CSS 中使用 --surface-_、--text-_、--border-_、--action-_、--status-*。
+- 使用语义变量参与 color-mix，前提是不能混入具体 hex/rgb。
+- 使用状态 class、data attribute 或修饰 class 表达 hover、active、disabled、error 等状态。
+
+### 6.2 禁止
+
+```css
+/* 禁止：组件直接写具体色值 */
+background: #1265d8;
+
+/* 禁止：组件跳过语义层 */
+background: var(--ref-accent);
+
+/* 禁止：新代码使用旧兼容别名 */
+background: var(--primary);
+color: var(--text-main);
+```
+
+- 组件和 feature CSS 不得直接写 hex、rgb、rgba。
+- JSX/TSX 的 inline style 不得写颜色 fallback 或具体色值。
+- 新代码不得使用 var(--ref-*)，参考值层和语义层本身除外。
+- 不要用全局元素选择器给业务组件着色；组件样式必须有组件根 class。
+- 不要通过复制一整份暗色布局来实现亮色主题；只覆盖主题值或必要的皮肤差异。
+- 新增 !important 前必须证明是原生控件兼容问题，并留下行内注释。DropdownSelect 的原生 select reset 可作为例外；普通 Input 校验状态应优先改进 selector。
+
+## 7. 通用组件规范
+
+### Button
+
+- 统一使用 components/common/button/。
+- 变体使用 primary、secondary、ghost、danger 等语义命名。
+- 同一操作组的按钮必须共享高度、圆角和内边距。
+- 主按钮使用 --action-primary-*，不能用 --focus-outline 填充。
+- 异步操作必须有 busy/submitting 状态：禁用重复提交、显示 spinner、保留失败反馈。
+
+### DropdownSelect
+
+- 所有表单下拉框必须使用 DropdownSelect。
+- 禁止在业务组件中新增原生 select。
+- macOS 原生外壳和 Windows/Linux 自绘 Portal 都必须保持同一套语义变量和自适应箭头尺寸。
+
+### Input
+
+- 背景、边框、文字和错误状态只使用 --surface-input、--border-_、--text-_、--status-danger*。
+- 不要用 !important 解决普通校验状态的 selector 问题。
+
+### Dialog 和危险操作
+
+- 删除、清空、覆盖、断开等破坏性操作必须使用 ConfirmActionDialog。
+- 禁止在桌面 WebView 中使用 window.confirm()。
+- Dialog 的 surface、边框、阴影和按钮都通过语义变量获得。
+
+### 图标和滚动
+
+- 图标优先使用离线 SVG 的 AppIcon，禁止新增 material-symbols-outlined WebFont 依赖。
+- 新增纵向滚动区域默认复用 features/common/vertical-scrollbar.tsx，并隐藏容器原生纵向滚动条。
+- 横向滚动、第三方编辑器内部滚动和协议组件自带滚动可以保留专用实现。
+
+### StatusIndicator 和系统指标
+
+- StatusIndicator 的状态、尺寸和可访问性语义必须保持一致；装饰性状态点使用 aria-hidden。
+- CPU、交换、内存风险阈值与内存分段色是两个概念，不要用一套颜色覆盖另一套信息。
+
+## 8. Feature 样式和遗留皮肤迁移
+
+- 新 feature 组件的 CSS 与组件共址，根 class 使用 feature 前缀，避免全局污染。
+- styles/features/ 中的旧 CSS 只作为迁移对象，不得把新功能继续堆进去。
+- 修改旧 CSS 时，先把直接色值搬到对应 --ref-*，再把使用点改成语义变量。
+- 不要机械地把所有 var(--primary) 替换成 --action-primary-bg。如果原用法是边框、文字、焦点或状态，必须按视觉用途选择对应语义变量。
+
+常见迁移方向：
+
+```text
+--bg-main       → --surface-canvas
+--bg-card       → --surface-card 或 --surface-panel
+--bg-hover      → --surface-hover
+--text-main     → --text-primary
+--primary       → 按用途选择 --action-primary-bg、--border-focus 或 --accent-highlight
+--danger        → --status-danger
+--success       → --status-success
+--warning       → --status-warning
+--info          → --status-info
+```
+
+兼容别名只保留在 semantic.css，并在迁移完成后删除。完成标准是新代码不再产生旧变量引用，再逐步清理桥接。
+
+## 9. 主题切换和独立窗口
+
+- 主题由 document.documentElement.dataset.theme 控制，当前值包括 fileterm-dark、fileterm-light、codex-dark、codex-light 等。
+- main.tsx 必须在 React 挂载前设置首屏主题，避免独立亮色窗口先闪黑。
+- theme-config.ts 负责运行时主题变量和自定义主题映射；不要再按旧 styles/themes 路径增加分支。
+- TerminalView、xterm、Monaco 等非纯 CSS 渲染器必须监听主题变化并主动刷新内部主题。
+- 独立窗口的壳层不得写死暗色背景，使用语义 surface 或透明背景。
+
+## 10. 验收检查
+
+完成 CSS 或组件任务后，必须执行：
+
+```bash
+bash .agents/skills/common-components-skill/scripts/check-css-contract.sh
+npx prettier --check apps/tauri/src/renderer packages/core
+```
+
+涉及 TypeScript 或组件行为时，再执行项目要求的 typecheck、lint 和相关测试。
+
+CSS contract check 至少验证：
+
+1. semantic.css 没有直接 hex/rgb。
+2. components/common/ 和新 feature CSS 没有直接颜色值。
+3. 组件没有直接使用 --ref-*。
+4. 新组件没有使用旧兼容变量。
+5. 四个内置主题文件仍然存在。
+6. !important 只作为报告项，新增例外必须有理由。
+
+## 11. 完成定义
+
+提交前逐项确认：
+
+- [ ] 组件放在正确的 components/common/ 或 features/<feature>/ 目录。
+- [ ] 结构样式与主题颜色分开。
+- [ ] 组件只使用语义变量，不使用具体色值或 --ref-*。
+- [ ] 新颜色按用途命名，并补齐静态主题和运行时映射。
+- [ ] 自定义主题的 theme.accent 可以流到 --ref-accent。
+- [ ] 没有新增旧兼容变量、原生 select、material WebFont 或危险操作的原生 confirm。
+- [ ] 运行 CSS contract check，并记录遗留债务或合法例外。

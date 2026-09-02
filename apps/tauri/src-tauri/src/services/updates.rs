@@ -1,8 +1,8 @@
 //! Platform-specific application updates.
 //!
-//! Windows uses Tauri's signed updater and keeps a verified package in memory
-//! until the user confirms the restart. macOS intentionally remains on the
-//! GitHub Release-page path so the user explicitly downloads the DMG/ZIP.
+//! Windows installers use Tauri's signed updater and keep a verified package
+//! in memory until the user confirms the restart. Windows portable builds and
+//! macOS intentionally use the GitHub Release-page path instead.
 
 use semver::Version;
 use serde::Deserialize;
@@ -16,6 +16,9 @@ const ALL_RELEASES_PAGE: &str = "https://github.com/St0ff3l/fileterm/releases";
 #[cfg(target_os = "windows")]
 const RELEASE_DOWNLOAD_BASE: &str = "https://github.com/St0ff3l/fileterm/releases/download";
 const DEFAULT_UPDATE_CHANNEL: &str = "stable";
+const RELEASE_PAGE_UPDATE_MODE: &str = "release-page";
+#[cfg(any(test, target_os = "windows"))]
+const IN_APP_UPDATE_MODE: &str = "in-app";
 
 #[derive(Clone, Debug, Deserialize)]
 struct GithubRelease {
@@ -65,29 +68,60 @@ fn update_channel(app: &AppHandle) -> String {
         .unwrap_or_else(|_| DEFAULT_UPDATE_CHANNEL.to_string())
 }
 
+#[cfg(any(test, target_os = "windows"))]
+const fn windows_update_mode_for_portable(is_portable: bool) -> &'static str {
+    if is_portable {
+        RELEASE_PAGE_UPDATE_MODE
+    } else {
+        IN_APP_UPDATE_MODE
+    }
+}
+
 #[cfg(target_os = "windows")]
-const fn primary_update_mode() -> &'static str {
-    "in-app"
+fn is_portable_build() -> bool {
+    crate::storage::portable_config_directory().is_some()
+}
+
+#[cfg(not(target_os = "windows"))]
+const fn is_portable_build() -> bool {
+    false
+}
+
+#[cfg(target_os = "windows")]
+fn primary_update_mode() -> &'static str {
+    windows_update_mode_for_portable(is_portable_build())
 }
 
 #[cfg(not(target_os = "windows"))]
 const fn primary_update_mode() -> &'static str {
-    "release-page"
+    RELEASE_PAGE_UPDATE_MODE
+}
+
+#[cfg(target_os = "windows")]
+fn initial_update_message(update_mode: &str) -> &'static str {
+    if update_mode == RELEASE_PAGE_UPDATE_MODE {
+        "Windows 便携版将打开 GitHub Release 下载页面。"
+    } else {
+        "Windows 将下载并验证签名，重启后安装更新。"
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+const fn initial_update_message(_: &str) -> &'static str {
+    "检查 GitHub Release；安装将通过发布页完成。"
 }
 
 fn initial_status(app: &AppHandle) -> serde_json::Value {
     let channel = update_channel(app);
-    #[cfg(target_os = "windows")]
-    let message = "Windows 将下载并验证签名，重启后安装更新。";
-    #[cfg(not(target_os = "windows"))]
-    let message = "检查 GitHub Release；安装将通过发布页完成。";
+    let update_mode = primary_update_mode();
 
     serde_json::json!({
         "state": "idle",
         "currentVersion": current_version(app),
-        "updateMode": primary_update_mode(),
+        "updateMode": update_mode,
+        "isPortable": is_portable_build(),
         "updateChannel": channel,
-        "message": message,
+        "message": initial_update_message(update_mode),
     })
 }
 
@@ -222,7 +256,8 @@ async fn check_release_page_update(app: &AppHandle) -> serde_json::Value {
     serde_json::json!({
         "state": "available",
         "currentVersion": current,
-        "updateMode": "release-page",
+        "updateMode": RELEASE_PAGE_UPDATE_MODE,
+        "isPortable": is_portable_build(),
         "updateChannel": selection.channel,
         "availableVersion": version,
         "releaseTag": selection.release.tag_name,
@@ -360,7 +395,11 @@ pub async fn check(app: &AppHandle) -> Result<serde_json::Value, AppError> {
     .await;
 
     #[cfg(target_os = "windows")]
-    let status = check_windows_update(app).await;
+    let status = if is_portable_build() {
+        check_release_page_update(app).await
+    } else {
+        check_windows_update(app).await
+    };
     #[cfg(not(target_os = "windows"))]
     let status = check_release_page_update(app).await;
 
@@ -412,7 +451,9 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
         .clone();
     let _operation_guard = update_operation.lock().await;
     let existing_status = get_status(app).await;
-    if current_update_mode(&existing_status) == "release-page" {
+    if primary_update_mode() == RELEASE_PAGE_UPDATE_MODE
+        || current_update_mode(&existing_status) == RELEASE_PAGE_UPDATE_MODE
+    {
         return open_release_page(app).await;
     }
 
@@ -556,6 +597,10 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
 
 #[cfg(target_os = "windows")]
 async fn install_windows_update(app: &AppHandle) -> Result<(), AppError> {
+    if primary_update_mode() == RELEASE_PAGE_UPDATE_MODE {
+        return open_release_page(app).await;
+    }
+
     let update_operation = app
         .state::<crate::services::workspace::WorkspaceState>()
         .update_operation
@@ -611,7 +656,13 @@ pub async fn install(app: &AppHandle) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_newer, select_release, GithubRelease};
+    use super::{is_newer, select_release, windows_update_mode_for_portable, GithubRelease};
+
+    #[test]
+    fn portable_windows_builds_use_the_release_page_instead_of_the_nsis_updater() {
+        assert_eq!(windows_update_mode_for_portable(true), "release-page");
+        assert_eq!(windows_update_mode_for_portable(false), "in-app");
+    }
 
     #[test]
     fn compares_release_tags_numerically() {

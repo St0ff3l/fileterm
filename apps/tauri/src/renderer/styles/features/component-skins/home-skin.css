@@ -1,0 +1,65 @@
+/* home.css */
+:root:not([data-theme]) .home-workspace,
+:root:not([data-theme*='light']) .home-workspace,
+:root[data-theme='default'] .home-workspace {
+  background: var(--bg-main);
+}
+
+:root:not([data-theme]) .quick-panel,
+:root:not([data-theme*='light']) .quick-panel,
+:root[data-theme='default'] .quick-panel {
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+
+:root:not([data-theme]) .quick-header,
+:root:not([data-theme*='light']) .quick-header,
+:root[data-theme='default'] .quick-header {
+  background: var(--bg-sidebar);
+}
+
+:root:not([data-theme]) .quick-header strong,
+:root:not([data-theme*='light']) .quick-header strong,
+:root[data-theme='default'] .quick-header strong {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .flat-button,
+:root:not([data-theme*='light']) .flat-button,
+:root[data-theme='default'] .flat-button {
+  color: var(--text-main);
+  border-color: var(--border-dark);
+}
+
+:root:not([data-theme]) .flat-button:hover:not(:disabled),
+:root:not([data-theme*='light']) .flat-button:hover:not(:disabled),
+:root[data-theme='default'] .flat-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .quick-row,
+:root:not([data-theme*='light']) .quick-row,
+:root[data-theme='default'] .quick-row {
+  color: var(--text-muted);
+}
+
+:root:not([data-theme]) .quick-row strong,
+:root:not([data-theme*='light']) .quick-row strong,
+:root[data-theme='default'] .quick-row strong {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .quick-row:hover,
+:root:not([data-theme*='light']) .quick-row:hover,
+:root[data-theme='default'] .quick-row:hover,
+:root:not([data-theme]) .fs-file-table tbody tr:hover,
+:root:not([data-theme*='light']) .fs-file-table tbody tr:hover,
+:root[data-theme='default'] .fs-file-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .host-icon,
+:root:not([data-theme*='light']) .host-icon,
+:root[data-theme='default'] .host-icon {
+  color: var(--text-muted);
+}

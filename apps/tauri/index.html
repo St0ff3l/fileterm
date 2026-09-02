@@ -26,10 +26,12 @@
         const searchParams = new URLSearchParams(window.location.search)
         const queryTheme = searchParams.get('theme')
         const queryLocale = searchParams.get('locale')
-        const theme = queryTheme === 'default-light' || queryTheme === 'default-dark' ? queryTheme : 'default-dark'
+        const isLight =
+          queryTheme === 'default-light' || queryTheme === 'fileterm-light' || queryTheme === 'codex-light'
+        const theme = queryTheme || (isLight ? 'fileterm-light' : 'fileterm-dark')
         const locale = queryLocale === 'enUS' || queryLocale === 'zhCN' ? queryLocale : 'zhCN'
-        const background = theme === 'default-light' ? '#f8fafc' : '#151515'
-        const colorScheme = theme === 'default-light' ? 'light' : 'dark'
+        const background = isLight ? '#f8fafc' : '#151515'
+        const colorScheme = isLight ? 'light' : 'dark'
 
         document.documentElement.dataset.theme = theme
         document.documentElement.lang = locale === 'enUS' ? 'en' : 'zh-CN'

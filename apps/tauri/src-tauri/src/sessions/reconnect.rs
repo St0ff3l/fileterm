@@ -12,6 +12,10 @@ const DEFAULT_INITIAL_DELAY: Duration = Duration::from_secs(2);
 const DEFAULT_MAX_DELAY: Duration = Duration::from_secs(30);
 const MIN_INITIAL_DELAY: Duration = Duration::from_millis(250);
 const MAX_CONFIGURED_DELAY: Duration = Duration::from_secs(300);
+/// Even when an old profile requests unlimited retries, an endpoint that has
+/// never stayed connected must not make the desktop spin through a permanent
+/// accept-then-drop loop. A stable connection resets this safety circuit.
+const MAX_UNSTABLE_RECONNECT_ATTEMPTS: u32 = 5;
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 const MIN_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(3600);
@@ -59,6 +63,22 @@ impl ReconnectPolicy {
         if self
             .max_attempts
             .is_some_and(|max_attempts| next > max_attempts)
+        {
+            None
+        } else {
+            Some(next)
+        }
+    }
+
+    pub(crate) fn next_attempt_after_connection(
+        self,
+        attempt: u32,
+        connection_was_stable: bool,
+    ) -> Option<u32> {
+        let next = self.next_attempt(attempt)?;
+        if !connection_was_stable
+            && self.max_attempts.is_none()
+            && next > MAX_UNSTABLE_RECONNECT_ATTEMPTS
         {
             None
         } else {
@@ -187,6 +207,14 @@ mod tests {
         assert_eq!(policy.delay_for_attempt(1), Duration::from_secs(1));
         assert_eq!(policy.delay_for_attempt(4), Duration::from_secs(5));
         assert_eq!(policy.next_attempt(3), None);
+    }
+
+    #[test]
+    fn unlimited_policy_has_a_safety_circuit_for_unstable_connections() {
+        let policy = ReconnectPolicy::from_profile(&json!({}));
+        assert_eq!(policy.next_attempt_after_connection(4, false), Some(5));
+        assert_eq!(policy.next_attempt_after_connection(5, false), None);
+        assert_eq!(policy.next_attempt_after_connection(5, true), Some(6));
     }
 
     #[test]

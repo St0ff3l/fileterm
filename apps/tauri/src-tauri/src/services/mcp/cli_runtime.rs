@@ -1,4 +1,12 @@
 // MCP stdio and persistent CLI JSONL runtime.
+struct McpStdioJob {
+    request: Value,
+    id: Value,
+    cancellation: Arc<AtomicBool>,
+    controls: CliJsonlRequestControls,
+    bridge: Arc<BridgeClient>,
+}
+
 /// Entry point for `fileterm mcp`. This is deliberately dependency-free: MCP
 /// uses newline-delimited JSON-RPC over stdio while the local desktop bridge
 /// uses the authenticated socket above.
@@ -7,13 +15,41 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
         .iter()
         .any(|argument| argument == "--help" || argument == "-h")
     {
-        println!("Usage: fileterm mcp\n\nRun the FileTerm MCP server over stdio. FileTerm must be running.");
+        println!("Usage: fileterm mcp\n\nRun the persistent FileTerm MCP server over stdio. Keep this process alive for the whole Agent task; reuse returned sessionId/tabId and commandId instead of opening a new MCP process or restarting a long command. Call fileterm_get_agent_contract for the machine-readable workflow and recovery rules. FileTerm must be running for remote actions.");
         return Ok(());
     }
 
+    let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
+    let controls = CliJsonlRequestControls::default();
+    let bridge = Arc::new(BridgeClient::new());
+    let (job_sender, job_receiver) =
+        std::sync::mpsc::sync_channel::<Option<McpStdioJob>>(MCP_MAX_QUEUED_REQUESTS);
+    let job_receiver = Arc::new(Mutex::new(job_receiver));
+    let mut workers = Vec::with_capacity(MCP_MAX_CONCURRENT_CLIENTS);
+
+    for index in 0..MCP_MAX_CONCURRENT_CLIENTS {
+        let job_receiver = Arc::clone(&job_receiver);
+        let stdout = Arc::clone(&stdout);
+        let worker = thread::Builder::new()
+            .name(format!("fileterm-mcp-stdio-{index}"))
+            .spawn(move || loop {
+                let job = {
+                    let receiver = match job_receiver.lock() {
+                        Ok(receiver) => receiver,
+                        Err(_) => break,
+                    };
+                    receiver.recv()
+                };
+                let Ok(Some(job)) = job else {
+                    break;
+                };
+                process_mcp_stdio_request(job, &stdout);
+            })
+            .map_err(|error| format!("Unable to start FileTerm MCP worker: {error}"))?;
+        workers.push(worker);
+    }
+
     let stdin = io::stdin();
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
     for line in stdin.lock().lines() {
         let line = line.map_err(|error| format!("Unable to read MCP input: {error}"))?;
         if line.trim().is_empty() {
@@ -21,37 +57,129 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
         }
         if line.len() > MCP_MAX_MESSAGE_BYTES {
             let response = jsonrpc_error(Value::Null, -32600, "Request exceeds the size limit");
-            serde_json::to_writer(&mut stdout, &response)
-                .map_err(|error| format!("Unable to encode MCP response: {error}"))?;
-            stdout
-                .write_all(b"\n")
+            write_mcp_stdio_value(&stdout, &response)
                 .map_err(|error| format!("Unable to write MCP response: {error}"))?;
-            stdout
-                .flush()
-                .map_err(|error| format!("Unable to flush MCP response: {error}"))?;
             continue;
         }
-        let response = match serde_json::from_str::<Value>(&line) {
-            Ok(request) => {
-                let mut on_progress = |progress: &BridgeProgress| {
-                    let _ = write_mcp_progress(&mut stdout, progress);
-                };
-                handle_jsonrpc_request_with_progress(request, &mut on_progress)
+        let request = match serde_json::from_str::<Value>(&line) {
+            Ok(request) => request,
+            Err(_) => {
+                let response = jsonrpc_error(Value::Null, -32700, "Parse error");
+                write_mcp_stdio_value(&stdout, &response)
+                    .map_err(|error| format!("Unable to write MCP response: {error}"))?;
+                continue;
             }
-            Err(_) => Some(jsonrpc_error(Value::Null, -32700, "Parse error")),
         };
-        if let Some(response) = response {
-            serde_json::to_writer(&mut stdout, &response)
-                .map_err(|error| format!("Unable to encode MCP response: {error}"))?;
-            stdout
-                .write_all(b"\n")
-                .map_err(|error| format!("Unable to write MCP response: {error}"))?;
-            stdout
-                .flush()
-                .map_err(|error| format!("Unable to flush MCP response: {error}"))?;
+        if let Some(target_id) = mcp_cancel_request_id(&request) {
+            // MCP cancellation is a notification: it gets no response of its
+            // own. The worker holding the target request emits its normal
+            // cancelled result (or observes the closed bridge) independently.
+            let _ = controls.cancel(&target_id);
+            continue;
+        }
+        let Some(id) = request
+            .get("id")
+            .filter(|id| !id.is_null())
+            .cloned()
+        else {
+            // Notifications such as notifications/initialized do not create a
+            // worker and must not produce a JSON-RPC response.
+            continue;
+        };
+        let cancellation = match controls.register(&id) {
+            Ok(cancellation) => cancellation,
+            Err(error) => {
+                let response = jsonrpc_error(id, -32600, &error);
+                write_mcp_stdio_value(&stdout, &response)
+                    .map_err(|error| format!("Unable to write MCP response: {error}"))?;
+                continue;
+            }
+        };
+        let job = McpStdioJob {
+            request,
+            id: id.clone(),
+            cancellation,
+            controls: controls.clone(),
+            bridge: Arc::clone(&bridge),
+        };
+        match job_sender.try_send(Some(job)) {
+            Ok(()) => {}
+            Err(std::sync::mpsc::TrySendError::Full(_job)) => {
+                controls.remove(&id);
+                let error_info = agent_error_metadata(
+                    "mcp_request",
+                    &json!({}),
+                    FILETERM_REQUEST_QUEUE_FULL,
+                );
+                let response = jsonrpc_error_with_data(
+                    id,
+                    MCP_SERVER_BUSY_ERROR_CODE,
+                    "FileTerm MCP request queue is full; retry shortly",
+                    json!({ "errorInfo": error_info }),
+                );
+                write_mcp_stdio_value(&stdout, &response).map_err(|error| {
+                    format!("Unable to write MCP response: {error}")
+                })?;
+            }
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                controls.remove(&id);
+                return Err("FileTerm MCP workers stopped unexpectedly".to_string());
+            }
         }
     }
+    controls.cancel_all();
+    drop(job_sender);
+    for worker in workers {
+        worker
+            .join()
+            .map_err(|_| "FileTerm MCP worker panicked".to_string())?;
+    }
     Ok(())
+}
+
+fn process_mcp_stdio_request(
+    job: McpStdioJob,
+    stdout: &Arc<Mutex<io::BufWriter<io::Stdout>>>,
+) {
+    let McpStdioJob {
+        request,
+        id,
+        cancellation,
+        controls,
+        bridge,
+    } = job;
+    let request_id = id.clone();
+    let mut on_progress = |progress: &BridgeProgress| {
+        if cancellation.load(Ordering::Acquire) {
+            return;
+        }
+        if let Ok(mut writer) = stdout.lock() {
+            let _ = write_mcp_progress(&mut *writer, progress);
+            let _ = writer.flush();
+        }
+    };
+    let response = handle_jsonrpc_request_with_progress_and_cancellation(
+        request,
+        &mut on_progress,
+        Some(&cancellation),
+        &bridge,
+    );
+    if let Some(response) = response {
+        let _ = write_mcp_stdio_value(stdout, &response);
+    }
+    controls.remove(&request_id);
+}
+
+fn write_mcp_stdio_value(
+    stdout: &Arc<Mutex<io::BufWriter<io::Stdout>>>,
+    value: &Value,
+) -> io::Result<()> {
+    let mut writer = stdout
+        .lock()
+        .map_err(|_| io::Error::other("MCP stdout is unavailable"))?;
+    serde_json::to_writer(&mut *writer, value)?;
+    writer.write_all(b"\n")?;
+    writer.flush()
 }
 
 /// Entry point for the persistent JSONL mode of `fileterm cli`. Unlike the
@@ -65,7 +193,10 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
         .any(|argument| argument == "--help" || argument == "-h")
     {
         println!(
-            "Usage: fileterm cli --jsonl\n\nRun the persistent FileTerm CLI JSONL bridge over stdin/stdout. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nCancel a pending request:\n  {{\"id\":\"cancel-1\",\"action\":\"cancel_request\",\"params\":{{\"request_id\":\"request-1\"}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. CLI JSONL requests always use the in-app approval policy; the incoming requiresApproval field cannot disable approval. Cancellation stops waiting for the request result, but cannot roll back work already accepted by the desktop app. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and exits when stdin closes."
+            "Usage: fileterm cli --jsonl\n\nRun the persistent FileTerm CLI JSONL bridge over stdin/stdout. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nCancel a pending request:\n  {{\"id\":\"cancel-1\",\"action\":\"cancel_request\",\"params\":{{\"request_id\":\"request-1\"}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. CLI JSONL requests always use the in-app approval policy; the incoming requiresApproval field cannot disable approval. Cancellation stops waiting for the request result, but cannot roll back work already accepted by the desktop app. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and {MCP_MAX_QUEUED_REQUESTS} queued requests; it cancels pending work when stdin closes."
+        );
+        println!(
+            "Agent rules: keep this process alive; reuse the returned tabId/sessionId; use start_remote_command once for long jobs and read with the same commandId and nextOffset; never repeat a mutating action after a timeout without inspecting state. Send {{\"id\":\"contract-1\",\"action\":\"get_agent_contract\",\"params\":{{}}}} for the full machine-readable contract."
         );
         return Ok(());
     }
@@ -79,7 +210,9 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
 
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
     let controls = CliJsonlRequestControls::default();
-    let (job_sender, job_receiver) = std::sync::mpsc::channel::<Option<CliJsonlJob>>();
+    let bridge = Arc::new(BridgeClient::new());
+    let (job_sender, job_receiver) =
+        std::sync::mpsc::sync_channel::<Option<CliJsonlJob>>(MCP_MAX_QUEUED_REQUESTS);
     let job_receiver = Arc::new(Mutex::new(job_receiver));
     let mut workers = Vec::with_capacity(MCP_MAX_CONCURRENT_CLIENTS);
 
@@ -200,12 +333,48 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
             request,
             cancellation,
             controls: controls.clone(),
+            bridge: Arc::clone(&bridge),
         };
-        if job_sender.send(Some(job)).is_err() {
-            controls.remove(&request_id);
-            return Err("FileTerm CLI JSONL workers stopped unexpectedly".to_string());
+        match job_sender.try_send(Some(job)) {
+            Ok(()) => {}
+            Err(std::sync::mpsc::TrySendError::Full(job)) => {
+                controls.remove(&request_id);
+                let error_info = job
+                    .as_ref()
+                    .map(|queued_job| {
+                        agent_error_metadata(
+                            &queued_job.request.action,
+                            &queued_job.request.params,
+                            FILETERM_REQUEST_QUEUE_FULL,
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        agent_error_metadata("cli_request", &json!({}), FILETERM_REQUEST_QUEUE_FULL)
+                    });
+                write_cli_jsonl_value(
+                    &stdout,
+                    &json!({
+                        "id": request_id,
+                        "ok": false,
+                        "error": FILETERM_REQUEST_QUEUE_FULL,
+                        "errorInfo": error_info
+                    }),
+                )
+                .map_err(|error| {
+                    format!("Unable to write FileTerm CLI JSONL response: {error}")
+                })?;
+            }
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                controls.remove(&request_id);
+                return Err("FileTerm CLI JSONL workers stopped unexpectedly".to_string());
+            }
         }
     }
+    // Closing stdin is the JSONL connection lifecycle's disconnect event. Do
+    // not wait for a pending bridge timeout (which can be several minutes):
+    // propagate cancellation before joining workers so SSH execs, approvals,
+    // and bridge reads can clean themselves up promptly.
+    controls.cancel_all();
     drop(job_sender);
 
     for worker in workers {
@@ -248,6 +417,7 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
         request,
         cancellation,
         controls,
+        bridge,
     } = job;
     let id = request.id.clone();
     let request_id = id.clone();
@@ -256,6 +426,12 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
             stdout,
             &json!({ "id": id, "ok": false, "error": FILETERM_CLI_JSONL_REQUEST_CANCELLED }),
         );
+        controls.remove(&request_id);
+        return;
+    }
+    if request.action == "get_agent_contract" {
+        let response = json!({ "id": id, "ok": true, "result": agent_contract() });
+        let _ = write_cli_jsonl_value(stdout, &response);
         controls.remove(&request_id);
         return;
     }
@@ -278,7 +454,8 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
         }
         let _ = write_cli_jsonl_value(stdout, &value);
     };
-    let response = match call_desktop_bridge_with_progress_and_cancellation(
+    let response = match call_desktop_bridge_with_client(
+        &bridge,
         bridge_request,
         &mut on_progress,
         Some(&cancellation),
@@ -290,7 +467,12 @@ fn process_cli_jsonl_request(job: CliJsonlJob, stdout: &Arc<Mutex<io::BufWriter<
             json!({ "id": id, "ok": false, "error": FILETERM_CLI_JSONL_REQUEST_CANCELLED })
         }
         Ok(_) => json!({ "id": id, "ok": false, "error": FILETERM_CLI_JSONL_REQUEST_CANCELLED }),
-        Err(error) => json!({ "id": id, "ok": false, "error": error }),
+        Err(error) => json!({
+            "id": id,
+            "ok": false,
+            "error": error,
+            "errorInfo": agent_error_metadata(&request.action, &request.params, &error)
+        }),
     };
     let _ = write_cli_jsonl_value(stdout, &response);
     controls.remove(&request_id);

@@ -17,7 +17,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, LazyLock, Mutex as StdMutex,
 };
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use russh::client::{Handle, Handler};
@@ -53,10 +53,11 @@ use crate::services::{
 const DEFAULT_SSH_KEY_FILES: [&str; 4] = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"];
 const SSH_INTERACTION_TIMEOUT: Duration = Duration::from_secs(300);
 // Connection tests are transient and have no workspace session to keep alive.
-// If a first-time host-key prompt cannot be observed by the form, release the
-// SSH handshake promptly instead of occupying a server-side unauthenticated
-// slot for the normal five-minute interaction window.
-const SSH_CONNECTION_TEST_INTERACTION_TIMEOUT: Duration = Duration::from_secs(30);
+// Keep the prompt window long enough for a human to retrieve an OTP/security
+// key response. The old 30s budget left a visible MFA dialog alive after the
+// backend had already removed its pending request, so the next click returned
+// "SSH interaction request is no longer pending".
+const SSH_CONNECTION_TEST_INTERACTION_TIMEOUT: Duration = Duration::from_secs(120);
 // A TCP connection, SSH protocol handshake, or password-auth reply can remain
 // pending indefinitely on a broken server or middlebox. Keep each startup
 // stage bounded so the workspace moves out of `connecting` and the user can
@@ -100,9 +101,38 @@ const INITIAL_CAPABILITY_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 type SshShellWriteHalf = ChannelWriteHalf<russh::client::Msg>;
 type SharedRemoteSshId = Arc<StdMutex<Option<Vec<u8>>>>;
 
+/// Why the russh client handler stopped its transport. A shell channel can
+/// close normally while the SSH connection is still healthy; that is not a
+/// reason to recreate the whole session. Transport-level errors, on the
+/// other hand, are the only failures that the worker's reconnect policy may
+/// retry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum SshDisconnectKind {
+    Remote,
+    Transport,
+}
+
+impl SshDisconnectKind {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Remote => "remote-disconnect",
+            Self::Transport => "transport-error",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SshDisconnectInfo {
+    kind: SshDisconnectKind,
+    message: String,
+}
+
+type SharedSshDisconnectReason = Arc<StdMutex<Option<SshDisconnectInfo>>>;
+
 struct OpenSshSession {
     handle: Handle<ClientHandler>,
     remote_sshid: Vec<u8>,
+    disconnect_reason: SharedSshDisconnectReason,
 }
 
 /// Which endpoint in an SSH connection flow owns an authentication prompt.
@@ -168,9 +198,15 @@ struct SshInteractionContext {
     authentication_target: SshAuthenticationTarget,
     hop_index: u32,
     interaction_window_label: Option<String>,
+    /// The owning session's cancellation boundary. A prompt must disappear
+    /// as soon as a tab is closed or a connection attempt is superseded;
+    /// waiting only on the user-facing timeout leaves stale senders in
+    /// `pending_interactions` for up to five minutes.
+    cancellation: CancellationToken,
 }
 
 impl SshInteractionContext {
+    #[allow(clippy::too_many_arguments)] // Context construction keeps the complete hop identity explicit.
     fn from_profile(
         flow: &SshInteractionFlow,
         tab_id: &str,
@@ -179,6 +215,7 @@ impl SshInteractionContext {
         port: u16,
         authentication_target: SshAuthenticationTarget,
         interaction_window_label: Option<String>,
+        cancellation: CancellationToken,
     ) -> Self {
         let profile_id = profile
             .get("id")
@@ -202,11 +239,137 @@ impl SshInteractionContext {
             authentication_target,
             hop_index: authentication_target.hop_index(),
             interaction_window_label,
+            cancellation,
         }
     }
 
     fn next_sequence(&self) -> u64 {
         self.flow.next_sequence()
+    }
+
+    /// Write a single, searchable interaction line without ever including
+    /// prompt text or user-entered answers. Request/flow ids make jump-host
+    /// and target-hop races diagnosable while the logger's redaction layer
+    /// remains a final safety net for error strings.
+    #[allow(clippy::too_many_arguments)] // The log line deliberately carries the full SSH interaction identity.
+    fn log_interaction(
+        &self,
+        app: &AppHandle,
+        level: &str,
+        request_id: &str,
+        kind: &str,
+        stage: &str,
+        sequence: u64,
+        message: impl AsRef<str>,
+    ) {
+        crate::services::logging::session(
+            app,
+            level,
+            "ssh",
+            &self.tab_id,
+            format!(
+                "interaction flow_id={} request_id={} kind={} stage={} target={} hop={} sequence={} host={} port={} {}",
+                self.flow.flow_id,
+                request_id.escape_default(),
+                kind,
+                stage,
+                self.authentication_target.as_str(),
+                self.hop_index,
+                sequence,
+                self.host,
+                self.port,
+                message.as_ref(),
+            ),
+        );
+    }
+}
+
+async fn remove_pending_ssh_interaction(app: &AppHandle, request_id: &str) -> (bool, usize) {
+    let state = app
+        .state::<crate::services::workspace::WorkspaceState>();
+    let mut pending = state.pending_interactions.write().await;
+    let removed = pending.remove(request_id).is_some();
+    (removed, pending.len())
+}
+
+/// Last-resort cleanup for an interaction future that is dropped by an outer
+/// cancellation boundary before it reaches its normal `select!` cleanup path.
+/// This is intentionally silent when the request was already removed by the
+/// renderer or the waiter; it only emits a diagnostic when it actually finds
+/// and removes a stale sender.
+struct PendingSshInteractionGuard {
+    app: AppHandle,
+    request_id: String,
+    tab_id: String,
+}
+
+impl PendingSshInteractionGuard {
+    fn new(app: &AppHandle, tab_id: &str, request_id: &str) -> Self {
+        Self {
+            app: app.clone(),
+            request_id: request_id.to_string(),
+            tab_id: tab_id.to_string(),
+        }
+    }
+}
+
+impl Drop for PendingSshInteractionGuard {
+    fn drop(&mut self) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let app = self.app.clone();
+        let request_id = self.request_id.clone();
+        let tab_id = self.tab_id.clone();
+        runtime.spawn(async move {
+            let (removed, pending_after) =
+                remove_pending_ssh_interaction(&app, &request_id).await;
+            if removed {
+                crate::services::logging::warn(
+                    &app,
+                    &format!("ssh-interaction:{tab_id}"),
+                    format!(
+                        "pending interaction cleaned after task cancellation request_id={} pending={pending_after}",
+                        request_id.escape_default()
+                    ),
+                );
+            }
+        });
+    }
+}
+
+fn ssh_interaction_expires_at(deadline: Duration) -> u64 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    now.saturating_add(deadline.as_millis()).min(u64::MAX as u128) as u64
+}
+
+/// Wait for a renderer-owned SSH interaction while also observing the owning
+/// session's cancellation token. Closing a tab must wake host-key, password,
+/// key-passphrase, and KBI waits immediately; otherwise their oneshot senders
+/// remain in the global pending map until the normal human-response timeout.
+enum SshInteractionWaitResult {
+    Response(Value),
+    ReceiverClosed,
+    Timeout,
+    Cancelled,
+}
+
+async fn wait_for_ssh_interaction(
+    interaction: &SshInteractionContext,
+    rx: oneshot::Receiver<Value>,
+    interaction_timeout: Duration,
+) -> SshInteractionWaitResult {
+    tokio::select! {
+        biased;
+        _ = interaction.cancellation.cancelled() => SshInteractionWaitResult::Cancelled,
+        response = timeout(interaction_timeout, rx) => match response {
+            Ok(Ok(value)) => SshInteractionWaitResult::Response(value),
+            Ok(Err(_)) => SshInteractionWaitResult::ReceiverClosed,
+            Err(_) => SshInteractionWaitResult::Timeout,
+        },
     }
 }
 

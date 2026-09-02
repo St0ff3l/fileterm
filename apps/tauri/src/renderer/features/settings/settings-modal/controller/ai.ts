@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import type { AiProviderDraft, AiProviderSummary } from '@fileterm/core'
+import type { AiModelCapabilities, AiProviderDraft, AiProviderSummary } from '@fileterm/core'
 import { t } from '../../../../i18n'
 import { waitForMinimumBusyDuration } from '../../../common/operation-timing'
 import {
@@ -8,6 +8,7 @@ import {
   aiProviderRequestUrlPreview,
   aiProviderToDraft,
   createAiProviderDraft,
+  isAiManualCapabilityProvider,
   type AiProviderPreset
 } from '../constants'
 import type { SettingsModalDesktopApi, SettingsModalState } from './state'
@@ -57,19 +58,34 @@ export function useAiSettingsController({
     setAiDraft((current) => ({ ...current, ...patch }))
   }
 
+  const patchAiModelCapabilities = (modelName: string, capabilities: AiModelCapabilities) => {
+    setAiDraft((current) => ({
+      ...current,
+      modelCapabilities: {
+        ...(current.modelCapabilities ?? {}),
+        [modelName]: capabilities
+      }
+    }))
+  }
+
   const selectAiProvider = (provider: AiProviderSummary | undefined) => {
     const draft = provider ? aiProviderToDraft(provider) : createAiProviderDraft(aiProviders.length === 0)
     if (!provider) {
       draft.model = ''
     }
+    const providerModels =
+      provider?.models && provider.models.length > 0 ? provider.models : provider?.model ? [provider.model] : []
+    if (!isAiManualCapabilityProvider(draft)) {
+      draft.modelCapabilities = {}
+    }
     setAiDraft(draft)
     const presetMatch = AI_PROVIDER_PRESETS.find(
       (preset) => preset.draft.baseUrl === draft.baseUrl || preset.draft.name.toLowerCase() === draft.name.toLowerCase()
     )
-    const defaultModels = presetMatch?.draft.models ?? DEFAULT_MODELS_BY_KIND[draft.kind] ?? []
-    setAiModelChoices([...new Set([draft.model, ...defaultModels].filter(Boolean))])
-    const providerModels =
-      provider?.models && provider.models.length > 0 ? provider.models : provider?.model ? [provider.model] : []
+    const defaultModels = presetMatch ? (presetMatch.draft.models ?? []) : (DEFAULT_MODELS_BY_KIND[draft.kind] ?? [])
+    // Saved model IDs always stay visible, including for custom Providers that
+    // do not match an internal preset. Preset/kind models are suggestions only.
+    setAiModelChoices([...new Set([...providerModels, draft.model, ...defaultModels].filter(Boolean))])
     setConfiguredModels(providerModels)
     setSelectedCandidateModel('')
     setIsCustomInput(false)
@@ -88,6 +104,7 @@ export function useAiSettingsController({
       kind: preset.draft.kind,
       baseUrl: preset.draft.baseUrl,
       model: '',
+      modelCapabilities: {},
       allowNoAuth: preset.draft.allowNoAuth,
       allowInsecureHttp: preset.draft.allowInsecureHttp
     }))
@@ -101,10 +118,7 @@ export function useAiSettingsController({
   }
 
   const addSelectedModelToProvider = () => {
-    let modelToAdd = selectedCandidateModel.trim()
-    if (isCustomInput) {
-      modelToAdd = customModelText.trim()
-    }
+    const modelToAdd = (isCustomInput ? customModelText : selectedCandidateModel).trim()
     if (!modelToAdd) return
 
     setConfiguredModels((previous) => [...new Set([...previous, modelToAdd])])
@@ -116,12 +130,16 @@ export function useAiSettingsController({
   }
 
   const removeConfiguredModel = (modelName: string) => {
-    setConfiguredModels((previous) => {
-      const next = previous.filter((model) => model !== modelName)
-      if (aiDraft.model === modelName) {
-        patchAiDraft({ model: next[0] ?? '' })
+    setConfiguredModels((previous) => previous.filter((model) => model !== modelName))
+    setAiDraft((current) => {
+      const nextModels = configuredModels.filter((model) => model !== modelName)
+      const modelCapabilities = { ...(current.modelCapabilities ?? {}) }
+      delete modelCapabilities[modelName]
+      return {
+        ...current,
+        model: current.model === modelName ? (nextModels[0] ?? '') : current.model,
+        modelCapabilities
       }
-      return next
     })
   }
 
@@ -133,14 +151,42 @@ export function useAiSettingsController({
   const aiProviderInput = () => {
     const secrets = clearAiApiKey ? { apiKey: null } : aiApiKey.trim() ? { apiKey: aiApiKey } : undefined
     const activeModel = aiDraft.model || configuredModels[0] || ''
+    const modelCapabilities = isAiManualCapabilityProvider(aiDraft)
+      ? Object.fromEntries(
+          Object.entries(aiDraft.modelCapabilities ?? {}).filter(([model]) => configuredModels.includes(model))
+        )
+      : {}
     return {
       provider: {
         ...aiDraft,
         name: aiDraft.name.trim(),
         model: activeModel,
-        models: configuredModels
+        models: configuredModels,
+        modelCapabilities
       },
       ...(secrets ? { secrets } : {})
+    }
+  }
+
+  const refreshAiModelChoices = async () => {
+    if (!desktopApi || aiOperation || aiActionInFlightRef.current || aiProviderActionInFlight) return
+
+    const operationStartedAt = performance.now()
+    setAiOperation('models')
+    try {
+      const models = await desktopApi.listAiModels(aiProviderInput())
+      const modelIds = models.map((model) => model.id).filter(Boolean)
+      setAiModelChoices((previous) => [...new Set([...modelIds, ...previous])])
+      setAiMessage({
+        kind: 'success',
+        message:
+          modelIds.length > 0 ? `${t.aiSettingsModelListUpdated} (${modelIds.length})` : t.aiSettingsModelListEmpty
+      })
+    } catch (error) {
+      setAiMessage({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      await waitForMinimumBusyDuration(operationStartedAt)
+      setAiOperation(null)
     }
   }
 
@@ -300,6 +346,8 @@ export function useAiSettingsController({
     applyAiPreset,
     selectAiProvider,
     patchAiDraft,
+    patchAiModelCapabilities,
+    refreshAiModelChoices,
     addSelectedModelToProvider,
     removeConfiguredModel,
     saveAiProvider,

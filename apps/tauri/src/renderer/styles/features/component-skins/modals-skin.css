@@ -1,0 +1,145 @@
+/* modals.css */
+:root:not([data-theme]) .modal-backdrop,
+:root:not([data-theme*='light']) .modal-backdrop,
+:root[data-theme='default'] .modal-backdrop {
+  background: var(--modal-backdrop-bg);
+}
+
+:root:not([data-theme]) .modal-card,
+:root:not([data-theme*='light']) .modal-card,
+:root[data-theme='default'] .modal-card {
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+:root:not([data-theme]) .connection-form-window,
+:root:not([data-theme*='light']) .connection-form-window,
+:root[data-theme='default'] .connection-form-window {
+  background: var(--dialog-surface);
+  border-radius: var(--window-corner-radius);
+  overflow: hidden;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal.standalone,
+:root:not([data-theme*='light']) .modal-card.ssh-modal.standalone,
+:root[data-theme='default'] .modal-card.ssh-modal.standalone {
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:not([data-theme]) .modal-header,
+:root:not([data-theme*='light']) .modal-header,
+:root[data-theme='default'] .modal-header {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .ssh-modal-nav,
+:root:not([data-theme*='light']) .ssh-modal-nav,
+:root[data-theme='default'] .ssh-modal-nav {
+  background: var(--bg-sidebar) !important;
+}
+
+:root:not([data-theme]) .ssh-modal-nav button,
+:root:not([data-theme*='light']) .ssh-modal-nav button,
+:root[data-theme='default'] .ssh-modal-nav button {
+  background: transparent;
+}
+
+:root:not([data-theme]) .ssh-modal-nav button.active,
+:root:not([data-theme*='light']) .ssh-modal-nav button.active,
+:root[data-theme='default'] .ssh-modal-nav button.active {
+  background: var(--bg-hover);
+}
+
+:root:not([data-theme]) .ssh-grid input,
+:root:not([data-theme*='light']) .ssh-grid input,
+:root[data-theme='default'] .ssh-grid input,
+:root:not([data-theme]) .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme*='light']) .ssh-grid .dropdown-select-trigger,
+:root[data-theme='default'] .ssh-grid .dropdown-select-trigger,
+:root:not([data-theme]) .ssh-grid .ft-select-shell,
+:root:not([data-theme*='light']) .ssh-grid .ft-select-shell,
+:root[data-theme='default'] .ssh-grid .ft-select-shell,
+:root:not([data-theme]) .ssh-grid textarea,
+:root:not([data-theme*='light']) .ssh-grid textarea,
+:root[data-theme='default'] .ssh-grid textarea {
+  background: var(--input-bg);
+}
+
+:root:not([data-theme]) .ssh-placeholder,
+:root:not([data-theme*='light']) .ssh-placeholder,
+:root[data-theme='default'] .ssh-placeholder {
+  color: var(--text-muted);
+  background: var(--input-bg);
+}
+
+:root:not([data-theme]) .modal-error,
+:root:not([data-theme*='light']) .modal-error,
+:root[data-theme='default'] .modal-error {
+  border: 1px solid color-mix(in srgb, var(--status-danger) 28%, transparent);
+  color: var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
+}
+
+:root:not([data-theme]) .connection-form label,
+:root:not([data-theme*='light']) .connection-form label,
+:root[data-theme='default'] .connection-form label {
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .connection-form input,
+:root:not([data-theme*='light']) .connection-form input,
+:root[data-theme='default'] .connection-form input,
+:root:not([data-theme]) .connection-form .dropdown-select-trigger,
+:root:not([data-theme*='light']) .connection-form .dropdown-select-trigger,
+:root[data-theme='default'] .connection-form .dropdown-select-trigger,
+:root:not([data-theme]) .connection-form .ft-select-shell,
+:root:not([data-theme*='light']) .connection-form .ft-select-shell,
+:root[data-theme='default'] .connection-form .ft-select-shell {
+  background: var(--input-bg);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .connection-form input:focus,
+:root:not([data-theme*='light']) .connection-form input:focus,
+:root[data-theme='default'] .connection-form input:focus,
+:root:not([data-theme]) .connection-form .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .connection-form .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .connection-form .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .connection-form .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .connection-form .ft-select-shell:focus-within,
+:root[data-theme='default'] .connection-form .ft-select-shell:focus-within,
+:root:not([data-theme]) .ssh-grid input:focus,
+:root:not([data-theme*='light']) .ssh-grid input:focus,
+:root[data-theme='default'] .ssh-grid input:focus,
+:root:not([data-theme]) .ssh-grid .dropdown-select-trigger:focus-visible,
+:root:not([data-theme*='light']) .ssh-grid .dropdown-select-trigger:focus-visible,
+:root[data-theme='default'] .ssh-grid .dropdown-select-trigger:focus-visible,
+:root:not([data-theme]) .ssh-grid .ft-select-shell:focus-within,
+:root:not([data-theme*='light']) .ssh-grid .ft-select-shell:focus-within,
+:root[data-theme='default'] .ssh-grid .ft-select-shell:focus-within,
+:root:not([data-theme]) .ssh-grid textarea:focus,
+:root:not([data-theme*='light']) .ssh-grid textarea:focus,
+:root[data-theme='default'] .ssh-grid textarea:focus {
+  border-color: var(--focus-outline) !important;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring) !important;
+  background: var(--input-bg) !important;
+  outline: none !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+:root:not([data-theme]) .primary-button,
+:root:not([data-theme*='light']) .primary-button,
+:root[data-theme='default'] .primary-button {
+  color: var(--action-primary-text);
+  background: var(--button-primary-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+:root:not([data-theme]) .primary-button:hover:not(:disabled),
+:root:not([data-theme*='light']) .primary-button:hover:not(:disabled),
+:root[data-theme='default'] .primary-button:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+  box-shadow: var(--shadow-md);
+}

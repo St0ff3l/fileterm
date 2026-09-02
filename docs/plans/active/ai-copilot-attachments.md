@@ -1,6 +1,6 @@
 # AI Copilot 文件与图片附件支持计划
 
-状态：规划中（当前 Copilot 仅发送文本和经确认的终端上下文；附件能力尚未实现）
+状态：进行中（模型能力自动解析与 Provider 模型目录刷新已落地；Copilot 仍仅发送文本和经确认的终端上下文，附件链路尚未实现）
 
 创建日期：2026-08-16
 
@@ -9,6 +9,8 @@
 当前 Copilot composer 是文本输入框，`StartAiChatInput` 只有 `userMessage`、模式和一次性终端上下文快照；`AiMessage` 也只保存文本、上下文引用和工具活动。相关入口见 [Copilot 面板](../../../apps/tauri/src/renderer/features/ai/ai-copilot-panel.tsx)、[共享 AI 类型](../../../packages/core/src/index.ts) 和 [Rust AI service](../../../apps/tauri/src-tauri/src/services/ai/mod.rs)。
 
 这意味着现在不能把本地文件、远程文件或图片作为一个受控附件交给 Copilot。它与终端上下文不是同一类数据，不能通过扩大 L2 transcript 快照或把路径拼进 prompt 来“顺手支持”。
+
+2026-09-01 的前置实现已加入按模型自动解析的能力目录：设置页可以从 Provider 实时刷新模型 ID，已知模型使用官方的思考参数/图片能力，未知自定义模型保持安全默认，不主动发送思考参数。历史配置中的 `modelCapabilities` 仍兼容读取，但不再要求用户维护复杂的思考映射表；图片 content part、附件句柄和实际上传仍按下方 P0/P1 计划实现。
 
 ## 目标
 
@@ -76,6 +78,8 @@ interface AiAttachmentRef {
 - `supportsVision`：是否可以接收图片 content part。
 - `supportsNativeFile`：是否可以接收 Provider 原生文件引用；默认关闭，除非适配器明确支持。
 - `textExtraction`：当前附件是否可由本地/Rust 抽取为文本。
+
+当前能力解析覆盖 `inputModalities`（文本/图片等）和 `reasoning`（按模型选择官方 effort、budget 或 toggle 参数）；设置页的模型目录支持 OpenAI-compatible/Anthropic 的 `/models`，并适配 Ollama `/api/tags`、LM Studio `/api/v1/models`。历史 `modelCapabilities` 仍可被运行时读取，但未知模型不凭 URL 猜测能力，不把“识别支持图片”误认为“已经完成图片上传”。
 
 能力解析采用保守策略：已知模型映射或用户显式设置优先，未知模型默认不发送原始图片；不能因为 Provider URL 看起来兼容 OpenAI 就假定模型支持视觉。
 

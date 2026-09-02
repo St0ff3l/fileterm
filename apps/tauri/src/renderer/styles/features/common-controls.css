@@ -23,20 +23,20 @@
 }
 
 .status-indicator[data-status='connected'] {
-  background: var(--success);
+  background: var(--status-success);
   box-shadow:
-    0 0 4px rgba(57, 217, 138, 0.9),
-    0 0 10px rgba(57, 217, 138, 0.68);
+    0 0 4px color-mix(in srgb, var(--status-success) 90%, transparent),
+    0 0 10px color-mix(in srgb, var(--status-success) 68%, transparent);
 }
 
 .status-indicator[data-status='disconnected'] {
-  background: var(--danger);
-  box-shadow: 0 0 6px rgba(226, 91, 91, 0.35);
+  background: var(--status-danger);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-danger) 35%, transparent);
 }
 
 .status-indicator[data-status='connecting'] {
-  background: var(--warning);
-  box-shadow: 0 0 6px rgba(231, 198, 91, 0.35);
+  background: var(--status-warning);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-warning) 35%, transparent);
 }
 
 .radio-card-group__option {
@@ -49,7 +49,7 @@
   border: 1px solid var(--border-light);
   border-radius: 8px;
   color: var(--text-secondary);
-  background: var(--bg-primary);
+  background: var(--surface-card);
   cursor: pointer;
   transition:
     border-color 120ms ease,
@@ -59,7 +59,7 @@
 
 .radio-card-group__option:hover:not(.is-disabled) {
   border-color: color-mix(in srgb, var(--focus-outline) 65%, var(--border-light));
-  background: color-mix(in srgb, var(--focus-outline) 6%, var(--bg-primary));
+  background: color-mix(in srgb, var(--focus-outline) 6%, var(--surface-card));
 }
 
 .radio-card-group__option:focus-within {
@@ -69,7 +69,7 @@
 
 .radio-card-group__option.is-selected {
   border-color: var(--focus-outline);
-  background: color-mix(in srgb, var(--focus-outline) 10%, var(--bg-primary));
+  background: color-mix(in srgb, var(--focus-outline) 10%, var(--surface-card));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-outline) 24%, transparent);
 }
 

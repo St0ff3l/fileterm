@@ -32,24 +32,44 @@
   position: relative;
   height: 100%;
   min-height: 0;
-  padding: 0 var(--local-terminal-frame-size) var(--local-terminal-frame-size);
+  grid-template-columns: var(--local-terminal-frame-size) minmax(0, 1fr) var(--local-terminal-frame-size);
+  grid-template-rows: minmax(0, 1fr) var(--local-terminal-frame-size);
+  grid-template-areas:
+    'left surface right'
+    'bottom bottom bottom';
   overflow: hidden;
-  background: rgb(36, 36, 36);
+  background: var(--surface-toolbar);
 }
 
-.local-terminal-frame::before {
-  content: '';
-  position: absolute;
-  inset: 0 var(--local-terminal-frame-size) var(--local-terminal-frame-size);
-  border-inline: 1px solid var(--terminal-right-frame-accent);
-  border-bottom: 1px solid var(--terminal-right-frame-accent);
+.local-terminal-frame-left,
+.local-terminal-frame-right,
+.local-terminal-frame-bottom {
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-toolbar);
   pointer-events: none;
   z-index: 6;
+}
+
+.local-terminal-frame-left {
+  grid-area: left;
+  border-left: 1px solid var(--terminal-right-frame-accent);
+}
+
+.local-terminal-frame-right {
+  grid-area: right;
+  border-left: 1px solid var(--terminal-right-frame-accent);
+}
+
+.local-terminal-frame-bottom {
+  grid-area: bottom;
+  border-top: 1px solid var(--terminal-right-frame-accent);
 }
 
 .local-terminal-surface {
   display: grid;
   position: relative;
+  grid-area: surface;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -109,9 +129,8 @@
 }
 
 .terminal-right-frame {
-  position: relative;
-  grid-column: 2;
-  grid-row: 1 / -1;
+  grid-column: 3;
+  grid-row: 2;
   width: 12px;
   min-height: 0;
   height: 100%;
@@ -122,8 +141,17 @@
     var(--terminal-right-frame-accent) 11px,
     var(--terminal-right-frame-accent) 12px
   );
-  pointer-events: none;
   z-index: 6;
+}
+
+.fs-shell.has-window-menubar .terminal-right-frame {
+  grid-row: 3;
+}
+
+.fs-shell.is-local-terminal .terminal-right-frame,
+.fs-shell.is-home-active .terminal-right-frame,
+.fs-shell.has-ai-copilot .terminal-right-frame {
+  display: none;
 }
 
 .session-split-resizer {
@@ -915,7 +943,7 @@
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-card) 76%, transparent);
   color: var(--text-muted);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-lg);
   cursor: pointer;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -1260,9 +1288,9 @@
 }
 
 .pane-filter-input-wrapper:focus-within {
-  outline: 1px solid var(--primary, #3b82f6);
+  outline: 1px solid var(--focus-outline);
   outline-offset: -1px;
-  border-color: var(--primary, #3b82f6);
+  border-color: var(--focus-outline);
   background: var(--bg-main);
 }
 
@@ -1316,7 +1344,7 @@
   font-size: 10px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   color: var(--accent-highlight);
-  background: var(--accent-tint, rgba(59, 130, 246, 0.12));
+  background: var(--accent-tint);
   padding: 1px 5px;
   border-radius: 4px;
   white-space: nowrap;
@@ -1355,7 +1383,7 @@
 .pane-filter-mode-btn.active {
   background: var(--bg-card);
   color: var(--text-main);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-xs);
 }
 
 .file-current-path {
@@ -1420,7 +1448,7 @@
 }
 
 .terminal-area .vertical-scrollbar {
-  right: 18px;
+  right: 4px;
 }
 
 .vertical-scrollbar.is-visible,
@@ -1437,11 +1465,6 @@
   border-radius: 999px;
   background: var(--border, var(--border-light));
   cursor: grab;
-}
-
-.terminal-area .vertical-scrollbar__thumb {
-  width: 4px;
-  margin-left: auto;
 }
 
 .vertical-scrollbar__thumb:hover,
@@ -1670,7 +1693,7 @@
 }
 
 .transfer-strip {
-  grid-column: 2;
+  grid-column: 2 / -1;
   grid-row: 3;
   min-width: 0;
   height: 24px;
@@ -1715,7 +1738,7 @@
   border-radius: 999px;
   background: var(--surface-inset);
   color: var(--text-muted);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--control-inset-shadow);
   user-select: text;
 }
 
@@ -1735,6 +1758,33 @@
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   font-size: 10px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transfer-session-jump {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(28vw, 240px);
+  align-items: center;
+  gap: 4px;
+  height: 15px;
+  overflow: hidden;
+  color: var(--accent-highlight);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.transfer-session-jump-label {
+  flex: 0 0 auto;
+  opacity: 0.86;
+}
+
+.transfer-session-jump-name {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3606,7 +3656,7 @@
   border-radius: 6px;
 }
 .ssh-tunnel-actions .danger {
-  color: var(--danger-text, #d86666);
+  color: var(--status-danger);
 }
 .ssh-tunnel-purpose {
   display: flex;
@@ -3770,7 +3820,7 @@
 }
 .ssh-tunnel-error {
   margin-top: 12px !important;
-  color: var(--danger-text, #d86666) !important;
+  color: var(--status-danger) !important;
 }
 .ssh-tunnel-error-slot {
   min-height: 18px;
@@ -3825,15 +3875,15 @@
   background: var(--text-muted);
 }
 .ssh-tunnel-status.is-running {
-  background: #43be7b;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #43be7b 18%, transparent);
+  background: var(--status-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-success) 18%, transparent);
 }
 .ssh-tunnel-status.is-error {
-  background: #de6b6b;
+  background: var(--status-danger);
 }
 .ssh-tunnel-status.is-starting,
 .ssh-tunnel-status.is-stopping {
-  background: #e7af54;
+  background: var(--status-warning);
 }
 .ssh-tunnel-description {
   min-width: 0;
@@ -3853,7 +3903,7 @@
   font-style: normal;
 }
 .ssh-tunnel-description em {
-  color: var(--danger-text, #d86666);
+  color: var(--status-danger);
 }
 .ssh-tunnel-state {
   color: var(--text-muted);

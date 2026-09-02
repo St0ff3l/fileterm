@@ -3,7 +3,7 @@ async fn open_connection(
     app: &AppHandle,
     params: &Value,
     source: WorkspaceSessionSource,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
 ) -> Result<Value, String> {
     let profile_id = required_string(params, "profile_id", 256)?;
@@ -96,7 +96,7 @@ fn requested_execution_mode(params: &Value) -> Result<&'static str, String> {
 async fn wait_for_connection(
     app: &AppHandle,
     params: &Value,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
 ) -> Result<Value, String> {
     let operation_id = required_string(params, "operation_id", 256)?;
@@ -115,7 +115,7 @@ async fn wait_for_connection_operation(
     app: &AppHandle,
     operation_id: &str,
     params: &Value,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
     operation_name: &str,
 ) -> Result<Value, String> {
@@ -135,7 +135,7 @@ async fn wait_for_connection_operation(
         .await
         .map_err(|error| format!("{MCP_CONNECTION_OPERATION_NOT_FOUND}: {error}"))?;
     if let Some(sender) = progress_sender {
-        let _ = sender.send(BridgeProgress::connection_waiting(progress_token));
+        let _ = sender.try_send(BridgeProgress::connection_waiting(progress_token));
     }
 
     let mut tab_id = info.tab_id;
@@ -226,7 +226,8 @@ fn connection_operation_result(
         );
         object.insert("timedOut".to_string(), Value::Bool(timed_out));
     }
-    result
+    let agent = connection_agent_metadata(&result, operation_id, status, timed_out);
+    attach_agent_metadata(result, agent)
 }
 
 fn with_execution_mode(mut result: Value, execution_mode: &str) -> Value {
@@ -308,8 +309,9 @@ async fn close_session(app: &AppHandle, params: &Value) -> Result<Value, String>
 async fn execute_remote_command(
     app: &AppHandle,
     params: &Value,
-    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<Value, String> {
     let tab_id = required_string(params, "tab_id", 256)?;
     let command = required_text(params, "command", 64 * 1024)?;
@@ -322,35 +324,172 @@ async fn execute_remote_command(
     let privileged_prompt_notice = progress_sender.map(|sender| {
         let progress_token = progress_token.clone();
         Arc::new(move |needed_code: &str| {
-            let _ = sender.send(BridgeProgress::privileged_password_prompt(
+            let _ = sender.try_send(BridgeProgress::privileged_password_prompt(
                 needed_code,
                 progress_token.clone(),
             ));
         }) as crate::services::action_review::PrivilegedPromptNotice
     });
-    let result = crate::services::action_review::execute_background_remote_command(
-        app,
-        crate::services::action_review::RemoteExecRequest {
-            tab_id: tab_id.clone(),
-            command,
-            cwd,
-            timeout_ms,
-            expected_session_revision: None,
-            sudo_password,
-            su_password,
-            save_sudo_password,
-            save_su_password,
-            allow_local_privileged_prompt: true,
-            privileged_prompt_notice,
-        },
-    )
-    .await
+    let request = crate::services::action_review::RemoteExecRequest {
+        tab_id: tab_id.clone(),
+        command,
+        cwd,
+        timeout_ms,
+        expected_session_revision: None,
+        sudo_password,
+        su_password,
+        save_sudo_password,
+        save_su_password,
+        allow_local_privileged_prompt: true,
+        privileged_prompt_notice,
+    };
+    let result = match cancellation {
+        Some(cancellation) => {
+            crate::services::action_review::execute_background_remote_command_cancellable(
+                app,
+                request,
+                cancellation,
+            )
+            .await
+        }
+        None => crate::services::action_review::execute_background_remote_command(app, request)
+            .await,
+    }
     .map_err(public_app_error)?;
-    Ok(json!({
+    let response = json!({
         "tabId": tab_id,
         "executionMode": EXECUTION_MODE_BACKGROUND,
         "result": result,
-    }))
+    });
+    let agent = synchronous_command_agent_metadata(&response);
+    Ok(attach_agent_metadata(response, agent))
+}
+
+async fn start_remote_command(
+    app: &AppHandle,
+    params: &Value,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
+    progress_token: Option<Value>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command = required_text(params, "command", 64 * 1024)?;
+    let cwd = optional_string(params, "cwd", 4_096)?;
+    let timeout_ms = optional_u64(params, "timeout_ms")?;
+    let sudo_password = optional_secret_string(params, "sudo_password", 4 * 1024)?;
+    let su_password = optional_secret_string(params, "su_password", 4 * 1024)?;
+    let privileged_prompt_notice = progress_sender.map(|sender| {
+        let progress_token = progress_token.clone();
+        Arc::new(move |needed_code: &str| {
+            let _ = sender.try_send(BridgeProgress::privileged_password_prompt(
+                needed_code,
+                progress_token.clone(),
+            ));
+        }) as crate::services::action_review::PrivilegedPromptNotice
+    });
+    let request = crate::services::action_review::RemoteExecRequest {
+        tab_id: tab_id.clone(),
+        command,
+        cwd,
+        timeout_ms,
+        expected_session_revision: None,
+        sudo_password,
+        su_password,
+        save_sudo_password: false,
+        save_su_password: false,
+        allow_local_privileged_prompt: true,
+        privileged_prompt_notice,
+    };
+    let result = match cancellation {
+        Some(cancellation) => {
+            crate::services::action_review::start_background_remote_command_cancellable(
+                app,
+                request,
+                cancellation,
+            )
+            .await
+        }
+        None => crate::services::action_review::start_background_remote_command(app, request).await,
+    }
+    .map_err(public_app_error)?;
+    let response = json!({
+        "tabId": result.tab_id,
+        "executionMode": EXECUTION_MODE_BACKGROUND,
+        "commandId": result.command_id,
+        "startedAt": result.started_at,
+        "status": "running",
+    });
+    let agent = command_start_agent_metadata(
+        response.get("tabId").and_then(Value::as_str).unwrap_or_default(),
+        response
+            .get("commandId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    Ok(attach_agent_metadata(response, agent))
+}
+
+async fn read_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command_id = required_string(params, "command_id", 256)?;
+    let offset = optional_u64(params, "offset")?.unwrap_or(0);
+    let max_bytes = optional_u64(params, "max_bytes")?
+        .unwrap_or(64 * 1024)
+        .try_into()
+        .map_err(|_| "max_bytes is too large".to_string())?;
+    let wait_ms = optional_u64(params, "wait_ms")?.unwrap_or(0);
+    if wait_ms > 30_000 {
+        return Err("wait_ms must be between 0 and 30000".to_string());
+    }
+    let snapshot = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .background_remote_commands
+        .read(
+            &tab_id,
+            &command_id,
+            offset,
+            max_bytes,
+            Duration::from_millis(wait_ms),
+        )
+        .await?;
+    let response = serde_json::to_value(snapshot).map_err(|error| error.to_string())?;
+    let agent = background_command_agent_metadata(&response, "read");
+    Ok(attach_agent_metadata(response, agent))
+}
+
+async fn terminate_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command_id = required_string(params, "command_id", 256)?;
+    let snapshot = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .background_remote_commands
+        .terminate(&tab_id, &command_id)
+        .await?;
+    let response = serde_json::to_value(snapshot).map_err(|error| error.to_string())?;
+    let agent = background_command_agent_metadata(&response, "terminate");
+    Ok(attach_agent_metadata(response, agent))
+}
+
+async fn close_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command_id = required_string(params, "command_id", 256)?;
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .background_remote_commands
+        .close(&tab_id, &command_id)
+        .await?;
+    let response = json!({
+        "tabId": tab_id,
+        "commandId": command_id,
+        "closed": true,
+    });
+    let agent = command_close_agent_metadata(
+        response.get("tabId").and_then(Value::as_str).unwrap_or_default(),
+        response
+            .get("commandId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn execute_visible_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -362,12 +501,14 @@ async fn execute_visible_command(app: &AppHandle, params: &Value) -> Result<Valu
     )
     .await
     .map_err(public_app_error)?;
-    Ok(json!({
+    let response = json!({
         "tabId": tab_id,
         "executionMode": EXECUTION_MODE_VISIBLE_TERMINAL,
         "accepted": true,
         "result": result,
-    }))
+    });
+    let agent = visible_command_agent_metadata(&response);
+    Ok(attach_agent_metadata(response, agent))
 }
 
 async fn execute_command_template(app: &AppHandle, params: &Value) -> Result<Value, String> {

@@ -5,7 +5,7 @@ async fn run_worker_loop(
     terminal_input_rx: &mut mpsc::UnboundedReceiver<String>,
     app: &AppHandle,
     cancellation: CancellationToken,
-) -> Result<(), String> {
+) -> Result<SshWorkerExit, String> {
     let host = profile
         .get("host")
         .and_then(|h| h.as_str())
@@ -22,17 +22,20 @@ async fn run_worker_loop(
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
     // one authenticated handle for every channel. The handle is wrapped in
     // `Arc` so the background metrics task can share it with the main loop.
-    let session = match open_session(
-        profile,
-        app,
-        tab_id,
-        SSH_INTERACTION_TIMEOUT,
-        Some("main".to_string()),
-        SshAuthenticationTarget::Direct,
-        SshInteractionFlow::new(),
-    )
-    .await
-    {
+    let session = match tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err("SSH connection canceled".to_string()),
+        result = open_session(
+            profile,
+            app,
+            tab_id,
+            SSH_INTERACTION_TIMEOUT,
+            Some("main".to_string()),
+            SshAuthenticationTarget::Direct,
+            SshInteractionFlow::new(),
+            cancellation.clone(),
+        ) => result,
+    } {
         Ok(h) => h,
         Err(error) => {
             crate::services::logging::session(
@@ -47,6 +50,7 @@ async fn run_worker_loop(
     };
     crate::services::logging::session(app, "INFO", "ssh", tab_id, "SSH session established");
     let remote_sshid = session.remote_sshid;
+    let disconnect_reason = session.disconnect_reason;
     let handle: Arc<Handle<ClientHandler>> = Arc::new(session.handle);
     let resolution = resolve_ssh_device_mode(profile, &remote_sshid);
     log_ssh_device_mode_resolution(app, tab_id, profile, &remote_sshid, resolution);
@@ -250,6 +254,7 @@ async fn run_worker_loop(
     }
 
     update_tab_status_and_emit(app, tab_id, WorkspaceTabStatus::Connected).await;
+    let connected_at = Instant::now();
 
     // Emit "connected" notice so the user sees confirmation in the terminal.
     // Mirrors Electron's `appendSystemMessage('连接主机成功\r\n')`.
@@ -314,6 +319,8 @@ async fn run_worker_loop(
         exec_channel_enabled,
         sftp_unavailable_reason,
         cancellation: cancellation.clone(),
+        disconnect_reason,
+        connected_at,
         metrics_shutdown,
         shell_setup_script,
         terminal_write_tx,

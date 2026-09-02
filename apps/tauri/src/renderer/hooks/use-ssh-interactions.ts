@@ -50,6 +50,11 @@ export type UseSshInteractionsResult = {
   acceptHostAndSave(): Promise<void>
 }
 
+function isStaleSshInteractionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /SSH interaction (?:request is no longer pending|receiver is no longer available)/i.test(message)
+}
+
 export function useSshInteractions({
   desktopApi,
   isMainWorkspaceWindow = false,
@@ -141,7 +146,16 @@ export function useSshInteractions({
         setErrorMessage(null)
       } catch (error) {
         onError('响应 SSH 交互', error)
-        setErrorMessage(error instanceof Error ? error.message : String(error))
+        if (isStaleSshInteractionError(error)) {
+          // The backend removes timed-out requests so a late click must not
+          // leave an unusable MFA/host-key modal covering the workspace.
+          // Keep the parent connection error for retry diagnostics, but drop
+          // this stale request from the renderer queue immediately.
+          setQueue((current) => removeSshInteraction(current, requestId))
+          setErrorMessage(null)
+        } else {
+          setErrorMessage(error instanceof Error ? error.message : String(error))
+        }
       } finally {
         resolvingRequestIdsRef.current.delete(requestId)
         setResolvingRequestId((current) => (current === requestId ? null : current))
@@ -151,6 +165,27 @@ export function useSshInteractions({
   )
 
   const request = getActiveSshInteraction(queue)
+  useEffect(() => {
+    const requestId = request?.requestId
+    const expiresAt = request?.expiresAt
+    if (!requestId || typeof expiresAt !== 'number') {
+      return
+    }
+
+    const dismissExpiredRequest = () => {
+      // The backend owns the actual timeout and cleanup. This renderer-side
+      // guard prevents a stale dialog from covering the workspace while a
+      // late IPC response is still making its way back from Tauri.
+      setQueue((current) => removeSshInteraction(current, requestId))
+      setErrorMessage(null)
+      resolvingRequestIdsRef.current.delete(requestId)
+      setResolvingRequestId((current) => (current === requestId ? null : current))
+    }
+    const delay = Math.max(0, expiresAt - Date.now())
+    const timer = setTimeout(dismissExpiredRequest, delay)
+    return () => clearTimeout(timer)
+  }, [request?.expiresAt, request?.requestId])
+
   const credentialsRequest = request?.kind === 'credentials' ? request : null
   const keyboardInteractiveRequest = request?.kind === 'keyboard-interactive' ? request : null
   const hostVerificationRequest = request?.kind === 'host-verification' ? request : null
