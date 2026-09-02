@@ -426,6 +426,10 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           </div>
         </main>
 
+        {!isHomeWorkspaceVisible && !isLocalTerminalWorkspace && (
+          <div className="terminal-right-frame" aria-hidden="true" />
+        )}
+
         <TransferCenterHost
           activeProfileId={activeTab?.profileId}
           activeTabId={activeTab?.id ?? null}

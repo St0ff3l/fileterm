@@ -770,7 +770,6 @@ export function SessionWorkspace({
           ) : null}
         </div>
       ) : null}
-      <div className="terminal-right-frame" aria-hidden="true" />
     </section>
   )
 }

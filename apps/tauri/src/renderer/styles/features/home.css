@@ -950,10 +950,12 @@
 
 /* Layout overrides when Home tab is active (hiding topbar and bottom bar) */
 .fs-shell.is-home-active {
+  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) 0 !important;
   grid-template-rows: 0px minmax(0, 1fr) 0px !important;
 }
 
 .fs-shell.has-window-menubar.is-home-active {
+  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) 0 !important;
   grid-template-rows: 32px 0px minmax(0, 1fr) 0px !important;
 }
 

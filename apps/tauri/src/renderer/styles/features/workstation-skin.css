@@ -140,7 +140,7 @@ textarea:focus-visible,
 }
 
 .fs-shell {
-  grid-template-columns: var(--sidebar-width, 214px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 214px) minmax(0, 1fr) auto;
   grid-template-rows: 48px minmax(0, 1fr) 24px;
   transition: grid-template-columns 0.24s linear;
 }
@@ -198,7 +198,7 @@ textarea:focus-visible,
 .fs-tabbar {
   grid-column: 1 / -1;
   grid-row: 1;
-  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) auto;
+  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr);
   height: 48px;
   z-index: 10;
   position: relative;
@@ -1328,7 +1328,7 @@ textarea:focus-visible,
 }
 
 .transfer-strip {
-  grid-column: 2;
+  grid-column: 2 / -1;
   grid-row: 3;
   height: 24px;
   min-height: 24px;
@@ -1517,7 +1517,7 @@ textarea:focus-visible,
 
 @media (max-width: 1100px) {
   .fs-shell {
-    grid-template-columns: var(--sidebar-width, 200px) minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width, 200px) minmax(0, 1fr) auto;
   }
 
   .fs-tabbar {

@@ -331,7 +331,7 @@ function resolveCompactUiVariables(
     '--terminal-frame-gradient':
       isCodex || isLight
         ? 'none'
-        : 'linear-gradient(to left, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to right, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px)',
+        : 'linear-gradient(to bottom, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to top, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to right, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to left, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px)',
     '--terminal-frame-shadow': isCodex || isLight ? 'none' : 'inset 0 0 14px rgba(0, 0, 0, 0.3)',
     '--terminal-right-frame-outer': sidebar,
     '--terminal-right-frame-accent': border,
