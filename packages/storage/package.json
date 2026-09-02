@@ -1,6 +1,6 @@
 {
   "name": "@fileterm/storage",
-  "version": "2.2.7",
+  "version": "2.2.8-beta.1",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -13,6 +13,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fileterm/core": "2.2.7"
+    "@fileterm/core": "2.2.8-beta.1"
   }
 }
