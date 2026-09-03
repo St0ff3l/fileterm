@@ -246,6 +246,18 @@ async fn open_session(
                 }
             ),
         );
+        if jump_identification
+            .to_ascii_lowercase()
+            .starts_with("ssh-2.0-go")
+        {
+            crate::services::logging::session(
+                app,
+                "WARN",
+                "ssh",
+                tab_id,
+                "jump host identifies as SSH-2.0-Go; direct-tcpip target routing may be policy-gated by an application gateway (for KoKo use a direct asset username or an ordinary OpenSSH jump host)",
+            );
+        }
         let jump_handle = jump_session.handle;
 
         let mut target_profile = effective_profile.clone();

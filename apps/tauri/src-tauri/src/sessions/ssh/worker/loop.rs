@@ -17,11 +17,39 @@ async fn run_worker_loop(
         .and_then(|u| u.as_str())
         .unwrap_or("root")
         .to_string();
+    let jump_host_configured = profile
+        .get("jumpProfileId")
+        .and_then(Value::as_str)
+        .is_some();
+    let direct_login_hint =
+        crate::sessions::system_metrics::jumpserver_direct_login_hint(&username);
+    let route_hint = if jump_host_configured {
+        "transparent-jump-host"
+    } else if direct_login_hint.is_some() {
+        "jumpserver-direct-asset"
+    } else {
+        "direct-or-interactive"
+    };
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!(
+            "SSH route classified route_hint={route_hint} jump_profile_configured={jump_host_configured} direct_login_hint={} direct_login_user_segments={}",
+            direct_login_hint.unwrap_or("none"),
+            username
+                .split(['@', '#'])
+                .filter(|part| !part.trim().is_empty())
+                .count()
+        ),
+    );
 
-    // ── Main session (single SSH session multiplexes shell + SFTP + metrics) ─
+    // ── Main session (one authenticated handle for shell + auxiliary channels)
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
-    // one authenticated handle for every channel. The handle is wrapped in
-    // `Arc` so the background metrics task can share it with the main loop.
+    // one authenticated handle for every channel when the target route is
+    // known. Menu-driven gateways are the exception: their auxiliary channels
+    // start a new unselected menu and are deferred after platform probing.
     let session = match tokio::select! {
         biased;
         _ = cancellation.cancelled() => Err("SSH connection canceled".to_string()),
@@ -48,7 +76,13 @@ async fn run_worker_loop(
             return Err(error);
         }
     };
-    crate::services::logging::session(app, "INFO", "ssh", tab_id, "SSH session established");
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!("SSH session established route_hint={route_hint}"),
+    );
     let remote_sshid = session.remote_sshid;
     let disconnect_reason = session.disconnect_reason;
     let handle: Arc<Handle<ClientHandler>> = Arc::new(session.handle);
@@ -177,7 +211,7 @@ async fn run_worker_loop(
     // channel.wait() 循环读取且无内层 timeout。服务器在 exec 模式下卡住
     // 时整个 probe 会永久 await，worker 永远起不来。超时后回落到
     // "unknown"，shell CWD 注入会被 fail-closed 门控跳过，终端仍可用。
-    let (platform, mut metrics_request_pty) = if network_device_mode {
+    let (platform, mut metrics_request_pty, interactive_gateway) = if network_device_mode {
         crate::services::logging::session(
             app,
             "INFO",
@@ -185,7 +219,7 @@ async fn run_worker_loop(
             tab_id,
             "network-device mode; skipping platform probe",
         );
-        ("unknown".to_string(), false)
+        ("unknown".to_string(), false, false)
     } else if exec_channel_enabled {
         crate::services::logging::session(
             app,
@@ -206,7 +240,7 @@ async fn run_worker_loop(
         )
         .await
         {
-            Ok(result) => (result.platform, result.request_pty),
+            Ok(result) => (result.platform, result.request_pty, result.interactive_gateway),
             Err(_) => {
                 crate::services::logging::session(
                     app,
@@ -215,7 +249,7 @@ async fn run_worker_loop(
                     tab_id,
                     "platform probe timed out, falling back to unknown",
                 );
-                ("unknown".to_string(), false)
+                ("unknown".to_string(), false, false)
             }
         }
     } else {
@@ -226,7 +260,7 @@ async fn run_worker_loop(
             tab_id,
             "exec channel disabled; skipping platform probe",
         );
-        ("unknown".to_string(), false)
+        ("unknown".to_string(), false, false)
     };
 
     // Go-based jump hosts commonly gate all command handlers on a PTY. Keep a
@@ -253,7 +287,7 @@ async fn run_worker_loop(
         "metrics",
         tab_id,
         format!(
-            "platform probe completed platform={platform} transport={} metrics_request_pty={metrics_request_pty}",
+            "platform probe completed platform={platform} transport={} metrics_request_pty={metrics_request_pty} interactive_gateway={interactive_gateway} route_hint={route_hint}",
             if metrics_request_pty {
                 "exec-pty"
             } else {
@@ -261,6 +295,25 @@ async fn run_worker_loop(
             }
         ),
     );
+    if interactive_gateway {
+        crate::services::logging::session(
+            app,
+            "WARN",
+            "ssh",
+            tab_id,
+            format!(
+                "interactive SSH gateway detected route_hint={route_hint}; terminal is still connected but target asset is not routed; deferring metrics and SFTP; use JumpServer direct username JumpServerUser@AssetUser@AssetIP or a transparent jumpProfileId route through an ordinary OpenSSH jump host"
+            ),
+        );
+    } else if remote_sshid_is_go {
+        crate::services::logging::session(
+            app,
+            "DEBUG",
+            "ssh",
+            tab_id,
+            "SSH-2.0-Go banner observed without an interactive asset menu; continuing auxiliary channels and requiring a real target identity in the first metrics sample",
+        );
+    }
 
     // ── Inject shell CWD setup (POSIX only, fail-closed) ───────────────────
     // Mirrors Electron's `supportsPosixShellSetup()` + `injectShellSetup()`
@@ -314,6 +367,8 @@ async fn run_worker_loop(
         network_device_mode,
         exec_channel_enabled,
         metrics_request_pty,
+        interactive_gateway,
+        route_hint,
         cancellation: &cancellation,
         state: &state,
     };
@@ -321,9 +376,47 @@ async fn run_worker_loop(
     let (sftp_arc, sftp_unavailable_reason) = initialize_sftp_session(&startup).await;
     let transfer_sftp_slot: TransferSftpSlot = Arc::new(Mutex::new(None));
 
-    // Push the full snapshot (with files) to the renderer
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    // Push the full snapshot (with files) to the renderer. Record both sides
+    // of this boundary: the backend emit result is useful when a WebView is
+    // not yet listening, while the renderer logs receipt/application of the
+    // same workspace revision.
+    match crate::commands::get_workspace_snapshot(app.clone()).await {
+        Ok(snapshot) => {
+            let workspace_revision = snapshot
+                .get("workspaceRevision")
+                .and_then(Value::as_u64)
+                .map(|revision| revision.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            match app.emit("workspace:snapshot", snapshot) {
+                Ok(()) => crate::services::logging::session(
+                    app,
+                    "INFO",
+                    "ssh",
+                    tab_id,
+                    format!(
+                        "initial workspace snapshot emitted workspace_revision={workspace_revision} interactive_gateway={interactive_gateway}"
+                    ),
+                ),
+                Err(error) => crate::services::logging::session(
+                    app,
+                    "WARN",
+                    "ssh",
+                    tab_id,
+                    format!(
+                        "initial workspace snapshot emission failed workspace_revision={workspace_revision} interactive_gateway={interactive_gateway} error={error}"
+                    ),
+                ),
+            }
+        }
+        Err(error) => crate::services::logging::session(
+            app,
+            "WARN",
+            "ssh",
+            tab_id,
+            format!(
+                "initial workspace snapshot build failed interactive_gateway={interactive_gateway} error={error}"
+            ),
+        ),
     }
     if sftp_arc.is_some() {
         let cleanup_app = app.clone();

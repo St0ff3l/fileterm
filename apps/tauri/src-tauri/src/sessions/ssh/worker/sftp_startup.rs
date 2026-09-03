@@ -14,6 +14,8 @@ let network_device_mode = startup.network_device_mode;
 let exec_enabled = startup.exec_channel_enabled;
 let cancellation = startup.cancellation;
 let state = startup.state;
+let interactive_gateway = startup.interactive_gateway;
+let route_hint = startup.route_hint;
 // ── SFTP subsystem ─────────────────────────────────────────────────────
 // russh-sftp 2.3 needs an explicit subsystem request before converting
 // the channel into its protocol stream. A failed SFTP negotiation must
@@ -29,6 +31,25 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
         "network-device mode; skipping SFTP channel",
     );
     (None, None)
+} else if interactive_gateway {
+    let reason = "Interactive JumpServer asset selection is active; use JumpServerUser@AssetUser@AssetIP or a transparent OpenSSH jump host before opening SFTP".to_string();
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "sftp",
+        tab_id,
+        format!("interactive gateway detected; skipping auxiliary SFTP channel until target route is known route_hint={route_hint}"),
+    );
+    {
+        let mut sessions = state.sessions.write().await;
+        if let Some(session) = sessions.get_mut(tab_id) {
+            session.remote_files_loading = false;
+            session.sftp_unavailable_reason = Some(reason.clone());
+            session.capabilities.files = false;
+            session.capabilities.file_access = false;
+        }
+    }
+    (None, Some(reason))
 } else if !sftp_enabled {
     let reason = "SFTP disabled for this connection profile".to_string();
     crate::services::logging::session(

@@ -135,6 +135,13 @@ struct SshWorkerStartupContext<'a> {
     /// platform probe records that compatibility decision so the persistent
     /// metrics channel uses the same transport instead of exiting immediately.
     metrics_request_pty: bool,
+    /// A menu-driven gateway such as JumpServer/KoKo has not routed this
+    /// channel to an asset yet. Auxiliary channels would each receive a new
+    /// asset-selection menu instead of reaching the selected target.
+    interactive_gateway: bool,
+    /// Best-effort route classification used only for diagnostics. It is
+    /// intentionally computed from profile shape and never changes routing.
+    route_hint: &'static str,
     cancellation: &'a CancellationToken,
     state: &'a crate::services::workspace::WorkspaceState,
 }
