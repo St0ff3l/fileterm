@@ -10,11 +10,77 @@ pub(crate) async fn probe_remote_platform_for_session<H: Handler>(
     handle: &Handle<H>,
     tab_id: Option<&str>,
 ) -> String {
-    // 1. Try POSIX probe
-    let posix_cmd = "sh -lc 'printf \"__FILETERM_PROBE_START__\\n\"; uname -s 2>/dev/null; shell_exe=$(readlink /proc/$$/exe 2>/dev/null || readlink /bin/sh 2>/dev/null || true); case \"$shell_exe\" in *busybox*) printf \"busybox\\n\" ;; esac; if [ -f /etc/openwrt_release ]; then printf \"openwrt\\n\"; fi; if [ -r /etc/centos-release ] || [ -r /etc/redhat-release ] || [ -r /etc/fedora-release ]; then printf \"linux\\n\"; fi; printf \"__FILETERM_PROBE_END__\\n\"'";
+    probe_remote_platform_for_session_with_transport(handle, tab_id)
+        .await
+        .platform
+}
 
-    let posix_result = exec_command_with_status_detailed(handle, posix_cmd).await;
-    log_probe_result("posix", &posix_result, tab_id);
+/// Result of the short platform probe that runs before the terminal worker
+/// enters its main event loop.
+///
+/// A few SSH servers (including Go-based jump hosts) reject every `exec`
+/// request that does not carry a PTY. Returning the transport used by the
+/// successful probe lets the long-lived metrics channel make the same choice;
+/// otherwise platform detection can succeed while the collector immediately
+/// exits with a benign-looking status 0.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PlatformProbeResult {
+    pub platform: String,
+    pub request_pty: bool,
+}
+
+impl PlatformProbeResult {
+    fn new(platform: impl Into<String>, request_pty: bool) -> Self {
+        Self {
+            platform: platform.into(),
+            request_pty,
+        }
+    }
+}
+
+/// Build a single remote command for PTY-only SSH gateways.
+///
+/// KoKo-style gateways inspect the raw `exec` command before forwarding it to
+/// the asset.  A command beginning with `bash --login` is the compatible
+/// path, while writing a multi-kilobyte script to a PTY's stdin can be
+/// truncated by the terminal line discipline or echoed into the metrics
+/// stream.  Encode the script locally and let a login shell decode it on the
+/// remote side.  Base64's standard alphabet does not contain a single quote,
+/// so the payload is safe inside the outer `-c` shell string.
+pub(crate) fn build_pty_login_shell_command(script: &str) -> String {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(script.as_bytes());
+    format!(
+        "bash --login -c 'printf \"%s\" \"{encoded}\" | (base64 -d 2>/dev/null || base64 -D 2>/dev/null) | bash'"
+    )
+}
+
+fn probe_command_supports_login_shell_wrapper(command: &str) -> bool {
+    let normalized = command.trim_start().to_ascii_lowercase();
+    !normalized.starts_with("powershell ")
+        && !normalized.starts_with("pwsh ")
+        && !normalized.starts_with("cmd /c")
+}
+
+/// Probe the remote platform and report whether the remote requires a PTY for
+/// exec commands. The first attempt remains a regular non-PTY exec so normal
+/// servers keep their separate stderr channel; a response such as
+/// `No PTY requested.` triggers one bounded PTY retry and all following probes
+/// reuse that transport.
+pub(crate) async fn probe_remote_platform_for_session_with_transport<H: Handler>(
+    handle: &Handle<H>,
+    tab_id: Option<&str>,
+) -> PlatformProbeResult {
+    let mut request_pty = false;
+
+    let (posix_result, used_pty) = run_probe_command(
+        handle,
+        "posix",
+        "sh -lc 'printf \"__FILETERM_PROBE_START__\\n\"; uname -s 2>/dev/null; shell_exe=$(readlink /proc/$$/exe 2>/dev/null || readlink /bin/sh 2>/dev/null || true); case \"$shell_exe\" in *busybox*) printf \"busybox\\n\" ;; esac; if [ -f /etc/openwrt_release ]; then printf \"openwrt\\n\"; fi; if [ -r /etc/centos-release ] || [ -r /etc/redhat-release ] || [ -r /etc/fedora-release ]; then printf \"linux\\n\"; fi; printf \"__FILETERM_PROBE_END__\\n\"'",
+        tab_id,
+        request_pty,
+    )
+    .await;
+    request_pty |= used_pty;
     if let Ok(result) = &posix_result {
         // CRLF normalization — Windows remotes emit `\r\n` which would
         // pollute platform detection (e.g. `linux\r` fails `contains`).
@@ -23,9 +89,12 @@ pub(crate) async fn probe_remote_platform_for_session<H: Handler>(
             if let Some(platform) = classify_posix_probe_body(&body) {
                 log_probe_message(
                     tab_id,
-                    format!("probe=posix classified platform={platform}"),
+                    format!(
+                        "probe=posix classified platform={platform} transport={}",
+                        probe_transport_label(request_pty)
+                    ),
                 );
-                return platform.to_string();
+                return PlatformProbeResult::new(platform, request_pty);
             }
         }
     }
@@ -35,16 +104,26 @@ pub(crate) async fn probe_remote_platform_for_session<H: Handler>(
     // bare POSIX fallback so platform detection does not depend on shell
     // startup files. This is especially useful for hosted Debian 12 images.
     let fallback_probe = "uname -s 2>/dev/null; if [ -r /etc/centos-release ] || [ -r /etc/redhat-release ] || [ -r /etc/fedora-release ]; then cat /etc/centos-release /etc/redhat-release /etc/fedora-release 2>/dev/null; fi";
-    let fallback_result = exec_command_with_status_detailed(handle, fallback_probe).await;
-    log_probe_result("posix-fallback", &fallback_result, tab_id);
+    let (fallback_result, used_pty) = run_probe_command(
+        handle,
+        "posix-fallback",
+        fallback_probe,
+        tab_id,
+        request_pty,
+    )
+    .await;
+    request_pty |= used_pty;
     if let Ok(result) = &fallback_result {
         let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
         if let Some(platform) = classify_posix_probe_body(&output) {
             log_probe_message(
                 tab_id,
-                format!("probe=posix-fallback classified platform={platform}"),
+                format!(
+                    "probe=posix-fallback classified platform={platform} transport={}",
+                    probe_transport_label(request_pty)
+                ),
             );
-            return platform.to_string();
+            return PlatformProbeResult::new(platform, request_pty);
         }
     }
 
@@ -52,44 +131,167 @@ pub(crate) async fn probe_remote_platform_for_session<H: Handler>(
     // source. Keep a direct `cat` probe after the generic POSIX probes so a
     // restricted login shell (or an image without a usable `sh -lc`) can
     // still be recognized without depending on `/etc/os-release`.
-    let release_result = exec_command_with_status_detailed(
+    let (release_result, used_pty) = run_probe_command(
         handle,
+        "release-files",
         "cat /etc/redhat-release /etc/centos-release /etc/fedora-release /etc/os-release 2>/dev/null",
+        tab_id,
+        request_pty,
     )
     .await;
-    log_probe_result("release-files", &release_result, tab_id);
+    request_pty |= used_pty;
     if let Ok(result) = &release_result {
         let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
         if let Some(platform) = classify_posix_probe_body(&output) {
             log_probe_message(
                 tab_id,
-                format!("probe=release-files classified platform={platform}"),
+                format!(
+                    "probe=release-files classified platform={platform} transport={}",
+                    probe_transport_label(request_pty)
+                ),
             );
-            return platform.to_string();
+            return PlatformProbeResult::new(platform, request_pty);
         }
     }
 
-    // 2. Try Windows probes
+    // Try Windows probes only after the POSIX family. Once a PTY-required
+    // response has been observed, use PTY for these too; issuing more rejected
+    // non-PTY requests only adds latency and can exhaust a jump host's
+    // MaxSessions allowance.
     let windows_cmds = [
         "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"[Environment]::OSVersion.Platform\"",
         "pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"[Environment]::OSVersion.Platform\"",
         "cmd /c ver",
     ];
     for cmd in &windows_cmds {
-        let result = exec_command_with_status_detailed(handle, cmd).await;
-        log_probe_result(cmd, &result, tab_id);
+        let (result, used_pty) = run_probe_command(handle, cmd, cmd, tab_id, request_pty).await;
+        request_pty |= used_pty;
         if let Ok(result) = &result {
-            let output = &result.output;
-            let output = output.replace("\r\n", "\n").replace('\r', "\n");
+            let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
             if let Some(platform) = classify_windows_probe_output(&output) {
-                log_probe_message(tab_id, format!("probe={cmd} classified platform={platform}"));
-                return platform.to_string();
+                log_probe_message(
+                    tab_id,
+                    format!(
+                        "probe={cmd} classified platform={platform} transport={}",
+                        probe_transport_label(request_pty)
+                    ),
+                );
+                return PlatformProbeResult::new(platform, request_pty);
             }
         }
     }
 
-    log_probe_message(tab_id, "all probes failed; returning platform=unknown");
-    "unknown".to_string()
+    log_probe_message(
+        tab_id,
+        format!(
+            "all probes failed; returning platform=unknown transport={}",
+            probe_transport_label(request_pty)
+        ),
+    );
+    PlatformProbeResult::new("unknown", request_pty)
+}
+
+/// Execute one platform probe with a transport fallback. The returned bool
+/// records whether the result was obtained through a PTY (or whether a PTY
+/// was required but the retry still failed), so the caller can carry that
+/// compatibility decision into the persistent metrics channel.
+async fn run_probe_command<H: Handler>(
+    handle: &Handle<H>,
+    label: &str,
+    command: &str,
+    tab_id: Option<&str>,
+    prefer_pty: bool,
+) -> (Result<ExecCommandResult, String>, bool) {
+    if prefer_pty {
+        let wrapped_command = probe_command_supports_login_shell_wrapper(command)
+            .then(|| build_pty_login_shell_command(command));
+        if let Some(wrapped_command) = wrapped_command.as_deref() {
+            log_probe_message(
+                tab_id,
+                format!(
+                    "probe={label} flow_role=target command prepared command_mode=login-shell-inline-b64 script_bytes={} command_bytes={}",
+                    command.len(),
+                    wrapped_command.len(),
+                ),
+            );
+        }
+        let result = exec_command_with_status_pty_detailed(
+            handle,
+            wrapped_command.as_deref().unwrap_or(command),
+        )
+        .await;
+        log_probe_result(label, &result, tab_id, "exec-pty");
+        return (result, true);
+    }
+
+    let result = exec_command_with_status_detailed(handle, command).await;
+    log_probe_result(label, &result, tab_id, "exec");
+    let requires_pty = match &result {
+        Ok(result) => output_indicates_pty_required(&result.output),
+        Err(error) => output_indicates_pty_required(error),
+    };
+    if !requires_pty {
+        return (result, false);
+    }
+
+    log_probe_message(
+        tab_id,
+        format!(
+            "probe={label} flow_role=target retrying transport=exec-pty reason=pty-required-response command_mode={}",
+            if probe_command_supports_login_shell_wrapper(command) {
+                "login-shell-inline-b64"
+            } else {
+                "direct"
+            }
+        ),
+    );
+    let wrapped_command = probe_command_supports_login_shell_wrapper(command)
+        .then(|| build_pty_login_shell_command(command));
+    if let Some(wrapped_command) = wrapped_command.as_deref() {
+        log_probe_message(
+            tab_id,
+            format!(
+                "probe={label} flow_role=target command prepared command_mode=login-shell-inline-b64 script_bytes={} command_bytes={}",
+                command.len(),
+                wrapped_command.len(),
+            ),
+        );
+    }
+    let pty_result = exec_command_with_status_pty_detailed(
+        handle,
+        wrapped_command.as_deref().unwrap_or(command),
+    )
+    .await;
+    log_probe_result(label, &pty_result, tab_id, "exec-pty");
+    (pty_result, true)
+}
+
+fn probe_transport_label(request_pty: bool) -> &'static str {
+    if request_pty {
+        "exec-pty"
+    } else {
+        "exec"
+    }
+}
+
+/// Detect the benign response emitted by SSH servers that only execute
+/// commands attached to a terminal. Keep this deliberately narrow: a generic
+/// command error mentioning `pty` must not make every subsequent probe request
+/// a PTY and change stderr semantics on otherwise compatible servers.
+fn output_indicates_pty_required(output: &str) -> bool {
+    let normalized = output.to_ascii_lowercase();
+    [
+        "no pty requested",
+        "no pty was requested",
+        "pty required",
+        "requires a pty",
+        "requires pty",
+        "must request a pty",
+        "must request pty",
+        "request a pty",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
 }
 
 fn log_probe_scope(tab_id: Option<&str>) -> String {
@@ -107,13 +309,14 @@ fn log_probe_result(
     label: &str,
     result: &Result<ExecCommandResult, String>,
     tab_id: Option<&str>,
+    transport: &str,
 ) {
     let scope = log_probe_scope(tab_id);
     match result {
         Ok(result) => crate::services::logging::debug_global(
             &scope,
             format!(
-                "probe={label} result=ok exit_code={} timed_out={} output_truncated={} output={:?}",
+                "probe={label} flow_role=target transport={transport} result=ok exit_code={} timed_out={} output_truncated={} output={:?}",
                 result
                     .exit_code
                     .map(|status| status.to_string())
@@ -125,7 +328,9 @@ fn log_probe_result(
         ),
         Err(error) => crate::services::logging::debug_global(
             &scope,
-            format!("probe={label} result=error error={error}"),
+                format!(
+                    "probe={label} flow_role=target transport={transport} result=error error={error}"
+                ),
         ),
     }
 }
@@ -241,9 +446,19 @@ pub async fn exec_command_with_status_pty<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, None, true, None, None)
+    exec_command_with_status_pty_detailed(handle, cmd)
         .await
         .map(|result| (result.output, result.exit_code))
+}
+
+/// PTY variant of [`exec_command_with_status_detailed`] used by platform
+/// detection. Keeping the truncation/timeout metadata lets the probe logger
+/// describe the retry with the same fidelity as the regular transport.
+pub(crate) async fn exec_command_with_status_pty_detailed<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+) -> Result<ExecCommandResult, String> {
+    exec_command_internal(handle, cmd, None, true, None, None).await
 }
 
 /// Run an exec command with a requested PTY, write `stdin`, and retain the

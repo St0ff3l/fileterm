@@ -9,6 +9,7 @@ include!("event_loop.rs");
 include!("terminal_output.rs");
 include!("tunnel_startup.rs");
 include!("command_event.rs");
+include!("metrics_diagnostics.rs");
 include!("metrics.rs");
 include!("session_snapshot.rs");
 include!("sftp_startup.rs");

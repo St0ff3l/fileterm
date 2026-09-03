@@ -2,12 +2,15 @@
 mod tests {
     use super::{
         append_pty_prompt_window, build_freebsd_metrics_command, build_posix_metrics_command,
+        build_pty_login_shell_command,
         build_windows_metrics_command, build_windows_streaming_metrics_command,
         build_windows_streaming_metrics_exec_command, classify_posix_probe_body,
         classify_windows_probe_output, extend_with_cap, parse_system_metrics,
-        pty_password_prompt_detected, is_retryable_exec_channel_open_error,
+        output_indicates_pty_required, pty_password_prompt_detected,
+        is_retryable_exec_channel_open_error,
         EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS, EXEC_CHANNEL_OPEN_RETRY_DELAY, EXEC_COMMAND_OUTPUT_CAP,
     };
+    use base64::Engine;
     use std::time::Duration;
 
     #[test]
@@ -86,6 +89,31 @@ mod tests {
             status.success(),
             "generated POSIX metrics script is invalid"
         );
+    }
+
+    #[test]
+    fn pty_login_shell_command_keeps_script_out_of_stdin_and_uses_login_shell() {
+        let script = "printf '__FILETERM_PROBE_START__\\n'; uname -s";
+        let command = build_pty_login_shell_command(script);
+        let encoded = base64::engine::general_purpose::STANDARD.encode(script.as_bytes());
+
+        assert!(command.starts_with("bash --login -c '"));
+        assert!(command.contains("base64 -d"));
+        assert!(command.contains("base64 -D"));
+        assert!(command.contains(&encoded));
+        assert!(!command.contains(script));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pty_login_shell_command_is_valid_shell_syntax() {
+        let command = build_pty_login_shell_command("printf 'ok\\n'");
+        let status = std::process::Command::new("sh")
+            .args(["-n", "-c", &command])
+            .status()
+            .expect("shell syntax checker should start");
+
+        assert!(status.success(), "generated PTY command is invalid");
     }
 
     #[test]
@@ -510,6 +538,15 @@ devil() {{
     fn posix_probe_returns_none_for_unrecognized_bodies() {
         assert_eq!(classify_posix_probe_body(""), None);
         assert_eq!(classify_posix_probe_body("sunos\n"), None);
+    }
+
+    #[test]
+    fn platform_probe_detects_pty_required_server_responses_without_false_positives() {
+        assert!(output_indicates_pty_required("No PTY requested.\n"));
+        assert!(output_indicates_pty_required("command requires a pty"));
+        assert!(output_indicates_pty_required("MUST REQUEST PTY"));
+        assert!(!output_indicates_pty_required("pty allocation request accepted"));
+        assert!(!output_indicates_pty_required("Linux\n"));
     }
 
     #[test]

@@ -172,11 +172,12 @@ async fn run_worker_loop(
     });
 
     // ── Probe platform ─────────────────────────────────────────────────────
-    // 加 timeout：probe 内部最多 6 次串行 exec_command，每次都用
+    // 加 timeout：probe 内部最多 6 组串行探针（PTY-only server 会对每组
+    // 再重试一次，最多 12 个 exec channel），每次都用
     // channel.wait() 循环读取且无内层 timeout。服务器在 exec 模式下卡住
     // 时整个 probe 会永久 await，worker 永远起不来。超时后回落到
     // "unknown"，shell CWD 注入会被 fail-closed 门控跳过，终端仍可用。
-    let platform = if network_device_mode {
+    let (platform, mut metrics_request_pty) = if network_device_mode {
         crate::services::logging::session(
             app,
             "INFO",
@@ -184,7 +185,7 @@ async fn run_worker_loop(
             tab_id,
             "network-device mode; skipping platform probe",
         );
-        "unknown".to_string()
+        ("unknown".to_string(), false)
     } else if exec_channel_enabled {
         crate::services::logging::session(
             app,
@@ -198,14 +199,14 @@ async fn run_worker_loop(
         );
         match timeout(
             PLATFORM_PROBE_TIMEOUT,
-            crate::sessions::system_metrics::probe_remote_platform_for_session(
+            crate::sessions::system_metrics::probe_remote_platform_for_session_with_transport(
                 &handle,
                 Some(tab_id),
             ),
         )
         .await
         {
-            Ok(p) => p,
+            Ok(result) => (result.platform, result.request_pty),
             Err(_) => {
                 crate::services::logging::session(
                     app,
@@ -214,7 +215,7 @@ async fn run_worker_loop(
                     tab_id,
                     "platform probe timed out, falling back to unknown",
                 );
-                "unknown".to_string()
+                ("unknown".to_string(), false)
             }
         }
     } else {
@@ -225,14 +226,40 @@ async fn run_worker_loop(
             tab_id,
             "exec channel disabled; skipping platform probe",
         );
-        "unknown".to_string()
+        ("unknown".to_string(), false)
     };
+
+    // Go-based jump hosts commonly gate all command handlers on a PTY. Keep a
+    // conservative banner heuristic for the case where the probe itself was
+    // interrupted or all PTY retries were rejected; requesting a PTY for the
+    // detached collector is harmless on these servers and prevents the exact
+    // `No PTY requested.` exit-0 failure seen in the field.
+    let remote_sshid_is_go = String::from_utf8_lossy(&remote_sshid)
+        .to_ascii_lowercase()
+        .starts_with("ssh-2.0-go");
+    if exec_channel_enabled && remote_sshid_is_go && !metrics_request_pty {
+        metrics_request_pty = true;
+        crate::services::logging::session(
+            app,
+            "INFO",
+            "metrics",
+            tab_id,
+            "metrics transport heuristic enabled request_pty=true reason=go-server-identification",
+        );
+    }
     crate::services::logging::session(
         app,
         "INFO",
         "metrics",
         tab_id,
-        format!("platform probe completed platform={platform}"),
+        format!(
+            "platform probe completed platform={platform} transport={} metrics_request_pty={metrics_request_pty}",
+            if metrics_request_pty {
+                "exec-pty"
+            } else {
+                "exec"
+            }
+        ),
     );
 
     // ── Inject shell CWD setup (POSIX only, fail-closed) ───────────────────
@@ -286,6 +313,7 @@ async fn run_worker_loop(
         operation_timeout,
         network_device_mode,
         exec_channel_enabled,
+        metrics_request_pty,
         cancellation: &cancellation,
         state: &state,
     };

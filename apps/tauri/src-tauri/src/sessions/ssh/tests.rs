@@ -2522,6 +2522,15 @@ mod tests {
                 .unwrap();
         assert_eq!(command, "tauri-openssh-exec");
 
+        let pty_command = crate::sessions::system_metrics::exec_command_with_status_pty_detailed(
+            &handle,
+            "printf 'tauri-openssh-pty-exec'",
+        )
+        .await
+        .unwrap();
+        assert_eq!(pty_command.output, "tauri-openssh-pty-exec");
+        assert_eq!(pty_command.exit_code, Some(0));
+
         let platform = crate::sessions::system_metrics::probe_remote_platform(&handle).await;
         #[cfg(target_os = "linux")]
         assert_eq!(platform, "linux");

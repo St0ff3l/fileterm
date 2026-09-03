@@ -569,6 +569,7 @@ export function useWorkspaceIpcSync({
     let hydrated = false
     let receivedSnapshotEvent = false
     const pendingMetrics: SessionMetricsUpdate[] = []
+    let receivedMetricsEventCount = 0
     const pendingTransfers: TransferTask[] = []
     const pendingRemoteFiles: RemoteFilesUpdate[] = []
     let unsubscribeSnapshot: (() => void) | null = null
@@ -663,11 +664,29 @@ export function useWorkspaceIpcSync({
           if (canceled) {
             return
           }
+          receivedMetricsEventCount += 1
+          const shouldLogMetricsEvent = receivedMetricsEventCount === 1 || receivedMetricsEventCount % 60 === 0
+          if (shouldLogMetricsEvent) {
+            logWorkspaceDiagnostic(
+              'DEBUG',
+              `session metrics event received count=${receivedMetricsEventCount} tab_id=${payload.tabId} mode=${payload.mode ?? 'replace'} has_system_metrics=${payload.systemMetrics !== undefined} hydrated=${hydrated}`
+            )
+          }
           if (!hydrated) {
             pendingMetrics.push(payload)
+            logWorkspaceDiagnostic(
+              'DEBUG',
+              `session metrics event queued tab_id=${payload.tabId} reason=workspace-not-hydrated pending_count=${pendingMetrics.length}`
+            )
             return
           }
           applySessionMetrics(payload)
+          if (shouldLogMetricsEvent) {
+            logWorkspaceDiagnostic(
+              'DEBUG',
+              `session metrics update scheduled count=${receivedMetricsEventCount} tab_id=${payload.tabId} mode=${payload.mode ?? 'replace'}`
+            )
+          }
         })
       : () => undefined
     const unsubscribeTransferUpdate = isMainWorkspaceWindow
