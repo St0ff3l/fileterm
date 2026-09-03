@@ -3,6 +3,7 @@ node_modules/
 
 dist/
 apps/tauri/dist/
+/apps/tauri/build/
 release/
 apps/tauri/release/
 apps/tauri/src-tauri/target/

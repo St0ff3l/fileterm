@@ -44,6 +44,7 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 
 ### 平台兼容边界
 
+- **macOS 应用图标安全留白**：Dock 和 `⌘Tab` 使用 `icon.icns` 时，macOS 专用主图标必须在 1024×1024 画布中保留约 100px 的透明安全边距（有效图形约 824×824），不得直接使用满版主图标；Windows/Linux/WebView 继续使用完整主图标。macOS 菜单栏托盘仍使用独立的黑色单色透明 Template 图标，不能用 `icon.icns` 代替。
 - **CWD 目录跟随**：终端工作目录 (CWD) 变化通过底层会话流安全捕获，经 runtime 广播同步给文件管理器，严禁 UI 层轮询或直接探测平台路径。
 - **POSIX CWD 注入门控**：`supportsPosixShellSetup()` 仅对 `linux` / `busybox` 返回 true。Windows / unknown 平台**严禁注入** Linux shell CWD 脚本，采用 fail-closed 双重门控（`detectPlatformAndSetupShell` + `injectShellSetup` 各一道）。
 - **CRLF 归一化**：系统指标解析入口必须对远端输出做 `replace(/\r\n?/g, '\n')` 归一化，避免 `'windows\r'` 等污染导致平台误判。

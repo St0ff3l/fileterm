@@ -196,7 +196,7 @@ platform probe
 - CSS 使用 `data-platform` 和稳定 class 做 macOS/Windows/Linux 差异化布局。
 - Tauri 无边框子窗口在 macOS 与 Windows 使用透明原生表面，由 renderer 的 `standalone-window-frame` 统一裁切圆角；Windows 主窗口通过平台专用配置使用相同的 renderer 圆角，并在最大化时取消圆角。Windows 子窗口保持隐藏到 React 首帧完成以避免 WebView2 启动闪烁，Linux 继续使用不透明原生表面。Linux 主窗口同样使用无边框 renderer chrome，与 Windows 共用紧凑菜单栏；Linux 独立窗口不得附加 GTK 应用菜单。
 - Windows 下严禁从同步 Tauri command、托盘回调或原生菜单回调直接执行 `WebviewWindowBuilder::build()`；WebView2 会在该上下文发生建窗死锁并阻塞后续全部 invoke。Renderer 建窗入口必须使用 async command，实际 builder 工作进入 blocking worker；原生事件入口也必须先交给 worker。
-- macOS 菜单栏托盘图标使用 `apps/tauri/build/trayTemplate*.png` template 资源，由 Rust/Tauri backend 设置 template 属性。
+- macOS 菜单栏托盘图标使用 `apps/tauri/src-tauri/icons/trayTemplate*.png` template 资源（源文件位于 `apps/tauri/assets/icons/trayTemplate.svg`），由 Rust/Tauri backend 设置 template 属性。
 - macOS 主窗口保留原生红黄绿按钮；`tauri*.conf.json` 不保存 traffic-light 坐标。首个页面加载完成后，Rust 从 `NSWindow` 真实 frame 计算 48pt renderer 顶栏的窗口坐标中心，经按钮 superview 的 AppKit 坐标转换统一写入三个原生按钮 frame，并统一应用 `Regular` control size 与 12pt → 14pt 的中心绘制缩放。Debug、Release、本地打包和 GitHub Actions 共用同一算法，不允许 `debug_assertions` 分支、Release 垂直偏移或 renderer CSS 伪造按钮；精确设计基线见 `docs/design.md` 的“macOS 原生标题栏基线”。
 - Tauri 托盘由 Rust backend 显式创建：macOS 使用独立 template 图标，Windows/Linux 使用应用图标。主窗口与可见子窗口隐藏到托盘后会成组恢复；普通关闭请求与真正退出请求保持分离。
 - 应用更新通过 Rust/Tauri update service 统一管理，renderer 仅经 `Rust commands/events -> tauri-api.ts -> renderer` 查询状态和触发检查；更新通道持久化为 `stable` / `beta`，稳定版只选择非 prerelease Release，测试版选择 prerelease 与正式版中 SemVer 最新的一项，以便测试版自然升级到正式版。Windows 按选中的 Release tag 动态读取签名 `latest.json`、NSIS 安装器及其 `.sig`，继续采用两段式“下载验签 → 重启安装”；macOS 发行构建使用 ad hoc 签名并保持检查后跳转选中的 GitHub Release 下载页（不接入 Apple 证书、公证或应用内 updater）。

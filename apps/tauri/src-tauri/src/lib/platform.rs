@@ -368,7 +368,7 @@ fn windows_icon_image() -> Result<Image<'static>, AppError> {
     // icon generator places the 32px frame first, which is the frame used by
     // its dev-time context loader. The previous ICO had a 16px first frame,
     // so npm dev loaded that bitmap and Windows enlarged it for the taskbar.
-    Image::from_bytes(include_bytes!("../../../build/icon.ico"))
+    Image::from_bytes(include_bytes!("../../icons/icon.ico"))
         .map_err(|error| AppError::Window(error.to_string()))
 }
 

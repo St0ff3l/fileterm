@@ -183,7 +183,7 @@ pub fn run() {
             // tray-icon renders the source at 18 logical points on macOS.
             // Feed it the 36px Retina representation so the status item has
             // one physical source pixel per output pixel on @2x displays.
-            let tray_icon = Image::from_bytes(include_bytes!("../../../build/trayTemplate@2x.png"))
+            let tray_icon = Image::from_bytes(include_bytes!("../../icons/trayTemplate@2x.png"))
                 .map_err(|error| error.to_string())?;
             #[cfg(target_os = "windows")]
             let tray_icon = windows_icon_image().map_err(|error| error.to_string())?;
