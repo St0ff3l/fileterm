@@ -131,6 +131,10 @@ struct SshWorkerStartupContext<'a> {
     operation_timeout: Duration,
     network_device_mode: bool,
     exec_channel_enabled: bool,
+    /// Some SSH servers only allow exec commands attached to a PTY. The
+    /// platform probe records that compatibility decision so the persistent
+    /// metrics channel uses the same transport instead of exiting immediately.
+    metrics_request_pty: bool,
     cancellation: &'a CancellationToken,
     state: &'a crate::services::workspace::WorkspaceState,
 }

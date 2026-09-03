@@ -231,6 +231,21 @@ async fn open_session(
             cancellation.clone(),
         ))
         .await?;
+        let jump_identification = normalize_ssh_identification(&jump_session.remote_sshid);
+        crate::services::logging::session(
+            app,
+            "INFO",
+            "ssh",
+            tab_id,
+            format!(
+                "jump host SSH session ready flow_role=jump-host identification={}",
+                if jump_identification.is_empty() {
+                    "unknown"
+                } else {
+                    jump_identification.as_str()
+                }
+            ),
+        );
         let jump_handle = jump_session.handle;
 
         let mut target_profile = effective_profile.clone();
@@ -305,6 +320,22 @@ async fn open_session(
                 interaction_timeout,
             )
             .await?;
+            let target_remote_sshid = read_shared_remote_sshid(&remote_sshid);
+            let target_identification = normalize_ssh_identification(&target_remote_sshid);
+            crate::services::logging::session(
+                app,
+                "INFO",
+                "ssh",
+                tab_id,
+                format!(
+                    "target SSH session ready flow_role=target transport=direct-tcpip identification={}",
+                    if target_identification.is_empty() {
+                        "unknown"
+                    } else {
+                        target_identification.as_str()
+                    }
+                ),
+            );
             if authenticate_session(
                 &mut target_handle,
                 &target_username,
@@ -318,7 +349,7 @@ async fn open_session(
             {
                 Ok(OpenSshSession {
                     handle: target_handle,
-                    remote_sshid: read_shared_remote_sshid(&remote_sshid),
+                    remote_sshid: target_remote_sshid,
                     disconnect_reason,
                 })
             } else {

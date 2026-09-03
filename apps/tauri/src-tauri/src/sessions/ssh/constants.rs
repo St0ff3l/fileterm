@@ -25,7 +25,9 @@ const SFTP_INIT_STEP_TIMEOUT: Duration = Duration::from_secs(8);
 const SHELL_INIT_STEP_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// `probe_remote_platform` 总超时。该函数在 worker 主循环之前调用，
-/// 内部最多尝试 4 次 exec_command（POSIX + 3 个 Windows probe），每次
+/// 内部最多尝试 6 组探针（3 个 POSIX + 3 个 Windows probe；发现
+/// PTY-only server 时每组最多再做一次 PTY 重试，因此最多 12 个 SSH
+/// exec channel），每次
 /// 都用 `channel.wait()` 循环读取，没有内层 timeout。如果服务器在 exec
 /// 模式下卡住（不返回 EOF/Close），整个 probe 会永久 await，worker
 /// 永远起不来，所有后续命令（含 Ctrl+C）都进不了 cmd_rx。20 秒覆盖
