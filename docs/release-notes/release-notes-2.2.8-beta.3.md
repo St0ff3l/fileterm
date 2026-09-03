@@ -11,7 +11,7 @@ FileTerm 2.2.8-beta.3 是面向 SSH 跳板机资源监控的兼容性测试版�
 
 ### 本版本包含的主要 PR 和问题修复
 
-- SSH 跳板机资源监控兼容性修复：覆盖 SSH-2.0-Go 网关的 PTY 回退、目标机身份校验、监控通道生命周期和前后端状态同步。
+- [PR #233](https://github.com/St0ff3l/fileterm/pull/233)：SSH 跳板机资源监控兼容性修复，覆盖 SSH-2.0-Go 网关的 PTY 回退、目标机身份校验、监控通道生命周期和前后端状态同步。
 
 完整变更记录请查看 [v2.2.8-beta.2 与 v2.2.8-beta.3 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.2...v2.2.8-beta.3)。
 
@@ -36,7 +36,7 @@ FileTerm 2.2.8-beta.3 is a compatibility beta for SSH jump-host resource monitor
 
 ### Main PRs and issues
 
-- SSH jump-host resource-monitoring compatibility: PTY fallback for SSH-2.0-Go gateways, target identity validation, metrics-channel lifecycle, and renderer state synchronization.
+- [PR #233](https://github.com/St0ff3l/fileterm/pull/233): SSH jump-host resource-monitoring compatibility with PTY fallback for SSH-2.0-Go gateways, target identity validation, metrics-channel lifecycle, and renderer state synchronization.
 
 See the [comparison between v2.2.8-beta.2 and v2.2.8-beta.3](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.2...v2.2.8-beta.3) for the complete change set.
 
