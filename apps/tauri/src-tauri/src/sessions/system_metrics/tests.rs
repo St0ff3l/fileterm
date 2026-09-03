@@ -6,7 +6,8 @@ mod tests {
         build_windows_metrics_command, build_windows_streaming_metrics_command,
         build_windows_streaming_metrics_exec_command, classify_posix_probe_body,
         classify_windows_probe_output, extend_with_cap, parse_system_metrics,
-        output_indicates_pty_required, pty_password_prompt_detected,
+        detect_interactive_gateway, output_indicates_pty_required, pty_password_prompt_detected,
+        jumpserver_direct_login_hint, probe_output_preview,
         is_retryable_exec_channel_open_error,
         EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS, EXEC_CHANNEL_OPEN_RETRY_DELAY, EXEC_COMMAND_OUTPUT_CAP,
     };
@@ -114,6 +115,62 @@ mod tests {
             .expect("shell syntax checker should start");
 
         assert!(status.success(), "generated PTY command is invalid");
+    }
+
+    #[test]
+    fn jumpserver_direct_login_hint_matches_documented_username_shapes() {
+        assert_eq!(
+            jumpserver_direct_login_hint("liuhong@root@192.168.0.123"),
+            Some("direct-asset-at")
+        );
+        assert_eq!(
+            jumpserver_direct_login_hint("liuhong@ssh@root@192.168.0.123"),
+            Some("direct-asset-at-with-protocol")
+        );
+        assert_eq!(
+            jumpserver_direct_login_hint("liuhong#root#192.168.0.123"),
+            Some("direct-asset-hash")
+        );
+        assert_eq!(
+            jumpserver_direct_login_hint("JMS-connection-token"),
+            Some("connection-token")
+        );
+    }
+
+    #[test]
+    fn jumpserver_direct_login_hint_rejects_ordinary_or_malformed_usernames() {
+        assert_eq!(jumpserver_direct_login_hint("liuhong"), None);
+        assert_eq!(jumpserver_direct_login_hint("liuhong@root"), None);
+        assert_eq!(jumpserver_direct_login_hint("liuhong@@192.168.0.123"), None);
+        assert_eq!(jumpserver_direct_login_hint("jms-connection-token"), None);
+        assert_eq!(jumpserver_direct_login_hint("JMS-"), None);
+        assert_eq!(
+            jumpserver_direct_login_hint("liuhong@rdp@root@192.168.0.123"),
+            None
+        );
+        assert_eq!(jumpserver_direct_login_hint("用户@root@192.168.0.123"), Some("direct-asset-at"));
+    }
+
+    #[test]
+    fn interactive_gateway_detector_accepts_english_menu_without_brand_banner() {
+        let output = "1) Partial IP, hostname, remark to search\n"
+            .to_string()
+            + "3) Show assets you have access to\n"
+            + "7) Refresh the latest machine and node information\n"
+            + "Opt> ";
+
+        assert_eq!(detect_interactive_gateway(&output), Some("jumpserver"));
+    }
+
+    #[test]
+    fn probe_preview_suppresses_interactive_gateway_menu() {
+        let menu = "JumpServer open source fortress system\n1) Search\nOpt> ";
+
+        assert_eq!(
+            probe_output_preview(menu),
+            "<interactive-gateway-menu-suppressed>"
+        );
+        assert_eq!(probe_output_preview("Linux\n"), "Linux\n");
     }
 
     #[test]
@@ -547,6 +604,22 @@ devil() {{
         assert!(output_indicates_pty_required("MUST REQUEST PTY"));
         assert!(!output_indicates_pty_required("pty allocation request accepted"));
         assert!(!output_indicates_pty_required("Linux\n"));
+    }
+
+    #[test]
+    fn platform_probe_detects_jumpserver_asset_menu_after_pty_retry() {
+        let output = "\u{1b}[H\u{1b}[2J JumpServer 开源堡垒机\r\n 1) 输入部分IP进行搜索登录\r\n 10) 输入 q 进行退出\r\nOpt> ";
+
+        assert_eq!(detect_interactive_gateway(output), Some("jumpserver"));
+    }
+
+    #[test]
+    fn platform_probe_does_not_disable_normal_shell_with_opt_text() {
+        assert_eq!(detect_interactive_gateway("Opt> echo Linux\n"), None);
+        assert_eq!(
+            detect_interactive_gateway("JumpServer docs: use the selector\n"),
+            None
+        );
     }
 
     #[test]

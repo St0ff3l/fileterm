@@ -15,29 +15,6 @@ pub(crate) async fn probe_remote_platform_for_session<H: Handler>(
         .platform
 }
 
-/// Result of the short platform probe that runs before the terminal worker
-/// enters its main event loop.
-///
-/// A few SSH servers (including Go-based jump hosts) reject every `exec`
-/// request that does not carry a PTY. Returning the transport used by the
-/// successful probe lets the long-lived metrics channel make the same choice;
-/// otherwise platform detection can succeed while the collector immediately
-/// exits with a benign-looking status 0.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PlatformProbeResult {
-    pub platform: String,
-    pub request_pty: bool,
-}
-
-impl PlatformProbeResult {
-    fn new(platform: impl Into<String>, request_pty: bool) -> Self {
-        Self {
-            platform: platform.into(),
-            request_pty,
-        }
-    }
-}
-
 /// Build a single remote command for PTY-only SSH gateways.
 ///
 /// KoKo-style gateways inspect the raw `exec` command before forwarding it to
@@ -82,6 +59,7 @@ pub(crate) async fn probe_remote_platform_for_session_with_transport<H: Handler>
     .await;
     request_pty |= used_pty;
     if let Ok(result) = &posix_result {
+        return_if_interactive_gateway!(&posix_result, tab_id, "posix", request_pty);
         // CRLF normalization — Windows remotes emit `\r\n` which would
         // pollute platform detection (e.g. `linux\r` fails `contains`).
         let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
@@ -114,6 +92,7 @@ pub(crate) async fn probe_remote_platform_for_session_with_transport<H: Handler>
     .await;
     request_pty |= used_pty;
     if let Ok(result) = &fallback_result {
+        return_if_interactive_gateway!(&fallback_result, tab_id, "posix-fallback", request_pty);
         let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
         if let Some(platform) = classify_posix_probe_body(&output) {
             log_probe_message(
@@ -141,6 +120,7 @@ pub(crate) async fn probe_remote_platform_for_session_with_transport<H: Handler>
     .await;
     request_pty |= used_pty;
     if let Ok(result) = &release_result {
+        return_if_interactive_gateway!(&release_result, tab_id, "release-files", request_pty);
         let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
         if let Some(platform) = classify_posix_probe_body(&output) {
             log_probe_message(
@@ -166,6 +146,7 @@ pub(crate) async fn probe_remote_platform_for_session_with_transport<H: Handler>
     for cmd in &windows_cmds {
         let (result, used_pty) = run_probe_command(handle, cmd, cmd, tab_id, request_pty).await;
         request_pty |= used_pty;
+        return_if_interactive_gateway!(&result, tab_id, cmd, request_pty);
         if let Ok(result) = &result {
             let output = result.output.replace("\r\n", "\n").replace('\r', "\n");
             if let Some(platform) = classify_windows_probe_output(&output) {
@@ -323,7 +304,7 @@ fn log_probe_result(
                     .unwrap_or_else(|| "none".to_string()),
                 result.timed_out,
                 result.output_truncated,
-                result.output.chars().take(300).collect::<String>(),
+                probe_output_preview(&result.output),
             ),
         ),
         Err(error) => crate::services::logging::debug_global(

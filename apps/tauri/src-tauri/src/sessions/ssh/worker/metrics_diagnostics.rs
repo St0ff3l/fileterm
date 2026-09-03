@@ -40,7 +40,12 @@ fn metrics_stderr_preview(tail: &[u8]) -> String {
 
 fn metrics_stdout_preview(tail: &[u8], sample_count: u64) -> String {
     if sample_count == 0 {
-        metrics_stderr_preview(tail)
+        let output = String::from_utf8_lossy(tail);
+        if crate::sessions::system_metrics::detect_interactive_gateway(&output).is_some() {
+            "<interactive-gateway-menu-suppressed>".to_string()
+        } else {
+            metrics_stderr_preview(tail)
+        }
     } else {
         "<suppressed-after-first-sample>".to_string()
     }
@@ -187,7 +192,8 @@ async fn close_metrics_channel(
 #[cfg(test)]
 mod metrics_tests {
     use super::{
-        append_metrics_stderr_tail, metrics_identity_field, target_identity_is_valid,
+        append_metrics_stderr_tail, metrics_identity_field, metrics_stdout_preview,
+        target_identity_is_valid,
         METRICS_STDERR_TAIL_BYTES,
     };
 
@@ -279,5 +285,20 @@ mod metrics_tests {
         });
 
         assert!(!target_identity_is_valid(&value, "linux"));
+    }
+
+    #[test]
+    fn stdout_preview_suppresses_interactive_gateway_menu() {
+        let menu = b"JumpServer open source fortress system\n1) Search\nOpt> ";
+
+        assert_eq!(
+            metrics_stdout_preview(menu, 0),
+            "<interactive-gateway-menu-suppressed>"
+        );
+        assert_eq!(metrics_stdout_preview(b"probe failed\n", 0), "probe failed\n");
+        assert_eq!(
+            metrics_stdout_preview(menu, 1),
+            "<suppressed-after-first-sample>"
+        );
     }
 }

@@ -16,6 +16,19 @@ let platform = startup.platform;
 let cancellation = startup.cancellation;
 let state = startup.state;
 let metrics_request_pty = startup.metrics_request_pty;
+let route_hint = startup.route_hint;
+if startup.interactive_gateway {
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "metrics",
+        tab_id,
+        format!(
+            "interactive gateway detected; skipping auxiliary metrics channel until target route is known route_hint={route_hint}"
+        ),
+    );
+    return;
+}
 // ── Spawn metrics collection task (single persistent channel) ─────────
 // Instead of opening a new exec channel every second (which adds variable
 // SSH overhead and makes the refresh cadence jittery), we open one
@@ -46,7 +59,7 @@ if effective_resource_monitoring_enabled(profile) {
             "metrics",
             &metrics_tid,
             format!(
-                "collector starting flow_role=target target={target_host}:{target_port} platform={} collector_variant={} interval_seconds={metrics_interval_seconds} request_pty={metrics_request_pty}",
+                "collector starting flow_role=target target={target_host}:{target_port} profile_endpoint={target_host}:{target_port} route_hint={route_hint} platform={} collector_variant={} interval_seconds={metrics_interval_seconds} request_pty={metrics_request_pty}",
                 metrics_plat,
                 if metrics_plat == "windows" {
                     "windows"
@@ -523,7 +536,7 @@ if effective_resource_monitoring_enabled(profile) {
                                             "metrics",
                                             &metrics_tid,
                                             format!(
-                                                "target identity rejected before first snapshot flow_role=target target={target_host}:{target_port} platform={} remote_ip={remote_ip:?} remote_hostname={remote_hostname:?} remote_os={remote_os:?} remote_kernel={remote_kernel:?} reason=missing-or-incompatible-identity",
+                                                "target identity rejected before first snapshot flow_role=target target={target_host}:{target_port} profile_endpoint={target_host}:{target_port} route_hint={route_hint} platform={} remote_ip={remote_ip:?} remote_hostname={remote_hostname:?} remote_os={remote_os:?} remote_kernel={remote_kernel:?} reason=missing-or-incompatible-identity",
                                                 metrics_plat,
                                             ),
                                         );
@@ -542,7 +555,7 @@ if effective_resource_monitoring_enabled(profile) {
                                         "metrics",
                                         &metrics_tid,
                                         format!(
-                                            "target identity validated before first snapshot flow_role=target target={target_host}:{target_port} platform={} remote_ip={remote_ip:?} remote_hostname={remote_hostname:?} remote_os={remote_os:?} remote_kernel={remote_kernel:?}",
+                                            "target identity validated before first snapshot flow_role=target target={target_host}:{target_port} profile_endpoint={target_host}:{target_port} route_hint={route_hint} platform={} remote_ip={remote_ip:?} remote_hostname={remote_hostname:?} remote_os={remote_os:?} remote_kernel={remote_kernel:?}",
                                             metrics_plat,
                                         ),
                                     );
@@ -555,7 +568,7 @@ if effective_resource_monitoring_enabled(profile) {
                                         "metrics",
                                         &metrics_tid,
                                         format!(
-                                            "first sample target={target_host}:{target_port} cpu_percent={cpu_pct:.1} memory_percent={mem_pct:.1} remote_ip={} remote_hostname={:?} remote_os={:?} remote_kernel={:?}",
+                                            "first sample flow_role=target target={target_host}:{target_port} profile_endpoint={target_host}:{target_port} route_hint={route_hint} cpu_percent={cpu_pct:.1} memory_percent={mem_pct:.1} remote_ip={} remote_hostname={:?} remote_os={:?} remote_kernel={:?}",
                                             metrics_identity_field(&val, "ip"),
                                             metrics_identity_field(&val, "hostname"),
                                             metrics_identity_field(&val, "osName"),

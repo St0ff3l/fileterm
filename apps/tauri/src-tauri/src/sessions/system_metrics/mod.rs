@@ -59,6 +59,7 @@ pub(crate) struct BackgroundExecChannel {
     pub pending_pty_stdin: Option<Vec<u8>>,
 }
 
+include!("gateway.rs");
 include!("exec.rs");
 include!("parser.rs");
 include!("posix.rs");

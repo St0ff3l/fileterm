@@ -10,6 +10,7 @@ let port = startup.port;
 let username = startup.username;
 let network_device_mode = startup.network_device_mode;
 let exec_channel_enabled = startup.exec_channel_enabled;
+let interactive_gateway = startup.interactive_gateway;
 // ── Initialize session snapshot ────────────────────────────────────────
 let state = startup.state;
 {
@@ -40,6 +41,26 @@ let state = startup.state;
         capabilities.resource_monitoring = false;
         capabilities.shell_integration = false;
     }
+    if interactive_gateway {
+        // A menu-driven gateway creates a fresh, unselected route for every
+        // auxiliary SSH channel. Keep the terminal capability, but do not
+        // advertise file or metrics channels that would only observe the
+        // gateway menu instead of the target asset.
+        capabilities.files = false;
+        capabilities.file_access = false;
+        capabilities.resource_monitoring = false;
+        capabilities.shell_integration = false;
+        crate::services::logging::session(
+            startup.app,
+            "INFO",
+            "ssh",
+            tab_id,
+            format!(
+                "session snapshot target route pending route_hint={}; capabilities files=false file_access=false resource_monitoring=false shell_integration=false",
+                startup.route_hint
+            ),
+        );
+    }
     sessions.insert(
         tab_id.to_string(),
         crate::services::SessionSnapshot {
@@ -57,7 +78,7 @@ let state = startup.state;
             terminal_transcript: existing_transcript,
             remote_path: existing_remote_path,
             shell_cwd: existing_shell_cwd,
-            follow_shell_cwd: exec_channel_enabled,
+            follow_shell_cwd: exec_channel_enabled && !interactive_gateway,
             remote_files_loading: false,
             remote_files: Vec::new(),
             sftp_unavailable_reason: None,
