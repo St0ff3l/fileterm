@@ -10,7 +10,7 @@ FileTerm 2.2.8-beta.6 修复 JumpServer/KoKo MFA 认证顺序，并优化交互�
 
 ### 本版本包含的主要 PR 和问题修复
 
-- KoKo MFA 认证顺序修复、交互式资产菜单提示自动关闭和公共关闭按钮优化。
+- [PR #238](https://github.com/St0ff3l/fileterm/pull/238)：KoKo MFA 认证顺序修复、交互式资产菜单提示自动关闭和公共关闭按钮优化。
 
 完整变更记录请查看 [v2.2.8-beta.5 与 v2.2.8-beta.6 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.5...v2.2.8-beta.6)。
 
@@ -34,7 +34,7 @@ FileTerm 2.2.8-beta.6 fixes the JumpServer/KoKo MFA authentication order and imp
 
 ### Main PRs and issues
 
-- KoKo MFA authentication order fix, interactive asset-menu notice auto-dismiss, and shared close-button improvements.
+- [PR #238](https://github.com/St0ff3l/fileterm/pull/238): KoKo MFA authentication order fix, interactive asset-menu notice auto-dismiss, and shared close-button improvements.
 
 See the [comparison between v2.2.8-beta.5 and v2.2.8-beta.6](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.5...v2.2.8-beta.6) for the complete change set.
 
