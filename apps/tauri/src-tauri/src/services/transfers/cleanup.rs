@@ -229,23 +229,78 @@ pub async fn retry_pending_cleanup_for_tab(app: &AppHandle, tab_id: &str) -> Res
     Ok(())
 }
 
+/// Refresh a task's tab binding when its recorded tab no longer has a live
+/// worker (tab closed, reconnected, or task restored from the journal).
+/// Prefers a connected tab with the same profile and file access mode so
+/// staging cleanup keeps working; falls back to any connected tab of the
+/// same profile. Upload tasks only — downloads clean up locally.
+async fn refresh_stale_transfer_tab(app: &AppHandle, task: &mut TransferTask) {
+    if task.direction != "upload" {
+        return;
+    }
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    if let Some(tab_id) = task.tab_id.as_deref() {
+        if state.workers.read().await.contains_key(tab_id) {
+            return;
+        }
+    }
+    let Some(profile_id) = task.profile_id.clone() else {
+        return;
+    };
+    let Some(fresh_tab_id) =
+        find_refreshable_tab(app, &profile_id, task.file_access_mode.as_deref()).await
+    else {
+        return;
+    };
+    task.tab_id = Some(fresh_tab_id.clone());
+    let _ = patch_task(
+        app,
+        &task.id,
+        move |stored| {
+            stored.tab_id = Some(fresh_tab_id);
+        },
+        PatchDelivery::PersistedEvent,
+    )
+    .await;
+}
+
+async fn find_refreshable_tab(
+    app: &AppHandle,
+    profile_id: &str,
+    file_access_mode: Option<&str>,
+) -> Option<String> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let tabs = state.tabs.read().await.clone();
+    let sessions = state.sessions.read().await;
+    let mut fallback = None;
+    for tab in tabs {
+        if tab.profile_id != profile_id || !matches!(tab.session_type.as_str(), "ssh" | "ftp") {
+            continue;
+        }
+        let Some(session) = sessions.get(&tab.id) else {
+            continue;
+        };
+        if !session.connected {
+            continue;
+        }
+        if file_access_mode.is_none_or(|expected| session.file_access_mode == expected) {
+            return Some(tab.id);
+        }
+        fallback.get_or_insert(tab.id);
+    }
+    fallback
+}
+
 pub async fn discard(app: &AppHandle, transfer_id: String, force: bool) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
     task_for(app, &transfer_id).await?;
     cancel_and_wait_transfer_run(app, &transfer_id).await?;
-    let task = task_for(app, &transfer_id).await?;
+    let mut task = task_for(app, &transfer_id).await?;
     if task.status == "done" {
         return Ok(());
     }
-    if task.cleanup_pending && !force {
-        // 上一次丢弃的远端断点清理失败（常见于传输会话断开或 user/root
-        // 文件访问模式不匹配）。直接静默重跑清理只会得到同样的失败，
-        // 表现为“点了没反应”。这里要求显式 force，由前端二次确认。
-        return Err(transfer_error(
-            "该传输仍有未清理的远端断点：可切回创建任务时的文件访问模式（user/root）等待自动清理，或选择强制丢弃（远端残留文件不会被删除）",
-        ));
-    }
+    refresh_stale_transfer_tab(app, &mut task).await;
     patch_task(
         app,
         &transfer_id,
