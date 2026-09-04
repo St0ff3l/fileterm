@@ -229,7 +229,7 @@ pub async fn retry_pending_cleanup_for_tab(app: &AppHandle, tab_id: &str) -> Res
     Ok(())
 }
 
-pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppError> {
+pub async fn discard(app: &AppHandle, transfer_id: String, force: bool) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
     task_for(app, &transfer_id).await?;
@@ -237,6 +237,14 @@ pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppErro
     let task = task_for(app, &transfer_id).await?;
     if task.status == "done" {
         return Ok(());
+    }
+    if task.cleanup_pending && !force {
+        // 上一次丢弃的远端断点清理失败（常见于传输会话断开或 user/root
+        // 文件访问模式不匹配）。直接静默重跑清理只会得到同样的失败，
+        // 表现为“点了没反应”。这里要求显式 force，由前端二次确认。
+        return Err(transfer_error(
+            "该传输仍有未清理的远端断点：可切回创建任务时的文件访问模式（user/root）等待自动清理，或选择强制丢弃（远端残留文件不会被删除）",
+        ));
     }
     patch_task(
         app,
@@ -257,15 +265,36 @@ pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppErro
         "canceled by user; cleaning partial data",
     );
     let cleanup = cleanup_transfer_partial(app, &task).await;
-    record_cleanup_attempt(
-        app,
-        &transfer_id,
-        None,
-        &cleanup,
-        "传输已取消，断点已清理",
-        "传输已取消，但断点清理失败",
-    )
-    .await?;
+    if force {
+        // 强制丢弃：用户已确认接受远端残留。无论清理是否成功都释放
+        // cleanup_pending，否则会话不可用时该记录永远无法被清除。
+        let message = match &cleanup {
+            Ok(()) => "传输已取消，断点已清理".to_string(),
+            Err(error) => format!("已强制丢弃，远端临时文件未清理：{error}"),
+        };
+        patch_task(
+            app,
+            &transfer_id,
+            |task| {
+                task.message = Some(message);
+                task.cleanup_pending = false;
+                task.resumable = false;
+                task.retry_attempt = None;
+            },
+            PatchDelivery::PersistedEvent,
+        )
+        .await?;
+    } else {
+        record_cleanup_attempt(
+            app,
+            &transfer_id,
+            None,
+            &cleanup,
+            "传输已取消，断点已清理",
+            "传输已取消，但断点清理失败",
+        )
+        .await?;
+    }
     clear_transfer_progress_runtime(app, &transfer_id).await;
     Ok(())
 }

@@ -250,7 +250,7 @@ async fn transfer_action(app: &AppHandle, params: &Value, action: &str) -> Resul
     let snapshot = match action {
         "pause" => crate::commands::app_pause_transfer(app.clone(), transfer_id.clone()).await,
         "resume" => crate::commands::app_resume_transfer(app.clone(), transfer_id.clone()).await,
-        "discard" => crate::commands::app_discard_transfer(app.clone(), transfer_id.clone()).await,
+        "discard" => crate::commands::app_discard_transfer(app.clone(), transfer_id.clone(), None).await,
         _ => return Err("Unsupported transfer action".to_string()),
     }
     .map_err(public_app_error)?;

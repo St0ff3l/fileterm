@@ -1117,6 +1117,9 @@ const zhCN = {
   resumingTransfer: '继续中',
   discardCheckpoint: '丢弃',
   discardingCheckpoint: '清理中',
+  forceDiscardCheckpoint: '强制丢弃',
+  forceDiscardCheckpointDescription:
+    '该传输的远端断点上次清理失败（传输会话未连接或文件访问模式不匹配）。强制丢弃会移除本地记录，但远端残留的临时文件不会被删除。切回创建任务时的文件访问模式（user/root）可等待自动清理。',
   transferPaused: '已暂停，可继续',
   transferInterrupted: '传输中断，可继续',
   transferVerifying: '正在校验',
@@ -2961,6 +2964,9 @@ const enUS: typeof zhCN = {
   resumingTransfer: 'Resuming',
   discardCheckpoint: 'Discard',
   discardingCheckpoint: 'Discarding',
+  forceDiscardCheckpoint: 'Force discard',
+  forceDiscardCheckpointDescription:
+    'The last remote checkpoint cleanup for this transfer failed (transfer session not connected or file access mode mismatch). Force discard removes the local record, but leftover remote temporary files will not be deleted. Switch back to the file access mode (user/root) used when the task was created to allow automatic cleanup.',
   transferPaused: 'Paused, ready to resume',
   transferInterrupted: 'Interrupted, ready to resume',
   transferVerifying: 'Verifying',

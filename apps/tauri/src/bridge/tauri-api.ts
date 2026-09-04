@@ -576,7 +576,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     cancelTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_cancel_transfer', { transferId }),
     pauseTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_pause_transfer', { transferId }),
     resumeTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_resume_transfer', { transferId }),
-    discardTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_discard_transfer', { transferId }),
+    discardTransfer: (transferId: string, force = false) =>
+      invoke<WorkspaceSnapshot>('app_discard_transfer', { transferId, force }),
     clearTransfers: (transferIds: string[]) => invoke<WorkspaceSnapshot>('app_clear_transfers', { transferIds }),
     getTerminalCommandHistory: (profileId: string) =>
       invoke<TerminalCommandHistoryEntry[]>('app_get_terminal_command_history', { profileId }),

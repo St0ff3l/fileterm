@@ -124,6 +124,11 @@ export function TransferCenter({
               ? runTransferAction(t.discardTransferCheckpoint, (id) => desktopApi.discardTransfer(id), transferId)
               : undefined
           }
+          onForceDiscardTransfer={(transferId) =>
+            desktopApi
+              ? runTransferAction(t.forceDiscardCheckpoint, (id) => desktopApi.discardTransfer(id, true), transferId)
+              : undefined
+          }
           onPauseTransfer={(transferId) =>
             desktopApi
               ? runTransferAction(t.pauseTransfer, (id) => desktopApi.pauseTransfer(id), transferId)

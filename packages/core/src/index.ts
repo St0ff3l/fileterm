@@ -2594,7 +2594,7 @@ export interface FileTermDesktopApi {
   cancelTransfer(transferId: string): Promise<WorkspaceSnapshot>
   pauseTransfer(transferId: string): Promise<WorkspaceSnapshot>
   resumeTransfer(transferId: string): Promise<WorkspaceSnapshot>
-  discardTransfer(transferId: string): Promise<WorkspaceSnapshot>
+  discardTransfer(transferId: string, force?: boolean): Promise<WorkspaceSnapshot>
   clearTransfers(transferIds: string[]): Promise<WorkspaceSnapshot>
   uploadFile(
     tabId: string,
