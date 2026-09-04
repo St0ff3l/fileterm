@@ -12,11 +12,37 @@ async fn run_worker_loop(
         .unwrap_or("127.0.0.1")
         .to_string();
     let port = port_from_profile(profile, 22, "SSH")?;
-    let username = profile
+    let configured_username = profile
         .get("username")
         .and_then(|u| u.as_str())
         .unwrap_or("root")
         .to_string();
+    let normalized_username =
+        crate::sessions::system_metrics::normalize_jumpserver_cli_username(
+            &configured_username,
+            &host,
+        );
+    let username_normalized = normalized_username.is_some();
+    let configured_user_segments = configured_username
+        .split(['@', '#'])
+        .filter(|part| !part.trim().is_empty())
+        .count();
+    let mut routed_profile = profile.clone();
+    if let Some(normalized_username) = normalized_username.as_ref() {
+        routed_profile["username"] = Value::String(normalized_username.clone());
+        crate::services::logging::session(
+            app,
+            "INFO",
+            "ssh",
+            tab_id,
+            format!(
+                "JumpServer username normalized source_shape=full-cli-destination target_shape=direct-asset configured_user_segments={} normalized_user_segments=3 host_match=true",
+                configured_user_segments,
+            ),
+        );
+    }
+    let profile = &routed_profile;
+    let username = normalized_username.unwrap_or(configured_username);
     let jump_host_configured = profile
         .get("jumpProfileId")
         .and_then(Value::as_str)
@@ -36,8 +62,9 @@ async fn run_worker_loop(
         "ssh",
         tab_id,
         format!(
-            "SSH route classified route_hint={route_hint} jump_profile_configured={jump_host_configured} direct_login_hint={} direct_login_user_segments={}",
+            "SSH route classified route_hint={route_hint} jump_profile_configured={jump_host_configured} direct_login_hint={} username_normalized={username_normalized} configured_user_segments={} direct_login_user_segments={}",
             direct_login_hint.unwrap_or("none"),
+            configured_user_segments,
             username
                 .split(['@', '#'])
                 .filter(|part| !part.trim().is_empty())
@@ -247,7 +274,9 @@ async fn run_worker_loop(
                     "WARN",
                     "metrics",
                     tab_id,
-                    "platform probe timed out, falling back to unknown",
+                    format!(
+                        "platform probe timed out, falling back to unknown route_hint={route_hint} username_normalized={username_normalized}"
+                    ),
                 );
                 ("unknown".to_string(), false, false)
             }
@@ -287,7 +316,7 @@ async fn run_worker_loop(
         "metrics",
         tab_id,
         format!(
-            "platform probe completed platform={platform} transport={} metrics_request_pty={metrics_request_pty} interactive_gateway={interactive_gateway} route_hint={route_hint}",
+            "platform probe completed platform={platform} transport={} metrics_request_pty={metrics_request_pty} interactive_gateway={interactive_gateway} route_hint={route_hint} username_normalized={username_normalized}",
             if metrics_request_pty {
                 "exec-pty"
             } else {
@@ -302,7 +331,8 @@ async fn run_worker_loop(
             "ssh",
             tab_id,
             format!(
-                "interactive SSH gateway detected route_hint={route_hint}; terminal is still connected but target asset is not routed; deferring metrics and SFTP; use JumpServer direct username JumpServerUser@AssetUser@AssetIP or a transparent jumpProfileId route through an ordinary OpenSSH jump host"
+                "interactive SSH gateway detected route_hint={route_hint} route_state=foreground-menu-only username_normalized={username_normalized} direct_login_hint={}; terminal is still connected but target asset is not routed; deferring metrics and SFTP; use a JumpServer direct username or a transparent jumpProfileId route through an ordinary OpenSSH jump host",
+                direct_login_hint.unwrap_or("none"),
             ),
         );
     } else if remote_sshid_is_go {

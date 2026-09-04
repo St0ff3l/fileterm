@@ -43,6 +43,17 @@ export function SystemInfoWorkspace({
     )
   }
 
+  if (activeSession.resourceMonitoringUnavailableReason === 'interactive-gateway-target-route-required') {
+    return (
+      <section className="system-info-workspace system-info-workspace-empty selectable-text">
+        <div className="system-info-empty">
+          <strong>{t.interactiveGatewayResourceMonitoringTitle}</strong>
+          <p>{t.interactiveGatewayResourceMonitoringDescription}</p>
+        </div>
+      </section>
+    )
+  }
+
   if (!metrics) {
     return (
       <section className="system-info-workspace system-info-workspace-empty selectable-text">

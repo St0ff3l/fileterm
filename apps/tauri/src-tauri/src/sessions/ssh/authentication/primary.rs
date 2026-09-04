@@ -348,9 +348,11 @@ async fn try_authenticate(
             .await?;
             Ok(authentication_result_from_auth_result(&result))
         }
-        "keyboard-interactive" => Ok(AuthenticationResult::KeyboardInteractiveAvailable {
-            mode: KeyboardInteractiveMode::PasswordFallback,
-        }),
+        "keyboard-interactive" | "jumpserver-koko-mfa" => {
+            Ok(AuthenticationResult::KeyboardInteractiveAvailable {
+                mode: KeyboardInteractiveMode::PasswordFallback,
+            })
+        }
         _ => {
             try_system_authenticate(handle, username, profile, app, interaction).await
         }

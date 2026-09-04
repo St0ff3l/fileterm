@@ -228,7 +228,7 @@ export function useWorkspaceIpcSync({
       const activeSession = snapshot.activeTabId ? snapshot.sessions[snapshot.activeTabId] : undefined
       logWorkspaceDiagnostic(
         'INFO',
-        `workspace snapshot applied workspace_revision=${typeof incomingRevision === 'number' ? incomingRevision : 'none'} sessions=${Object.keys(snapshot.sessions).length} resource_monitoring_disabled_sessions=${disabledResourceMonitoringSessions} active_tab_id=${snapshot.activeTabId ?? 'none'} active_tab_resource_monitoring_disabled=${activeSession?.capabilities?.resourceMonitoring === false}`
+        `workspace snapshot applied workspace_revision=${typeof incomingRevision === 'number' ? incomingRevision : 'none'} sessions=${Object.keys(snapshot.sessions).length} resource_monitoring_disabled_sessions=${disabledResourceMonitoringSessions} active_tab_id=${snapshot.activeTabId ?? 'none'} active_tab_resource_monitoring_disabled=${activeSession?.capabilities?.resourceMonitoring === false} active_tab_resource_monitoring_unavailable_reason=${activeSession?.resourceMonitoringUnavailableReason ?? 'none'}`
       )
       return true
     },

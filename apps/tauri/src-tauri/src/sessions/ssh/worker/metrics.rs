@@ -466,6 +466,28 @@ if effective_resource_monitoring_enabled(profile) {
                         Ok(Some(ChannelMsg::Data { data })) => {
                             stdout_bytes = stdout_bytes.saturating_add(data.len() as u64);
                             append_metrics_stderr_tail(&mut stdout_tail, data.as_ref());
+                            if interactive_gateway_menu_detected(&stdout_tail, sample_count) {
+                                remote_terminal_event = "interactive-gateway-menu";
+                                crate::services::logging::session(
+                                    &metrics_app,
+                                    "WARN",
+                                    "metrics",
+                                    &metrics_tid,
+                                    format!(
+                                        "interactive gateway menu received on auxiliary metrics channel; target route is unavailable flow_role=target route_hint={route_hint} stdout_bytes={} reason=target-route-required unavailable_reason=interactive-gateway-target-route-required",
+                                        stdout_bytes,
+                                    ),
+                                );
+                                if !metrics_cancellation.is_cancelled() {
+                                    disable_resource_monitoring_capability(
+                                        &metrics_app,
+                                        &metrics_tid,
+                                        "interactive gateway menu received on auxiliary metrics channel; target route is unavailable",
+                                    )
+                                    .await;
+                                }
+                                break 'collector "interactive-gateway-menu";
+                            }
                             buffer.extend_from_slice(data.as_ref());
                             // Drain all complete blocks from the buffer.
                             while let Some(idx) = find_subsequence(&buffer, marker_bytes) {

@@ -54,6 +54,32 @@ async fn open_session(
         .and_then(|h| h.as_str())
         .unwrap_or("127.0.0.1")
         .to_string();
+    let configured_username = effective_profile
+        .get("username")
+        .and_then(Value::as_str)
+        .unwrap_or("root")
+        .to_string();
+    if let Some(normalized_username) =
+        crate::sessions::system_metrics::normalize_jumpserver_cli_username(
+            &configured_username,
+            &host,
+        )
+    {
+        effective_profile["username"] = Value::String(normalized_username);
+        crate::services::logging::session(
+            app,
+            "INFO",
+            "ssh",
+            tab_id,
+            format!(
+                "JumpServer username normalized source_shape=full-cli-destination target_shape=direct-asset configured_user_segments={} normalized_user_segments=3 host_match=true",
+                configured_username
+                    .split(['@', '#'])
+                    .filter(|part| !part.trim().is_empty())
+                    .count(),
+            ),
+        );
+    }
     let port = port_from_profile(&effective_profile, 22, "SSH")?;
     let interaction = SshInteractionContext::from_profile(
         &flow,

@@ -105,7 +105,9 @@ fn map_auth(value: Option<&Value>) -> &'static str {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if value.contains("interactive") {
+    if (value.contains("jumpserver") || value.contains("koko")) && value.contains("mfa") {
+        "jumpserver-koko-mfa"
+    } else if value.contains("interactive") {
         "keyboard-interactive"
     } else if value.contains("key") {
         "privateKey"
@@ -713,6 +715,23 @@ mod tests {
         assert_eq!(profile["type"], "ssh");
         assert_eq!(profile["username"], "ops");
         assert_eq!(profile["authType"], "privateKey");
+    }
+
+    #[test]
+    fn preserves_jumpserver_koko_mfa_when_normalizing_compatible_json() {
+        let profile = normalize_external_profile(
+            &json!({
+                "name": "bastion",
+                "conection_type": "ssh",
+                "host": "jump.example.com",
+                "port": 2222,
+                "user_name": "alice@root@192.168.1.100@jump.example.com",
+                "authentication_type": "JumpServer / KoKo MFA Interactive"
+            }),
+            "fallback",
+        )
+        .unwrap();
+        assert_eq!(profile["authType"], "jumpserver-koko-mfa");
     }
 
     #[test]

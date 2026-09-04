@@ -56,11 +56,13 @@ let state = startup.state;
             "ssh",
             tab_id,
             format!(
-                "session snapshot target route pending route_hint={}; capabilities files=false file_access=false resource_monitoring=false shell_integration=false",
-                startup.route_hint
+                "session snapshot target route pending route_hint={} resource_monitoring_unavailable_reason=interactive-gateway-target-route-required; capabilities files=false file_access=false resource_monitoring=false shell_integration=false",
+                startup.route_hint,
             ),
         );
     }
+    let resource_monitoring_unavailable_reason = interactive_gateway
+        .then(|| "interactive-gateway-target-route-required".to_string());
     sessions.insert(
         tab_id.to_string(),
         crate::services::SessionSnapshot {
@@ -99,6 +101,7 @@ let state = startup.state;
             shell_user: None,
             connected: true,
             system_metrics: None,
+            resource_monitoring_unavailable_reason,
             capabilities,
             remote_capabilities: None,
             reconnect_mode: existing_reconnect_mode
