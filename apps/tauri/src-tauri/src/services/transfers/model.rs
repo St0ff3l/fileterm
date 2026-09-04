@@ -133,6 +133,15 @@ impl TransferTask {
     fn terminal(&self) -> bool {
         matches!(self.status.as_str(), "done" | "failed" | "canceled")
     }
+
+    pub fn to_ui_task(&self) -> TransferTask {
+        let mut ui_task = self.clone();
+        if let Some(manifest) = ui_task.manifest.as_mut() {
+            manifest.directories.clear();
+            manifest.files.clear();
+        }
+        ui_task
+    }
 }
 
 /// Status a task transitions to when the application interrupts it (quit,

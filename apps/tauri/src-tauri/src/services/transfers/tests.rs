@@ -178,6 +178,76 @@ mod tests {
         assert_eq!(manifest_totals(&manifest), (17, 30));
     }
 
+    #[test]
+    fn to_ui_task_strips_manifest_collections_while_preserving_truthiness() {
+        let task = TransferTask {
+            id: "transfer-large-folder".to_string(),
+            direction: "upload".to_string(),
+            name: "node_modules".to_string(),
+            progress: 50.0,
+            status: "running".to_string(),
+            message: Some("node_modules/lodash/lodash.js".to_string()),
+            speed: Some("15.2 MB/s".to_string()),
+            transferred_bytes: Some(400_000_000),
+            total_bytes: Some(800_000_000),
+            tab_id: Some("tab-1".to_string()),
+            profile_id: None,
+            session_type: None,
+            file_access_mode: None,
+            target_type: Some("folder".to_string()),
+            source_path: Some("/local/node_modules".to_string()),
+            destination_path: Some("/remote/node_modules".to_string()),
+            partial_path: None,
+            staging_path: None,
+            source_identity: None,
+            manifest: Some(TransferManifest {
+                version: 1,
+                directories: vec!["/remote/node_modules/a".to_string(), "/remote/node_modules/b".to_string()],
+                files: vec![
+                    TransferManifestEntry {
+                        relative_path: "a/1.js".to_string(),
+                        source_path: "/local/node_modules/a/1.js".to_string(),
+                        destination_path: "/remote/node_modules/a/1.js".to_string(),
+                        partial_path: "/remote/node_modules/a/1.js.fileterm-part".to_string(),
+                        staging_path: None,
+                        source_identity: TransferFileIdentity { size: 100, modified_at: None },
+                        status: "done".to_string(),
+                        transferred_bytes: 100,
+                    },
+                    TransferManifestEntry {
+                        relative_path: "b/2.js".to_string(),
+                        source_path: "/local/node_modules/b/2.js".to_string(),
+                        destination_path: "/remote/node_modules/b/2.js".to_string(),
+                        partial_path: "/remote/node_modules/b/2.js.fileterm-part".to_string(),
+                        staging_path: None,
+                        source_identity: TransferFileIdentity { size: 200, modified_at: None },
+                        status: "running".to_string(),
+                        transferred_bytes: 50,
+                    },
+                ],
+            }),
+            resumable: true,
+            retry_attempt: None,
+            cleanup_pending: false,
+            created_at: Some(1000),
+            updated_at: Some(2000),
+        };
+
+        let ui_task = task.to_ui_task();
+        let manifest = ui_task.manifest.as_ref().expect("manifest must remain present for UI truthiness check");
+        assert_eq!(manifest.version, 1);
+        assert!(manifest.directories.is_empty(), "UI task directories must be empty to avoid IPC bloat");
+        assert!(manifest.files.is_empty(), "UI task files must be empty to avoid IPC bloat");
+        assert_eq!(ui_task.message.as_deref(), Some("node_modules/lodash/lodash.js"));
+        assert_eq!(ui_task.name, "node_modules");
+
+        // Verify JSON serialization contains manifest object with empty arrays
+        let json = serde_json::to_value(&ui_task).unwrap();
+        assert!(json.get("manifest").is_some());
+        assert_eq!(json["manifest"]["directories"].as_array().unwrap().len(), 0);
+        assert_eq!(json["manifest"]["files"].as_array().unwrap().len(), 0);
+    }
+
     fn sample_task(id: &str, updated_at: u64) -> TransferTask {
         TransferTask {
             id: id.to_string(),

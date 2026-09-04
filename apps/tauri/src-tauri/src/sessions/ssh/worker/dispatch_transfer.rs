@@ -66,6 +66,7 @@ async fn dispatch_transfer_cmd(
             resume_offset,
             transfer_id,
             cancel,
+            verify_checksum,
             respond_to,
         } => {
             // 上传可能持续数分钟，必须 spawn 到独立任务否则会阻塞整个 worker
@@ -132,7 +133,7 @@ async fn dispatch_transfer_cmd(
                     )
                     .await
                 };
-                if result.is_ok() {
+                if result.is_ok() && verify_checksum {
                     result = match timeout(
                         checksum_timeout,
                         verify_sftp_transfer_sha256(
@@ -162,6 +163,7 @@ async fn dispatch_transfer_cmd(
             resume_offset,
             transfer_id,
             cancel,
+            verify_checksum,
             respond_to,
         } => {
             // 下载同样可能持续数分钟，必须 spawn。
@@ -217,7 +219,7 @@ async fn dispatch_transfer_cmd(
                     }
                     result
                 };
-                if result.is_ok() {
+                if result.is_ok() && verify_checksum {
                     result = match timeout(
                         checksum_timeout,
                         verify_sftp_transfer_sha256(

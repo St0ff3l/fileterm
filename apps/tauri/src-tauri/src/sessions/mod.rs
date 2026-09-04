@@ -150,6 +150,7 @@ pub enum WorkerCmd {
         resume_offset: u64,
         transfer_id: String,
         cancel: tokio_util::sync::CancellationToken,
+        verify_checksum: bool,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     DownloadRemoteFile {
@@ -158,6 +159,7 @@ pub enum WorkerCmd {
         resume_offset: u64,
         transfer_id: String,
         cancel: tokio_util::sync::CancellationToken,
+        verify_checksum: bool,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     ReplaceRemoteFile {

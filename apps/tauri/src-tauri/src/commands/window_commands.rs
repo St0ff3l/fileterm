@@ -248,7 +248,13 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
             .unwrap_or_default()
             .to_string();
     }
-    let transfers = state.transfers.read().await.clone();
+    let transfers: Vec<crate::services::transfers::TransferTask> = state
+        .transfers
+        .read()
+        .await
+        .iter()
+        .map(crate::services::transfers::TransferTask::to_ui_task)
+        .collect();
     let active_pane_tab_id_by_root = state.active_pane_tab_id_by_root.read().await.clone();
 
     // Read + heal profiles, then strip secrets before exposing in snapshot.

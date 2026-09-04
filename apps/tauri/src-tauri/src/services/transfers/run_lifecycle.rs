@@ -317,6 +317,7 @@ async fn run(
                             resume_offset: offset,
                             transfer_id: transfer_id.clone(),
                             cancel: cancel.clone(),
+                            verify_checksum: true,
                             respond_to,
                         }
                     })
@@ -335,6 +336,7 @@ async fn run(
                         resume_offset: offset,
                         transfer_id: transfer_id.clone(),
                         cancel: cancel.clone(),
+                        verify_checksum: true,
                         respond_to,
                     }
                 })

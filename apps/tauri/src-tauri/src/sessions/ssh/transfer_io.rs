@@ -5,6 +5,12 @@ async fn ensure_transfer_parent_dir(sftp: &SftpSession, path: &str) -> Result<()
     if parent == "/" {
         return Ok(());
     }
+    // Fast path: if the parent directory already exists, all ancestors exist.
+    match sftp.metadata(&parent).await {
+        Ok(metadata) if metadata.is_dir() => return Ok(()),
+        Ok(_) => return Err(format!("传输目标父路径不是目录: {parent}")),
+        Err(_) => {}
+    }
     let mut current = String::new();
     for segment in parent.split('/').filter(|segment| !segment.is_empty()) {
         current.push('/');

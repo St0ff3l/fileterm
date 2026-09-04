@@ -18,20 +18,79 @@ async fn stat_local_transfer_file(path: &str) -> Option<TransferFileIdentity> {
     })
 }
 
+struct DirectoryTransferThrottler {
+    last_emitted: std::time::Instant,
+    last_persisted: std::time::Instant,
+    completed_since_persist: usize,
+}
+
+impl DirectoryTransferThrottler {
+    fn new() -> Self {
+        let now = std::time::Instant::now();
+        Self {
+            last_emitted: now,
+            last_persisted: now,
+            completed_since_persist: 0,
+        }
+    }
+
+    fn delivery_for_file_start(&mut self) -> PatchDelivery {
+        let now = std::time::Instant::now();
+        if now.duration_since(self.last_emitted) >= Duration::from_millis(150) {
+            self.last_emitted = now;
+            PatchDelivery::Event
+        } else {
+            PatchDelivery::Silent
+        }
+    }
+
+    fn delivery_for_file_completed(&mut self) -> PatchDelivery {
+        self.completed_since_persist += 1;
+        let now = std::time::Instant::now();
+        let should_persist = now.duration_since(self.last_persisted) >= Duration::from_secs(2)
+            || self.completed_since_persist >= 50;
+        if should_persist {
+            self.last_persisted = now;
+            self.last_emitted = now;
+            self.completed_since_persist = 0;
+            PatchDelivery::PersistedEvent
+        } else if now.duration_since(self.last_emitted) >= Duration::from_millis(150) {
+            self.last_emitted = now;
+            PatchDelivery::Event
+        } else {
+            PatchDelivery::Silent
+        }
+    }
+}
+
+struct DirectoryManifestPatch<'a> {
+    status: &'a str,
+    message: Option<String>,
+    transferred: u64,
+    total: u64,
+    delivery: PatchDelivery,
+}
+
 async fn update_directory_manifest(
     app: &AppHandle,
     transfer_id: &str,
     manifest: &TransferManifest,
-    status: &str,
-    message: Option<String>,
-    immediate: bool,
+    patch: DirectoryManifestPatch<'_>,
 ) -> Result<(), AppError> {
-    let (transferred, total) = manifest_totals(manifest);
+    let DirectoryManifestPatch {
+        status,
+        message,
+        transferred,
+        total,
+        delivery,
+    } = patch;
     patch_task(
         app,
         transfer_id,
         |task| {
-            task.manifest = Some(manifest.clone());
+            if !matches!(delivery, PatchDelivery::Silent) {
+                task.manifest = Some(manifest.clone());
+            }
             task.status = status.to_string();
             task.message = message;
             task.transferred_bytes = Some(transferred);
@@ -52,11 +111,7 @@ async fn update_directory_manifest(
                 task.speed = None;
             }
         },
-        if immediate {
-            PatchDelivery::PersistedEvent
-        } else {
-            PatchDelivery::Event
-        },
+        delivery,
     )
     .await?;
     Ok(())
@@ -121,30 +176,27 @@ async fn run_directory_transfer(
         .filter(|manifest| manifest.version == 1)
         .ok_or_else(|| transfer_error("目录传输任务缺少有效 manifest"))?;
 
+    let (initial_transferred, total_bytes) = manifest_totals(&manifest);
+    let mut current_transferred = initial_transferred;
+    let mut throttler = DirectoryTransferThrottler::new();
+
     if !resume_requested {
         for entry in &mut manifest.files {
-            if task.direction == "upload" {
-                remove_remote_upload_artifacts(
-                    app,
-                    tab_id,
-                    &entry.partial_path,
-                    entry.staging_path.as_deref(),
-                    Some(&cancel),
-                )
-                .await?;
-            } else {
-                let _ = tokio::fs::remove_file(&entry.partial_path).await;
-            }
             entry.status = "pending".to_string();
             entry.transferred_bytes = 0;
         }
+        current_transferred = 0;
         update_directory_manifest(
             app,
             transfer_id,
             &manifest,
-            "running",
-            Some("正在准备目录传输".to_string()),
-            true,
+            DirectoryManifestPatch {
+                status: "running",
+                message: Some("正在准备目录传输".to_string()),
+                transferred: 0,
+                total: total_bytes,
+                delivery: PatchDelivery::PersistedEvent,
+            },
         )
         .await?;
     }
@@ -230,9 +282,25 @@ async fn run_directory_transfer(
             }
         }
 
-        let upload_plan = if task.direction == "upload" {
-            Some(
-                prepare_remote_upload(
+        let is_fresh_entry =
+            !resume_requested || (entry.status == "pending" && entry.transferred_bytes == 0);
+        let (upload_plan, offset) = if task.direction == "upload" {
+            if is_fresh_entry {
+                let upload_path = entry
+                    .staging_path
+                    .clone()
+                    .unwrap_or_else(|| entry.partial_path.clone());
+                (
+                    RemoteUploadPlan {
+                        upload_path,
+                        resume_offset: 0,
+                        upload_needed: true,
+                        partial_ready: false,
+                    },
+                    0,
+                )
+            } else {
+                let plan = prepare_remote_upload(
                     app,
                     tab_id,
                     &entry.partial_path,
@@ -240,18 +308,28 @@ async fn run_directory_transfer(
                     entry.source_identity.size,
                     Some(&cancel),
                 )
-                .await?,
+                .await?;
+                let offset = plan.resume_offset;
+                (plan, offset)
+            }
+        } else {
+            let offset = if is_fresh_entry {
+                0
+            } else {
+                stat_local_transfer_file(&entry.partial_path)
+                    .await
+                    .map(|value| value.size)
+                    .unwrap_or(0)
+            };
+            (
+                RemoteUploadPlan {
+                    upload_path: String::new(),
+                    resume_offset: offset,
+                    upload_needed: true,
+                    partial_ready: false,
+                },
+                offset,
             )
-        } else {
-            None
-        };
-        let offset = if let Some(plan) = upload_plan.as_ref() {
-            plan.resume_offset
-        } else {
-            stat_local_transfer_file(&entry.partial_path)
-                .await
-                .map(|value| value.size)
-                .unwrap_or(0)
         };
         if offset > entry.source_identity.size {
             return Err(transfer_error(format!(
@@ -262,32 +340,36 @@ async fn run_directory_transfer(
 
         manifest.files[index].status = "running".to_string();
         manifest.files[index].transferred_bytes = offset;
+
+        let start_delivery = throttler.delivery_for_file_start();
         update_directory_manifest(
             app,
             transfer_id,
             &manifest,
-            "running",
-            Some(if offset > 0 {
-                format!("{}（从 {offset} bytes 继续）", entry.relative_path)
-            } else {
-                entry.relative_path.clone()
-            }),
-            true,
+            DirectoryManifestPatch {
+                status: "running",
+                message: Some(if offset > 0 {
+                    format!("{}（从 {offset} bytes 继续）", entry.relative_path)
+                } else {
+                    entry.relative_path.clone()
+                }),
+                transferred: current_transferred.saturating_add(offset),
+                total: total_bytes,
+                delivery: start_delivery,
+            },
         )
         .await?;
 
         if task.direction == "upload" {
-            let plan = upload_plan
-                .as_ref()
-                .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?;
-            if plan.upload_needed {
+            if upload_plan.upload_needed {
                 worker_data_call_with_cancel(app, tab_id, &cancel, |respond_to, _token| {
                     WorkerCmd::UploadLocalFile {
                         local_path: entry.source_path.clone(),
-                        remote_path: plan.upload_path.clone(),
+                        remote_path: upload_plan.upload_path.clone(),
                         resume_offset: offset,
                         transfer_id: transfer_id.to_string(),
                         cancel: cancel.clone(),
+                        verify_checksum: false,
                         respond_to,
                     }
                 })
@@ -306,6 +388,7 @@ async fn run_directory_transfer(
                     resume_offset: offset,
                     transfer_id: transfer_id.to_string(),
                     cancel: cancel.clone(),
+                    verify_checksum: false,
                     respond_to,
                 }
             })
@@ -316,16 +399,7 @@ async fn run_directory_transfer(
         }
 
         let completed_size = if task.direction == "upload" {
-            let plan = upload_plan
-                .as_ref()
-                .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?;
-            if plan.partial_ready {
-                entry.source_identity.size
-            } else {
-                stat_remote_transfer_size(app, tab_id, &plan.upload_path, Some(&cancel))
-                    .await?
-                    .unwrap_or(0)
-            }
+            entry.source_identity.size
         } else {
             stat_local_transfer_file(&entry.partial_path)
                 .await
@@ -339,17 +413,6 @@ async fn run_directory_transfer(
             )));
         }
 
-        manifest.files[index].transferred_bytes = entry.source_identity.size;
-
-        update_directory_manifest(
-            app,
-            transfer_id,
-            &manifest,
-            "finalizing",
-            Some(format!("正在提交 {}", entry.relative_path)),
-            true,
-        )
-        .await?;
         if task.direction == "upload" {
             finalize_remote_upload(
                 app,
@@ -359,10 +422,7 @@ async fn run_directory_transfer(
                     staging_path: entry.staging_path.as_deref(),
                     destination_path: &entry.destination_path,
                     source_size: entry.source_identity.size,
-                    partial_ready: upload_plan
-                        .as_ref()
-                        .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?
-                        .partial_ready,
+                    partial_ready: upload_plan.partial_ready,
                 },
                 Some(&cancel),
             )
@@ -374,20 +434,42 @@ async fn run_directory_transfer(
             )
             .await?;
         }
+
         manifest.files[index].status = "done".to_string();
+        current_transferred = current_transferred
+            .saturating_sub(manifest.files[index].transferred_bytes)
+            .saturating_add(entry.source_identity.size);
         manifest.files[index].transferred_bytes = entry.source_identity.size;
+
+        let done_delivery = throttler.delivery_for_file_completed();
         update_directory_manifest(
             app,
             transfer_id,
             &manifest,
-            "running",
-            Some(entry.relative_path),
-            true,
+            DirectoryManifestPatch {
+                status: "running",
+                message: Some(entry.relative_path),
+                transferred: current_transferred,
+                total: total_bytes,
+                delivery: done_delivery,
+            },
         )
         .await?;
     }
 
-    update_directory_manifest(app, transfer_id, &manifest, "done", None, true).await?;
+    update_directory_manifest(
+        app,
+        transfer_id,
+        &manifest,
+        DirectoryManifestPatch {
+            status: "done",
+            message: None,
+            transferred: total_bytes,
+            total: total_bytes,
+            delivery: PatchDelivery::PersistedEvent,
+        },
+    )
+    .await?;
     if task.direction == "upload" {
         if let Err(error) = refresh_remote_listing(app, tab_id).await {
             crate::services::logging::warn(
@@ -469,8 +551,20 @@ async fn fail_if_running(
             let Some(partial_size) = partial_size else {
                 entry.transferred_bytes = 0;
                 entry.status = "pending".to_string();
-                update_directory_manifest(app, transfer_id, &manifest, "failed", Some(error), true)
-                    .await?;
+                let (transferred, total) = manifest_totals(&manifest);
+                update_directory_manifest(
+                    app,
+                    transfer_id,
+                    &manifest,
+                    DirectoryManifestPatch {
+                        status: "failed",
+                        message: Some(error),
+                        transferred,
+                        total,
+                        delivery: PatchDelivery::PersistedEvent,
+                    },
+                )
+                .await?;
                 return Ok(());
             };
             if partial_size > entry.source_identity.size {

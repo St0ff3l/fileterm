@@ -386,6 +386,7 @@ async fn run_ftp_worker(
                 resume_offset,
                 transfer_id,
                 cancel,
+                verify_checksum: _,
                 respond_to,
             }) => {
                 let profile = profile.clone();
@@ -443,6 +444,7 @@ async fn run_ftp_worker(
                 resume_offset,
                 transfer_id,
                 cancel,
+                verify_checksum: _,
                 respond_to,
             }) => {
                 let profile = profile.clone();

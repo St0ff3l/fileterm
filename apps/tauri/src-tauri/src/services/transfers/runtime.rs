@@ -25,7 +25,13 @@ pub async fn ensure_loaded(app: &AppHandle) -> Result<(), AppError> {
 pub async fn list(app: &AppHandle) -> Result<Vec<TransferTask>, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let transfers = state.transfers.read().await.clone();
+    let transfers = state
+        .transfers
+        .read()
+        .await
+        .iter()
+        .map(TransferTask::to_ui_task)
+        .collect();
     Ok(transfers)
 }
 
@@ -40,7 +46,11 @@ async fn persist(app: &AppHandle) -> Result<(), AppError> {
 // from workspace snapshots so standalone editors do not rehydrate while a
 // background upload or download advances.
 async fn emit_task(app: &AppHandle, task: TransferTask) {
-    let _ = app.emit_to(EventTarget::webview_window("main"), "transfer:update", task);
+    let _ = app.emit_to(
+        EventTarget::webview_window("main"),
+        "transfer:update",
+        task.to_ui_task(),
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -88,6 +98,9 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
         }
         should_emit
     };
+    if !should_emit {
+        return;
+    }
     let speed = {
         let now = std::time::Instant::now();
         let mut samples = state.transfer_progress_samples.lock().await;
@@ -160,11 +173,7 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
             }
             task.resumable = true;
         },
-        if should_emit {
-            PatchDelivery::Event
-        } else {
-            PatchDelivery::Silent
-        },
+        PatchDelivery::Event,
     )
     .await;
 }
