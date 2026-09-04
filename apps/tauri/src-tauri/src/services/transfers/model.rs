@@ -312,7 +312,15 @@ fn write_journal(app: &AppHandle, tasks: &[TransferTask]) -> Result<(), AppError
     };
     let json = serde_json::to_vec_pretty(&journal)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
-    std::fs::write(&temporary, json).map_err(|error| AppError::Storage(error.to_string()))?;
+    // 先写临时文件并 fsync 内容：断电场景下 rename 链本身只保证目录项
+    // 持久，不保证新文件数据落盘。没有这一步，崩溃后可能加载到截断的
+    // journal（读取端有 backup fallback，但主文件损坏仍会丢断点状态）。
+    let mut file = std::fs::File::create(&temporary)
+        .map_err(|error| AppError::Storage(error.to_string()))?;
+    std::io::Write::write_all(&mut file, &json)
+        .and_then(|_| std::io::Write::flush(&mut file))
+        .and_then(|_| file.sync_data())
+        .map_err(|error| AppError::Storage(error.to_string()))?;
     let _ = std::fs::remove_file(&backup);
 
     let moved_current = if path.exists() {

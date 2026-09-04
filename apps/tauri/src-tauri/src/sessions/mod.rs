@@ -10,6 +10,14 @@ pub mod telnet;
 mod telnet_direct;
 pub mod terminal;
 
+/// 传输数据块的读取/写入缓冲大小。
+///
+/// SFTP 单请求上限约 256KB（`max_packet_len` 扣除协议开销），低于该值的
+/// buffer 会等比缩小在飞窗口（RTT 越大吞吐损失越明显）。该值同时作为
+/// FTP 数据流与 root 模式 exec 流的本地读块大小，只摊薄系统调用开销，
+/// 不改变协议行为。
+pub(crate) const TRANSFER_IO_BUFFER_BYTES: usize = 256 * 1024;
+
 pub enum WorkerCmd {
     WriteTerminal(String),
     SerialControl {

@@ -112,7 +112,7 @@ async fn upload_local_file(
         .await
         .map_err(|error| error.to_string())?;
     let mut transferred = resume_offset;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
     loop {
         let read = read_local_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
@@ -174,7 +174,7 @@ async fn download_remote_file(
         .await
         .map_err(|error| error.to_string())?;
     let mut transferred = resume_offset;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
     loop {
         let read = read_remote_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
