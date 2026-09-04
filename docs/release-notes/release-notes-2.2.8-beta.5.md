@@ -12,7 +12,7 @@ FileTerm 2.2.8-beta.5 补齐 JumpServer/KoKo 直连用户名与 MFA 交互认证
 
 ### 本版本包含的主要 PR 和问题修复
 
-- JumpServer/KoKo 直连用户名规范化、MFA 认证选项、监控回退和导入兼容性修复。
+- [PR #237](https://github.com/St0ff3l/fileterm/pull/237)：JumpServer/KoKo 直连用户名规范化、MFA 认证选项、监控回退和导入兼容性修复。
 
 完整变更记录请查看 [v2.2.8-beta.4 与 v2.2.8-beta.5 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.4...v2.2.8-beta.5)。
 
@@ -38,7 +38,7 @@ FileTerm 2.2.8-beta.5 completes JumpServer/KoKo direct-username routing and MFA 
 
 ### Main PRs and issues
 
-- JumpServer/KoKo direct-username normalization, MFA authentication selection, monitoring fallbacks, and import compatibility fixes.
+- [PR #237](https://github.com/St0ff3l/fileterm/pull/237): JumpServer/KoKo direct-username normalization, MFA authentication selection, monitoring fallbacks, and import compatibility fixes.
 
 See the [comparison between v2.2.8-beta.4 and v2.2.8-beta.5](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.4...v2.2.8-beta.5) for the complete change set.
 
