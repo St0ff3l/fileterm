@@ -205,271 +205,201 @@ async fn run_directory_transfer(
         if cancel.is_cancelled() {
             return Ok(());
         }
-        if task.direction == "upload" {
-            ensure_remote_directory(app, tab_id, directory, Some(&cancel)).await?;
-        } else {
-            tokio::fs::create_dir_all(directory)
-                .await
-                .map_err(|error| {
-                    transfer_error(format!("无法创建本地目录 {directory}: {error}"))
-                })?;
+        let mut attempt = 0_u32;
+        loop {
+            attempt += 1;
+            let result = if task.direction == "upload" {
+                ensure_remote_directory(app, tab_id, directory, Some(&cancel)).await
+            } else {
+                tokio::fs::create_dir_all(directory)
+                    .await
+                    .map_err(|error| {
+                        transfer_error(format!("无法创建本地目录 {directory}: {error}"))
+                    })
+            };
+            match result {
+                Ok(()) => break,
+                Err(error) => {
+                    if cancel.is_cancelled() {
+                        return Ok(());
+                    }
+                    if is_permanent_transfer_error(&error.to_string())
+                        || attempt >= TRANSIENT_MAX_ATTEMPTS
+                    {
+                        return Err(error);
+                    }
+                    sleep_transient_backoff(&cancel, transient_retry_backoff(attempt)).await;
+                    if cancel.is_cancelled() {
+                        return Ok(());
+                    }
+                }
+            }
         }
     }
 
+    let mut failed_files: Vec<String> = Vec::new();
     for index in 0..manifest.files.len() {
         if cancel.is_cancelled() {
             return Ok(());
         }
         let entry = manifest.files[index].clone();
-        let current_identity = if task.direction == "upload" {
-            stat_local_transfer_file(&entry.source_path)
-                .await
-                .ok_or_else(|| {
-                    transfer_error(format!(
-                        "上传源文件不存在或无法读取：{}",
-                        entry.relative_path
-                    ))
-                })?
-        } else {
-            let stat = worker_call_with_cancel(app, tab_id, &cancel, |respond_to, token| {
-                WorkerCmd::StatRemoteFile {
-                    path: entry.source_path.clone(),
-                    cancellation: token,
-                    respond_to,
-                }
-            })
-            .await?
-            .ok_or_else(|| {
-                transfer_error(format!(
-                    "下载源文件不存在或无法读取：{}",
-                    entry.relative_path
-                ))
-            })?;
-            TransferFileIdentity {
-                size: stat.size,
-                modified_at: stat.modified_at,
-            }
-        };
-        if !same_transfer_identity(&current_identity, &entry.source_identity) {
-            return Err(transfer_error(format!(
-                "源文件已发生变化，不能继续目录断点：{}",
-                entry.relative_path
-            )));
-        }
-
-        if entry.status == "done" {
-            let destination = if task.direction == "upload" {
-                worker_call_with_cancel(app, tab_id, &cancel, |respond_to, token| {
-                    WorkerCmd::StatRemoteFile {
-                        path: entry.destination_path.clone(),
-                        cancellation: token,
-                        respond_to,
-                    }
-                })
-                .await?
-                .map(|value| TransferFileIdentity {
-                    size: value.size,
-                    modified_at: value.modified_at,
-                })
-            } else {
-                stat_local_transfer_file(&entry.destination_path).await
-            };
-            if destination
-                .as_ref()
-                .is_some_and(|value| value.size == entry.source_identity.size)
-            {
-                continue;
-            }
-        }
-
-        let is_fresh_entry =
-            !resume_requested || (entry.status == "pending" && entry.transferred_bytes == 0);
-        let (upload_plan, offset) = if task.direction == "upload" {
-            if is_fresh_entry {
-                let upload_path = entry
-                    .staging_path
-                    .clone()
-                    .unwrap_or_else(|| entry.partial_path.clone());
-                (
-                    RemoteUploadPlan {
-                        upload_path,
-                        resume_offset: 0,
-                        upload_needed: true,
-                        partial_ready: false,
-                    },
-                    0,
-                )
-            } else {
-                let plan = prepare_remote_upload(
-                    app,
-                    tab_id,
-                    &entry.partial_path,
-                    entry.staging_path.as_deref(),
-                    entry.source_identity.size,
-                    Some(&cancel),
-                )
-                .await?;
-                let offset = plan.resume_offset;
-                (plan, offset)
-            }
-        } else {
-            let offset = if is_fresh_entry {
-                0
-            } else {
-                stat_local_transfer_file(&entry.partial_path)
-                    .await
-                    .map(|value| value.size)
-                    .unwrap_or(0)
-            };
-            (
-                RemoteUploadPlan {
-                    upload_path: String::new(),
-                    resume_offset: offset,
-                    upload_needed: true,
-                    partial_ready: false,
-                },
-                offset,
+        let mut attempt = 0_u32;
+        loop {
+            attempt += 1;
+            let outcome = transfer_directory_entry_once(
+                app,
+                transfer_id,
+                tab_id,
+                &task.direction,
+                task.session_type.as_deref(),
+                &cancel,
+                resume_requested,
+                &mut manifest,
+                index,
+                current_transferred,
+                total_bytes,
+                &mut throttler,
             )
-        };
-        if offset > entry.source_identity.size {
-            return Err(transfer_error(format!(
-                "断点文件大于源文件：{}",
-                entry.relative_path
-            )));
+            .await;
+            match outcome {
+                Ok(DirectoryEntryAttempt::Transferred) => {
+                    manifest.files[index].status = "done".to_string();
+                    current_transferred = current_transferred
+                        .saturating_sub(manifest.files[index].transferred_bytes)
+                        .saturating_add(entry.source_identity.size);
+                    manifest.files[index].transferred_bytes = entry.source_identity.size;
+
+                    let done_delivery = throttler.delivery_for_file_completed();
+                    update_directory_manifest(
+                        app,
+                        transfer_id,
+                        &manifest,
+                        DirectoryManifestPatch {
+                            status: "running",
+                            message: Some(entry.relative_path),
+                            transferred: current_transferred,
+                            total: total_bytes,
+                            delivery: done_delivery,
+                        },
+                    )
+                    .await?;
+                    break;
+                }
+                Ok(DirectoryEntryAttempt::AlreadyDone) => break,
+                Err(error) => {
+                    if cancel.is_cancelled() {
+                        return Ok(());
+                    }
+                    if is_permanent_transfer_error(&error.to_string()) {
+                        // 永久错误：失败半径收敛到当前文件，跳过并继续其余文件。
+                        // transferred_bytes 保留最后一次尝试写入的偏移（保守值），
+                        // 恢复时由 prepare_remote_upload 重新探测真实断点。
+                        crate::services::logging::warn(
+                            app,
+                            &format!("transfer:{transfer_id}"),
+                            format!(
+                                "file skipped after permanent error: {} attempt={attempt} error={error}",
+                                entry.relative_path
+                            ),
+                        );
+                        manifest.files[index].status = "failed".to_string();
+                        failed_files.push(format!("{}：{error}", entry.relative_path));
+                        let failed_delivery = throttler.delivery_for_file_completed();
+                        update_directory_manifest(
+                            app,
+                            transfer_id,
+                            &manifest,
+                            DirectoryManifestPatch {
+                                status: "running",
+                                message: Some(format!("已跳过失败文件 {}", entry.relative_path)),
+                                transferred: current_transferred,
+                                total: total_bytes,
+                                delivery: failed_delivery,
+                            },
+                        )
+                        .await?;
+                        break;
+                    }
+                    if attempt >= TRANSIENT_MAX_ATTEMPTS {
+                        // 瞬时错误重试耗尽：大概率链路已断，继续只会让每个文件
+                        // 都空耗重试预算。交由任务级失败路径保留断点并进入 paused。
+                        return Err(error);
+                    }
+                    crate::services::logging::warn(
+                        app,
+                        &format!("transfer:{transfer_id}"),
+                        format!(
+                            "retrying file after transient error: {} attempt={attempt}/{} error={error}",
+                            entry.relative_path, TRANSIENT_MAX_ATTEMPTS
+                        ),
+                    );
+                    let retry_delivery = throttler.delivery_for_file_start();
+                    update_directory_manifest(
+                        app,
+                        transfer_id,
+                        &manifest,
+                        DirectoryManifestPatch {
+                            status: "running",
+                            message: Some(format!(
+                                "{}（第 {attempt} 次重试）",
+                                entry.relative_path
+                            )),
+                            transferred: current_transferred,
+                            total: total_bytes,
+                            delivery: retry_delivery,
+                        },
+                    )
+                    .await?;
+                    sleep_transient_backoff(&cancel, transient_retry_backoff(attempt)).await;
+                    if cancel.is_cancelled() {
+                        return Ok(());
+                    }
+                }
+            }
         }
+    }
 
-        manifest.files[index].status = "running".to_string();
-        manifest.files[index].transferred_bytes = offset;
-
-        let start_delivery = throttler.delivery_for_file_start();
+    if failed_files.is_empty() {
         update_directory_manifest(
             app,
             transfer_id,
             &manifest,
             DirectoryManifestPatch {
-                status: "running",
-                message: Some(if offset > 0 {
-                    format!("{}（从 {offset} bytes 继续）", entry.relative_path)
-                } else {
-                    entry.relative_path.clone()
-                }),
-                transferred: current_transferred.saturating_add(offset),
+                status: "done",
+                message: None,
+                transferred: total_bytes,
                 total: total_bytes,
-                delivery: start_delivery,
+                delivery: PatchDelivery::PersistedEvent,
             },
         )
         .await?;
-
-        if task.direction == "upload" {
-            if upload_plan.upload_needed {
-                worker_data_call_with_cancel(app, tab_id, &cancel, |respond_to, _token| {
-                    WorkerCmd::UploadLocalFile {
-                        local_path: entry.source_path.clone(),
-                        remote_path: upload_plan.upload_path.clone(),
-                        resume_offset: offset,
-                        transfer_id: transfer_id.to_string(),
-                        cancel: cancel.clone(),
-                        verify_checksum: false,
-                        respond_to,
-                    }
-                })
-                .await?;
-            }
+    } else {
+        // 部分文件失败：任务进入可续传的 paused 状态而非终态，点击继续时
+        // 已完成文件被远端大小校验跳过，仅失败与未完成文件会重试。
+        let sample = failed_files.iter().take(3).cloned().collect::<Vec<_>>();
+        let summary = if failed_files.len() > sample.len() {
+            format!(
+                "{} 个文件传输失败（如 {}），点击继续可重试失败项",
+                failed_files.len(),
+                sample.join("；")
+            )
         } else {
-            if let Some(parent) = Path::new(&entry.partial_path).parent() {
-                tokio::fs::create_dir_all(parent)
-                    .await
-                    .map_err(|error| transfer_error(error.to_string()))?;
-            }
-            worker_data_call_with_cancel(app, tab_id, &cancel, |respond_to, _token| {
-                WorkerCmd::DownloadRemoteFile {
-                    remote_path: entry.source_path.clone(),
-                    local_path: entry.partial_path.clone(),
-                    resume_offset: offset,
-                    transfer_id: transfer_id.to_string(),
-                    cancel: cancel.clone(),
-                    verify_checksum: false,
-                    respond_to,
-                }
-            })
-            .await?;
-        }
-        if cancel.is_cancelled() {
-            return Ok(());
-        }
-
-        let completed_size = if task.direction == "upload" {
-            entry.source_identity.size
-        } else {
-            stat_local_transfer_file(&entry.partial_path)
-                .await
-                .map(|value| value.size)
-                .unwrap_or(0)
+            format!("{} 个文件传输失败，点击继续可重试失败项：{}", failed_files.len(), sample.join("；"))
         };
-        if completed_size != entry.source_identity.size {
-            return Err(transfer_error(format!(
-                "传输校验失败：{} 断点大小为 {completed_size}，期望 {}",
-                entry.relative_path, entry.source_identity.size
-            )));
-        }
-
-        if task.direction == "upload" {
-            finalize_remote_upload(
-                app,
-                tab_id,
-                RemoteUploadFinalize {
-                    partial_path: &entry.partial_path,
-                    staging_path: entry.staging_path.as_deref(),
-                    destination_path: &entry.destination_path,
-                    source_size: entry.source_identity.size,
-                    partial_ready: upload_plan.partial_ready,
-                },
-                Some(&cancel),
-            )
-            .await?;
-        } else {
-            replace_local_file(
-                Path::new(&entry.partial_path),
-                Path::new(&entry.destination_path),
-            )
-            .await?;
-        }
-
-        manifest.files[index].status = "done".to_string();
-        current_transferred = current_transferred
-            .saturating_sub(manifest.files[index].transferred_bytes)
-            .saturating_add(entry.source_identity.size);
-        manifest.files[index].transferred_bytes = entry.source_identity.size;
-
-        let done_delivery = throttler.delivery_for_file_completed();
         update_directory_manifest(
             app,
             transfer_id,
             &manifest,
             DirectoryManifestPatch {
-                status: "running",
-                message: Some(entry.relative_path),
+                status: "paused",
+                message: Some(summary),
                 transferred: current_transferred,
                 total: total_bytes,
-                delivery: done_delivery,
+                delivery: PatchDelivery::PersistedEvent,
             },
         )
         .await?;
     }
-
-    update_directory_manifest(
-        app,
-        transfer_id,
-        &manifest,
-        DirectoryManifestPatch {
-            status: "done",
-            message: None,
-            transferred: total_bytes,
-            total: total_bytes,
-            delivery: PatchDelivery::PersistedEvent,
-        },
-    )
-    .await?;
     if task.direction == "upload" {
         if let Err(error) = refresh_remote_listing(app, tab_id).await {
             crate::services::logging::warn(

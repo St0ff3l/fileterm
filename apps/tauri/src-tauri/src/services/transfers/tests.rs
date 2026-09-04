@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        can_resume_from, failure_status, interrupt_status, is_root_upload_staging_path,
-        join_remote_path, manifest_totals, normalize_root_upload_staging, partial_path,
-        progress_event_due, relative_remote_path, root_staging_path, select_journal_tasks,
-        TransferFileIdentity, TransferManifest, TransferManifestEntry, TransferTask,
-        JOURNAL_MAX_TASKS, UPDATE_INTERVAL,
+        can_resume_from, failure_status, interrupt_status, is_permanent_transfer_error,
+        is_root_upload_staging_path, join_remote_path, manifest_totals,
+        normalize_root_upload_staging, partial_path, progress_event_due, relative_remote_path,
+        root_staging_path, select_journal_tasks, transient_retry_backoff, TransferFileIdentity,
+        TransferManifest, TransferManifestEntry, TransferTask, JOURNAL_MAX_TASKS,
+        TRANSIENT_MAX_ATTEMPTS, UPDATE_INTERVAL,
     };
+    use std::time::Duration;
 
     #[test]
     fn creates_posix_paths_without_double_slashes() {
@@ -530,5 +532,60 @@ mod tests {
         //    重新进入 active 集合
         task.status = "queued".to_string();
         assert!(task.active());
+    }
+
+    #[test]
+    fn permanent_transfer_errors_are_recognized_across_protocols_and_locales() {
+        // 权限/空间/路径类：重试不可能成功，必须跳过该文件。
+        for message in [
+            "command error: Permission denied (os error 13)",
+            "SFTP failure: permission denied",
+            "open failure: Access denied",
+            "write error: no space left on device",
+            "disk quota exceeded",
+            "stat error: no such file",
+            "550 File not found",
+            "上传源文件不存在或无法读取：node_modules/.bin/cli",
+            "源文件已发生变化，不能继续目录断点：a.js",
+            "断点文件大于源文件：b.js",
+            "Read-only file system (os error 30)",
+        ] {
+            assert!(
+                is_permanent_transfer_error(message),
+                "应判定为永久错误：{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn transient_transfer_errors_are_not_misclassified_as_permanent() {
+        // 网络/超时类：重试可能恢复，绝不能被误判为永久而静默跳过。
+        for message in [
+            "command error: connection reset by peer (os error 54)",
+            "io error: broken pipe",
+            "channel closed",
+            "session closed by peer",
+            "operation timed out",
+            "Timeout",
+            "network unreachable",
+            "resource temporarily unavailable",
+            "传输操作响应超时，后台操作已取消",
+            "未知错误应默认按瞬时处理",
+            "",
+        ] {
+            assert!(
+                !is_permanent_transfer_error(message),
+                "不应判定为永久错误：{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn transient_retry_backoff_grows_geometrically() {
+        assert_eq!(transient_retry_backoff(1), Duration::from_secs(1));
+        assert_eq!(transient_retry_backoff(2), Duration::from_secs(4));
+        // 超出次数上限后的退避值不应溢出或倒退。
+        assert!(transient_retry_backoff(9) > transient_retry_backoff(2));
+        assert_eq!(TRANSIENT_MAX_ATTEMPTS, 3);
     }
 }

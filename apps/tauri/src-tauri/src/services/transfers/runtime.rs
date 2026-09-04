@@ -68,6 +68,9 @@ async fn patch_task(
 ) -> Result<Option<TransferTask>, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    // Silent 路径只更新内存状态，不需要事件载荷；跳过克隆可避免目录传输
+    // 期间对含数万条目 manifest 的反复深拷贝（每次高达数十 MB）。
+    let should_publish = !matches!(delivery, PatchDelivery::Silent);
     let task = {
         let mut tasks = state.transfers.write().await;
         let Some(task) = tasks.iter_mut().find(|task| task.id == transfer_id) else {
@@ -75,16 +78,15 @@ async fn patch_task(
         };
         patch(task);
         task.updated_at = Some(now_ms());
-        task.clone()
+        should_publish.then(|| task.clone())
     };
     if matches!(delivery, PatchDelivery::PersistedEvent) {
         persist(app).await?;
     }
-    match delivery {
-        PatchDelivery::Silent => {}
-        PatchDelivery::Event | PatchDelivery::PersistedEvent => emit_task(app, task.clone()).await,
+    if let Some(task) = task.as_ref() {
+        emit_task(app, task.clone()).await;
     }
-    Ok(Some(task))
+    Ok(task)
 }
 
 pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u64, total: u64) {
