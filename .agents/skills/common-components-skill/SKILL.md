@@ -256,9 +256,23 @@ color: var(--text-main);
 - 禁止在桌面 WebView 中使用 window.confirm()。
 - Dialog 的 surface、边框、阴影和按钮都通过语义变量获得。
 
-### 图标和滚动
+### 图标规范与资产分类
 
-- 图标优先使用离线 SVG 的 AppIcon，禁止新增 material-symbols-outlined WebFont 依赖。
+- **应用身份与 UI 图标严格隔离**：
+  - 应用本体身份图标（`apps/tauri/src-tauri/icons/*` 平台图标、`apps/tauri/assets/icons/trayTemplate.svg` 托盘模板、`apps/tauri/public/icon.png` Favicon）供操作系统与外壳使用，严禁与 UI 业务图标混合存放。
+  - 界面操作与功能图标一律就地归档于 `apps/tauri/src/renderer/assets/icons/`，且必须按功能域归类到子目录：
+    - `actions/`：操作与编辑（增删改查、保存、刷新、排序等）
+    - `navigation/`：页面导航与窗口（前进后退、折叠、全屏、关闭等）
+    - `files/`：文件与存储（文件夹、文件类型、上传下载等）
+    - `network/`：连接与终端（终端模拟、局域网、DNS、云同步等）
+    - `security/`：安全与权限（锁、密钥、盾牌、指纹、可见性等）
+    - `system/`：系统与偏好（设置、调色板、语言、更新、日志等）
+- **矢量就地化与样式规范**：
+  - 所有 UI SVG 统一设置 `fill="currentColor"`，使其自然跟随父级 CSS `--theme-text`、`--folder-accent` 或交互伪类变色。
+  - 图标组件优先使用离线预置的 `<AppIcon />`，禁止新增 `<span className="material-symbols-outlined">` 等依赖外部 WebFont 的实现，彻底消除 FOUT 连字字符闪烁。
+
+### 滚动区域
+
 - 新增纵向滚动区域默认复用 features/common/vertical-scrollbar.tsx，并隐藏容器原生纵向滚动条。
 - 横向滚动、第三方编辑器内部滚动和协议组件自带滚动可以保留专用实现。
 

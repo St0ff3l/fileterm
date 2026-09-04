@@ -55,7 +55,10 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - **语言名称使用本地自称**：语言选择器中的语言名称必须保持该语言自己的写法（如 `简体中文`、`English`、`한국어` / `조선어`），不得根据当前界面语言翻译；新增语言时同样遵循此规则。
 - **下拉框统一走 DropdownSelect**：所有表单与设置项的下拉菜单必须统一使用公用组件 `<DropdownSelect>`，严禁直写原始 HTML `<select>` 标签（确保 macOS 下包裹 `ft-select-shell` 外壳，Windows / Linux 下 100% 触发自绘 React Portal 弹出菜单）。
 - **下拉箭头随控件缩放**：`DropdownSelect` 的箭头必须由组件根据当前控件实际高度自适应（覆盖 macOS 原生外壳和 Windows/Linux 自绘触发器），业务组件不得写死一套箭头尺寸或覆盖共享计算；新增紧凑/表单尺寸时必须检查箭头与文字的垂直对齐。
-- **图标矢量就地化**：所有按钮与视觉图标优先使用预置的离线 SVG 图标组件 `<AppIcon />`，严禁新增 `<span className="material-symbols-outlined">` 依赖外部字体/WebFont 图标。
+- **图标矢量就地化与分类标准**：
+  - **应用身份与 UI 图标严格隔离**：应用主图标（`apps/tauri/src-tauri/icons/*`，macOS Dock 遵守 824×824 安全留白）、macOS 菜单栏托盘（`apps/tauri/assets/icons/trayTemplate.svg`）、Web Favicon（`apps/tauri/public/icon.png`）为应用级身份资产；界面内所有操作与功能图标统一收敛于 `apps/tauri/src/renderer/assets/icons/`，严禁两者混用或混放。
+  - **按功能域分类存储**：UI SVG 图标必须按功能子目录归档：`actions/`（操作编辑）、`navigation/`（导航窗口）、`files/`（文件存储）、`network/`（连接终端）、`security/`（安全凭据）、`system/`（系统配置）。
+  - **标准 SVG 与 currentColor**：所有 UI 图标统一使用本地 SVG 矢量且填充设为 `fill="currentColor"` 继承主题文本颜色，优先通过 `<AppIcon />` 或离线组件调用；严禁新增 `<span className="material-symbols-outlined">` WebFont 方案，彻底杜绝 FOUT 闪烁与外网依赖。
 - **二次确认弹窗统一**：所有破坏性/危险操作（如删除、清空等）必须调用项目通用的 `<ConfirmActionDialog>` 确认弹窗组件，严禁在桌面 Webview 环境中使用原生 `window.confirm()`。
 - **按钮尺寸高度规范**：同一操作组/表单行内的按钮必须具有严格统一的高度（如 32px 紧凑型 / 36px 表单型）、边框半径与内边距，禁止主次按钮尺寸参差不齐。
 - **颜色语义边界**：`--focus-outline` 只用于焦点/选中/拖拽目标的描边或光环；文件相关操作使用 `--folder-accent`，实心主按钮使用 `--button-primary-*`，不要用描边色填充按钮。
