@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from 'react'
+import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react'
 import { AiCopilotPanel } from '../ai/ai-copilot-panel'
 import { CloseButton } from '../common/close-button'
 import { SystemSidebarShell } from '../system/system-sidebar-shell'
@@ -7,9 +7,13 @@ import { KeepAliveWorkspaceStage } from '../workspace/workspace-stage'
 import { TabBar, type TabBarProps, type TabContextTarget } from './tab-bar'
 import type { AppViewModel } from './app-view-model'
 import { WindowMenubar } from './window-menubar'
+import { STATUS_MESSAGE_TIMEOUT_MS } from '../../app/app-shell-utils'
 import { t, setLocale } from '../../i18n'
 
 export function AppMainWorkspace({ model }: { model: AppViewModel }) {
+  const [dismissedInteractiveGatewayNoticeTabId, setDismissedInteractiveGatewayNoticeTabId] = useState<string | null>(
+    null
+  )
   const { shell, workspace: workspaceState, data, resize, usesCustomWindowChrome } = model
   const {
     workspace,
@@ -154,7 +158,30 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
 
   const isInteractiveGatewayRoutePending =
     activeSession?.resourceMonitoringUnavailableReason === 'interactive-gateway-target-route-required'
-  const hasStatusMessage = Boolean(error || isInteractiveGatewayRoutePending)
+  const interactiveGatewayNoticeTabId = isInteractiveGatewayRoutePending ? (activeTab?.id ?? null) : null
+  const isInteractiveGatewayNoticeVisible =
+    interactiveGatewayNoticeTabId !== null && dismissedInteractiveGatewayNoticeTabId !== interactiveGatewayNoticeTabId
+
+  useEffect(() => {
+    if (!interactiveGatewayNoticeTabId || !isInteractiveGatewayNoticeVisible) {
+      return
+    }
+    const timeoutId = window.setTimeout(() => {
+      setDismissedInteractiveGatewayNoticeTabId((current) =>
+        current === interactiveGatewayNoticeTabId ? current : interactiveGatewayNoticeTabId
+      )
+    }, STATUS_MESSAGE_TIMEOUT_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [interactiveGatewayNoticeTabId, isInteractiveGatewayNoticeVisible])
+
+  useEffect(() => {
+    if (interactiveGatewayNoticeTabId || !activeTab?.id) {
+      return
+    }
+    setDismissedInteractiveGatewayNoticeTabId((current) => (current === activeTab.id ? null : current))
+  }, [activeTab?.id, interactiveGatewayNoticeTabId])
+
+  const hasStatusMessage = Boolean(error || isInteractiveGatewayNoticeVisible)
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
   const activeJumpHost =
     activeProfile?.type === 'ssh' && activeProfile.jumpProfileId
@@ -248,14 +275,29 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           {error ? (
             <div className="status-message" role="alert">
               <span className="status-message-text">{error}</span>
-              <CloseButton aria-label={t.closeTab} onClick={() => setError(null)} size="compact" />
+              <CloseButton
+                className="status-message-close"
+                aria-label={t.closeTab}
+                onClick={() => setError(null)}
+                size="compact"
+              />
             </div>
-          ) : isInteractiveGatewayRoutePending ? (
+          ) : isInteractiveGatewayNoticeVisible ? (
             <div className="status-message" role="status" aria-live="polite">
               <span className="status-message-text">
                 <strong>{t.interactiveGatewayResourceMonitoringTitle}</strong>{' '}
                 {t.interactiveGatewayResourceMonitoringDescription}
               </span>
+              <CloseButton
+                className="status-message-close"
+                aria-label={t.closeTab}
+                size="compact"
+                onClick={() => {
+                  if (interactiveGatewayNoticeTabId) {
+                    setDismissedInteractiveGatewayNoticeTabId(interactiveGatewayNoticeTabId)
+                  }
+                }}
+              />
             </div>
           ) : null}
           <div className={`workspace-stage ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}>
