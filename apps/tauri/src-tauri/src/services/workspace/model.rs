@@ -375,6 +375,8 @@ pub struct SessionSnapshot {
     pub shell_user: Option<String>,
     pub connected: bool,
     pub system_metrics: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_monitoring_unavailable_reason: Option<String>,
     pub capabilities: ConnectionCapabilities,
     pub remote_capabilities: Option<RemoteFileCapabilities>,
     #[serde(skip_serializing_if = "Option::is_none")]

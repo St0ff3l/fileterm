@@ -275,7 +275,7 @@ export function useAppWorkspace({
           : isSystemSidebarUserCollapsed
             ? 'user-collapsed'
             : 'none'
-    const diagnostic = `resource monitoring UI state tab_id=${activeTab.id} connected=${activeSession?.connected === true} configured=${activeSshResourceMonitoring} capability=${resourceMonitoring === undefined ? 'unknown' : resourceMonitoring} available=${isResourceMonitoringAvailable} sidebar_rendered=${shouldShowSystemSidebar} sidebar_collapsed=${isSystemSidebarCollapsed} collapse_reason=${collapseReason}`
+    const diagnostic = `resource monitoring UI state tab_id=${activeTab.id} connected=${activeSession?.connected === true} configured=${activeSshResourceMonitoring} capability=${resourceMonitoring === undefined ? 'unknown' : resourceMonitoring} unavailable_reason=${activeSession?.resourceMonitoringUnavailableReason ?? 'none'} available=${isResourceMonitoringAvailable} sidebar_rendered=${shouldShowSystemSidebar} sidebar_collapsed=${isSystemSidebarCollapsed} collapse_reason=${collapseReason}`
     if (lastResourceMonitoringDiagnosticRef.current === diagnostic) {
       return
     }
@@ -284,6 +284,7 @@ export function useAppWorkspace({
   }, [
     activeSession?.capabilities?.resourceMonitoring,
     activeSession?.connected,
+    activeSession?.resourceMonitoringUnavailableReason,
     activeSshResourceMonitoring,
     activeTab,
     desktopApi,

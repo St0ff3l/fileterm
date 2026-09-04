@@ -105,7 +105,9 @@ fn map_auth(value: Option<&Value>) -> &'static str {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if value.contains("interactive") {
+    if (value.contains("jumpserver") || value.contains("koko")) && value.contains("mfa") {
+        "jumpserver-koko-mfa"
+    } else if value.contains("interactive") {
         "keyboard-interactive"
     } else if value.contains("key") {
         "privateKey"
@@ -192,9 +194,13 @@ fn normalize_external_profile(raw: &Value, fallback_name: &str) -> Result<Value,
         let auth = source
             .get("authType")
             .or_else(|| source.get("authentication_type"));
-        object
-            .entry("authType".to_string())
-            .or_insert_with(|| Value::String(map_auth(auth).to_string()));
+        // External exporters may put either the canonical value or the
+        // localized/display label in `authType`. Always map it at the import
+        // boundary so the runtime only receives the internal enum value.
+        object.insert(
+            "authType".to_string(),
+            Value::String(map_auth(auth).to_string()),
+        );
     }
     if let Some(value) = source.get("terminal_encoding") {
         object
@@ -713,6 +719,40 @@ mod tests {
         assert_eq!(profile["type"], "ssh");
         assert_eq!(profile["username"], "ops");
         assert_eq!(profile["authType"], "privateKey");
+    }
+
+    #[test]
+    fn preserves_jumpserver_koko_mfa_when_normalizing_compatible_json() {
+        let profile = normalize_external_profile(
+            &json!({
+                "name": "bastion",
+                "conection_type": "ssh",
+                "host": "jump.example.com",
+                "port": 2222,
+                "user_name": "alice@root@192.168.1.100@jump.example.com",
+                "authentication_type": "JumpServer / KoKo MFA Interactive"
+            }),
+            "fallback",
+        )
+        .unwrap();
+        assert_eq!(profile["authType"], "jumpserver-koko-mfa");
+    }
+
+    #[test]
+    fn canonicalizes_display_label_when_auth_type_key_is_used() {
+        let profile = normalize_external_profile(
+            &json!({
+                "name": "bastion",
+                "type": "ssh",
+                "host": "jump.example.com",
+                "port": 2222,
+                "username": "alice@root@192.168.1.100@jump.example.com",
+                "authType": "JumpServer / KoKo MFA Interactive"
+            }),
+            "fallback",
+        )
+        .unwrap();
+        assert_eq!(profile["authType"], "jumpserver-koko-mfa");
     }
 
     #[test]

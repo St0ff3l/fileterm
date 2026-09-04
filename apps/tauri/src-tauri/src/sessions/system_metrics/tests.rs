@@ -2,12 +2,13 @@
 mod tests {
     use super::{
         append_pty_prompt_window, build_freebsd_metrics_command, build_posix_metrics_command,
+        build_posix_monitor_fallback_script,
         build_pty_login_shell_command,
         build_windows_metrics_command, build_windows_streaming_metrics_command,
         build_windows_streaming_metrics_exec_command, classify_posix_probe_body,
         classify_windows_probe_output, extend_with_cap, parse_system_metrics,
         detect_interactive_gateway, output_indicates_pty_required, pty_password_prompt_detected,
-        jumpserver_direct_login_hint, probe_output_preview,
+        jumpserver_direct_login_hint, normalize_jumpserver_cli_username, probe_output_preview,
         is_retryable_exec_channel_open_error,
         EXEC_CHANNEL_OPEN_RETRY_ATTEMPTS, EXEC_CHANNEL_OPEN_RETRY_DELAY, EXEC_COMMAND_OUTPUT_CAP,
     };
@@ -92,6 +93,89 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn posix_monitor_fallback_parses_htop_batch_output() {
+        let script = format!(
+            r#"run_bounded() {{ limit="$1"; shift; "$@"; }}
+has_bounded_runner() {{ return 0; }}
+htop() {{
+  printf '%s\n' '0[||||] 12.5%' '1[||||] 25.0%' 'Mem[||||] 1.0G/4.0G'
+}}
+total1=0
+total2=0
+mem_bytes=""
+cpu_pct=0
+cpu_user_pct=0
+cpu_system_pct=0
+cpu_nice_pct=0
+cpu_idle_pct=0
+cpu_iowait_pct=0
+cpu_irq_pct=0
+cpu_softirq_pct=0
+cpu_steal_pct=0
+{}
+printf 'cpu=%s|%s|%s|%s|%s\nmem=%s\n' "$cpu_pct" "$cpu_user_pct" "$cpu_system_pct" "$cpu_idle_pct" "$cpu_steal_pct" "$mem_bytes"
+"#,
+            build_posix_monitor_fallback_script()
+        );
+        let output = std::process::Command::new("sh")
+            .args(["-c", &script])
+            .output()
+            .expect("shell fallback fixture should start");
+
+        assert!(
+            output.status.success(),
+            "fallback fixture failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("cpu=18.8|0.0|0.0|81.2|0.0"));
+        assert!(stdout.contains("mem=1073741824|4294967296|3221225472|25.0|0|0|0"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_monitor_fallback_parses_procps_top_output() {
+        let script = format!(
+            r#"run_bounded() {{ limit="$1"; shift; "$@"; }}
+has_bounded_runner() {{ return 0; }}
+htop() {{ :; }}
+top() {{
+  printf '%s\n' 'Cpu(s): 1.0%us, 2.0%sy, 0.0%ni, 96.0%id, 1.0%wa, 0.0%hi, 0.0%si, 0.0%st' 'MiB Mem : 8192.0 total, 1024.0 free, 2048.0 used, 512.0 buff/cache, 6144.0 avail Mem'
+}}
+total1=0
+total2=0
+mem_bytes=""
+cpu_pct=0
+cpu_user_pct=0
+cpu_system_pct=0
+cpu_nice_pct=0
+cpu_idle_pct=0
+cpu_iowait_pct=0
+cpu_irq_pct=0
+cpu_softirq_pct=0
+cpu_steal_pct=0
+{}
+printf 'cpu=%s|%s|%s|%s|%s\nmem=%s\n' "$cpu_pct" "$cpu_user_pct" "$cpu_system_pct" "$cpu_idle_pct" "$cpu_steal_pct" "$mem_bytes"
+"#,
+            build_posix_monitor_fallback_script()
+        );
+        let output = std::process::Command::new("sh")
+            .args(["-c", &script])
+            .output()
+            .expect("shell fallback fixture should start");
+
+        assert!(
+            output.status.success(),
+            "fallback fixture failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("cpu=4.0|1.0|2.0|96.0|0.0"));
+        assert!(stdout.contains("mem=2147483648|8589934592|6442450944|25.0|0|0|0"));
+    }
+
     #[test]
     fn pty_login_shell_command_keeps_script_out_of_stdin_and_uses_login_shell() {
         let script = "printf '__FILETERM_PROBE_START__\\n'; uname -s";
@@ -149,6 +233,35 @@ mod tests {
             None
         );
         assert_eq!(jumpserver_direct_login_hint("用户@root@192.168.0.123"), Some("direct-asset-at"));
+    }
+
+    #[test]
+    fn normalize_jumpserver_cli_username_removes_only_the_matching_gateway_host() {
+        assert_eq!(
+            normalize_jumpserver_cli_username(
+                "liuhong@root@192.168.0.123@jump.example",
+                "jump.example"
+            ),
+            Some("liuhong@root@192.168.0.123".to_string())
+        );
+        assert_eq!(
+            normalize_jumpserver_cli_username(
+                "liuhong@ssh@root@192.168.0.123@JUMP.EXAMPLE",
+                "jump.example"
+            ),
+            Some("liuhong@ssh@root@192.168.0.123".to_string())
+        );
+        assert_eq!(
+            normalize_jumpserver_cli_username(
+                "liuhong@root@192.168.0.123@other.example",
+                "jump.example"
+            ),
+            None
+        );
+        assert_eq!(
+            normalize_jumpserver_cli_username("liuhong@root@asset", "jump.example"),
+            None
+        );
     }
 
     #[test]

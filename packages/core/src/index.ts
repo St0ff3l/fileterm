@@ -158,6 +158,15 @@ export interface ConnectionCapabilities {
   tunnels: boolean
 }
 
+/** Machine-readable reason exposed when a live session cannot collect metrics. */
+export type ResourceMonitoringUnavailableReason =
+  | 'interactive-gateway-target-route-required'
+  | 'exec-channel-disabled'
+  | 'platform-probe-timeout'
+  | 'collector-idle-timeout'
+  | 'target-identity-invalid'
+  | 'collector-failed'
+
 export interface RemoteDiskSpace {
   availableBytes: number
   totalBytes: number
@@ -175,7 +184,7 @@ export interface RemoteFileCapabilities {
   hardlink: boolean
 }
 
-export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-interactive'
+export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-interactive' | 'jumpserver-koko-mfa'
 
 /** 资源监控采集间隔，单位为秒。 */
 export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60
@@ -897,6 +906,8 @@ export interface SessionSnapshot {
   loginUser?: string
   connected?: boolean
   systemMetrics?: SystemMetrics
+  /** Explains a runtime capability downgrade without exposing remote output. */
+  resourceMonitoringUnavailableReason?: ResourceMonitoringUnavailableReason
   capabilities?: ConnectionCapabilities
   remoteCapabilities?: RemoteFileCapabilities
   reconnectMode?: 'none' | 'enter' | 'auto'

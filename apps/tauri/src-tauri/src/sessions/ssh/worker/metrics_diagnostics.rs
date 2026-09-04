@@ -40,8 +40,7 @@ fn metrics_stderr_preview(tail: &[u8]) -> String {
 
 fn metrics_stdout_preview(tail: &[u8], sample_count: u64) -> String {
     if sample_count == 0 {
-        let output = String::from_utf8_lossy(tail);
-        if crate::sessions::system_metrics::detect_interactive_gateway(&output).is_some() {
+        if interactive_gateway_menu_detected(tail, sample_count) {
             "<interactive-gateway-menu-suppressed>".to_string()
         } else {
             metrics_stderr_preview(tail)
@@ -49,6 +48,18 @@ fn metrics_stdout_preview(tail: &[u8], sample_count: u64) -> String {
     } else {
         "<suppressed-after-first-sample>".to_string()
     }
+}
+
+/// A missed platform probe can still leave the auxiliary metrics channel at
+/// an interactive JumpServer menu. Detect that response while reading the
+/// stream so the collector fails closed immediately instead of waiting for
+/// the idle watchdog to expire.
+fn interactive_gateway_menu_detected(tail: &[u8], sample_count: u64) -> bool {
+    if sample_count != 0 {
+        return false;
+    }
+    let output = String::from_utf8_lossy(tail);
+    crate::sessions::system_metrics::detect_interactive_gateway(&output).is_some()
 }
 
 fn metrics_identity_field(value: &serde_json::Value, key: &str) -> String {
@@ -192,8 +203,8 @@ async fn close_metrics_channel(
 #[cfg(test)]
 mod metrics_tests {
     use super::{
-        append_metrics_stderr_tail, metrics_identity_field, metrics_stdout_preview,
-        target_identity_is_valid,
+        append_metrics_stderr_tail, interactive_gateway_menu_detected, metrics_identity_field,
+        metrics_stdout_preview, target_identity_is_valid,
         METRICS_STDERR_TAIL_BYTES,
     };
 
@@ -291,6 +302,9 @@ mod metrics_tests {
     fn stdout_preview_suppresses_interactive_gateway_menu() {
         let menu = b"JumpServer open source fortress system\n1) Search\nOpt> ";
 
+        assert!(interactive_gateway_menu_detected(menu, 0));
+        assert!(!interactive_gateway_menu_detected(menu, 1));
+        assert!(!interactive_gateway_menu_detected(b"Linux\n", 0));
         assert_eq!(
             metrics_stdout_preview(menu, 0),
             "<interactive-gateway-menu-suppressed>"

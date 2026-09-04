@@ -113,6 +113,46 @@ pub(crate) fn jumpserver_direct_login_hint(username: &str) -> Option<&'static st
     None
 }
 
+/// Normalize the complete OpenSSH destination form when it is pasted into
+/// FileTerm's Username field. The CLI form includes the gateway host as its
+/// final `@`-separated field, while FileTerm already keeps that host in Host;
+/// KoKo therefore needs only the direct asset username on the SSH wire.
+///
+/// This is intentionally conservative: it only rewrites a four-field direct
+/// destination or a five-field `user@ssh@account@asset@host` destination when
+/// the final field matches FileTerm's configured gateway host. Normal user
+/// names and unrelated multi-field values are left untouched.
+pub(crate) fn normalize_jumpserver_cli_username(
+    username: &str,
+    gateway_host: &str,
+) -> Option<String> {
+    let gateway_host = gateway_host.trim();
+    if gateway_host.is_empty() {
+        return None;
+    }
+
+    for separator in ['@', '#'] {
+        let parts = username
+            .split(separator)
+            .map(str::trim)
+            .collect::<Vec<_>>();
+        if parts.iter().any(|part| part.is_empty())
+            || parts
+                .last()
+                .is_none_or(|part| !part.eq_ignore_ascii_case(gateway_host))
+        {
+            continue;
+        }
+        let separator = separator.to_string();
+        match parts.len() {
+            4 if parts[1] != "ssh" => return Some(parts[..3].join(&separator)),
+            5 if parts[1] == "ssh" => return Some(parts[..4].join(&separator)),
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Keep probe diagnostics useful without copying a JumpServer asset menu into
 /// `app.log`. The full menu can contain tenant-specific asset names and is not
 /// needed to identify the route; the detector already records its bounded

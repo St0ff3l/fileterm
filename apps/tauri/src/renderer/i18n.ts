@@ -380,6 +380,9 @@ const zhCN = {
   noConnectionDescription: '打开一个连接后，这里会显示主机状态、资源占用和网络监控。',
   loadingSystemInfo: '正在获取系统信息',
   loadingSystemInfoDescription: '连接正常，正在读取主机状态、硬件和文件系统数据…',
+  interactiveGatewayResourceMonitoringTitle: '已进入 JumpServer 资产菜单',
+  interactiveGatewayResourceMonitoringDescription:
+    '当前前台终端可以继续使用，但资源监控和 SFTP 未启动，因为菜单选择没有同步到后台通道。请编辑连接，使用堡垒机提供的直连用户名或 JMS-... 连接令牌；如果直连后仍出现 Opt>，请让堡垒机管理员提供可用的资产路由格式。',
   remoteDisconnected: '远程连接已断开',
   remoteDisconnectedDescription: '当前会话已断开，远程文件和系统信息已停止刷新，请先重连。',
   remoteSessionDisconnectedAction: '会话已断开，请先重连。',
@@ -846,6 +849,8 @@ const zhCN = {
   group: '分组',
   remotePath: '远程路径',
   authType: '认证方式',
+  keyboardInteractiveAuth: 'Keyboard-interactive / MFA',
+  jumpServerKokoMfaAuth: 'JumpServer / KoKo MFA Interactive',
   systemSshAuth: '系统 SSH（agent/默认私钥）',
   systemSshAuthHint: '优先复用本机 SSH agent，其次尝试 ~/.ssh 下的默认私钥。',
   password: '密码',
@@ -1770,7 +1775,9 @@ const zhCN = {
   sortHeaderTitle: '{label} - 单击切换排序',
   keyCount: '{count} 个密钥',
   folderCount: '{count} 个分组',
-  keyboardInteractiveHint: '可选：先尝试此密码；服务器需要 OTP/MFA 时，会弹出单独的验证码输入框。',
+  keyboardInteractiveHint: '服务器需要 OTP/MFA 时，会弹出单独的验证码输入框。',
+  jumpServerInteractiveGatewayHint:
+    'JumpServer/KoKo：主机填堡垒机/跳板机地址；用户名填“堡垒机账号@目标机账号@目标机IP（即资产IP）”，亦支持带末尾“@堡垒机Host”。示例：主机=jump.example.com；用户名=alice@root@192.168.1.100（或 alice@root@192.168.1.100@jump.example.com）。',
   disconnectBehavior: '断线行为',
   scrollCommandList: '滚动命令列表',
   discardTransferCheckpoint: '丢弃传输断点',
@@ -2190,6 +2197,9 @@ const enUS: typeof zhCN = {
   noConnectionDescription: 'Open a connection to see host status, resource usage, and network monitoring here.',
   loadingSystemInfo: 'Loading system information',
   loadingSystemInfoDescription: 'Connected. Reading host status, hardware, and filesystem data…',
+  interactiveGatewayResourceMonitoringTitle: 'JumpServer asset menu detected',
+  interactiveGatewayResourceMonitoringDescription:
+    'The foreground terminal is still usable, but resource monitoring and SFTP are paused because the menu selection is not available to auxiliary channels. Edit the connection and use the bastion-supported direct username or a JMS-... connection token. If Opt> still appears, ask the bastion administrator for the supported asset route format.',
   remoteDisconnected: 'Remote connection closed',
   remoteDisconnectedDescription:
     'This session is disconnected. Remote files and system info have stopped updating. Reconnect first.',
@@ -2662,6 +2672,8 @@ const enUS: typeof zhCN = {
   group: 'Group',
   remotePath: 'Remote Path',
   authType: 'Auth Type',
+  keyboardInteractiveAuth: 'Keyboard-interactive / MFA',
+  jumpServerKokoMfaAuth: 'JumpServer / KoKo MFA Interactive',
   systemSshAuth: 'System SSH (agent/default key)',
   systemSshAuthHint: 'Reuse the local SSH agent first, then fall back to default keys under ~/.ssh.',
   password: 'Password',
@@ -3641,8 +3653,9 @@ const enUS: typeof zhCN = {
   sortHeaderTitle: '{label} - click to change sort',
   keyCount: '{count} keys',
   folderCount: '{count} folders',
-  keyboardInteractiveHint:
-    'Optional: try this password first. If the server requires OTP/MFA, a separate code prompt will appear.',
+  keyboardInteractiveHint: 'A separate code prompt will appear when the server requires OTP/MFA.',
+  jumpServerInteractiveGatewayHint:
+    'JumpServer/KoKo: enter the bastion/jump host address in Host; in Username, enter bastion-user@target-account@target-ip (asset IP), optionally with trailing @bastion-host. Example: Host=jump.example.com; Username=alice@root@192.168.1.100 (or alice@root@192.168.1.100@jump.example.com).',
   disconnectBehavior: 'Disconnect behavior',
   appTitle: 'FileTerm',
   activateUpgrade: 'Activate / Upgrade',

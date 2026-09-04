@@ -152,6 +152,9 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   } = data
   const { startSidebarResize, startAiCopilotResize } = resize
 
+  const isInteractiveGatewayRoutePending =
+    activeSession?.resourceMonitoringUnavailableReason === 'interactive-gateway-target-route-required'
+  const hasStatusMessage = Boolean(error || isInteractiveGatewayRoutePending)
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
   const activeJumpHost =
     activeProfile?.type === 'ssh' && activeProfile.jumpProfileId
@@ -240,12 +243,19 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
         ) : null}
 
         <main
-          className={`fs-main ${error ? 'has-status' : 'no-status'} ${shouldShowSystemSidebar ? '' : 'full-width'}`}
+          className={`fs-main ${hasStatusMessage ? 'has-status' : 'no-status'} ${shouldShowSystemSidebar ? '' : 'full-width'}`}
         >
           {error ? (
             <div className="status-message" role="alert">
               <span className="status-message-text">{error}</span>
               <CloseButton aria-label={t.closeTab} onClick={() => setError(null)} size="compact" />
+            </div>
+          ) : isInteractiveGatewayRoutePending ? (
+            <div className="status-message" role="status" aria-live="polite">
+              <span className="status-message-text">
+                <strong>{t.interactiveGatewayResourceMonitoringTitle}</strong>{' '}
+                {t.interactiveGatewayResourceMonitoringDescription}
+              </span>
             </div>
           ) : null}
           <div className={`workspace-stage ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}>

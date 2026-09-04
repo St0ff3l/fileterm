@@ -26,6 +26,8 @@ export function ConnectionSshAuthSection({
   onClearHostFingerprint?(): void
   setForm: ConnectionFormSetter
 }) {
+  const isKeyboardInteractiveAuth = form.authType === 'keyboard-interactive' || form.authType === 'jumpserver-koko-mfa'
+
   return (
     <fieldset className="ssh-fieldset">
       <legend>{t.auth}</legend>
@@ -38,8 +40,9 @@ export function ConnectionSshAuthSection({
               options={[
                 { value: 'password', label: t.password },
                 { value: 'privateKey', label: t.privateKey },
-                { value: 'keyboard-interactive', label: 'Keyboard-interactive / MFA' },
-                { value: 'system', label: 'System / SSH agent' }
+                { value: 'keyboard-interactive', label: t.keyboardInteractiveAuth },
+                { value: 'jumpserver-koko-mfa', label: t.jumpServerKokoMfaAuth },
+                { value: 'system', label: t.systemSshAuth }
               ]}
               onChange={(value) => setForm((prev) => ({ ...prev, authType: value as CreateProfileInput['authType'] }))}
             />
@@ -54,7 +57,7 @@ export function ConnectionSshAuthSection({
             />
           </label>
         ) : null}
-        {form.type === 'ftp' || form.authType === 'password' || form.authType === 'keyboard-interactive' ? (
+        {form.type === 'ftp' || form.authType === 'password' || isKeyboardInteractiveAuth ? (
           <ConnectionSecretField
             id="connection-password"
             label={t.password}
@@ -80,8 +83,11 @@ export function ConnectionSshAuthSection({
         {form.type === 'ssh' && form.authType === 'privateKey' ? (
           <SshPrivateKeyField form={form} setForm={setForm} />
         ) : null}
-        {form.type === 'ssh' && form.authType === 'keyboard-interactive' ? (
-          <div className="span-2 ssh-auth-hint">{t.keyboardInteractiveHint}</div>
+        {form.type === 'ssh' && isKeyboardInteractiveAuth ? (
+          <div className="span-2 ssh-auth-hint">
+            <div>{t.keyboardInteractiveHint}</div>
+            {form.authType === 'jumpserver-koko-mfa' ? <div>{t.jumpServerInteractiveGatewayHint}</div> : null}
+          </div>
         ) : form.type === 'ftp' ? (
           <>
             <label className="span-2">

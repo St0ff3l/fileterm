@@ -288,12 +288,14 @@ async fn disable_resource_monitoring_capability(
     reason: impl Into<String>,
 ) {
     let reason = reason.into();
+    let unavailable_reason = classify_resource_monitoring_unavailable_reason(&reason);
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let changed = {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(tab_id) {
             let changed = session.capabilities.resource_monitoring;
             session.capabilities.resource_monitoring = false;
+            session.resource_monitoring_unavailable_reason = Some(unavailable_reason.to_string());
             if changed {
                 session.system_metrics = None;
             }
@@ -329,7 +331,7 @@ async fn disable_resource_monitoring_capability(
         "metrics",
         tab_id,
         format!(
-            "resource monitoring capability transition from=true to=false reason={reason}"
+            "resource monitoring capability transition from=true to=false reason={reason} unavailable_reason={unavailable_reason}"
         ),
     );
     crate::services::logging::session(
@@ -358,7 +360,7 @@ async fn disable_resource_monitoring_capability(
                     "metrics",
                     tab_id,
                     format!(
-                        "resource monitoring disabled snapshot emitted resource_monitoring=false workspace_revision={workspace_revision}"
+                        "resource monitoring disabled snapshot emitted resource_monitoring=false unavailable_reason={unavailable_reason} workspace_revision={workspace_revision}"
                     ),
                 ),
                 Err(error) => crate::services::logging::session(
@@ -391,6 +393,23 @@ async fn disable_resource_monitoring_capability(
                 RESOURCE_MONITORING_SNAPSHOT_TIMEOUT.as_secs()
             ),
         ),
+    }
+}
+
+fn classify_resource_monitoring_unavailable_reason(reason: &str) -> &'static str {
+    let normalized = reason.to_ascii_lowercase();
+    if normalized.contains("interactive gateway") || normalized.contains("target route") {
+        "interactive-gateway-target-route-required"
+    } else if normalized.contains("idle timeout") {
+        "collector-idle-timeout"
+    } else if normalized.contains("first metrics snapshot")
+        || normalized.contains("incompatible identity")
+    {
+        "target-identity-invalid"
+    } else if normalized.contains("probe") && normalized.contains("timed out") {
+        "platform-probe-timeout"
+    } else {
+        "collector-failed"
     }
 }
 
