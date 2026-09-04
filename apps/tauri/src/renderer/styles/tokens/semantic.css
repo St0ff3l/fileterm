@@ -81,17 +81,18 @@
   --action-danger-text: var(--ref-action-danger-text, var(--ref-text-inverse));
 
   /* Status Semantics */
-  --status-success: var(--ref-status-success);
-  --status-success-bg: var(--ref-status-success-bg);
-  --status-warning: var(--ref-status-warning);
-  --status-warning-bg: var(--ref-status-warning-bg);
-  --status-danger: var(--ref-status-danger);
-  --status-danger-bg: var(--ref-status-danger-bg);
-  --status-info: var(--ref-status-info);
-  --status-info-bg: var(--ref-status-info-bg);
+  --status-success: var(--theme-success, var(--ref-status-success));
+  --status-success-bg: var(--theme-success-surface, var(--ref-status-success-bg));
+  --status-warning: var(--theme-warning, var(--ref-status-warning));
+  --status-warning-bg: var(--theme-warning-surface, var(--ref-status-warning-bg));
+  --status-warning-text: var(--theme-warning-text, var(--ref-status-warning-text, var(--status-warning)));
+  --status-danger: var(--theme-error, var(--ref-status-danger));
+  --status-danger-bg: var(--theme-error-surface, var(--ref-status-danger-bg));
+  --status-info: var(--theme-info, var(--ref-status-info));
+  --status-info-bg: var(--theme-info-surface, var(--ref-status-info-bg));
   --status-error: var(--status-danger);
   --danger-color: var(--status-danger);
-  --warning-text: var(--status-warning);
+  --warning-text: var(--status-warning-text, var(--status-warning));
 
   /* Focus and Glow Rings */
   --accent-focus-ring: var(--ref-accent-focus);
@@ -151,19 +152,19 @@
   --copy-link-hover: var(--ref-accent-secondary);
 
   /* Status Colors */
-  --success: var(--ref-status-success);
-  --success-text: var(--ref-status-success);
-  --success-surface: var(--ref-status-success-bg);
-  --success-border: var(--ref-status-success);
-  --danger: var(--ref-status-danger);
-  --danger-text: var(--ref-status-danger);
-  --danger-surface: var(--ref-status-danger-bg);
-  --danger-border: var(--ref-status-danger);
-  --warning: var(--ref-status-warning);
-  --info: var(--ref-status-info);
-  --info-text: var(--ref-status-info);
-  --info-surface: var(--ref-status-info-bg);
-  --info-border: var(--ref-status-info);
+  --success: var(--status-success);
+  --success-text: var(--status-success);
+  --success-surface: var(--status-success-bg);
+  --success-border: var(--status-success);
+  --danger: var(--status-danger);
+  --danger-text: var(--status-danger);
+  --danger-surface: var(--status-danger-bg);
+  --danger-border: var(--status-danger);
+  --warning: var(--status-warning);
+  --info: var(--status-info);
+  --info-text: var(--status-info);
+  --info-surface: var(--status-info-bg);
+  --info-border: var(--status-info);
 
   /* Dialogs */
   --dialog-border: var(--border-subtle);
@@ -252,6 +253,18 @@
   --brand-title-shadow: none;
   --file-editor-button-bg: var(--surface-hover);
   --file-editor-primary-shadow: var(--ref-file-editor-primary-shadow);
+
+  /* Monaco Editor */
+  --monaco-editor-bg: var(--ref-monaco-editor-bg);
+  --monaco-editor-foreground: var(--ref-monaco-editor-foreground);
+  --monaco-line-number: var(--ref-monaco-line-number);
+  --monaco-line-number-active: var(--ref-monaco-line-number-active);
+  --monaco-cursor: var(--ref-monaco-cursor);
+  --monaco-selection: var(--ref-monaco-selection);
+  --monaco-inactive-selection: var(--ref-monaco-inactive-selection);
+  --monaco-line-highlight: var(--ref-monaco-line-highlight);
+  --monaco-indent-guide: var(--ref-monaco-indent-guide);
+  --monaco-indent-guide-active: var(--ref-monaco-indent-guide-active);
 
   /* Floating Drawer & Tabs */
   --floating-drawer-expanded-bg: var(--surface-modal);

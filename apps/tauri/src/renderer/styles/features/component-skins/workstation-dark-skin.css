@@ -156,9 +156,9 @@
 :root:not([data-theme]) .status-message,
 :root:not([data-theme*='light']) .status-message,
 :root[data-theme='default'] .status-message {
-  border-bottom-color: color-mix(in srgb, var(--status-warning) 28%, var(--surface-canvas));
-  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
-  color: var(--status-warning);
+  border-bottom-color: color-mix(in srgb, var(--status-warning) 14%, var(--surface-canvas));
+  background: var(--status-warning-bg, color-mix(in srgb, var(--status-warning) 8%, transparent));
+  color: var(--status-warning-text, var(--status-warning));
 }
 
 :root:not([data-theme]) .workspace-stage,

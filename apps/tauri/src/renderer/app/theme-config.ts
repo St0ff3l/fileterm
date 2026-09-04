@@ -138,7 +138,8 @@ function resolveCompactUiVariables(
   const totalSurface = alpha(total, isLight ? 10 : 14)
   const infoSurface = alpha(info, isLight ? 10 : 14)
   const successSurface = alpha(success, isLight ? 10 : 14)
-  const warningSurface = alpha(warning, isLight ? 10 : 14)
+  const warningSurface = alpha(warning, isLight ? 10 : 8)
+  const warningText = !isLight && warning.toLowerCase() === '#ffcc00' ? '#e7c65b' : warning
   const dangerSurface = alpha(danger, isLight ? 10 : 14)
 
   const sidebarGlassActive = !theme.opaqueWindows && sidebarGlassSupported()
@@ -203,7 +204,6 @@ function resolveCompactUiVariables(
     '--theme-surface-elevated': surfaceElevated,
     '--theme-text-primary': ink,
     '--theme-text-secondary': secondaryText,
-    '--theme-info': info,
     '--theme-semantic-total': total,
     '--theme-semantic-telnet': telnet,
     '--theme-semantic-sftp': telnet,
@@ -211,9 +211,33 @@ function resolveCompactUiVariables(
     '--theme-semantic-network-rx': networkRx,
     '--theme-semantic-network-tx': networkTx,
     '--theme-warning': warning,
+    '--theme-warning-surface': warningSurface,
+    '--theme-warning-text': warningText,
     '--theme-error': danger,
+    '--theme-error-surface': dangerSurface,
     '--theme-error-hover': dangerHover,
     '--theme-success': success,
+    '--theme-success-surface': successSurface,
+    '--theme-info': info,
+    '--theme-info-surface': infoSurface,
+    '--ref-status-warning': warning,
+    '--ref-status-warning-bg': warningSurface,
+    '--ref-status-warning-text': warningText,
+    '--ref-status-danger': danger,
+    '--ref-status-danger-bg': dangerSurface,
+    '--ref-status-success': success,
+    '--ref-status-success-bg': successSurface,
+    '--ref-status-info': info,
+    '--ref-status-info-bg': infoSurface,
+    '--status-warning': warning,
+    '--status-warning-bg': warningSurface,
+    '--status-warning-text': warningText,
+    '--status-danger': danger,
+    '--status-danger-bg': dangerSurface,
+    '--status-success': success,
+    '--status-success-bg': successSurface,
+    '--status-info': info,
+    '--status-info-bg': infoSurface,
     '--focus-outline': focus,
     '--border-focus': focus,
     '--accent-highlight': secondaryAccent,
@@ -233,6 +257,7 @@ function resolveCompactUiVariables(
     '--success-surface': successSurface,
     '--success-border': alpha(success, isLight ? 20 : 30),
     '--warning': warning,
+    '--warning-text': warningText,
     '--info': info,
     '--info-text': secondaryHover,
     '--info-surface': infoSurface,
@@ -524,6 +549,8 @@ function buildThemeVariables(
   const normalized = normalizeThemeConfig({ ...config, variant }, variant)
   const theme = normalized.theme
   const isDefaultTheme = isDefaultFileTermTheme(normalized, variant)
+  const isLight = variant === 'light'
+  const isCodex = normalized.baseThemeId === 'codex'
   const sidebarGlassActive = !theme.opaqueWindows && sidebarGlassSupported()
   const variables: Record<string, string> = {
     '--theme-accent': theme.accent,
@@ -540,9 +567,38 @@ function buildThemeVariables(
     '--theme-text-primary': theme.ink,
     '--theme-text-secondary': theme.semanticColors.textSecondary,
     '--theme-info': theme.semanticColors.info,
+    '--theme-info-surface': alpha(theme.semanticColors.info, isLight ? 10 : 12),
     '--theme-warning': theme.semanticColors.warning,
+    '--theme-warning-surface': alpha(theme.semanticColors.warning, isLight ? 10 : 8),
+    '--theme-warning-text':
+      !isLight && theme.semanticColors.warning.toLowerCase() === '#ffcc00' ? '#e7c65b' : theme.semanticColors.warning,
     '--theme-error': theme.semanticColors.error,
+    '--theme-error-surface': alpha(theme.semanticColors.error, isLight ? 10 : 12),
     '--theme-success': theme.semanticColors.success,
+    '--theme-success-surface': alpha(theme.semanticColors.success, isLight ? 10 : 12),
+    '--ref-status-warning': theme.semanticColors.warning,
+    '--ref-status-warning-bg': alpha(theme.semanticColors.warning, isLight ? 10 : 8),
+    '--ref-status-warning-text':
+      !isLight && theme.semanticColors.warning.toLowerCase() === '#ffcc00' ? '#e7c65b' : theme.semanticColors.warning,
+    '--ref-status-danger': theme.semanticColors.error,
+    '--ref-status-danger-bg': alpha(theme.semanticColors.error, isLight ? 10 : 12),
+    '--ref-status-success': theme.semanticColors.success,
+    '--ref-status-success-bg': alpha(theme.semanticColors.success, isLight ? 10 : 12),
+    '--ref-status-info': theme.semanticColors.info,
+    '--ref-status-info-bg': alpha(theme.semanticColors.info, isLight ? 10 : 12),
+    '--status-warning': theme.semanticColors.warning,
+    '--status-warning-bg': alpha(theme.semanticColors.warning, isLight ? 10 : 8),
+    '--status-warning-text':
+      !isLight && theme.semanticColors.warning.toLowerCase() === '#ffcc00' ? '#e7c65b' : theme.semanticColors.warning,
+    '--status-danger': theme.semanticColors.error,
+    '--status-danger-bg': alpha(theme.semanticColors.error, isLight ? 10 : 12),
+    '--status-success': theme.semanticColors.success,
+    '--status-success-bg': alpha(theme.semanticColors.success, isLight ? 10 : 12),
+    '--status-info': theme.semanticColors.info,
+    '--status-info-bg': alpha(theme.semanticColors.info, isLight ? 10 : 12),
+    '--warning': theme.semanticColors.warning,
+    '--warning-text':
+      !isLight && theme.semanticColors.warning.toLowerCase() === '#ffcc00' ? '#e7c65b' : theme.semanticColors.warning,
     '--theme-action-primary': theme.semanticColors.primaryAction ?? theme.accent,
     '--theme-action-danger': theme.semanticColors.dangerAction ?? (variant === 'light' ? '#d32f2f' : '#c93b3b'),
     '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
@@ -575,7 +631,28 @@ function buildThemeVariables(
     '--terminal-text': theme.terminal.foreground,
     '--terminal-selection-bg': theme.terminal.selectionBackground,
     '--terminal-search-match-bg': theme.terminal.search.matchBackground,
-    '--terminal-search-active-bg': theme.terminal.search.activeMatchBackground
+    '--terminal-search-active-bg': theme.terminal.search.activeMatchBackground,
+    // Monaco editor concrete tokens for all themes
+    '--ref-monaco-editor-bg': isLight ? '#ffffff' : isCodex ? '#111111' : theme.terminal.background,
+    '--ref-monaco-editor-foreground': isLight ? '#1a1c1f' : isCodex ? '#fcfcfc' : theme.terminal.foreground,
+    '--ref-monaco-line-number': isLight ? '#8e9197' : isCodex ? '#7a7a7a' : '#5f6875',
+    '--ref-monaco-line-number-active': isLight ? '#64676c' : isCodex ? '#a6a6a6' : '#9faab8',
+    '--ref-monaco-cursor': isLight ? '#339cff' : isCodex ? '#0169cc' : '#7cc7ff',
+    '--ref-monaco-selection': isLight ? '#e6f3ff' : isCodex ? '#172a3a' : '#21466b',
+    '--ref-monaco-inactive-selection': isLight ? '#f0f7ff' : isCodex ? '#13202c' : '#1a354d',
+    '--ref-monaco-line-highlight': isLight ? '#f5f5f5' : isCodex ? '#171717' : '#161b22',
+    '--ref-monaco-indent-guide': isLight ? '#e0e0e0' : isCodex ? '#242424' : '#1f2630',
+    '--ref-monaco-indent-guide-active': isLight ? '#c0c0c0' : isCodex ? '#383838' : '#344150',
+    '--monaco-editor-bg': isLight ? '#ffffff' : isCodex ? '#111111' : theme.terminal.background,
+    '--monaco-editor-foreground': isLight ? '#1a1c1f' : isCodex ? '#fcfcfc' : theme.terminal.foreground,
+    '--monaco-line-number': isLight ? '#8e9197' : isCodex ? '#7a7a7a' : '#5f6875',
+    '--monaco-line-number-active': isLight ? '#64676c' : isCodex ? '#a6a6a6' : '#9faab8',
+    '--monaco-cursor': isLight ? '#339cff' : isCodex ? '#0169cc' : '#7cc7ff',
+    '--monaco-selection': isLight ? '#e6f3ff' : isCodex ? '#172a3a' : '#21466b',
+    '--monaco-inactive-selection': isLight ? '#f0f7ff' : isCodex ? '#13202c' : '#1a354d',
+    '--monaco-line-highlight': isLight ? '#f5f5f5' : isCodex ? '#171717' : '#161b22',
+    '--monaco-indent-guide': isLight ? '#e0e0e0' : isCodex ? '#242424' : '#1f2630',
+    '--monaco-indent-guide-active': isLight ? '#c0c0c0' : isCodex ? '#383838' : '#344150'
   }
 
   // Built-in Codex has the same compact token contract as custom themes, but

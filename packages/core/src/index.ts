@@ -1720,7 +1720,7 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#5e5e61' : '#9b9b9b',
         info: isLight ? '#3b82f6' : '#38bdf8',
-        warning: isLight ? '#d97706' : '#f59e0b',
+        warning: isLight ? '#d97706' : '#ffcc00',
         error: isLight ? '#d94e4e' : '#ff5f57',
         success: isLight ? '#168a53' : '#34d399',
         primaryAction: isLight ? '#3b82f6' : '#1687e8',
