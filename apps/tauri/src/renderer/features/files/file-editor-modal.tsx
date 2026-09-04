@@ -27,13 +27,61 @@ type EditorInstance = Parameters<OnMount>[0]
 type EditorMenu = 'file' | 'edit' | 'search' | 'preferences' | 'encoding' | 'language'
 const MONACO_DARK_THEME = 'fileterm-default-dark'
 
-function readCssVariable(name: string, fallbackName?: string) {
-  const styles = window.getComputedStyle(document.documentElement)
-  const value = styles.getPropertyValue(name).trim()
-  if (value) {
-    return value
+function resolveCssColorToHex(cssValue: string): string | null {
+  const trimmed = cssValue.trim()
+  if (!trimmed) return null
+  if (/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(trimmed)) {
+    return trimmed
   }
-  return fallbackName ? styles.getPropertyValue(fallbackName).trim() : ''
+  const varMatch = trimmed.match(/^var\(\s*(--[a-zA-Z0-9_-]+)/)
+  if (varMatch) {
+    const resolved = window.getComputedStyle(document.documentElement).getPropertyValue(varMatch[1]).trim()
+    if (resolved) {
+      const hex = resolveCssColorToHex(resolved)
+      if (hex) return hex
+    }
+  }
+  if (typeof document !== 'undefined') {
+    const probe = document.createElement('div')
+    probe.style.color = trimmed
+    probe.style.display = 'none'
+    document.documentElement.appendChild(probe)
+    const computedColor = window.getComputedStyle(probe).color
+    probe.remove()
+    const rgbMatch = computedColor.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/)
+    if (rgbMatch) {
+      const r = Math.min(255, Math.max(0, parseInt(rgbMatch[1], 10)))
+        .toString(16)
+        .padStart(2, '0')
+      const g = Math.min(255, Math.max(0, parseInt(rgbMatch[2], 10)))
+        .toString(16)
+        .padStart(2, '0')
+      const b = Math.min(255, Math.max(0, parseInt(rgbMatch[3], 10)))
+        .toString(16)
+        .padStart(2, '0')
+      if (rgbMatch[4] !== undefined) {
+        const a = Math.min(255, Math.max(0, Math.round(parseFloat(rgbMatch[4]) * 255)))
+          .toString(16)
+          .padStart(2, '0')
+        return `#${r}${g}${b}${a}`
+      }
+      return `#${r}${g}${b}`
+    }
+  }
+  return null
+}
+
+function readMonacoColor(varName: string, fallbackVarName: string, defaultHex: string): string {
+  const styles = window.getComputedStyle(document.documentElement)
+  const val = styles.getPropertyValue(varName)
+  const resolved = resolveCssColorToHex(val)
+  if (resolved) return resolved
+
+  const fallbackVal = styles.getPropertyValue(fallbackVarName)
+  const fallbackResolved = resolveCssColorToHex(fallbackVal)
+  if (fallbackResolved) return fallbackResolved
+
+  return defaultHex
 }
 
 function defineFileTermMonacoTheme(monaco: Monaco) {
@@ -42,16 +90,16 @@ function defineFileTermMonacoTheme(monaco: Monaco) {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': readCssVariable('--monaco-editor-bg', '--terminal-bg'),
-      'editor.foreground': readCssVariable('--monaco-editor-foreground', '--terminal-text'),
-      'editorLineNumber.foreground': readCssVariable('--monaco-line-number', '--text-soft'),
-      'editorLineNumber.activeForeground': readCssVariable('--monaco-line-number-active', '--text-muted'),
-      'editorCursor.foreground': readCssVariable('--monaco-cursor', '--accent-highlight'),
-      'editor.selectionBackground': readCssVariable('--monaco-selection', '--selection-bg'),
-      'editor.inactiveSelectionBackground': readCssVariable('--monaco-inactive-selection', '--selection-bg'),
-      'editor.lineHighlightBackground': readCssVariable('--monaco-line-highlight', '--surface-inset'),
-      'editorIndentGuide.background1': readCssVariable('--monaco-indent-guide', '--border-light'),
-      'editorIndentGuide.activeBackground1': readCssVariable('--monaco-indent-guide-active', '--border-dark')
+      'editor.background': readMonacoColor('--monaco-editor-bg', '--terminal-bg', '#111316'),
+      'editor.foreground': readMonacoColor('--monaco-editor-foreground', '--terminal-text', '#d6dde7'),
+      'editorLineNumber.foreground': readMonacoColor('--monaco-line-number', '--text-soft', '#5f6875'),
+      'editorLineNumber.activeForeground': readMonacoColor('--monaco-line-number-active', '--text-muted', '#9faab8'),
+      'editorCursor.foreground': readMonacoColor('--monaco-cursor', '--accent-highlight', '#7cc7ff'),
+      'editor.selectionBackground': readMonacoColor('--monaco-selection', '--selection-bg', '#21466b'),
+      'editor.inactiveSelectionBackground': readMonacoColor('--monaco-inactive-selection', '--selection-bg', '#1a354d'),
+      'editor.lineHighlightBackground': readMonacoColor('--monaco-line-highlight', '--surface-inset', '#161b22'),
+      'editorIndentGuide.background1': readMonacoColor('--monaco-indent-guide', '--border-light', '#1f2630'),
+      'editorIndentGuide.activeBackground1': readMonacoColor('--monaco-indent-guide-active', '--border-dark', '#344150')
     }
   })
 }

@@ -234,6 +234,25 @@ async fn try_system_authenticate(
 
 // Configured password, private-key, and agent authentication.
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ConfiguredAuthenticationMethod {
+    Password,
+    PrivateKey,
+    KeyboardInteractive,
+    System,
+}
+
+fn configured_authentication_method(auth_type: &str) -> ConfiguredAuthenticationMethod {
+    match auth_type {
+        // KoKo records the first password factor in its SSH session context
+        // before it permits the MFA keyboard-interactive continuation.
+        "password" | "jumpserver-koko-mfa" => ConfiguredAuthenticationMethod::Password,
+        "privateKey" => ConfiguredAuthenticationMethod::PrivateKey,
+        "keyboard-interactive" => ConfiguredAuthenticationMethod::KeyboardInteractive,
+        _ => ConfiguredAuthenticationMethod::System,
+    }
+}
+
 async fn try_authenticate(
     handle: &mut Handle<ClientHandler>,
     username: &str,
@@ -243,11 +262,22 @@ async fn try_authenticate(
     interaction: &SshInteractionContext,
     interaction_timeout: Duration,
 ) -> Result<AuthenticationResult, String> {
-    match auth_type {
-        "password" => {
+    match configured_authentication_method(auth_type) {
+        ConfiguredAuthenticationMethod::Password => {
             let Some(password) = password_for_authentication(profile) else {
                 return Err("SSH password is missing".to_string());
             };
+            if auth_type == "jumpserver-koko-mfa" {
+                interaction.log_interaction(
+                    app,
+                    "INFO",
+                    "-",
+                    "authentication",
+                    "jumpserver-koko",
+                    0,
+                    "password-first authentication selected; keyboard-interactive starts only after the server advertises a follow-up challenge",
+                );
+            }
             // Some embedded SSH servers do not reply to a direct password
             // request until the client has first sent the RFC-standard
             // `none` probe. Electron's ssh2 client always performs this
@@ -309,9 +339,35 @@ async fn try_authenticate(
                     res.success()
                 ),
             );
-            Ok(authentication_result_from_auth_result(&res))
+            let authentication_result = authentication_result_from_auth_result(&res);
+            if auth_type == "jumpserver-koko-mfa" {
+                let outcome = match authentication_result {
+                    AuthenticationResult::Authenticated => "password factor accepted; no follow-up challenge",
+                    AuthenticationResult::KeyboardInteractiveAvailable {
+                        mode: KeyboardInteractiveMode::AdditionalFactor,
+                    } => "password factor accepted with partial success; continuing with keyboard-interactive MFA",
+                    AuthenticationResult::KeyboardInteractiveAvailable {
+                        mode: KeyboardInteractiveMode::PasswordFallback,
+                    } => "password method did not complete authentication; server advertised keyboard-interactive fallback",
+                    AuthenticationResult::Rejected => "password method rejected; no keyboard-interactive continuation advertised",
+                };
+                interaction.log_interaction(
+                    app,
+                    if matches!(authentication_result, AuthenticationResult::Rejected) {
+                        "WARN"
+                    } else {
+                        "INFO"
+                    },
+                    "-",
+                    "authentication",
+                    "jumpserver-koko",
+                    0,
+                    outcome,
+                );
+            }
+            Ok(authentication_result)
         }
-        "privateKey" => {
+        ConfiguredAuthenticationMethod::PrivateKey => {
             let (key_content, passphrase) = if let Some(key_id) =
                 profile.get("privateKeyId").and_then(|value| value.as_str())
             {
@@ -348,12 +404,12 @@ async fn try_authenticate(
             .await?;
             Ok(authentication_result_from_auth_result(&result))
         }
-        "keyboard-interactive" | "jumpserver-koko-mfa" => {
+        ConfiguredAuthenticationMethod::KeyboardInteractive => {
             Ok(AuthenticationResult::KeyboardInteractiveAvailable {
                 mode: KeyboardInteractiveMode::PasswordFallback,
             })
         }
-        _ => {
+        ConfiguredAuthenticationMethod::System => {
             try_system_authenticate(handle, username, profile, app, interaction).await
         }
     }

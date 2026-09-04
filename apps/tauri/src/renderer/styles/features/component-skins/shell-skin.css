@@ -513,8 +513,8 @@
 :root:not([data-theme]) .status-message,
 :root:not([data-theme*='light']) .status-message,
 :root[data-theme='default'] .status-message {
-  color: var(--warning);
-  background: color-mix(in srgb, var(--status-warning) 10%, transparent);
+  color: var(--status-warning-text, var(--warning));
+  background: var(--status-warning-bg, color-mix(in srgb, var(--status-warning) 8%, transparent));
 }
 
 :root:not([data-theme]) .status-message-close:hover,

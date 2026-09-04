@@ -55,6 +55,7 @@
   --ref-status-success: #168a53;
   --ref-status-success-bg: rgba(22, 138, 83, 0.1);
   --ref-status-warning: #d97706;
+  --ref-status-warning-text: #d97706;
   --ref-status-warning-bg: rgba(217, 119, 6, 0.1);
   --ref-status-danger: #d94e4e;
   --ref-status-danger-hover: #be3f3f;
@@ -94,6 +95,18 @@
   --ref-window-control-danger-bg: #c42b1c;
   --ref-window-control-danger-text: #ffffff;
   --ref-file-editor-primary-shadow: 0 2px 10px rgba(59, 130, 246, 0.26);
+
+  /* Monaco Editor */
+  --ref-monaco-editor-bg: #ffffff;
+  --ref-monaco-editor-foreground: #1a1c1f;
+  --ref-monaco-line-number: #8e9197;
+  --ref-monaco-line-number-active: #64676c;
+  --ref-monaco-cursor: #339cff;
+  --ref-monaco-selection: #e6f3ff;
+  --ref-monaco-inactive-selection: #f0f7ff;
+  --ref-monaco-line-highlight: #f5f5f5;
+  --ref-monaco-indent-guide: #e0e0e0;
+  --ref-monaco-indent-guide-active: #c0c0c0;
   --ref-terminal-frame-gradient: none;
   --ref-terminal-frame-shadow: none;
 

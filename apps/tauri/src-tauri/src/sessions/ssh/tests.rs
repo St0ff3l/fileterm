@@ -2,7 +2,8 @@
 mod tests {
     use super::{
         authentication_result_from_auth_result, build_http_connect_request, build_legacy_preferred,
-        capture_root_access_password_input, coalesce_terminal_input, contains_interrupt_byte,
+        capture_root_access_password_input, coalesce_terminal_input, configured_authentication_method,
+        contains_interrupt_byte,
         decode_bytes, default_ssh_key_paths, detect_network_device_family,
         detect_remote_exec_input_kind, effective_exec_channel_enabled, effective_remote_file_type,
         effective_remote_forward_port, effective_resource_monitoring_enabled,
@@ -28,6 +29,7 @@ mod tests {
         try_keyboard_interactive_with_responder, tunnel_bind_address,
         validate_root_download_completion, validate_tunnel_rule,
         wait_for_ssh_handshake_with_timeouts, wait_for_ssh_stage, AuthenticationResult,
+        ConfiguredAuthenticationMethod,
         KeyboardInteractiveMode, KeyboardInteractiveRequest, ResolvedSshDeviceMode, RootFileAccessMethod,
         ShellSetupEchoSuppression, SshDeviceModeResolution, SshTunnelRule, TunnelCommand,
         SshInteractionContext, SshInteractionFlow, SshAuthenticationTarget,
@@ -2227,6 +2229,18 @@ mod tests {
             AuthenticationResult::KeyboardInteractiveAvailable {
                 mode: KeyboardInteractiveMode::PasswordFallback,
             }
+        );
+    }
+
+    #[test]
+    fn jumpserver_koko_mfa_starts_with_the_password_method() {
+        assert_eq!(
+            configured_authentication_method("jumpserver-koko-mfa"),
+            ConfiguredAuthenticationMethod::Password
+        );
+        assert_eq!(
+            configured_authentication_method("keyboard-interactive"),
+            ConfiguredAuthenticationMethod::KeyboardInteractive
         );
     }
 

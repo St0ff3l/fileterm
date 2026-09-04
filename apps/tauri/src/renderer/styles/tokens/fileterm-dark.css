@@ -56,8 +56,9 @@
   /* Status Colors */
   --ref-status-success: #34d399;
   --ref-status-success-bg: rgba(52, 211, 153, 0.12);
-  --ref-status-warning: #f59e0b;
-  --ref-status-warning-bg: rgba(245, 158, 11, 0.12);
+  --ref-status-warning: #ffcc00;
+  --ref-status-warning-text: #e7c65b;
+  --ref-status-warning-bg: rgba(255, 204, 0, 0.08);
   --ref-status-danger: #ff5f57;
   --ref-status-danger-hover: #e04b44;
   --ref-status-danger-bg: rgba(255, 95, 87, 0.12);
@@ -96,6 +97,18 @@
   --ref-window-control-danger-bg: #c42b1c;
   --ref-window-control-danger-text: #ffffff;
   --ref-file-editor-primary-shadow: 0 2px 10px rgba(22, 135, 232, 0.26);
+
+  /* Monaco Editor */
+  --ref-monaco-editor-bg: #111316;
+  --ref-monaco-editor-foreground: #d6dde7;
+  --ref-monaco-line-number: #5f6875;
+  --ref-monaco-line-number-active: #9faab8;
+  --ref-monaco-cursor: #7cc7ff;
+  --ref-monaco-selection: #21466b;
+  --ref-monaco-inactive-selection: #1a354d;
+  --ref-monaco-line-highlight: #161b22;
+  --ref-monaco-indent-guide: #1f2630;
+  --ref-monaco-indent-guide-active: #344150;
   --ref-terminal-frame-gradient:
     linear-gradient(to bottom, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px),
     linear-gradient(to top, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px),
