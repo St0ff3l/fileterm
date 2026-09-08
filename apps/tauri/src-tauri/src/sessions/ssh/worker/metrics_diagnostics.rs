@@ -42,6 +42,8 @@ fn metrics_stdout_preview(tail: &[u8], sample_count: u64) -> String {
     if sample_count == 0 {
         if interactive_gateway_menu_detected(tail, sample_count) {
             "<interactive-gateway-menu-suppressed>".to_string()
+        } else if target_shell_prompt_detected(tail, sample_count) {
+            "<target-shell-prompt>".to_string()
         } else {
             metrics_stderr_preview(tail)
         }
@@ -58,8 +60,34 @@ fn interactive_gateway_menu_detected(tail: &[u8], sample_count: u64) -> bool {
     if sample_count != 0 {
         return false;
     }
-    let output = String::from_utf8_lossy(tail);
+    let output = visible_shell_text(&String::from_utf8_lossy(tail));
     crate::sessions::system_metrics::detect_interactive_gateway(&output).is_some()
+}
+
+/// Some KoKo/asset combinations accept an exec request with a PTY but start
+/// the asset's interactive shell instead of running the requested command.
+/// The prompt is the safe point at which the collector can retry by writing
+/// the script through that same PTY. Only classify a prompt before the first
+/// marker; a normal collector can legitimately print `$` or `#` in its data.
+fn target_shell_prompt_detected(tail: &[u8], sample_count: u64) -> bool {
+    if sample_count != 0 {
+        return false;
+    }
+    let output = visible_shell_text(&String::from_utf8_lossy(tail));
+    output
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .lines()
+        .rev()
+        .take(3)
+        .any(|line| {
+            let line = line.trim();
+            let prompt = line.strip_suffix(['#', '$', '%']);
+            prompt.is_some_and(|prefix| {
+                let prefix = prefix.trim_end();
+                !prefix.is_empty() && (prefix.contains('@') || prefix.starts_with('['))
+            })
+        })
 }
 
 fn metrics_identity_field(value: &serde_json::Value, key: &str) -> String {
@@ -200,11 +228,59 @@ async fn close_metrics_channel(
     }
 }
 
+async fn send_metrics_pty_fallback(
+    channel: &mut Channel<russh::client::Msg>,
+    app: &AppHandle,
+    tab_id: &str,
+    script: &str,
+) -> Result<(), String> {
+    match timeout(SHELL_INIT_STEP_TIMEOUT, channel.data(script.as_bytes())).await {
+        Ok(Ok(())) => {
+            crate::services::logging::session(
+                app,
+                "INFO",
+                "metrics",
+                tab_id,
+                format!(
+                    "collector PTY stdin fallback sent flow_role=target script_bytes={} transport=pty-shell-stdin",
+                    script.len(),
+                ),
+            );
+            Ok(())
+        }
+        Ok(Err(error)) => {
+            crate::services::logging::session(
+                app,
+                "ERROR",
+                "metrics",
+                tab_id,
+                format!(
+                    "collector PTY stdin fallback failed flow_role=target error={error} transport=pty-shell-stdin"
+                ),
+            );
+            Err(format!("write collector script through PTY failed: {error}"))
+        }
+        Err(_) => {
+            crate::services::logging::session(
+                app,
+                "ERROR",
+                "metrics",
+                tab_id,
+                format!(
+                    "collector PTY stdin fallback timed out timeout_secs={} transport=pty-shell-stdin",
+                    SHELL_INIT_STEP_TIMEOUT.as_secs(),
+                ),
+            );
+            Err("write collector script through PTY timed out".to_string())
+        }
+    }
+}
+
 #[cfg(test)]
 mod metrics_tests {
     use super::{
         append_metrics_stderr_tail, interactive_gateway_menu_detected, metrics_identity_field,
-        metrics_stdout_preview, target_identity_is_valid,
+        metrics_stdout_preview, target_identity_is_valid, target_shell_prompt_detected,
         METRICS_STDERR_TAIL_BYTES,
     };
 
@@ -314,5 +390,22 @@ mod metrics_tests {
             metrics_stdout_preview(menu, 1),
             "<suppressed-after-first-sample>"
         );
+    }
+
+    #[test]
+    fn target_shell_prompt_is_detected_without_logging_remote_prompt() {
+        let prompt = b"Welcome\r\n\x1b]0;root@target:~\x07[root@target ~]# ";
+        let colored_prompt = b"\x1b[01;32mroot@target\x1b[0m:~$\x1b[0m";
+
+        assert!(target_shell_prompt_detected(prompt, 0));
+        assert!(target_shell_prompt_detected(colored_prompt, 0));
+        assert!(!target_shell_prompt_detected(prompt, 1));
+        assert_eq!(metrics_stdout_preview(prompt, 0), "<target-shell-prompt>");
+    }
+
+    #[test]
+    fn unrelated_output_is_not_treated_as_a_target_shell_prompt() {
+        assert!(!target_shell_prompt_detected(b"No PTY requested.\n", 0));
+        assert!(!target_shell_prompt_detected(b"value #\n", 0));
     }
 }

@@ -251,9 +251,10 @@ if effective_resource_monitoring_enabled(profile) {
             return;
         }
 
-        // PTY mode sends no script bytes through stdin. Encoding the complete
-        // collector in the command keeps the gateway's login-shell matcher
-        // satisfied and avoids TTY line-buffer limits and input echo.
+        // Use an inline command for the normal PTY-exec path. Some KoKo/asset
+        // combinations return an asset shell prompt instead of executing it;
+        // the stream reader below then retries the same script through PTY
+        // stdin, after the prompt proves that the target shell is ready.
         let inline_login_shell_command = if collector_request_pty && windows_command.is_none() {
             script_body.as_deref().map(
                 crate::sessions::system_metrics::build_pty_login_shell_command,
@@ -428,6 +429,7 @@ if effective_resource_monitoring_enabled(profile) {
         let mut stderr_tail = Vec::with_capacity(METRICS_STDERR_TAIL_BYTES);
         let mut collector_exit_code = None;
         let mut remote_terminal_event = "none";
+        let mut pty_fallback_sent = false;
         let close_reason = 'collector: loop {
             tokio::select! {
                 biased;
@@ -446,10 +448,17 @@ if effective_resource_monitoring_enabled(profile) {
                                 "metrics",
                                 &metrics_tid,
                                 format!(
-                                    "collector idle timeout timeout_secs={} samples={} buffer_bytes={}",
+                                    "collector idle timeout timeout_secs={} samples={} buffer_bytes={} stdout_bytes={} stdout_tail={} stderr_bytes={} stderr_tail={} transport={} pty_fallback_sent={} elapsed_ms={}",
                                     metrics_idle_timeout.as_secs(),
                                     sample_count,
                                     buffer.len(),
+                                    stdout_bytes,
+                                    metrics_stdout_preview(&stdout_tail, sample_count),
+                                    stderr_bytes,
+                                    metrics_stderr_preview(&stderr_tail),
+                                    collector_command_mode,
+                                    pty_fallback_sent,
+                                    collector_started_at.elapsed().as_millis(),
                                 ),
                             );
                             disable_resource_monitoring_capability(
@@ -487,6 +496,44 @@ if effective_resource_monitoring_enabled(profile) {
                                     .await;
                                 }
                                 break 'collector "interactive-gateway-menu";
+                            }
+                            if !pty_fallback_sent
+                                && collector_request_pty
+                                && script_body.is_some()
+                                && target_shell_prompt_detected(&stdout_tail, sample_count)
+                            {
+                                pty_fallback_sent = true;
+                                remote_terminal_event = "target-shell-prompt-fallback";
+                                let script = script_body
+                                    .as_deref()
+                                    .expect("script_body checked before PTY fallback");
+                                crate::services::logging::session(
+                                    &metrics_app,
+                                    "WARN",
+                                    "metrics",
+                                    &metrics_tid,
+                                    format!(
+                                        "target shell prompt received before first metrics sample; retrying collector through PTY stdin flow_role=target fallback_mode=pty-shell-stdin script_bytes={} stdout_bytes={} route_hint={route_hint}",
+                                        script.len(),
+                                        stdout_bytes,
+                                    ),
+                                );
+                                if let Err(error) = send_metrics_pty_fallback(
+                                    &mut channel,
+                                    &metrics_app,
+                                    &metrics_tid,
+                                    script,
+                                )
+                                .await
+                                {
+                                    disable_resource_monitoring_capability(
+                                        &metrics_app,
+                                        &metrics_tid,
+                                        error,
+                                    )
+                                    .await;
+                                    break 'collector "pty-fallback-write-error";
+                                }
                             }
                             buffer.extend_from_slice(data.as_ref());
                             // Drain all complete blocks from the buffer.
@@ -908,7 +955,7 @@ if effective_resource_monitoring_enabled(profile) {
             "metrics",
             &metrics_tid,
             format!(
-                "collector stopped flow_role=target reason={close_reason} remote_terminal_event={remote_terminal_event} exit_code={} samples={} malformed_samples={} oversized_samples={} dropped_buffer_bytes={} stdout_bytes={} stdout_tail={} stderr_bytes={} stderr_tail={} transport={}",
+                "collector stopped flow_role=target reason={close_reason} remote_terminal_event={remote_terminal_event} exit_code={} samples={} malformed_samples={} oversized_samples={} dropped_buffer_bytes={} stdout_bytes={} stdout_tail={} stderr_bytes={} stderr_tail={} transport={} pty_fallback_sent={}",
                 metrics_exit_status_label(collector_exit_code),
                 sample_count,
                 malformed_block_count,
@@ -919,6 +966,7 @@ if effective_resource_monitoring_enabled(profile) {
                 stderr_bytes,
                 metrics_stderr_preview(&stderr_tail),
                 collector_command_mode,
+                pty_fallback_sent,
             ),
         );
     });
