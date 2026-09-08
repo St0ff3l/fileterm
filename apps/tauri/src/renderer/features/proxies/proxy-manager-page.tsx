@@ -288,7 +288,7 @@ export function ProxyManagerPage({
               <span>{t.name}</span>
               <span>{t.host}</span>
               <span>{t.port}</span>
-              <span>{t.proxyUserLabel}</span>
+              <span>{t.proxyAuthStatus}</span>
               <span>{t.proxyType}</span>
               <span>{t.proxyBoundConnections}</span>
               <span>{t.actions}</span>
@@ -466,15 +466,17 @@ function ManagerRow({
   const name = entry.item.name
   let endpoint = '--'
   let portOrSetting = '--'
-  let identity = '--'
-  let typeLabel = 'SSH TUNNEL'
+  let authConfigured = false
+  let typeLabel = t.sshTunnelTypeShort
+  let typeTitle = t.sshTunnelProfiles
   let typeClass = 'ssh'
   let boundNames: string[] = []
   if (entry.kind === 'proxy') {
     endpoint = `${entry.item.host}:${entry.item.port}`
     portOrSetting = String(entry.item.port)
-    identity = entry.item.username || '--'
-    typeLabel = entry.item.type === 'http' ? 'HTTP CONNECT' : 'SOCKS5'
+    authConfigured = Boolean(entry.item.username || entry.item.hasPassword)
+    typeLabel = entry.item.type === 'http' ? t.proxyTypeHttpConnectShort : t.proxyTypeSocks5Short
+    typeTitle = entry.item.type === 'http' ? t.proxyProtocolHttpConnect : t.proxyProtocolSocks5
     typeClass = entry.item.type === 'http' ? 'http-connect' : 'socks5'
     boundNames = entry.item.boundConnectionNames ?? []
   } else {
@@ -483,8 +485,8 @@ function ManagerRow({
         ? `${t.sshTunnelProfiles} · ${entry.item.forwards?.length ?? 0} ${t.tunnelForwardRules}`
         : (entry.item.scriptUrl ?? '--')
     portOrSetting = entry.item.type === 'http' ? `${entry.item.timeoutSeconds ?? 30}s` : '--'
-    identity = entry.item.type === 'http' && entry.item.hasToken ? t.httpTunnelToken : '--'
-    typeLabel = entry.item.type === 'http' ? 'HTTP TUNNEL' : 'SSH TUNNEL'
+    typeLabel = entry.item.type === 'http' ? t.httpTunnelTypeShort : t.sshTunnelTypeShort
+    typeTitle = entry.item.type === 'http' ? t.httpTunnels : t.sshTunnelProfiles
     typeClass = entry.item.type === 'http' ? 'http-tunnel' : 'ssh'
     boundNames = entry.item.boundConnectionNames ?? []
   }
@@ -503,8 +505,23 @@ function ManagerRow({
         {endpoint}
       </span>
       <span>{portOrSetting}</span>
-      <span>{identity}</span>
-      <span className={`manager-type-badge is-${typeClass}`}>{typeLabel}</span>
+      <span
+        aria-label={authConfigured ? t.proxyAuthConfigured : t.proxyAuthNotConfigured}
+        className={`proxy-auth-status ${authConfigured ? 'is-configured' : ''}`}
+        title={authConfigured ? t.proxyAuthConfigured : t.proxyAuthNotConfigured}
+      >
+        {authConfigured ? (
+          <>
+            <AppIcon name="lock" size={12} />
+            <span>{t.proxyAuthConfigured}</span>
+          </>
+        ) : (
+          <span aria-hidden="true">--</span>
+        )}
+      </span>
+      <span className={`manager-type-badge is-${typeClass}`} title={typeTitle}>
+        {typeLabel}
+      </span>
       <span title={boundNames.join(', ')}>{boundNames.length > 0 ? `${boundNames.length} 个连接` : '--'}</span>
       <span className="manager-actions">
         {isProxy ? (

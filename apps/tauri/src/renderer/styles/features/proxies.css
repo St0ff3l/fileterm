@@ -11,6 +11,18 @@
   border-radius: 0;
 }
 
+.proxy-manager-table .manager-head,
+.proxy-manager-table .manager-row {
+  grid-template-columns:
+    minmax(0, 1.25fr)
+    minmax(0, 1.25fr)
+    56px
+    72px
+    minmax(72px, 0.62fr)
+    minmax(0, 0.85fr)
+    74px;
+}
+
 .connection-manager-title .proxy-manager-title-icon {
   flex: 0 0 auto;
   color: var(--accent-highlight);
@@ -145,6 +157,32 @@
 
 .manager-type-badge.is-http-tunnel {
   color: var(--status-warning);
+}
+
+.proxy-manager-table .manager-type-badge {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.proxy-auth-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.proxy-auth-status.is-configured {
+  color: var(--status-success);
+}
+
+.proxy-auth-status .app-icon {
+  flex: 0 0 auto;
 }
 
 .proxy-manager-endpoint {
@@ -426,6 +464,6 @@
 @media (max-width: 900px) {
   .proxy-manager-table .manager-head,
   .proxy-manager-table .manager-row {
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr) 52px 68px 86px 68px 74px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.3fr) 52px 68px 80px 68px 74px;
   }
 }
