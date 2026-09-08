@@ -22,6 +22,7 @@ import { PortableUpdateDialog } from '../common/portable-update-dialog'
 import { OverviewPage } from './overview-page'
 import { QuickLinksPage } from './quick-links-page'
 import { ConnectionManagerModal } from '../connections/connection-manager-modal'
+import { ProxyManagerPage, type ProxyManagerStats } from '../proxies/proxy-manager-page'
 import { CommandManagerModal } from '../commands/command-manager-modal'
 import { SshKeyManagerPage } from '../ssh-keys/ssh-key-manager-page'
 import { SettingsModal } from '../settings/settings-modal'
@@ -132,8 +133,9 @@ export function HomeWorkspace({
   const [activeTab, setActiveTab] = useState<
     | 'overview'
     | 'quick-links'
-    | 'command-manager'
     | 'connection-manager'
+    | 'proxy-manager'
+    | 'command-manager'
     | 'ssh-key-manager'
     | 'background-sessions'
     | 'settings'
@@ -144,16 +146,27 @@ export function HomeWorkspace({
   const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
   const [activeSshKeyFolderName, setActiveSshKeyFolderName] = useState(t.allKeys)
   const [sshKeyStats, setSshKeyStats] = useState({ keyCount: 0, folderCount: 0 })
+  const [activeProxyFilterLabel, setActiveProxyFilterLabel] = useState(t.allProxiesAndTunnels)
+  const [proxyStats, setProxyStats] = useState<ProxyManagerStats>({
+    totalCount: 0,
+    proxyCount: 0,
+    tunnelCount: 0,
+    socks5Count: 0,
+    httpProxyCount: 0,
+    sshTunnelCount: 0,
+    httpTunnelCount: 0
+  })
 
   // 侧栏页签的纵向顺序,用于判断切换方向(目标更靠下=向下飞入,更靠上=向上飞入)
   const tabOrder: Record<string, number> = {
     overview: 0,
     'connection-manager': 1,
-    'command-manager': 2,
-    'ssh-key-manager': 3,
-    'background-sessions': 4,
-    settings: 5,
-    'quick-links': 6
+    'proxy-manager': 2,
+    'command-manager': 3,
+    'ssh-key-manager': 4,
+    'background-sessions': 5,
+    settings: 6,
+    'quick-links': 7
   }
   const selectTab = (tab: typeof activeTab) => {
     if (tab === activeTab) return
@@ -282,6 +295,16 @@ export function HomeWorkspace({
           >
             <span className="material-symbols-outlined">settings_ethernet</span>
             <span>{t.connectionManager}</span>
+          </button>
+          <button
+            className={`sidebar-nav-link ${activeTab === 'proxy-manager' ? 'active' : ''}`}
+            onClick={() => selectTab('proxy-manager')}
+            aria-label={t.proxyManager}
+            title={t.proxyManager}
+            type="button"
+          >
+            <AppIcon name="shield" size={20} />
+            <span>{t.proxyManager}</span>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'command-manager' ? 'active' : ''}`}
@@ -420,6 +443,11 @@ export function HomeWorkspace({
               />
             </div>
           )}
+          {activeTab === 'proxy-manager' && (
+            <div key="proxy-manager" className="page-transition" data-nav-direction={navDirection}>
+              <ProxyManagerPage onStatsChange={setProxyStats} onActiveFilterChange={setActiveProxyFilterLabel} />
+            </div>
+          )}
           {activeTab === 'command-manager' && (
             <div key="command-manager" className="page-transition" data-nav-direction={navDirection}>
               <CommandManagerModal
@@ -495,6 +523,28 @@ export function HomeWorkspace({
                   <>
                     <span className="footer-meta-separator">|</span>
                     <span>{activeConnectionFolderName}</span>
+                  </>
+                )}
+              </>
+            )}
+            {activeTab === 'proxy-manager' && (
+              <>
+                <span className="footer-meta-separator">|</span>
+                <span>
+                  {proxyStats.totalCount} {t.allProxiesAndTunnels}
+                </span>
+                <span className="footer-meta-separator">|</span>
+                <span>
+                  {proxyStats.proxyCount} {t.proxyType}
+                </span>
+                <span className="footer-meta-separator">|</span>
+                <span>
+                  {proxyStats.tunnelCount} {t.tunnelProfileType}
+                </span>
+                {activeProxyFilterLabel && (
+                  <>
+                    <span className="footer-meta-separator">|</span>
+                    <span>{activeProxyFilterLabel}</span>
                   </>
                 )}
               </>

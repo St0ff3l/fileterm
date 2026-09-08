@@ -73,6 +73,8 @@ include!("terminal_commands.rs");
 include!("remote_file_commands.rs");
 include!("transfer_commands.rs");
 include!("tunnel_commands.rs");
+include!("tunnel_profile_commands.rs");
+include!("proxy_commands.rs");
 include!("interaction_commands.rs");
 include!("profile_commands.rs");
 include!("tests.rs");

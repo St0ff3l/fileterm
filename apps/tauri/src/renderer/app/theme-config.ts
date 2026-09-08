@@ -81,6 +81,7 @@ function resolveCompactUiVariables(
 
   const sidebar = isCodex ? surfaceSecondary : isLight ? surfaceElevated : '#242424'
   const card = surfaceSecondary
+  const section = isCodex ? (isLight ? '#f6f6f8' : '#1d1d20') : isLight ? '#f5f5f7' : '#242424'
   const elevated = surfaceElevated
   const input = isCodex ? surfaceElevated : isLight ? surfaceElevated : '#1a1a1a'
   const hover =
@@ -173,6 +174,8 @@ function resolveCompactUiVariables(
     '--surface-panel': card,
     '--surface-raised': elevated,
     '--surface-secondary': surfaceSecondary,
+    '--surface-section': section,
+    '--ref-surface-section': section,
     '--surface-elevated': surfaceElevated,
     '--ref-surface-context-menu': contextMenuSurface,
     '--surface-hover': alpha(ink, isLight ? 5 : 7),

@@ -368,21 +368,22 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--border-light) 80%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-hover) 62%, transparent);
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--status-info) 22%, var(--border-subtle));
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--status-info) 7%, var(--surface-panel));
   color: var(--text-secondary);
 }
 
-.tunnel-intro .material-symbols-outlined {
-  color: var(--primary);
-  font-size: 19px;
+.tunnel-intro__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--status-info);
 }
 .tunnel-intro p {
   margin: 0;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .tunnel-rule-list {
   display: grid;
@@ -411,51 +412,68 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   color: var(--text-main);
 }
 .tunnel-rule-index {
-  color: var(--primary);
+  color: var(--text-muted);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .tunnel-rule-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
-.tunnel-rule-grid label {
-  display: grid;
-  gap: 5px;
-  color: var(--text-muted);
-  .tunnel-rule-grid input,
-  .tunnel-rule-grid .dropdown-select-trigger,
-  .tunnel-rule-grid .ft-select-shell {
-    min-width: 0;
-    height: 36px;
-    padding: 0 10px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm, 4px);
-    background: var(--input-bg, var(--surface-input));
-    color: var(--text-primary);
-    box-sizing: border-box;
-  }
 
+.tunnel-rule-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.tunnel-rule-grid input,
+.tunnel-rule-grid .dropdown-select-trigger,
+.tunnel-rule-grid .ft-select-shell {
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg, var(--surface-input));
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.tunnel-target-host {
+  grid-column: span 2;
+}
+
+.tunnel-socks-note {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  min-height: 36px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-left: 2px solid var(--border-subtle);
+}
+
+.tunnel-socks-note .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.tunnel-autostart {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   color: var(--text-secondary);
   font-size: 12px;
-}
-.tunnel-socks-note {
-  grid-column: span 2;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 9px;
-  color: var(--text-muted);
-  font-size: 12px;
-  border-left: 2px solid var(--primary);
-}
-.tunnel-socks-note .material-symbols-outlined {
-  font-size: 16px;
 }
 .tunnel-remove-button {
   display: grid;
@@ -482,18 +500,25 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   gap: 6px;
   min-height: 36px;
   height: 36px;
-  padding: 0 12px;
-  border: 1px dashed color-mix(in srgb, var(--primary) 65%, var(--border-light));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--primary) 7%, transparent);
-  color: var(--primary);
+  padding: 0 14px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);
-  font-weight: var(--button-font-weight);
+  font-weight: 500;
   line-height: var(--button-line-height);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 .tunnel-add-button:hover {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: var(--border-light);
+  background: var(--bg-active);
+  color: var(--text-main);
 }
 .tunnel-add-button .material-symbols-outlined {
   font-size: 16px;

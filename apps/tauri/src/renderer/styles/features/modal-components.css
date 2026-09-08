@@ -2352,9 +2352,16 @@
   gap: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--bg-card);
+  background: var(--surface-section);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.theme-advanced-section:hover {
+  border-color: color-mix(in srgb, var(--border-subtle) 70%, var(--border-default));
 }
 
 .theme-config-section-summary {
@@ -2364,21 +2371,23 @@
   gap: 12px;
   min-height: 46px;
   padding: 10px 14px;
-  color: var(--text-main);
-  background: var(--bg-hover);
+  color: var(--text-primary);
+  background: transparent;
   border-bottom: 1px solid transparent;
   cursor: pointer;
   list-style: none;
   user-select: none;
-  transition: background 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .theme-config-section-summary:hover {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--surface-hover) 55%, transparent);
 }
 
 .theme-advanced-section[open] > .theme-config-section-summary {
-  border-bottom-color: var(--border-light);
+  border-bottom-color: var(--border-subtle);
 }
 
 .theme-config-section-summary::-webkit-details-marker {
@@ -2386,6 +2395,9 @@
 }
 
 .theme-config-section-summary::before {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 14px;
   margin-right: 2px;
   color: var(--text-muted);
@@ -2393,7 +2405,13 @@
   font-size: 18px;
   line-height: 1;
   transform: rotate(0deg);
-  transition: transform 120ms ease;
+  transition:
+    transform 120ms ease,
+    color 120ms ease;
+}
+
+.theme-config-section-summary:hover::before {
+  color: var(--text-primary);
 }
 
 .theme-advanced-section[open] > .theme-config-section-summary::before {
@@ -2411,7 +2429,7 @@
 .theme-config-section-summary-copy strong {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .theme-config-section-summary-copy span {
@@ -2429,7 +2447,7 @@
   font-weight: 600;
   padding: 2px 6px;
   background: var(--surface-inset);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
 }
 

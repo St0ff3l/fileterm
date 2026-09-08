@@ -57,6 +57,13 @@ import type {
   CreateAiContextPreviewInput,
   DeleteAiMessageInput,
   ListAiModelsInput,
+  ProxyProfile,
+  CreateProxyProfileInput,
+  UpdateProxyProfileInput,
+  TunnelProfile,
+  TunnelProfileType,
+  CreateTunnelProfileInput,
+  UpdateTunnelProfileInput,
   CreateProfileInput,
   ImportedFont,
   RenameAiConversationInput,
@@ -483,6 +490,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<void>('app_open_window', {
         input: { kind: 'command-form', mode, commandId, folderId, command }
       }),
+    openProxyFormWindow: (mode: 'create' | 'edit', profileId?: string, proxyType?: 'socks5' | 'http') =>
+      invoke<void>('app_open_window', {
+        input: { kind: 'proxy-form', mode, profileId, encoding: proxyType }
+      }),
+    openTunnelFormWindow: (mode: 'create' | 'edit', profileId?: string, tunnelType?: TunnelProfileType) =>
+      invoke<void>('app_open_window', {
+        input: { kind: 'tunnel-form', mode, profileId, encoding: tunnelType }
+      }),
     openFileEditorWindow: (input: {
       source: 'local' | 'remote'
       path: string
@@ -619,6 +634,18 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     updateSshKeyNote: (keyId: string, note: string) =>
       invoke<SshKeyMetadata>('app_update_ssh_key_note', { keyId, note }),
     deleteSshKey: (keyId: string) => invoke<void>('app_delete_ssh_key', { keyId }),
+    listProxyProfiles: () => invoke<ProxyProfile[]>('app_list_proxy_profiles'),
+    saveProxyProfile: (input: CreateProxyProfileInput | UpdateProxyProfileInput) =>
+      invoke<ProxyProfile>('app_save_proxy_profile', { input }),
+    deleteProxyProfile: (id: string) => invoke<void>('app_delete_proxy_profile', { id }),
+    testProxyProfile: (input: CreateProxyProfileInput | { id: string }) =>
+      invoke<{ success: boolean; latencyMs?: number; error?: string }>('app_test_proxy_profile', { input }),
+    onProxiesChanged: (listener: () => void) => subscribe('proxies:changed', listener),
+    listTunnelProfiles: () => invoke<TunnelProfile[]>('app_list_tunnel_profiles'),
+    saveTunnelProfile: (input: CreateTunnelProfileInput | UpdateTunnelProfileInput) =>
+      invoke<TunnelProfile>('app_save_tunnel_profile', { input }),
+    deleteTunnelProfile: (id: string) => invoke<void>('app_delete_tunnel_profile', { id }),
+    onTunnelsChanged: (listener: () => void) => subscribe('tunnels:changed', listener),
     previewConnectionImport: (source: 'files' | 'folder' = 'files') =>
       invoke<ConnectionImportPlan | null>('app_preview_connection_import', { source }),
     commitConnectionJsonImport: (planId: string, options: ConnectionImportOptions) =>

@@ -213,6 +213,8 @@ fn window_label(input: &OpenWindowInput) -> String {
         "command-manager" => "command-manager".to_string(),
         "connection-form" => "connection-form".to_string(),
         "command-form" => "command-form".to_string(),
+        "proxy-form" => "proxy-form".to_string(),
+        "tunnel-form" => "tunnel-form".to_string(),
         "file-editor" => {
             let key = format!(
                 "{}:{}:{}",

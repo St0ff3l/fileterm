@@ -1,5 +1,6 @@
 import type { SshForwardRule } from '@fileterm/core'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/app-icon'
 import { DropdownSelect } from '../common/dropdown-select'
 import { SelectionControl } from '../common/selection-control'
 
@@ -31,7 +32,7 @@ export function TunnelRuleEditor({
           title={t.deleteTunnel}
           onClick={onRemove}
         >
-          <span className="material-symbols-outlined">delete</span>
+          <AppIcon name="trash" size={15} />
         </button>
       </header>
       <div className="tunnel-rule-grid">
@@ -66,7 +67,7 @@ export function TunnelRuleEditor({
         </label>
         {!isDynamic ? (
           <>
-            <label>
+            <label className="tunnel-target-host">
               {t.tunnelTargetHost}
               <input value={rule.targetHost ?? ''} onChange={(event) => onChange({ targetHost: event.target.value })} />
             </label>
@@ -81,7 +82,7 @@ export function TunnelRuleEditor({
           </>
         ) : (
           <div className="tunnel-socks-note">
-            <span className="material-symbols-outlined">vpn_key</span>
+            <AppIcon name="key" size={15} />
             {t.tunnelClientTargetHint}
           </div>
         )}

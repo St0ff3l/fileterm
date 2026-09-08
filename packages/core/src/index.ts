@@ -131,6 +131,39 @@ export interface ProxyConfig {
   password?: string
 }
 
+export interface ProxyProfile {
+  id: string
+  name: string
+  type: 'socks5' | 'http'
+  host: string
+  port: number
+  username?: string
+  hasPassword?: boolean
+  usageCount?: number
+  boundConnectionNames?: string[]
+  createdAt?: number
+  updatedAt?: number
+}
+
+export interface CreateProxyProfileInput {
+  name: string
+  type: 'socks5' | 'http'
+  host: string
+  port: number
+  username?: string
+  password?: string
+}
+
+export interface UpdateProxyProfileInput {
+  id: string
+  name?: string
+  type?: 'socks5' | 'http'
+  host?: string
+  port?: number
+  username?: string
+  password?: string
+}
+
 export interface SshForwardRule {
   id: string
   name?: string
@@ -140,6 +173,45 @@ export interface SshForwardRule {
   targetHost?: string
   targetPort?: number
   autoStart: boolean
+}
+
+/** A reusable tunnel definition. Proxy protocols intentionally do not live here. */
+export type TunnelProfileType = 'ssh' | 'http'
+
+export interface TunnelProfile {
+  id: string
+  name: string
+  type: TunnelProfileType
+  /** SSH local/remote/dynamic forwarding rules. */
+  forwards?: SshForwardRule[]
+  /** HTTP tunnel relay script endpoint. */
+  scriptUrl?: string
+  timeoutSeconds?: number
+  hasToken?: boolean
+  usageCount?: number
+  boundConnectionNames?: string[]
+  createdAt?: number
+  updatedAt?: number
+}
+
+export interface CreateTunnelProfileInput {
+  name: string
+  type: TunnelProfileType
+  forwards?: SshForwardRule[]
+  scriptUrl?: string
+  timeoutSeconds?: number
+  token?: string
+}
+
+export interface UpdateTunnelProfileInput {
+  id: string
+  name?: string
+  type?: TunnelProfileType
+  forwards?: SshForwardRule[]
+  scriptUrl?: string
+  timeoutSeconds?: number
+  /** Undefined keeps the existing token; null clears it. */
+  token?: string | null
 }
 
 /** A forward rule plus its state in one live SSH workspace tab. */
@@ -355,6 +427,8 @@ export interface SshProfile extends NetworkProfile {
   reconnectMode?: 'none' | 'enter' | 'auto'
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
+  proxyProfileId?: string
+  tunnelProfileId?: string
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
@@ -371,6 +445,7 @@ export interface FtpProfile extends NetworkProfile {
   securityMode?: FtpSecurityMode
   transferMode?: FtpTransferMode
   proxy?: ProxyConfig
+  proxyProfileId?: string
   /** Optional SHA-256 pin for the FTPS server certificate. CA validation remains required. */
   certificateFingerprint?: string
   remotePath: string
@@ -387,6 +462,7 @@ export interface TelnetProfile extends NetworkProfile {
   /** Optional command lines sent after Telnet negotiation completes. */
   loginScript?: string
   proxy?: ProxyConfig
+  proxyProfileId?: string
 }
 
 export interface SerialProfile extends BaseProfile {
@@ -1173,6 +1249,8 @@ export interface CreateProfileInput {
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
   proxyPassword?: string
+  proxyProfileId?: string
+  tunnelProfileId?: string
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
@@ -1457,7 +1535,8 @@ export interface CommandTemplateInput {
 
 export type ConnectionFormMode = 'create' | 'edit'
 
-export type AppWindowMode = 'main' | 'connection-manager' | 'connection-form' | 'command-manager' | 'command-form'
+export type AppWindowMode =
+  'main' | 'connection-manager' | 'connection-form' | 'command-manager' | 'command-form' | 'proxy-form' | 'tunnel-form'
 
 export interface CommandExecutionResult {
   renderedCommand: string
@@ -2501,6 +2580,19 @@ export interface FileTermDesktopApi {
   updateSshKeyNote(keyId: string, note: string): Promise<SshKeyMetadata>
   deleteSshKey(keyId: string): Promise<void>
   onSshKeysChanged(listener: (keys: SshKeyMetadata[]) => void): () => void
+  listProxyProfiles(): Promise<ProxyProfile[]>
+  saveProxyProfile(input: CreateProxyProfileInput | UpdateProxyProfileInput): Promise<ProxyProfile>
+  deleteProxyProfile(id: string): Promise<void>
+  testProxyProfile(
+    input: CreateProxyProfileInput | { id: string }
+  ): Promise<{ success: boolean; latencyMs?: number; error?: string }>
+  openProxyFormWindow?(mode: 'create' | 'edit', profileId?: string, proxyType?: 'socks5' | 'http'): Promise<void>
+  onProxiesChanged?(listener: () => void): () => void
+  listTunnelProfiles(): Promise<TunnelProfile[]>
+  saveTunnelProfile(input: CreateTunnelProfileInput | UpdateTunnelProfileInput): Promise<TunnelProfile>
+  deleteTunnelProfile(id: string): Promise<void>
+  openTunnelFormWindow?(mode: 'create' | 'edit', profileId?: string, tunnelType?: TunnelProfileType): Promise<void>
+  onTunnelsChanged?(listener: () => void): () => void
   previewConnectionImport(source?: 'files' | 'folder'): Promise<ConnectionImportPlan | null>
   commitConnectionJsonImport(planId: string, options: ConnectionImportOptions): Promise<ConnectionImportResult>
   exportConnections(format: ConnectionExportFormat): Promise<boolean>
