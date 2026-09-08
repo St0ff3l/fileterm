@@ -698,8 +698,32 @@
   min-height: 22px;
   height: 22px;
   padding: 0 6px;
-  font-size: 10px;
+  font-size: 9px;
   gap: 4px;
+}
+
+/* The compact sidebar selector is a passive status control. Keep its
+   keyboard/open state visible through the normal surface and border without
+   adding the large blue focus ring used by form inputs. */
+.system-sidebar-layout .network-select.dropdown-select-trigger:focus-visible,
+.system-sidebar-layout .network-select.dropdown-select-trigger[aria-expanded='true'] {
+  border-color: var(--border-light);
+  box-shadow: none;
+  background-color: var(--surface-hover);
+}
+
+.system-sidebar-layout .network-select.ft-select-shell {
+  font-size: 9px;
+}
+
+.system-sidebar-layout .network-select.ft-select-shell:focus-within {
+  border-color: var(--border-light);
+  box-shadow: none;
+  background-color: var(--surface-hover);
+}
+
+.system-sidebar-layout .network-select.ft-select-shell .ft-select-shell__value {
+  font-size: 9px;
 }
 
 .system-sidebar-layout .network-select.dropdown-select-trigger .dropdown-select-arrow {
