@@ -1,5 +1,6 @@
 import type { ConnectionFormMode, CreateProfileInput, FtpSecurityMode, SshConnectionDefaults } from '@fileterm/core'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/app-icon'
 import { DropdownSelect } from '../common/dropdown-select'
 import { ConnectionSecretField } from './connection-secret-field'
 import { SshPrivateKeyField } from './ssh-private-key-field'
@@ -28,6 +29,7 @@ export function ConnectionSshAuthSection({
 }) {
   const isKeyboardInteractiveAuth = form.authType === 'keyboard-interactive' || form.authType === 'jumpserver-koko-mfa'
   const isPasswordAuth = form.authType === 'password' || form.authType === 'kubernetes'
+  const hasPasswordField = form.type === 'ftp' || isPasswordAuth || isKeyboardInteractiveAuth
 
   return (
     <fieldset className="ssh-fieldset">
@@ -51,15 +53,21 @@ export function ConnectionSshAuthSection({
           </label>
         ) : null}
         {form.type !== 'telnet' && form.type !== 'serial' ? (
-          <label>
-            {t.username}:
+          <div className={`ssh-form-field${hasPasswordField ? '' : ' span-2'}`}>
+            <div className="ssh-form-field__header">
+              <label htmlFor="connection-username">{t.username}:</label>
+            </div>
             <input
+              id="connection-username"
+              autoComplete="username"
+              spellCheck={false}
+              placeholder={t.usernamePlaceholder}
               value={form.username}
               onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
             />
-          </label>
+          </div>
         ) : null}
-        {form.type === 'ftp' || isPasswordAuth || isKeyboardInteractiveAuth ? (
+        {hasPasswordField ? (
           <ConnectionSecretField
             id="connection-password"
             label={t.password}
@@ -88,9 +96,39 @@ export function ConnectionSshAuthSection({
         ) : null}
         {form.type === 'ssh' && (isKeyboardInteractiveAuth || form.authType === 'kubernetes') ? (
           <div className="span-2 ssh-auth-hint">
-            {isKeyboardInteractiveAuth ? <div>{t.keyboardInteractiveHint}</div> : null}
-            {form.authType === 'jumpserver-koko-mfa' ? <div>{t.jumpServerInteractiveGatewayHint}</div> : null}
-            {form.authType === 'kubernetes' ? <div>{t.kubernetesSshAuthHint}</div> : null}
+            <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
+            <div className="ssh-auth-hint__content">
+              {isKeyboardInteractiveAuth ? (
+                <div className="ssh-auth-hint__item">{t.keyboardInteractiveHint}</div>
+              ) : null}
+              {form.authType === 'jumpserver-koko-mfa' ? (
+                <div className="ssh-auth-hint__item">
+                  <div className="ssh-auth-hint__line">
+                    <span className="ssh-auth-hint__lead">{t.jumpServerRuleTitle}</span>
+                    <span>{t.jumpServerHostDesc} </span>
+                    <code className="ssh-auth-hint__code">{t.jumpServerUsernameFormat}</code>
+                    <span className="ssh-auth-hint__subtle"> {t.jumpServerSuffixNote}</span>
+                  </div>
+                  <div className="ssh-auth-hint__example">
+                    <span className="ssh-auth-hint__example-tag">{t.jumpServerExamplePrefix}</span>
+                    <code className="ssh-auth-hint__code">{t.jumpServerExampleHost}</code>
+                    <span className="ssh-auth-hint__example-sep">;</span>
+                    <code className="ssh-auth-hint__code">{t.jumpServerExampleUser}</code>
+                  </div>
+                </div>
+              ) : null}
+              {form.authType === 'kubernetes' ? (
+                <div className="ssh-auth-hint__item">
+                  <div className="ssh-auth-hint__line">
+                    <span className="ssh-auth-hint__lead">{t.kubernetesModeLead}</span>
+                    <span>{t.kubernetesRulePrefix} </span>
+                    <code className="ssh-auth-hint__code">{t.kubernetesCommandFormat}</code>
+                    <span> {t.kubernetesRuleSuffix}</span>
+                  </div>
+                  <div className="ssh-auth-hint__subtle">{t.kubernetesAuxiliaryNote}</div>
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : form.type === 'ftp' ? (
           <>
@@ -148,7 +186,12 @@ export function ConnectionSshAuthSection({
               />
               <span className="ssh-field-hint">{t.ftpTransferModeHint}</span>
             </label>
-            <div className="span-2 ssh-auth-hint">{t.ftpAuthHint}</div>
+            <div className="span-2 ssh-auth-hint">
+              <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
+              <div className="ssh-auth-hint__content">
+                <div className="ssh-auth-hint__item">{t.ftpAuthHint}</div>
+              </div>
+            </div>
           </>
         ) : null}
         {form.type === 'ssh' && !isNetworkDevice ? (

@@ -1343,35 +1343,121 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 }
 
 .ssh-auth-hint {
-  padding: 12px 14px;
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  background: var(--bg-hover);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--status-info) 22%, var(--border-subtle));
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--status-info) 7%, var(--surface-panel));
+  color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.55;
+}
+
+.ssh-auth-hint__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--status-info);
+}
+
+.ssh-auth-hint__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ssh-auth-hint__item {
+  min-width: 0;
   color: var(--text-secondary);
 }
 
+.ssh-auth-hint__line {
+  min-width: 0;
+}
+
+.ssh-auth-hint__lead {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 4px;
+}
+
+.ssh-auth-hint__subtle {
+  color: var(--text-muted);
+}
+
+.ssh-auth-hint code,
+.ssh-auth-hint__code {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 3px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-card));
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.ssh-auth-hint__example {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--surface-card) 65%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--status-info) 25%, var(--border-subtle));
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.ssh-auth-hint__example-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-info);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.ssh-auth-hint__example-sep {
+  color: var(--text-muted);
+}
+
+.ssh-form-field,
 .ssh-secret-field {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
+.ssh-form-field.span-2,
+.ssh-secret-field.span-2 {
+  grid-column: 1 / -1;
+}
+
+.ssh-form-field__header,
 .ssh-secret-field__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+  min-height: 22px;
 }
 
+.ssh-form-field__header > label,
 .ssh-secret-field__header > label {
   display: block;
   min-width: 0;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.2;
 }
 
 .ssh-secret-field__optional {
@@ -1424,20 +1510,22 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 
 .ssh-secret-field__undo {
   padding: 2px 6px;
-  color: var(--text-main);
-  background: var(--bg-hover);
+  color: var(--text-primary);
+  background: var(--surface-hover);
   font-size: 10px;
 }
 
 .ssh-secret-field__undo:hover {
-  border-color: var(--focus-outline);
-  color: var(--accent-highlight);
+  border-color: var(--border-focus);
+  color: var(--action-primary-bg);
 }
 
+.ssh-form-field input::placeholder,
 .ssh-secret-field input::placeholder {
   color: var(--text-muted);
 }
 
+.ssh-form-field input:disabled,
 .ssh-secret-field input:disabled {
   color: var(--text-muted);
   cursor: not-allowed;

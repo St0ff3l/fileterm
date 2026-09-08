@@ -52,6 +52,7 @@ export type AppIconName =
   | 'drag-handle'
   | 'check'
   | 'play'
+  | 'info'
   | 'close'
 
 export function AppIcon({
@@ -386,6 +387,13 @@ export function AppIcon({
       ) : null}
       {name === 'check' ? <path {...commonProps} d="m3.2 8.2 3.1 3.1 6.5-6.6" /> : null}
       {name === 'play' ? <path {...commonProps} d="M5.5 3.5v9l6.5-4.5z" /> : null}
+      {name === 'info' ? (
+        <>
+          <circle {...commonProps} cx="8" cy="8" r="6" />
+          <path {...commonProps} d="M8 7.2v4" />
+          <path {...commonProps} d="M8 4.8h.01" strokeWidth={2.4} />
+        </>
+      ) : null}
       {name === 'close' ? <path {...commonProps} d="M3.5 3.5l9 9M12.5 3.5l-9 9" /> : null}
     </svg>
   )
