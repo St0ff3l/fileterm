@@ -869,7 +869,7 @@
   line-height: 20px;
 }
 
-.process-row span {
+.process-row > span {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -884,17 +884,19 @@
   text-align: left;
 }
 
-.process-row span:last-child {
+.process-row > span:last-child {
+  justify-content: flex-start;
   padding-right: 0;
+  text-align: left;
 }
 
-.process-row span:nth-child(1),
-.process-row span:nth-child(2) {
+.process-row > span:nth-child(1),
+.process-row > span:nth-child(2) {
   justify-content: center;
   text-align: center;
 }
 
-.process-row span:last-child .metric-hover-detail-text {
+.process-row > span:last-child .metric-hover-detail-text {
   text-align: left;
 }
 
