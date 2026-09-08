@@ -4,6 +4,9 @@
 // module so the split preserves the worker's private state and call graph.
 
 include!("context.rs");
+include!("startup_lifecycle.rs");
+include!("utf8.rs");
+include!("cwd_refresh.rs");
 include!("loop.rs");
 include!("event_loop.rs");
 include!("terminal_output.rs");

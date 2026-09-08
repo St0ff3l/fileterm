@@ -249,17 +249,22 @@ async fn follow_shell_cwd(
             sudo_password.is_some(),
         ),
     );
-    {
+    let previous_remote_path = {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
         let mut sessions = state.sessions.write().await;
         let Some(session) = sessions.get_mut(&tab_id) else {
             return;
         };
-        if session.shell_cwd.as_deref() != Some(cwd.as_str()) || !session.follow_shell_cwd {
+        if session.shell_cwd.as_deref() != Some(cwd.as_str())
+            || !session.follow_shell_cwd
+            || session.file_access_mode != file_access_mode
+            || (file_access_mode == "root" && session.sudo_user != sudo_user)
+        {
             return;
         }
         session.remote_files_loading = true;
-    }
+        session.remote_path.clone()
+    };
     if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
         let _ = app.emit("workspace:snapshot", snapshot);
     }
@@ -300,7 +305,12 @@ async fn follow_shell_cwd(
         return;
     };
     session.remote_files_loading = false;
-    if session.shell_cwd.as_deref() == Some(cwd.as_str()) && session.follow_shell_cwd {
+    if session.shell_cwd.as_deref() == Some(cwd.as_str())
+        && session.follow_shell_cwd
+        && session.remote_path == previous_remote_path
+        && session.file_access_mode == file_access_mode
+        && (file_access_mode != "root" || session.sudo_user == sudo_user)
+    {
         if let Ok((files, resolved_path)) = &listing {
             session.remote_path = resolved_path.clone();
             session.remote_files = files.clone();

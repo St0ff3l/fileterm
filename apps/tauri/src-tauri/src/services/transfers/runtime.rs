@@ -37,15 +37,23 @@ pub async fn list(app: &AppHandle) -> Result<Vec<TransferTask>, AppError> {
 
 async fn persist(app: &AppHandle) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let _write = state.transfer_journal_write.lock().await;
+    let write_guard = state.transfer_journal_write.clone().lock_owned().await;
     let tasks = state.transfers.read().await.clone();
-    write_journal(app, &tasks)
+    let journal_app = app.clone();
+    // Serialization and fsync for large directory journals must not occupy
+    // a Tokio worker also responsible for terminal IO and UI commands.
+    tokio::task::spawn_blocking(move || {
+        let _write = write_guard;
+        write_journal(&journal_app, &tasks)
+    })
+    .await
+    .map_err(|error| AppError::Storage(error.to_string()))?
 }
 
 // Transfer progress belongs to the main workspace window. Keep it separate
 // from workspace snapshots so standalone editors do not rehydrate while a
 // background upload or download advances.
-async fn emit_task(app: &AppHandle, task: TransferTask) {
+async fn emit_task(app: &AppHandle, task: &TransferTask) {
     let _ = app.emit_to(
         EventTarget::webview_window("main"),
         "transfer:update",
@@ -60,11 +68,12 @@ enum PatchDelivery {
     PersistedEvent,
 }
 
-async fn patch_task(
+async fn patch_task_inner(
     app: &AppHandle,
     transfer_id: &str,
     patch: impl FnOnce(&mut TransferTask),
     delivery: PatchDelivery,
+    execution_result: bool,
 ) -> Result<Option<TransferTask>, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
@@ -78,13 +87,19 @@ async fn patch_task(
         };
         patch(task);
         task.updated_at = Some(now_ms());
-        should_publish.then(|| task.clone())
+        should_publish.then(|| {
+            if execution_result {
+                task.clone()
+            } else {
+                task.to_ui_task()
+            }
+        })
     };
     if matches!(delivery, PatchDelivery::PersistedEvent) {
         persist(app).await?;
     }
     if let Some(task) = task.as_ref() {
-        emit_task(app, task.clone()).await;
+        emit_task(app, task).await;
     }
     Ok(task)
 }
@@ -271,4 +286,24 @@ async fn worker_call_with_timeout<T>(
         }
     };
     response.map_err(transfer_error)
+}
+
+// Most patches need only the UI projection. Only starting execution needs
+// the durable manifest; progress updates never clone that collection.
+async fn patch_task(
+    app: &AppHandle,
+    transfer_id: &str,
+    patch: impl FnOnce(&mut TransferTask),
+    delivery: PatchDelivery,
+) -> Result<Option<TransferTask>, AppError> {
+    patch_task_inner(app, transfer_id, patch, delivery, false).await
+}
+
+async fn patch_task_for_execution(
+    app: &AppHandle,
+    transfer_id: &str,
+    patch: impl FnOnce(&mut TransferTask),
+    delivery: PatchDelivery,
+) -> Result<Option<TransferTask>, AppError> {
+    patch_task_inner(app, transfer_id, patch, delivery, true).await
 }

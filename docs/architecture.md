@@ -467,6 +467,10 @@ shell integration
 
 shell 注入按 bash、zsh、fish、POSIX 风格策略选择；探测或注入失败时只降级目录跟随，不影响 SSH、SFTP 和终端输入输出。
 
+主 shell 就绪后立即运行终端事件循环，平台探测、SFTP 初始化和系统指标启动作为并行辅助阶段；终端退出会取消本次连接的后台任务。辅助探测结束时若用户已经开始输入，则跳过初始 shell 注入，避免脚本与用户命令混写。终端 stdout/stderr 分别保留跨 SSH 数据包的未完成 UTF-8 字符，完整字符串才进入 shell 过滤与终端合批。
+
+`loginUser` 来自首次 shell `RemoteUser` 标记，不能直接使用可能包含容器或堡垒机路由信息的 SSH username。真实身份变化继续同步 sudo/su 文件权限，普通登录身份始终使用 SFTP。开启目录跟随时，相同 CWD 的新提示符也刷新文件列表，以反映解压、创建和删除文件；刷新队列只保留一个活动读取和一个最新待处理请求。
+
 ### 7.5 Workspace Tab
 
 ```ts
@@ -567,7 +571,7 @@ SSH/SFTP 和 FTP/FTPS 会在会话建立后上报实际能力，而不是把所�
 - 上传和下载都先写入 `.fileterm-part` 临时文件，校验大小后再替换正式目标。
 - SFTP 与 FTP/FTPS 分别在 controller 内实现 offset 读写和远端收尾，不把协议命令伪统一到 renderer 或 transfer UI。
 - 传输调度使用 `profileId` 作为跨重启身份，不依赖生命周期短暂的 `tabId` 恢复连接；所有中断任务都等待用户手动继续，root 任务继续前还需要恢复 root 授权。
-- 高频字节进度仍只走 `transfer:update`，journal 只在任务创建、状态切换和收尾时更新；恢复 offset 以实际临时文件大小为准。
+- 高频字节进度仍只走 `transfer:update`，UI 投影直接构造且不深拷贝 manifest。目录条目按索引同步内存状态，journal 在任务创建、状态切换、目录检查点和收尾时更新；序列化与 fsync 在 blocking pool 中持有写锁完成，恢复 offset 以实际临时文件大小为准。
 - 普通断线和暂停保留临时文件；只有显式丢弃才清理断点。
 - 本地最终替换采用可回滚的备份重命名。Windows 文件占用导致替换失败时保留 `.fileterm-part`，避免丢失已传数据。
 - 目录任务持久化逐文件 manifest：已完成文件经过目标大小复核后跳过，当前文件按真实 `.fileterm-part` 长度继续。

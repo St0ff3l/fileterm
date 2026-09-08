@@ -81,7 +81,7 @@ let state = startup.state;
             remote_path: existing_remote_path,
             shell_cwd: existing_shell_cwd,
             follow_shell_cwd: exec_channel_enabled && !interactive_gateway,
-            remote_files_loading: false,
+            remote_files_loading: effective_sftp_enabled(profile),
             remote_files: Vec::new(),
             sftp_unavailable_reason: None,
             file_access_mode: "user".to_string(),
@@ -94,10 +94,9 @@ let state = startup.state;
                     .get("sudoPassword")
                     .and_then(Value::as_str)
                     .is_some_and(|password| !password.is_empty()),
-            login_user: profile
-                .get("username")
-                .and_then(Value::as_str)
-                .map(|s| s.to_string()),
+            // SSH routing usernames may identify a container/asset, not a Unix user.
+            // Establish the baseline from the first shell identity marker.
+            login_user: None,
             shell_user: None,
             connected: true,
             system_metrics: None,

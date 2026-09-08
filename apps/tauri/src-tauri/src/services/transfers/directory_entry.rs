@@ -34,7 +34,10 @@ async fn transfer_directory_entry_once(
         stat_local_transfer_file(&entry.source_path)
             .await
             .ok_or_else(|| {
-                transfer_error(format!("上传源文件不存在或无法读取：{}", entry.relative_path))
+                transfer_error(format!(
+                    "上传源文件不存在或无法读取：{}",
+                    entry.relative_path
+                ))
             })?
     } else {
         let stat = worker_call_with_cancel(app, tab_id, cancel, |respond_to, token| {
@@ -46,7 +49,10 @@ async fn transfer_directory_entry_once(
         })
         .await?
         .ok_or_else(|| {
-            transfer_error(format!("下载源文件不存在或无法读取：{}", entry.relative_path))
+            transfer_error(format!(
+                "下载源文件不存在或无法读取：{}",
+                entry.relative_path
+            ))
         })?;
         TransferFileIdentity {
             size: stat.size,
@@ -150,6 +156,7 @@ async fn transfer_directory_entry_once(
         transfer_id,
         manifest,
         DirectoryManifestPatch {
+            changed_entry: Some(index),
             status: "running",
             message: Some(if offset > 0 {
                 format!("{}（从 {offset} bytes 继续）", entry.relative_path)
@@ -181,14 +188,10 @@ async fn transfer_directory_entry_once(
         // FTP 没有类似 SSH MAC 的传输层完整性保证，上传完成后需一次
         // 远端大小比对兜底；SSH 传输层已保证完整性，跳过该往返。
         if session_type == Some("ftp") && upload_plan.upload_needed {
-            let uploaded = stat_remote_transfer_size(
-                app,
-                tab_id,
-                &upload_plan.upload_path,
-                Some(cancel),
-            )
-            .await?
-            .unwrap_or(0);
+            let uploaded =
+                stat_remote_transfer_size(app, tab_id, &upload_plan.upload_path, Some(cancel))
+                    .await?
+                    .unwrap_or(0);
             if uploaded != entry.source_identity.size {
                 return Err(transfer_error(format!(
                     "FTP 传输校验失败：{} 实际 {uploaded} 字节，期望 {}",

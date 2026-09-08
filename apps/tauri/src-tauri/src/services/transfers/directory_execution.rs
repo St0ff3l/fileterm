@@ -69,6 +69,7 @@ struct DirectoryManifestPatch<'a> {
     transferred: u64,
     total: u64,
     delivery: PatchDelivery,
+    changed_entry: Option<usize>,
 }
 
 async fn update_directory_manifest(
@@ -83,14 +84,13 @@ async fn update_directory_manifest(
         transferred,
         total,
         delivery,
+        changed_entry,
     } = patch;
     patch_task(
         app,
         transfer_id,
         |task| {
-            if !matches!(delivery, PatchDelivery::Silent) {
-                task.manifest = Some(manifest.clone());
-            }
+            sync_directory_manifest(&mut task.manifest, manifest, changed_entry);
             task.status = status.to_string();
             task.message = message;
             task.transferred_bytes = Some(transferred);
@@ -191,6 +191,7 @@ async fn run_directory_transfer(
             transfer_id,
             &manifest,
             DirectoryManifestPatch {
+                changed_entry: None,
                 status: "running",
                 message: Some("正在准备目录传输".to_string()),
                 transferred: 0,
@@ -211,11 +212,9 @@ async fn run_directory_transfer(
             let result = if task.direction == "upload" {
                 ensure_remote_directory(app, tab_id, directory, Some(&cancel)).await
             } else {
-                tokio::fs::create_dir_all(directory)
-                    .await
-                    .map_err(|error| {
-                        transfer_error(format!("无法创建本地目录 {directory}: {error}"))
-                    })
+                tokio::fs::create_dir_all(directory).await.map_err(|error| {
+                    transfer_error(format!("无法创建本地目录 {directory}: {error}"))
+                })
             };
             match result {
                 Ok(()) => break,
@@ -275,6 +274,7 @@ async fn run_directory_transfer(
                         transfer_id,
                         &manifest,
                         DirectoryManifestPatch {
+                            changed_entry: Some(index),
                             status: "running",
                             message: Some(entry.relative_path),
                             transferred: current_transferred,
@@ -310,6 +310,7 @@ async fn run_directory_transfer(
                             transfer_id,
                             &manifest,
                             DirectoryManifestPatch {
+                                changed_entry: Some(index),
                                 status: "running",
                                 message: Some(format!("已跳过失败文件 {}", entry.relative_path)),
                                 transferred: current_transferred,
@@ -339,6 +340,7 @@ async fn run_directory_transfer(
                         transfer_id,
                         &manifest,
                         DirectoryManifestPatch {
+                            changed_entry: Some(index),
                             status: "running",
                             message: Some(format!(
                                 "{}（第 {attempt} 次重试）",
@@ -365,6 +367,7 @@ async fn run_directory_transfer(
             transfer_id,
             &manifest,
             DirectoryManifestPatch {
+                changed_entry: None,
                 status: "done",
                 message: None,
                 transferred: total_bytes,
@@ -384,13 +387,18 @@ async fn run_directory_transfer(
                 sample.join("；")
             )
         } else {
-            format!("{} 个文件传输失败，点击继续可重试失败项：{}", failed_files.len(), sample.join("；"))
+            format!(
+                "{} 个文件传输失败，点击继续可重试失败项：{}",
+                failed_files.len(),
+                sample.join("；")
+            )
         };
         update_directory_manifest(
             app,
             transfer_id,
             &manifest,
             DirectoryManifestPatch {
+                changed_entry: None,
                 status: "paused",
                 message: Some(summary),
                 transferred: current_transferred,
@@ -487,6 +495,7 @@ async fn fail_if_running(
                     transfer_id,
                     &manifest,
                     DirectoryManifestPatch {
+                        changed_entry: None,
                         status: "failed",
                         message: Some(error),
                         transferred,
@@ -571,4 +580,22 @@ async fn fail_if_running(
     )
     .await?;
     Ok(())
+}
+
+/// Keep every entry transition in memory, including throttled/silent ones.
+/// Cloning the whole manifest per tiny file makes directory uploads quadratic.
+fn sync_directory_manifest(
+    current: &mut Option<TransferManifest>,
+    manifest: &TransferManifest,
+    changed_entry: Option<usize>,
+) {
+    if let (Some(current), Some(index)) = (current.as_mut(), changed_entry) {
+        if let (Some(target), Some(source)) =
+            (current.files.get_mut(index), manifest.files.get(index))
+        {
+            *target = source.clone();
+            return;
+        }
+    }
+    *current = Some(manifest.clone());
 }

@@ -2,19 +2,18 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        ai_error, anthropic_history_messages_with_tools, anthropic_tool_schema, apply_secret_patch,
-        apply_openai_compatible_reasoning,
-        cancellation_or_request_error, classify_command_risk, command_has_unsafe_input,
-        conservative_command_risk, context_mode_reads_terminal_transcript,
-        copilot_mode_state_is_current, copilot_tool_blocked_after_failure,
-        copilot_tool_call_arguments, copilot_tool_result_allows_follow_up,
-        decrypt_provider_secrets, default_ai_mode_state, encrypt_provider_secrets,
-        ensure_conversation_fits, is_basic_safe_command, normalize_ai_title_suggestion,
-        normalize_base_url, normalize_conversation_title, now_millis, openai_chat_tool_schema,
+        ai_error, anthropic_history_messages_with_tools, anthropic_tool_schema,
+        apply_openai_compatible_reasoning, apply_secret_patch, cancellation_or_request_error,
+        classify_command_risk, command_has_unsafe_input, conservative_command_risk,
+        context_mode_reads_terminal_transcript, copilot_mode_state_is_current,
+        copilot_tool_blocked_after_failure, copilot_tool_call_arguments,
+        copilot_tool_result_allows_follow_up, decrypt_provider_secrets, default_ai_mode_state,
+        encrypt_provider_secrets, ensure_conversation_fits, extract_model_ids,
+        is_basic_safe_command, models_url, normalize_ai_title_suggestion, normalize_base_url,
+        normalize_conversation_title, now_millis, openai_chat_tool_schema,
         process_anthropic_payload, process_openai_payload, process_openai_responses_payload,
         provider_history_messages, provider_history_messages_with_tools, provider_is_usable,
         provider_safe_tool_arguments, provider_summary, prune_expired_context_snapshots,
-        extract_model_ids, models_url,
         public_mode_state, repair_default_provider, responses_input_items_with_tools,
         responses_tool_schema, sanitize_recent_terminal_output, stream_anthropic_messages,
         stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
@@ -26,14 +25,13 @@ mod tests {
         AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage,
         AiMessageRole, AiModelCapabilities, AiModelInputModality, AiModelReasoningConfig,
         AiModelReasoningMode, AiModelReasoningParameter, AiPromptContext, AiProviderKind,
-        AiProviderSecretPatch, AiProviderSummary, AiReasoningEffort,
-        AiStreamEvent, ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot,
-        StoredAiModeState, StoredAiProvider, StoredConversation, StoredProviderConfig,
-        StoredProviderSecret, StoredProviderSecrets, ToolLoopResult, ToolLoopTurn,
-        ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL,
-        CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
-        MAX_AI_TITLE_SUGGESTION_LENGTH, MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES,
-        MAX_CONVERSATION_TITLE_LENGTH,
+        AiProviderSecretPatch, AiProviderSummary, AiReasoningEffort, AiStreamEvent,
+        ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot, StoredAiModeState,
+        StoredAiProvider, StoredConversation, StoredProviderConfig, StoredProviderSecret,
+        StoredProviderSecrets, ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION,
+        ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION,
+        COPILOT_EXECUTE_REMOTE_COMMAND_TOOL, MAX_AI_TITLE_SUGGESTION_LENGTH,
+        MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES, MAX_CONVERSATION_TITLE_LENGTH,
     };
     use reqwest::Client;
     use serde_json::{json, Value};
@@ -141,11 +139,7 @@ mod tests {
         provider.model = "Pro/zai-org/GLM-5".to_string();
         let mut payload = json!({"model": provider.model});
 
-        apply_openai_compatible_reasoning(
-            &mut payload,
-            &provider,
-            Some(AiReasoningEffort::Max),
-        );
+        apply_openai_compatible_reasoning(&mut payload, &provider, Some(AiReasoningEffort::Max));
 
         assert_eq!(payload["enable_thinking"], true);
         assert_eq!(payload["thinking_budget"], 32_768);
@@ -479,6 +473,12 @@ mod tests {
         assert_eq!(arguments.command, "sudo id");
         assert_eq!(arguments.ai_risk, Some(AiCommandRisk::Privileged));
         assert!(copilot_tool_call_arguments(&call(r#"{"command":"pwd"}"#)).is_ok());
+        for value in [json!(""), Value::Null, json!(" ")] {
+            let args = json!({"command": "ls /home/longlll/1panel", "risk": "read-only", "sudo_password": value, "su_password": value});
+            let parsed = copilot_tool_call_arguments(&call(&args.to_string())).unwrap();
+            assert_eq!(parsed.command, "ls /home/longlll/1panel");
+            assert_eq!(parsed.ai_risk, Some(AiCommandRisk::ReadOnly));
+        }
         for arguments in [
             r#"{"command":"sudo id","password":"secret"}"#,
             r#"{"command":"pwd","unexpected":true}"#,

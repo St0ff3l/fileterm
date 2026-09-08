@@ -1,3 +1,16 @@
+/// Capture the actual initial shell identity, not the SSH routing username.
+/// Subsequent identities retain that baseline so sudo/su and exit still sync.
+fn observe_shell_user(
+    login: &mut Option<String>,
+    current: &mut Option<String>,
+    user: &str,
+) -> bool {
+    let changed = login.is_none() || current.as_deref() != Some(user);
+    login.get_or_insert_with(|| user.to_string());
+    *current = Some(user.to_string());
+    changed
+}
+
 /// Map the identity reported by the interactive shell to the file pane access
 /// model. Cached sudo credentials are deliberately not part of this decision:
 /// they make a future root switch reusable, but they do not mean the current

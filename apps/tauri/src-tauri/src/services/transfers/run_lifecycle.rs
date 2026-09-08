@@ -152,7 +152,7 @@ async fn run(
             "文件访问权限模式已变化，请切换回创建任务时的视图后再传输",
         ));
     }
-    task = patch_task(
+    task = patch_task_for_execution(
         &app,
         &transfer_id,
         |task| {
