@@ -14,7 +14,7 @@ async fn dispatch_file_cmd(
     saved_sudo_password: &mut Option<String>,
     saved_su_password: &mut Option<String>,
     tab_id: &str,
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &tauri::State<'_, crate::services::workspace::WorkspaceState>,
     _tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
     exec_channel_enabled: bool,
@@ -581,6 +581,22 @@ async fn dispatch_file_cmd(
                 s.has_reusable_sudo_auth = has_reusable;
             }
             let _ = respond_to.send(Ok(()));
+            // 切换 user/root 文件访问模式后，补触发待清理断点的自动清理：
+            // 补偿清理按 profile + 模式过滤，切回创建任务时的模式即可
+            // 自动清掉对应模式下遗留的远端临时文件。
+            let cleanup_app = app.clone();
+            let cleanup_tab_id = tab_id.to_string();
+            tokio::spawn(async move {
+                if let Err(error) =
+                    crate::services::transfers::retry_pending_cleanup_for_tab(&cleanup_app, &cleanup_tab_id).await
+                {
+                    crate::services::logging::warn(
+                        &cleanup_app,
+                        &format!("transfer-cleanup:{cleanup_tab_id}"),
+                        format!("retry pending cleanup after access mode switch failed: {error}"),
+                    );
+                }
+            });
             Ok(false)
         }
         WorkerCmd::Disconnect => Ok(true),

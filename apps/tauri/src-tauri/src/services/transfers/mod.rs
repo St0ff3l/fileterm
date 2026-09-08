@@ -7,8 +7,10 @@
 include!("model.rs");
 include!("runtime.rs");
 include!("remote.rs");
+include!("error_classify.rs");
 include!("creation.rs");
 include!("run_lifecycle.rs");
 include!("directory_execution.rs");
+include!("directory_entry.rs");
 include!("cleanup.rs");
 include!("tests.rs");

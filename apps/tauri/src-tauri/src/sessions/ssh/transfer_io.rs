@@ -5,6 +5,12 @@ async fn ensure_transfer_parent_dir(sftp: &SftpSession, path: &str) -> Result<()
     if parent == "/" {
         return Ok(());
     }
+    // Fast path: if the parent directory already exists, all ancestors exist.
+    match sftp.metadata(&parent).await {
+        Ok(metadata) if metadata.is_dir() => return Ok(()),
+        Ok(_) => return Err(format!("传输目标父路径不是目录: {parent}")),
+        Err(_) => {}
+    }
     let mut current = String::new();
     for segment in parent.split('/').filter(|segment| !segment.is_empty()) {
         current.push('/');
@@ -106,7 +112,7 @@ async fn upload_local_file(
         .await
         .map_err(|error| error.to_string())?;
     let mut transferred = resume_offset;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
     loop {
         let read = read_local_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
@@ -168,7 +174,7 @@ async fn download_remote_file(
         .await
         .map_err(|error| error.to_string())?;
     let mut transferred = resume_offset;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
     loop {
         let read = read_remote_transfer_chunk(&mut source, &mut buffer, &cancel).await?;

@@ -1,11 +1,13 @@
-import type { ConnectionProfile, ResourceMonitoringMetric, SessionSnapshot } from '@fileterm/core'
+import type { ConnectionProfile, ResourceMonitoringMetric, SessionSnapshot, TabStatus } from '@fileterm/core'
 import { t } from '../../i18n'
 import { SystemSidebar } from './system-sidebar'
 
 export function SystemSidebarShell({
   activeProfile,
   activeSession,
+  activeTabId,
   collapsed,
+  connectionStatus,
   showResourceMeters,
   visibleMetrics,
   isResizing,
@@ -16,7 +18,9 @@ export function SystemSidebarShell({
 }: {
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
+  activeTabId: string | null
   collapsed: boolean
+  connectionStatus: TabStatus | null
   showResourceMeters: boolean
   visibleMetrics: ResourceMonitoringMetric[]
   isResizing: boolean
@@ -30,7 +34,9 @@ export function SystemSidebarShell({
       <SystemSidebar
         activeProfile={activeProfile}
         activeSession={activeSession}
+        activeTabId={activeTabId}
         collapsed={collapsed}
+        connectionStatus={connectionStatus}
         showResourceMeters={showResourceMeters}
         visibleMetrics={visibleMetrics}
         onOpenSystemInfo={onOpenSystemInfo}

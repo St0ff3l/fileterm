@@ -368,21 +368,22 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--border-light) 80%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-hover) 62%, transparent);
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--status-info) 22%, var(--border-subtle));
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--status-info) 7%, var(--surface-panel));
   color: var(--text-secondary);
 }
 
-.tunnel-intro .material-symbols-outlined {
-  color: var(--primary);
-  font-size: 19px;
+.tunnel-intro__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--status-info);
 }
 .tunnel-intro p {
   margin: 0;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .tunnel-rule-list {
   display: grid;
@@ -411,51 +412,89 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   color: var(--text-main);
 }
 .tunnel-rule-index {
-  color: var(--primary);
+  color: var(--text-muted);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .tunnel-rule-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
-.tunnel-rule-grid label {
-  display: grid;
-  gap: 5px;
-  color: var(--text-muted);
-  .tunnel-rule-grid input,
-  .tunnel-rule-grid .dropdown-select-trigger,
-  .tunnel-rule-grid .ft-select-shell {
-    min-width: 0;
-    height: 36px;
-    padding: 0 10px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm, 4px);
-    background: var(--input-bg, var(--surface-input));
-    color: var(--text-primary);
-    box-sizing: border-box;
-  }
 
+.tunnel-rule-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.tunnel-rule-grid input,
+.tunnel-rule-grid .dropdown-select-trigger,
+.tunnel-rule-grid .ft-select-shell {
+  min-width: 0;
+  width: 100%;
+  height: var(--button-height-md, 36px);
+  min-height: var(--button-height-md, 36px);
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg, var(--surface-input));
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  line-height: 1.2;
+  box-sizing: border-box;
+  transition: border-color var(--transition-normal);
+}
+
+.tunnel-rule-grid input:hover:not(:disabled),
+.tunnel-rule-grid .dropdown-select-trigger:hover:not(:disabled),
+.tunnel-rule-grid .ft-select-shell:hover:not(:has(select:disabled)) {
+  border-color: var(--border-default);
+}
+
+.tunnel-rule-grid input:focus,
+.tunnel-rule-grid .dropdown-select-trigger:focus-visible,
+.tunnel-rule-grid .ft-select-shell:focus-within {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+  background-color: var(--surface-input-focus);
+}
+
+.tunnel-target-host {
+  grid-column: span 2;
+}
+
+.tunnel-socks-note {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  min-height: 36px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-left: 2px solid var(--border-subtle);
+}
+
+.tunnel-socks-note .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.tunnel-autostart {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   color: var(--text-secondary);
   font-size: 12px;
-}
-.tunnel-socks-note {
-  grid-column: span 2;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 9px;
-  color: var(--text-muted);
-  font-size: 12px;
-  border-left: 2px solid var(--primary);
-}
-.tunnel-socks-note .material-symbols-outlined {
-  font-size: 16px;
 }
 .tunnel-remove-button {
   display: grid;
@@ -482,125 +521,270 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   gap: 6px;
   min-height: 36px;
   height: 36px;
-  padding: 0 12px;
-  border: 1px dashed color-mix(in srgb, var(--primary) 65%, var(--border-light));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--primary) 7%, transparent);
-  color: var(--primary);
+  padding: 0 14px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);
-  font-weight: var(--button-font-weight);
+  font-weight: 500;
   line-height: var(--button-line-height);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 .tunnel-add-button:hover {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: var(--border-light);
+  background: var(--bg-active);
+  color: var(--text-main);
 }
 .tunnel-add-button .material-symbols-outlined {
   font-size: 16px;
 }
 
-.network-routing-list {
-  margin-bottom: 0;
+/* ==========================================================================
+   Network & Proxy Settings (ConnectionNetworkSection)
+   ========================================================================== */
+
+.network-form-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
 }
 
-.network-routing-group__label {
+.network-overview-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--status-info) 22%, var(--border-subtle));
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--status-info) 7%, var(--surface-panel));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.network-overview-tip__icon {
+  flex: 0 0 auto;
+  color: var(--status-info);
+}
+
+.network-overview-tip__text {
+  margin: 0;
+}
+
+.network-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px 2px;
+}
+
+.network-setting-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.network-setting-row__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.network-setting-row__control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.network-setting-row__control .ft-select-shell,
+.network-setting-row__control .dropdown-select-trigger {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+.network-create-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-}
-
-.network-routing-group__label .material-symbols-outlined {
-  color: var(--focus-outline);
-  font-size: 15px;
-}
-
-.advanced-toggle-row.network-routing-row {
-  display: grid;
-  grid-template-columns: minmax(84px, 1fr) minmax(0, auto);
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-.network-routing-row__name {
-  color: var(--text-main);
+  min-height: 30px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm, 4px);
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .network-routing-modes {
   display: inline-flex;
-  justify-self: end;
-  padding: 2px;
-  border-radius: 6px;
-  background: var(--bg-hover);
+  padding: 3px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--surface-canvas, var(--bg-hover));
+  border: 1px solid var(--border-subtle);
+  gap: 2px;
 }
 
 .network-routing-modes button {
-  min-width: 76px;
-  min-height: 26px;
+  min-width: 80px;
+  height: 28px;
   border: 0;
-  border-radius: 5px;
+  border-radius: calc(var(--radius-md, 6px) - 2px);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
+  padding: 0 12px;
+  transition: all 0.15s ease;
 }
 
 .network-routing-modes button:hover {
-  color: var(--text-main);
+  color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 .network-routing-modes button.is-active {
-  background: var(--button-primary-bg);
-  color: var(--button-primary-text);
+  background: var(--action-primary-bg);
+  color: var(--action-primary-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .network-routing-modes button.is-active:hover {
-  background: var(--button-primary-hover);
+  background: var(--action-primary-hover);
 }
 
-.network-routing-row .ft-select-shell,
-.network-routing-row .dropdown-select-trigger {
-  min-width: 0;
-  width: min(260px, 100%);
+.network-setting-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.network-field-hint {
+  margin: 0;
+  padding-left: 102px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.network-field-hint--subtle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.network-field-hint__icon {
+  flex: 0 0 auto;
+  color: var(--status-info);
+}
+
+.network-field-hint--warning {
+  color: var(--status-warning);
 }
 
 /* macOS keeps the native menu; explicitly size and inset this select so its
    trigger and native option sheet do not inherit the modal's larger text. */
+.network-select-control,
+.network-select-control select,
 .network-routing-select,
 .network-routing-select select {
   font-size: 12px !important;
 }
 
+.network-select-control select,
 .network-routing-select select {
-  min-height: 28px;
+  min-height: 30px;
   padding-left: 10px !important;
 }
 
+.network-select-control.dropdown-select-trigger,
 .network-routing-select.dropdown-select-trigger {
-  min-height: 28px;
+  min-height: 30px;
 }
 
-.network-routing-hint {
-  margin: 0;
-  padding: 6px 12px 10px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
+.proxy-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--surface-canvas) 50%, transparent);
+  border: 1px solid var(--border-subtle);
 }
 
-.network-routing-empty {
-  margin: 0;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border-dark);
-  color: var(--text-muted);
+.proxy-custom-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.45;
+  font-weight: 500;
+}
+
+.proxy-custom-grid label.span-2 {
+  grid-column: 1 / -1;
+}
+
+.proxy-custom-grid input,
+.proxy-custom-grid .ft-select-shell,
+.proxy-custom-grid .dropdown-select-trigger {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--button-height-md, 36px);
+  min-height: var(--button-height-md, 36px);
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg, var(--surface-input));
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  line-height: 1.2;
+  transition: border-color var(--transition-normal);
+}
+
+.proxy-custom-grid input:hover:not(:disabled),
+.proxy-custom-grid .dropdown-select-trigger:hover:not(:disabled),
+.proxy-custom-grid .ft-select-shell:hover:not(:has(select:disabled)) {
+  border-color: var(--border-default);
+}
+
+.proxy-custom-grid input:focus,
+.proxy-custom-grid .dropdown-select-trigger:focus-visible,
+.proxy-custom-grid .ft-select-shell:focus-within {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+  background-color: var(--surface-input-focus);
+}
+
+.tunnel-custom-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.network-card__body .proxy-saved-selected-card {
+  margin-top: 2px;
 }
 
 @media (max-width: 420px) {
@@ -1343,35 +1527,121 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 }
 
 .ssh-auth-hint {
-  padding: 12px 14px;
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  background: var(--bg-hover);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--status-info) 22%, var(--border-subtle));
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--status-info) 7%, var(--surface-panel));
+  color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.55;
+}
+
+.ssh-auth-hint__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--status-info);
+}
+
+.ssh-auth-hint__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ssh-auth-hint__item {
+  min-width: 0;
   color: var(--text-secondary);
 }
 
+.ssh-auth-hint__line {
+  min-width: 0;
+}
+
+.ssh-auth-hint__lead {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 4px;
+}
+
+.ssh-auth-hint__subtle {
+  color: var(--text-muted);
+}
+
+.ssh-auth-hint code,
+.ssh-auth-hint__code {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 3px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-card));
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.ssh-auth-hint__example {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--surface-card) 65%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--status-info) 25%, var(--border-subtle));
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.ssh-auth-hint__example-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-info);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.ssh-auth-hint__example-sep {
+  color: var(--text-muted);
+}
+
+.ssh-form-field,
 .ssh-secret-field {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
+.ssh-form-field.span-2,
+.ssh-secret-field.span-2 {
+  grid-column: 1 / -1;
+}
+
+.ssh-form-field__header,
 .ssh-secret-field__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+  min-height: 22px;
 }
 
+.ssh-form-field__header > label,
 .ssh-secret-field__header > label {
   display: block;
   min-width: 0;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.2;
 }
 
 .ssh-secret-field__optional {
@@ -1424,20 +1694,22 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 
 .ssh-secret-field__undo {
   padding: 2px 6px;
-  color: var(--text-main);
-  background: var(--bg-hover);
+  color: var(--text-primary);
+  background: var(--surface-hover);
   font-size: 10px;
 }
 
 .ssh-secret-field__undo:hover {
-  border-color: var(--focus-outline);
-  color: var(--accent-highlight);
+  border-color: var(--border-focus);
+  color: var(--action-primary-bg);
 }
 
+.ssh-form-field input::placeholder,
 .ssh-secret-field input::placeholder {
   color: var(--text-muted);
 }
 
+.ssh-form-field input:disabled,
 .ssh-secret-field input:disabled {
   color: var(--text-muted);
   cursor: not-allowed;

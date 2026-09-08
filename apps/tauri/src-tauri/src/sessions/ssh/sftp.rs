@@ -26,8 +26,11 @@ async fn open_sftp_session(
     // russh-sftp defaults each request to 10 seconds. Keep that library-level
     // deadline aligned with FileTerm's operation timeout so a slow SFTP
     // server is not failed early with a misleading bare `Timeout` error.
+    // Raised in-flight writes (8 -> 16) let large streaming uploads keep the
+    // wire saturated on high-RTT links without waiting for each ACK.
     let sftp_config = SftpConfig {
         request_timeout_secs: request_timeout.as_secs().max(1),
+        max_concurrent_writes: 16,
         ..SftpConfig::default()
     };
     timeout(

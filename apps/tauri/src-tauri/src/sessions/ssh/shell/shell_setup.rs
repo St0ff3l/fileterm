@@ -10,17 +10,33 @@ struct ShellSetupEchoSuppression {
     visible_prefix_length: Option<usize>,
     marker_seen_at: Option<Instant>,
     preserve_visible_prefix: bool,
+    release_replacement_prompt: bool,
     fallback_visible: Option<String>,
 }
 
 impl ShellSetupEchoSuppression {
     fn new(preserve_visible_prefix: bool) -> Self {
+        Self::with_prompt_policy(preserve_visible_prefix, true)
+    }
+
+    /// Build suppression for a setup command whose original prompt is already
+    /// visible in the terminal. The shell redraws that prompt after the hook
+    /// runs, so releasing the redraw would show the same prompt twice.
+    fn without_replacement_prompt() -> Self {
+        Self::with_prompt_policy(false, false)
+    }
+
+    fn with_prompt_policy(
+        preserve_visible_prefix: bool,
+        release_replacement_prompt: bool,
+    ) -> Self {
         Self {
             buffer: String::new(),
             started_at: Instant::now(),
             visible_prefix_length: None,
             marker_seen_at: None,
             preserve_visible_prefix,
+            release_replacement_prompt,
             fallback_visible: None,
         }
     }
@@ -44,7 +60,18 @@ fn shell_setup_release_deadline(pending: &Option<ShellSetupEchoSuppression>) -> 
     pending.as_ref().map(|state| {
         state
             .marker_seen_at
-            .map(|seen_at| seen_at + SHELL_SETUP_SETTLE_DELAY)
+            .map(|seen_at| {
+                seen_at
+                    + if state.release_replacement_prompt {
+                        SHELL_SETUP_SETTLE_DELAY
+                    } else {
+                        // The original startup prompt is already visible, so
+                        // wait for a delayed redraw long enough to consume it.
+                        // `suppress_shell_setup_echo` still finishes early as
+                        // soon as that prompt is observed.
+                        SHELL_SETUP_TIMEOUT
+                    }
+            })
             .unwrap_or(state.started_at + SHELL_SETUP_TIMEOUT)
     })
 }
@@ -57,7 +84,7 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
         // setup 成功执行（检测到唯一的 ready OSC marker）后，shell 会输出新 prompt。
         // 第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存（不 forward），
         // 所以这里释放新 prompt——让用户看到一个完整 prompt，而不是空白。
-        if state.marker_seen_at.is_some() {
+        if state.marker_seen_at.is_some() && state.release_replacement_prompt {
             // buffer 里同时含 setup echo、ready marker 和新 prompt。找到 marker
             // 的结束位置，释放它之后的部分（新 prompt），
             // 吞掉 setup echo 和 marker。marker 后可能直接接 prompt（无换行），
@@ -71,6 +98,13 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
             // 新 prompt 还没到（慢设备，settle/timeout 到期仍未见）：补换行
             // 让晚到的新 prompt 从新行开始。
             return "\r\n".to_string();
+        }
+        if !state.release_replacement_prompt {
+            // The startup path may have forwarded the login prompt while the
+            // auxiliary channels were still negotiating. In that case the
+            // prompt printed after setup is only a redraw and must remain
+            // suppressed. The visible prompt is already on screen.
+            return String::new();
         }
         // Root-shell injection keeps the prompt that was withheld before the
         // write as a fail-open fallback. The initial login setup has no such

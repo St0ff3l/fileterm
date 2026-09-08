@@ -1,4 +1,4 @@
-import type { ConnectionFormMode, FileContentSnapshot } from '@fileterm/core'
+import type { ConnectionFormMode, FileContentSnapshot, TunnelProfileType } from '@fileterm/core'
 import type { useAppDataOperations } from '../../hooks/use-app-data-operations'
 import type { useAppResize } from '../../hooks/use-app-resize'
 import type { useAppShellState } from '../../hooks/use-app-shell-state'
@@ -9,10 +9,14 @@ export type AppRouteState = {
   isCommandManagerWindow: boolean
   isConnectionFormWindow: boolean
   isCommandFormWindow: boolean
+  isProxyFormWindow: boolean
+  isTunnelFormWindow: boolean
   isFileEditorWindow: boolean
   isMainWorkspaceWindow: boolean
   formWindowMode: ConnectionFormMode
   formWindowProfileId: string | null
+  formWindowProxyType: 'socks5' | 'http'
+  formWindowTunnelType: TunnelProfileType
   formWindowCommandId: string | null
   formWindowFolderId: string | null
   formWindowCommand: string

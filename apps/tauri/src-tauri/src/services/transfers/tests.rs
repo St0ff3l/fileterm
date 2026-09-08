@@ -1,12 +1,59 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        can_resume_from, failure_status, interrupt_status, is_root_upload_staging_path,
-        join_remote_path, manifest_totals, normalize_root_upload_staging, partial_path,
-        progress_event_due, relative_remote_path, root_staging_path, select_journal_tasks,
+        can_resume_from, collect_local_tree, failure_status, interrupt_status,
+        is_permanent_transfer_error, is_root_upload_staging_path, join_remote_path,
+        manifest_totals, normalize_root_upload_staging, partial_path, progress_event_due,
+        relative_remote_path, root_staging_path, select_journal_tasks, transient_retry_backoff,
         TransferFileIdentity, TransferManifest, TransferManifestEntry, TransferTask,
-        JOURNAL_MAX_TASKS, UPDATE_INTERVAL,
+        JOURNAL_MAX_TASKS, TRANSIENT_MAX_ATTEMPTS, UPDATE_INTERVAL,
     };
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn local_directory_scan_includes_nested_and_hidden_files() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-transfer-scan-{}", rand::random::<u64>()));
+        let nested = root.join("backend").join("src").join("nested");
+        tokio::fs::create_dir_all(&nested).await.unwrap();
+        tokio::fs::write(root.join(".env"), b"root").await.unwrap();
+        tokio::fs::write(root.join("backend").join("README.md"), b"readme")
+            .await
+            .unwrap();
+        tokio::fs::write(nested.join("main.rs"), b"main")
+            .await
+            .unwrap();
+
+        let result = collect_local_tree(&root).await;
+
+        let _ = tokio::fs::remove_dir_all(&root).await;
+        let (directories, files) = result.unwrap();
+        assert_eq!(directories.len(), 3);
+        assert_eq!(files.len(), 3);
+        assert!(files.iter().any(|(path, _)| path.ends_with(".env")));
+        assert!(files
+            .iter()
+            .any(|(path, _)| path.ends_with("backend/src/nested/main.rs")));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn local_directory_scan_rejects_symlinks_instead_of_dropping_them() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-transfer-symlink-{}",
+            rand::random::<u64>()
+        ));
+        tokio::fs::create_dir_all(root.join("real")).await.unwrap();
+        symlink(root.join("real"), root.join("linked")).expect("create test symlink");
+
+        let result = collect_local_tree(&root).await;
+
+        let _ = tokio::fs::remove_dir_all(&root).await;
+        let error = result.expect_err("symlinks must not be silently skipped");
+        assert!(error.to_string().contains("linked"));
+    }
 
     #[test]
     fn creates_posix_paths_without_double_slashes() {
@@ -176,6 +223,97 @@ mod tests {
             ],
         };
         assert_eq!(manifest_totals(&manifest), (17, 30));
+    }
+
+    #[test]
+    fn to_ui_task_strips_manifest_collections_while_preserving_truthiness() {
+        let task = TransferTask {
+            id: "transfer-large-folder".to_string(),
+            direction: "upload".to_string(),
+            name: "node_modules".to_string(),
+            progress: 50.0,
+            status: "running".to_string(),
+            message: Some("node_modules/lodash/lodash.js".to_string()),
+            speed: Some("15.2 MB/s".to_string()),
+            transferred_bytes: Some(400_000_000),
+            total_bytes: Some(800_000_000),
+            tab_id: Some("tab-1".to_string()),
+            profile_id: None,
+            session_type: None,
+            file_access_mode: None,
+            target_type: Some("folder".to_string()),
+            source_path: Some("/local/node_modules".to_string()),
+            destination_path: Some("/remote/node_modules".to_string()),
+            partial_path: None,
+            staging_path: None,
+            source_identity: None,
+            manifest: Some(TransferManifest {
+                version: 1,
+                directories: vec![
+                    "/remote/node_modules/a".to_string(),
+                    "/remote/node_modules/b".to_string(),
+                ],
+                files: vec![
+                    TransferManifestEntry {
+                        relative_path: "a/1.js".to_string(),
+                        source_path: "/local/node_modules/a/1.js".to_string(),
+                        destination_path: "/remote/node_modules/a/1.js".to_string(),
+                        partial_path: "/remote/node_modules/a/1.js.fileterm-part".to_string(),
+                        staging_path: None,
+                        source_identity: TransferFileIdentity {
+                            size: 100,
+                            modified_at: None,
+                        },
+                        status: "done".to_string(),
+                        transferred_bytes: 100,
+                    },
+                    TransferManifestEntry {
+                        relative_path: "b/2.js".to_string(),
+                        source_path: "/local/node_modules/b/2.js".to_string(),
+                        destination_path: "/remote/node_modules/b/2.js".to_string(),
+                        partial_path: "/remote/node_modules/b/2.js.fileterm-part".to_string(),
+                        staging_path: None,
+                        source_identity: TransferFileIdentity {
+                            size: 200,
+                            modified_at: None,
+                        },
+                        status: "running".to_string(),
+                        transferred_bytes: 50,
+                    },
+                ],
+            }),
+            resumable: true,
+            retry_attempt: None,
+            cleanup_pending: false,
+            created_at: Some(1000),
+            updated_at: Some(2000),
+        };
+
+        let ui_task = task.to_ui_task();
+        let manifest = ui_task
+            .manifest
+            .as_ref()
+            .expect("manifest must remain present for UI truthiness check");
+        assert_eq!(manifest.version, 1);
+        assert!(
+            manifest.directories.is_empty(),
+            "UI task directories must be empty to avoid IPC bloat"
+        );
+        assert!(
+            manifest.files.is_empty(),
+            "UI task files must be empty to avoid IPC bloat"
+        );
+        assert_eq!(
+            ui_task.message.as_deref(),
+            Some("node_modules/lodash/lodash.js")
+        );
+        assert_eq!(ui_task.name, "node_modules");
+
+        // Verify JSON serialization contains manifest object with empty arrays
+        let json = serde_json::to_value(&ui_task).unwrap();
+        assert!(json.get("manifest").is_some());
+        assert_eq!(json["manifest"]["directories"].as_array().unwrap().len(), 0);
+        assert_eq!(json["manifest"]["files"].as_array().unwrap().len(), 0);
     }
 
     fn sample_task(id: &str, updated_at: u64) -> TransferTask {
@@ -460,5 +598,142 @@ mod tests {
         //    重新进入 active 集合
         task.status = "queued".to_string();
         assert!(task.active());
+    }
+
+    #[test]
+    fn permanent_transfer_errors_are_recognized_across_protocols_and_locales() {
+        // 权限/空间/路径类：重试不可能成功，必须跳过该文件。
+        for message in [
+            "command error: Permission denied (os error 13)",
+            "SFTP failure: permission denied",
+            "open failure: Access denied",
+            "write error: no space left on device",
+            "disk quota exceeded",
+            "stat error: no such file",
+            "550 File not found",
+            "上传源文件不存在或无法读取：node_modules/.bin/cli",
+            "源文件已发生变化，不能继续目录断点：a.js",
+            "断点文件大于源文件：b.js",
+            "Read-only file system (os error 30)",
+        ] {
+            assert!(
+                is_permanent_transfer_error(message),
+                "应判定为永久错误：{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn transient_transfer_errors_are_not_misclassified_as_permanent() {
+        // 网络/超时类：重试可能恢复，绝不能被误判为永久而静默跳过。
+        for message in [
+            "command error: connection reset by peer (os error 54)",
+            "io error: broken pipe",
+            "channel closed",
+            "session closed by peer",
+            "operation timed out",
+            "Timeout",
+            "network unreachable",
+            "resource temporarily unavailable",
+            "传输操作响应超时，后台操作已取消",
+            "未知错误应默认按瞬时处理",
+            "",
+        ] {
+            assert!(
+                !is_permanent_transfer_error(message),
+                "不应判定为永久错误：{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn transient_retry_backoff_grows_geometrically() {
+        assert_eq!(transient_retry_backoff(1), Duration::from_secs(1));
+        assert_eq!(transient_retry_backoff(2), Duration::from_secs(4));
+        // 超出次数上限后的退避值不应溢出或倒退。
+        assert!(transient_retry_backoff(9) > transient_retry_backoff(2));
+        assert_eq!(TRANSIENT_MAX_ATTEMPTS, 3);
+    }
+}
+
+#[cfg(test)]
+mod large_directory_regressions {
+    use super::*;
+
+    fn entry(index: usize) -> TransferManifestEntry {
+        TransferManifestEntry {
+            relative_path: format!("node_modules/package-{index}/index.js"),
+            source_path: format!("/local/node_modules/package-{index}/index.js"),
+            destination_path: format!("/remote/node_modules/package-{index}/index.js"),
+            partial_path: format!("/remote/node_modules/package-{index}/index.js.fileterm-part"),
+            staging_path: None,
+            source_identity: TransferFileIdentity {
+                size: 32,
+                modified_at: None,
+            },
+            status: "pending".to_string(),
+            transferred_bytes: 0,
+        }
+    }
+
+    #[test]
+    fn many_small_files_keep_completed_and_active_entries_without_reallocating_the_tree() {
+        let mut manifest = TransferManifest {
+            version: 1,
+            directories: vec!["/remote".to_string()],
+            files: (0..20_000).map(entry).collect(),
+        };
+        let mut stored = Some(manifest.clone());
+        let files_allocation = stored.as_ref().unwrap().files.as_ptr();
+        // A path in an untouched entry must keep its allocation: per-file
+        // progress must not clone all 20,000 source/destination path strings.
+        let untouched_path = stored.as_ref().unwrap().files[19_999].source_path.as_ptr();
+        for index in 0..100 {
+            manifest.files[index].status = "running".to_string();
+            sync_directory_manifest(&mut stored, &manifest, Some(index));
+            assert_eq!(
+                stored
+                    .as_ref()
+                    .unwrap()
+                    .files
+                    .iter()
+                    .position(|entry| entry.status == "running"),
+                Some(index)
+            );
+            manifest.files[index].status = "done".to_string();
+            manifest.files[index].transferred_bytes = 32;
+            sync_directory_manifest(&mut stored, &manifest, Some(index));
+        }
+        let stored = stored.unwrap();
+        assert_eq!(stored.files.as_ptr(), files_allocation);
+        assert_eq!(stored.files[19_999].source_path.as_ptr(), untouched_path);
+        assert_eq!(manifest_totals(&stored), (3200, 640_000));
+        let restored: TransferManifest =
+            serde_json::from_slice(&serde_json::to_vec(&stored).unwrap()).unwrap();
+        assert!(restored.files[..100]
+            .iter()
+            .all(|entry| entry.status == "done"));
+        assert!(restored.files[100..]
+            .iter()
+            .all(|entry| entry.status == "pending"));
+    }
+
+    #[test]
+    fn ui_payload_stays_small_for_a_hundred_thousand_file_manifest() {
+        let mut task: TransferTask = serde_json::from_value(serde_json::json!({
+            "id":"large-directory", "direction":"upload", "name":"frontend", "status":"running", "progress":10,
+            "transferredBytes":320_000, "totalBytes":3_200_000,
+        })).unwrap();
+        task.manifest = Some(TransferManifest {
+            version: 1,
+            directories: vec!["/remote".to_string(); 1000],
+            files: (0..100_000).map(entry).collect(),
+        });
+        for _ in 0..10 {
+            let ui = task.to_ui_task();
+            assert!(serde_json::to_vec(&ui).unwrap().len() < 1024);
+            assert_eq!(ui.transferred_bytes, Some(320_000));
+        }
+        assert_eq!(task.manifest.unwrap().files.len(), 100_000);
     }
 }

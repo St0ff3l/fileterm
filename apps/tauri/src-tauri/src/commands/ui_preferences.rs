@@ -581,10 +581,51 @@ fn resolve_profile_with_connection_defaults(
 
 fn resolve_profile_for_session(app: &AppHandle, profile: &Value) -> Result<Value, AppError> {
     let preferences = app_get_ui_preferences(app.clone())?;
-    Ok(resolve_profile_with_connection_defaults(
-        profile,
+    // Opening a profile starts from the public profiles.json record. Resolve
+    // reusable proxy/tunnel references from the canonical stores here so a
+    // connection always sees the latest shared definition instead of the
+    // copied values that happened to be present when it was edited.
+    let mut effective_profile = profile.clone();
+    let (profiles, _) = crate::services::profile_ops::read_and_heal_profiles(app)?;
+    if let Some(current) = profile
+        .get("id")
+        .and_then(Value::as_str)
+        .and_then(|id| {
+            profiles
+                .iter()
+                .find(|candidate| candidate.get("id").and_then(Value::as_str) == Some(id))
+        })
+    {
+        effective_profile = current.clone();
+    }
+
+    let mut resolved = resolve_profile_with_connection_defaults(
+        &effective_profile,
         &preferences.connection_defaults,
-    ))
+    );
+    if resolved.get("type").and_then(Value::as_str) == Some("ssh") {
+        if let Some(tunnel_profile_id) = resolved
+            .get("tunnelProfileId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+        {
+            let storage_path = crate::storage::workspace_file(app, "profiles.json")?;
+            let storage_root = storage_path
+                .parent()
+                .ok_or_else(|| AppError::Storage("无法解析隧道配置存储目录".to_string()))?;
+            let tunnel = crate::services::tunnels::get_internal(storage_root, tunnel_profile_id)?
+                .ok_or_else(|| AppError::Command("找不到所选的 SSH 隧道配置".to_string()))?;
+            if tunnel.tunnel_type != "ssh" {
+                return Err(AppError::Command(
+                    "HTTP 隧道是独立的 HTTP 中继配置，当前不能作为 SSH 运行时隧道使用".to_string(),
+                ));
+            }
+            if let Some(object) = resolved.as_object_mut() {
+                object.insert("forwards".to_string(), Value::Array(tunnel.forwards));
+            }
+        }
+    }
+    Ok(resolved)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

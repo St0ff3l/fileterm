@@ -152,7 +152,7 @@ async fn run(
             "文件访问权限模式已变化，请切换回创建任务时的视图后再传输",
         ));
     }
-    task = patch_task(
+    task = patch_task_for_execution(
         &app,
         &transfer_id,
         |task| {
@@ -317,6 +317,7 @@ async fn run(
                             resume_offset: offset,
                             transfer_id: transfer_id.clone(),
                             cancel: cancel.clone(),
+                            verify_checksum: true,
                             respond_to,
                         }
                     })
@@ -335,6 +336,7 @@ async fn run(
                         resume_offset: offset,
                         transfer_id: transfer_id.clone(),
                         cancel: cancel.clone(),
+                        verify_checksum: true,
                         respond_to,
                     }
                 })

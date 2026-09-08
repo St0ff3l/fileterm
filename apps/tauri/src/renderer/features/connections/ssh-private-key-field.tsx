@@ -55,10 +55,13 @@ export function SshPrivateKeyField({
   }
 
   return (
-    <div className="span-2 ssh-private-key-field">
-      <label>
-        {t.privateKeyLabel}
+    <div className="span-2 ssh-form-field ssh-private-key-field">
+      <div className="ssh-form-field__header">
+        <label htmlFor="connection-private-key">{t.privateKey}:</label>
+      </div>
+      <div className="ssh-private-key-controls">
         <DropdownSelect
+          id="connection-private-key"
           value={form.privateKeyId ?? ''}
           options={[
             { value: '', label: t.privateKeyChooseImported },
@@ -69,16 +72,16 @@ export function SshPrivateKeyField({
           ]}
           onChange={(value) => selectKey(value)}
         />
-      </label>
-      <button
-        aria-busy={busy}
-        className="primary-button ssh-private-key-action-button"
-        disabled={busy}
-        onClick={() => requestImport()}
-        type="button"
-      >
-        <StableButtonLabel busy={busy} busyLabel={t.privateKeyImporting} label={t.privateKeyImportNew} />
-      </button>
+        <button
+          aria-busy={busy}
+          className="primary-button ssh-private-key-action-button"
+          disabled={busy}
+          onClick={() => requestImport()}
+          type="button"
+        >
+          <StableButtonLabel busy={busy} busyLabel={t.privateKeyImporting} label={t.privateKeyImportNew} />
+        </button>
+      </div>
       {form.privateKeyPath && !form.privateKeyId ? (
         <div className="ssh-private-key-legacy">
           <span>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TransferTask } from '@fileterm/core'
 import { CloseButton } from '../common/close-button'
+import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 import { StableButtonContent, StableButtonLabel } from '../common/stable-button-content'
 import {
   formatTransferBytes,
@@ -16,6 +17,7 @@ export function TransferPopover({
   onClearTransfers,
   onClose,
   onDiscardTransfer,
+  onForceDiscardTransfer,
   onPauseTransfer,
   onResumeTransfer,
   transfers
@@ -23,6 +25,7 @@ export function TransferPopover({
   onClearTransfers(transferIds: string[]): Promise<void> | void
   onClose(): void
   onDiscardTransfer(transferId: string): Promise<void> | void
+  onForceDiscardTransfer(transferId: string): Promise<void> | void
   onPauseTransfer(transferId: string): Promise<void> | void
   onResumeTransfer(transferId: string): Promise<void> | void
   transfers: TransferTask[]
@@ -31,6 +34,7 @@ export function TransferPopover({
   const [directionFilter, setDirectionFilter] = useState<'all' | 'download' | 'upload'>('all')
   const [pendingActions, setPendingActions] = useState<Record<string, 'pause' | 'resume' | 'discard'>>({})
   const [isClearing, setIsClearing] = useState(false)
+  const [forceDiscardId, setForceDiscardId] = useState<string | null>(null)
   const pendingTransferIdsRef = useRef(new Set<string>())
   const isClearingRef = useRef(false)
   const orderedTransfers = transfers
@@ -98,6 +102,16 @@ export function TransferPopover({
           return next
         })
       })
+  }
+
+  const requestDiscard = (transfer: TransferTask) => {
+    if (transfer.cleanupPending) {
+      // 远端断点清理失败的任务：直接丢弃会静默重跑清理并得到同样的
+      // 失败，表现为按钮无反应。先走强制丢弃二次确认。
+      setForceDiscardId(transfer.id)
+      return
+    }
+    runAction(transfer.id, 'discard', onDiscardTransfer)
   }
 
   const clearTransfers = () => {
@@ -234,7 +248,7 @@ export function TransferPopover({
                       aria-busy={pendingActions[transfer.id] === 'discard'}
                       className="transfer-cancel"
                       disabled={Boolean(pendingActions[transfer.id])}
-                      onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
+                      onClick={() => requestDiscard(transfer)}
                       type="button"
                     >
                       <StableButtonLabel
@@ -265,7 +279,7 @@ export function TransferPopover({
                         aria-busy={pendingActions[transfer.id] === 'discard'}
                         className="transfer-cancel"
                         disabled={Boolean(pendingActions[transfer.id])}
-                        onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
+                        onClick={() => requestDiscard(transfer)}
                         type="button"
                       >
                         <StableButtonLabel
@@ -283,7 +297,7 @@ export function TransferPopover({
                       aria-busy={pendingActions[transfer.id] === 'discard'}
                       className="transfer-cancel"
                       disabled={Boolean(pendingActions[transfer.id])}
-                      onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
+                      onClick={() => requestDiscard(transfer)}
                       type="button"
                     >
                       <StableButtonLabel
@@ -342,6 +356,19 @@ export function TransferPopover({
           <div className="transfer-empty">{t.noTransferTasks}</div>
         )}
       </div>
+      {forceDiscardId ? (
+        <ConfirmActionDialog
+          confirmLabel={t.forceDiscardCheckpoint}
+          description={t.forceDiscardCheckpointDescription}
+          onClose={() => setForceDiscardId(null)}
+          onConfirm={() => {
+            const transferId = forceDiscardId
+            setForceDiscardId(null)
+            runAction(transferId, 'discard', onForceDiscardTransfer)
+          }}
+          title={t.discardTransferCheckpoint}
+        />
+      ) : null}
     </section>
   )
 }

@@ -19,12 +19,14 @@ mod tests {
         remote_bind_host_matches, resolve_shell_file_access, resolve_ssh_device_mode,
         resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
         root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
-        root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
-        root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
+        root_list_shell_command, root_read_shell_command, root_replace_remote_file_command,
+        root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
+        shell_cwd_setup_for_platform,
         shell_cwd_sftp_path_candidates, should_buffer_terminal_input_during_shell_setup,
         should_reinject_root_shell_setup, should_restart_keyboard_interactive,
         spawn_cancellable_file_operation, split_prompt_tail_for_setup_wait, ssh_terminal_type,
-        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        extract_root_read_base64, strip_su_exec_output, su_exec_command, suppress_shell_setup_echo,
+        track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
         try_keyboard_interactive_with_responder, tunnel_bind_address,
         validate_root_download_completion, validate_tunnel_rule,
@@ -168,6 +170,31 @@ mod tests {
         );
         assert!(replace_command.contains("readlink -f"));
         assert!(replace_command.contains("mv -f -- '/etc/.fileterm-edit' \"$target\""));
+    }
+
+    #[test]
+    fn root_file_reads_frame_base64_away_from_shell_diagnostics() {
+        let command = root_read_shell_command("/etc/issue");
+        assert!(command.contains("set -e"));
+        assert!(command.contains("base64 '/etc/issue' 2>/dev/null"));
+        assert!(command.contains("__FILETERM_READ_BASE64_START__"));
+        assert!(command.contains("__FILETERM_READ_BASE64_END__"));
+
+        assert_eq!(
+            extract_root_read_base64(
+                "sudo: warning: tty-less execution\n__FILETERM_READ_BASE64_START__\nSGVsbG8=\n__FILETERM_READ_BASE64_END__\n"
+            )
+            .unwrap(),
+            "SGVsbG8="
+        );
+        assert_eq!(
+            extract_root_read_base64(
+                "__FILETERM_READ_BASE64_START__\n__FILETERM_READ_BASE64_END__"
+            )
+            .unwrap(),
+            ""
+        );
+        assert!(extract_root_read_base64("base64 output without framing").is_err());
     }
 
     #[test]
@@ -548,6 +575,14 @@ mod tests {
         });
         assert_eq!(missing_password_credential(&empty_password), None);
         assert_eq!(password_for_authentication(&empty_password), Some(""));
+
+        let kubernetes_password = serde_json::json!({
+            "authType": "kubernetes",
+            "username": "container-id",
+            "password": "container-password"
+        });
+        assert_eq!(missing_password_credential(&kubernetes_password), None);
+        assert_eq!(password_for_authentication(&kubernetes_password), Some("container-password"));
     }
 
     #[test]
@@ -1606,6 +1641,28 @@ mod tests {
     }
 
     #[test]
+    fn suppresses_replacement_prompt_when_startup_prompt_was_already_forwarded() {
+        // Auxiliary setup can finish after the login prompt has already been
+        // sent to the terminal. The hook redraws that prompt; releasing the
+        // redraw would render two identical username/host prompts.
+        let mut pending = Some(ShellSetupEchoSuppression::without_replacement_prompt());
+        assert_eq!(
+            suppress_shell_setup_echo(
+                &mut pending,
+                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7777;FileTermReady\u{7}"
+            ),
+            ""
+        );
+        assert!(pending.is_some());
+
+        // A slow SSH link may deliver the replacement prompt separately. It
+        // is still consumed as soon as it arrives, before the long fallback
+        // deadline can release anything.
+        assert_eq!(suppress_shell_setup_echo(&mut pending, "user@host:~$ "), "");
+        assert!(pending.is_none());
+    }
+
+    #[test]
     fn finish_suppression_releases_newline_when_prompt_never_arrives() {
         // ready marker 已看到但新 prompt 迟迟未到（settle/timeout 到期）：
         // 补换行让晚到的新 prompt 从新行开始，避免粘在旧 prompt 后面。
@@ -2241,6 +2298,10 @@ mod tests {
         assert_eq!(
             configured_authentication_method("keyboard-interactive"),
             ConfiguredAuthenticationMethod::KeyboardInteractive
+        );
+        assert_eq!(
+            configured_authentication_method("kubernetes"),
+            ConfiguredAuthenticationMethod::Password
         );
     }
 

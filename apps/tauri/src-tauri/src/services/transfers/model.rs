@@ -133,6 +133,42 @@ impl TransferTask {
     fn terminal(&self) -> bool {
         matches!(self.status.as_str(), "done" | "failed" | "canceled")
     }
+
+    pub fn to_ui_task(&self) -> TransferTask {
+        // Construct the small projection directly: cloning then clearing a
+        // 100,000-entry manifest still allocates every path on every event.
+        TransferTask {
+            id: self.id.clone(),
+            direction: self.direction.clone(),
+            name: self.name.clone(),
+            progress: self.progress,
+            status: self.status.clone(),
+            message: self.message.clone(),
+            speed: self.speed.clone(),
+            transferred_bytes: self.transferred_bytes,
+            total_bytes: self.total_bytes,
+            tab_id: self.tab_id.clone(),
+            profile_id: self.profile_id.clone(),
+            session_type: self.session_type.clone(),
+            file_access_mode: self.file_access_mode.clone(),
+            target_type: self.target_type.clone(),
+            source_path: self.source_path.clone(),
+            destination_path: self.destination_path.clone(),
+            partial_path: self.partial_path.clone(),
+            staging_path: self.staging_path.clone(),
+            source_identity: self.source_identity.clone(),
+            manifest: self.manifest.as_ref().map(|manifest| TransferManifest {
+                version: manifest.version,
+                directories: Vec::new(),
+                files: Vec::new(),
+            }),
+            resumable: self.resumable,
+            retry_attempt: self.retry_attempt,
+            cleanup_pending: self.cleanup_pending,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
 }
 
 /// Status a task transitions to when the application interrupts it (quit,
@@ -303,7 +339,15 @@ fn write_journal(app: &AppHandle, tasks: &[TransferTask]) -> Result<(), AppError
     };
     let json = serde_json::to_vec_pretty(&journal)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
-    std::fs::write(&temporary, json).map_err(|error| AppError::Storage(error.to_string()))?;
+    // 先写临时文件并 fsync 内容：断电场景下 rename 链本身只保证目录项
+    // 持久，不保证新文件数据落盘。没有这一步，崩溃后可能加载到截断的
+    // journal（读取端有 backup fallback，但主文件损坏仍会丢断点状态）。
+    let mut file =
+        std::fs::File::create(&temporary).map_err(|error| AppError::Storage(error.to_string()))?;
+    std::io::Write::write_all(&mut file, &json)
+        .and_then(|_| std::io::Write::flush(&mut file))
+        .and_then(|_| file.sync_data())
+        .map_err(|error| AppError::Storage(error.to_string()))?;
     let _ = std::fs::remove_file(&backup);
 
     let moved_current = if path.exists() {

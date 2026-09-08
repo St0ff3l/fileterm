@@ -1,0 +1,469 @@
+/* Global Proxy & Tunnel Manager - Connection Manager Template */
+
+.proxy-manager-modal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.proxy-manager-table.manager-table {
+  border-radius: 0;
+}
+
+.proxy-manager-table .manager-head,
+.proxy-manager-table .manager-row {
+  grid-template-columns:
+    minmax(0, 1.25fr)
+    minmax(0, 1.25fr)
+    56px
+    72px
+    minmax(72px, 0.62fr)
+    minmax(0, 0.85fr)
+    74px;
+}
+
+.connection-manager-title .proxy-manager-title-icon {
+  flex: 0 0 auto;
+  color: var(--accent-highlight);
+}
+
+.home-content-body .manager-inline .connection-manager-title .proxy-manager-title-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--accent-highlight);
+}
+
+.proxy-section-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.proxy-saved-selected-card {
+  grid-column: span 2;
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-highlight) 24%, var(--border-subtle));
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--accent-highlight) 6%, var(--surface-panel));
+}
+
+.proxy-saved-selected-header,
+.proxy-saved-selected-info {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.proxy-saved-selected-header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.proxy-saved-selected-info {
+  gap: 8px;
+  overflow: hidden;
+}
+
+.proxy-saved-selected-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.proxy-saved-selected-endpoint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.proxy-type-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--accent-highlight) 12%, transparent);
+  color: var(--accent-highlight);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.proxy-type-badge--http,
+.proxy-type-badge--http-tunnel {
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  color: var(--status-warning);
+}
+
+.proxy-saved-selected-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.proxy-saved-selected-note .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-highlight);
+}
+
+.proxy-card-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px;
+}
+
+.tunnel-saved-selected-card {
+  margin-top: 2px;
+}
+
+/* Badge colors for protocols */
+.manager-type-badge.is-socks5 {
+  color: var(--status-info);
+}
+
+.manager-type-badge.is-http {
+  color: var(--status-success);
+}
+
+.manager-type-badge.is-http-connect {
+  color: var(--status-success);
+}
+
+.manager-type-badge.is-ssh {
+  color: var(--status-info);
+}
+
+.manager-type-badge.is-http-tunnel {
+  color: var(--status-warning);
+}
+
+.proxy-manager-table .manager-type-badge {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.proxy-auth-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.proxy-auth-status.is-configured {
+  color: var(--status-success);
+}
+
+.proxy-auth-status .app-icon {
+  flex: 0 0 auto;
+}
+
+.proxy-manager-endpoint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxy-row-success-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--status-success);
+}
+
+/* Modal Styling for Proxy Edit Dialog (matching ConnectionModal) */
+.modal-card.ssh-modal.proxy-edit-modal {
+  width: 860px;
+  max-width: calc(100vw - 32px);
+  height: 680px;
+  max-height: calc(100vh - 32px);
+}
+
+.modal-card.ssh-modal.proxy-edit-modal.standalone {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+}
+
+.proxy-modal-auth-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--status-info) 7%, var(--surface-panel));
+  border: 1px solid color-mix(in srgb, var(--status-info) 22%, var(--border-subtle));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.proxy-modal-auth-hint span:first-child,
+.proxy-modal-auth-hint svg {
+  color: var(--status-info);
+  flex-shrink: 0;
+}
+
+/* Password field with eye toggle */
+.proxy-password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.proxy-password-field input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.proxy-pwd-toggle-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: color 120ms ease;
+}
+
+.proxy-pwd-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Connectivity Test UI inside Modal */
+.proxy-test-result-wrapper {
+  margin-top: 4px;
+}
+
+.proxy-testing-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.proxy-result-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 6px);
+}
+
+.proxy-result-card.is-success {
+  background: color-mix(in srgb, var(--status-success) 8%, var(--surface-panel));
+  border: 1px solid color-mix(in srgb, var(--status-success) 24%, var(--border-subtle));
+  color: var(--status-success);
+}
+
+.proxy-result-card.is-error {
+  background: color-mix(in srgb, var(--status-danger) 8%, var(--surface-panel));
+  border: 1px solid color-mix(in srgb, var(--status-danger) 24%, var(--border-subtle));
+  color: var(--status-danger);
+}
+
+.proxy-result-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.proxy-result-detail strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.proxy-result-detail span {
+  color: var(--text-secondary);
+}
+
+.proxy-test-empty-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px dashed var(--border-subtle);
+  background: var(--surface-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.proxy-test-status-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.proxy-test-status-tag.is-success {
+  background: color-mix(in srgb, var(--status-success) 12%, transparent);
+  color: var(--status-success);
+}
+
+.proxy-test-status-tag.is-error {
+  background: color-mix(in srgb, var(--status-danger) 12%, transparent);
+  color: var(--status-danger);
+}
+
+.proxy-bound-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.proxy-bound-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.proxy-bound-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.proxy-bound-name {
+  font-weight: 500;
+}
+
+.proxy-empty-connections-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.tunnel-profile-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--status-info) 22%, var(--border-subtle));
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--status-info) 7%, var(--surface-panel));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.tunnel-profile-note > .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--status-info);
+}
+
+.tunnel-profile-note--field {
+  grid-column: span 2;
+  margin-top: 0;
+  align-self: end;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.tunnel-independent-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.tunnel-profile-clear-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.tunnel-profile-clear-token input {
+  width: auto !important;
+  accent-color: var(--focus-outline);
+}
+
+.tunnel-source-row {
+  min-width: 0;
+}
+
+.tunnel-source-row > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 520px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .proxy-manager-table .manager-head,
+  .proxy-manager-table .manager-row {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.3fr) 52px 68px 80px 68px 74px;
+  }
+}

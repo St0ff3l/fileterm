@@ -11,11 +11,12 @@ import { CloseButton } from '../common/close-button'
 import { FeedbackText } from '../common/feedback-text'
 import { StableButtonContent } from '../common/stable-button-content'
 import { waitForMinimumBusyDuration } from '../common/operation-timing'
-import { ConnectionProxySection } from './connection-proxy-section'
+import { ConnectionNetworkSection } from './connection-network-section'
+import { ConnectionReliabilitySection } from './connection-reliability-section'
 import { ConnectionSessionLogSection } from './connection-session-log-section'
+import { ConnectionSshAdvancedSection } from './connection-ssh-advanced-section'
 import { ConnectionSshSection } from './connection-ssh-section'
 import { ConnectionTerminalSection } from './connection-terminal-section'
-import { ConnectionTunnelSection } from './connection-tunnel-section'
 import { isValidFtpCertificateFingerprint, type SshConnectionSettingKey } from './connection-modal-utils'
 
 const CONNECTION_TEST_RETRY_COOLDOWN_MS = 5000
@@ -62,7 +63,9 @@ export function ConnectionModal({
   profiles?: import('@fileterm/core').ConnectionProfile[]
   editingProfileId?: string | null
 }) {
-  const [section, setSection] = useState<'ssh' | 'terminal' | 'session-log' | 'proxy' | 'tunnel'>('ssh')
+  const [section, setSection] = useState<'ssh' | 'network' | 'terminal' | 'advanced' | 'reliability' | 'session-log'>(
+    'ssh'
+  )
   const [isSelectingSessionLogDirectory, setIsSelectingSessionLogDirectory] = useState(false)
   const [serialPorts, setSerialPorts] = useState<SerialPortInfo[]>([])
   const [isLoadingSerialPorts, setIsLoadingSerialPorts] = useState(false)
@@ -73,7 +76,10 @@ export function ConnectionModal({
   const [connectionTestSucceeded, setConnectionTestSucceeded] = useState(false)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const serialPortRefreshInFlightRef = useRef(false)
-  const supportsProxy = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
+  const supportsNetwork = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
+  const supportsTerminal = form.type !== 'ftp'
+  const supportsAdvanced = form.type === 'ssh'
+  const supportsReliability = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
   const isNetworkDevice = form.type === 'ssh' && form.deviceMode === 'network-device'
   const showsNetworkDeviceVendor = form.type === 'ssh' && (isNetworkDevice || form.deviceMode === 'auto')
   const platform = window.fileterm?.platform
@@ -93,6 +99,26 @@ export function ConnectionModal({
   useEffect(() => {
     setConnectionTestSucceeded(false)
   }, [form])
+
+  useEffect(() => {
+    if (
+      (section === 'network' && !supportsNetwork) ||
+      (section === 'terminal' && !supportsTerminal) ||
+      (section === 'advanced' && !supportsAdvanced) ||
+      (section === 'reliability' && !supportsReliability)
+    ) {
+      setSection('ssh')
+    }
+  }, [section, supportsNetwork, supportsTerminal, supportsAdvanced, supportsReliability])
+
+  const connectionTabTitle =
+    form.type === 'ftp'
+      ? t.ftpConnection
+      : form.type === 'telnet'
+        ? t.telnetConnection
+        : form.type === 'serial'
+          ? t.serialConnection
+          : t.sshConnection
 
   const isFormBusy = isSubmitting || isTestingConnection
   const isTestBusy = isFormBusy || isTestRetryCoolingDown
@@ -203,7 +229,7 @@ export function ConnectionModal({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     if (form.type === 'ftp' && form.securityMode === 'implicit' && form.proxy?.type && form.proxy.type !== 'none') {
       event.preventDefault()
-      setSection('proxy')
+      setSection('network')
       setSerialValidationError(t.ftpImplicitProxyUnsupported)
       return
     }
@@ -275,15 +301,44 @@ export function ConnectionModal({
       <div className="ssh-modal-body">
         <aside className="ssh-modal-nav">
           <button className={section === 'ssh' ? 'active' : ''} type="button" onClick={() => setSection('ssh')}>
-            {t.sshConnection}
+            {connectionTabTitle}
           </button>
-          <button
-            className={section === 'terminal' ? 'active' : ''}
-            type="button"
-            onClick={() => setSection('terminal')}
-          >
-            {t.terminal}
-          </button>
+          {supportsNetwork ? (
+            <button
+              className={section === 'network' ? 'active' : ''}
+              type="button"
+              onClick={() => setSection('network')}
+            >
+              {t.networkAndProxy}
+            </button>
+          ) : null}
+          {supportsTerminal ? (
+            <button
+              className={section === 'terminal' ? 'active' : ''}
+              type="button"
+              onClick={() => setSection('terminal')}
+            >
+              {t.terminal}
+            </button>
+          ) : null}
+          {supportsAdvanced ? (
+            <button
+              className={section === 'advanced' ? 'active' : ''}
+              type="button"
+              onClick={() => setSection('advanced')}
+            >
+              {t.advancedSettings}
+            </button>
+          ) : null}
+          {supportsReliability ? (
+            <button
+              className={section === 'reliability' ? 'active' : ''}
+              type="button"
+              onClick={() => setSection('reliability')}
+            >
+              {t.reliability}
+            </button>
+          ) : null}
           <button
             className={section === 'session-log' ? 'active' : ''}
             type="button"
@@ -291,16 +346,6 @@ export function ConnectionModal({
           >
             {t.sessionLogs}
           </button>
-          {supportsProxy ? (
-            <button className={section === 'proxy' ? 'active' : ''} type="button" onClick={() => setSection('proxy')}>
-              {t.proxyServer}
-            </button>
-          ) : null}
-          {form.type === 'ssh' ? (
-            <button className={section === 'tunnel' ? 'active' : ''} type="button" onClick={() => setSection('tunnel')}>
-              {t.tunnel}
-            </button>
-          ) : null}
         </aside>
         <form aria-busy={isFormBusy} className="ssh-form-shell" onSubmit={handleSubmit}>
           <fieldset
@@ -311,37 +356,59 @@ export function ConnectionModal({
             {section === 'ssh' ? (
               <ConnectionSshSection
                 connectionDefaults={connectionDefaults}
-                fallbackResourceMonitoringMetrics={fallbackResourceMonitoringMetrics}
-                fallbackResourceMonitoringMetricOrder={fallbackResourceMonitoringMetricOrder}
                 form={form}
                 groupOptions={groupOptions}
                 hasSavedPassword={hasSavedPassword}
                 hasSavedSuPassword={hasSavedSuPassword}
                 hasSavedSudoPassword={hasSavedSudoPassword}
-                intervalSettingOptions={intervalSettingOptions}
                 isMacOs={isMacOs}
                 isLoadingSerialPorts={isLoadingSerialPorts}
                 isNetworkDevice={isNetworkDevice}
-                isSubmitting={isSubmitting}
-                jumpHosts={jumpHosts}
                 mode={mode}
                 onClearHostFingerprint={onClearHostFingerprint}
                 refreshSerialPorts={refreshSerialPorts}
-                routingMode={routingMode}
                 serialDevicePathPlaceholder={serialDevicePathPlaceholder}
                 serialPortLoadError={serialPortLoadError}
                 serialPortOptions={serialPortOptions}
                 serialPorts={serialPorts}
                 setForm={setForm}
-                setRoutingMode={setRoutingMode}
-                setSshConnectionSetting={setSshConnectionSetting}
                 showsNetworkDeviceVendor={showsNetworkDeviceVendor}
                 supportsBuiltInRs485={supportsBuiltInRs485}
                 supportsExtendedParity={supportsExtendedParity}
               />
             ) : null}
-            {section === 'terminal' ? (
+            {section === 'network' && supportsNetwork ? (
+              <ConnectionNetworkSection
+                form={form}
+                jumpHosts={jumpHosts}
+                routingMode={routingMode}
+                setForm={setForm}
+                setRoutingMode={setRoutingMode}
+              />
+            ) : null}
+            {section === 'terminal' && supportsTerminal ? (
               <ConnectionTerminalSection form={form} isNetworkDevice={isNetworkDevice} setForm={setForm} />
+            ) : null}
+            {section === 'advanced' && supportsAdvanced ? (
+              <ConnectionSshAdvancedSection
+                connectionDefaults={connectionDefaults}
+                fallbackResourceMonitoringMetrics={fallbackResourceMonitoringMetrics}
+                fallbackResourceMonitoringMetricOrder={fallbackResourceMonitoringMetricOrder}
+                form={form}
+                intervalSettingOptions={intervalSettingOptions}
+                isNetworkDevice={isNetworkDevice}
+                isSubmitting={isSubmitting}
+                setForm={setForm}
+                setSshConnectionSetting={setSshConnectionSetting}
+              />
+            ) : null}
+            {section === 'reliability' && supportsReliability ? (
+              <ConnectionReliabilitySection
+                connectionDefaults={connectionDefaults}
+                form={form}
+                setForm={setForm}
+                setSshConnectionSetting={setSshConnectionSetting}
+              />
             ) : null}
             {section === 'session-log' ? (
               <ConnectionSessionLogSection
@@ -350,10 +417,6 @@ export function ConnectionModal({
                 isSelectingSessionLogDirectory={isSelectingSessionLogDirectory}
                 setForm={setForm}
               />
-            ) : null}
-            {section === 'proxy' && supportsProxy ? <ConnectionProxySection form={form} setForm={setForm} /> : null}
-            {section === 'tunnel' && form.type === 'ssh' ? (
-              <ConnectionTunnelSection form={form} setForm={setForm} />
             ) : null}
             <div className="form-actions ssh-actions">
               {connectionTestFeedback ? (

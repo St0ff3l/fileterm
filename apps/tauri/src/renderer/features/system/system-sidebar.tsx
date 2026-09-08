@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ConnectionProfile, ResourceMonitoringMetric, SessionSnapshot } from '@fileterm/core'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ConnectionProfile, ResourceMonitoringMetric, SessionSnapshot, TabStatus } from '@fileterm/core'
 import { t } from '../../i18n'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import {
@@ -15,7 +15,9 @@ import { NetworkMetricPanel, ProcessMetricPanel } from './system-resource-detail
 export function SystemSidebar({
   activeProfile,
   activeSession,
+  activeTabId,
   collapsed,
+  connectionStatus,
   showResourceMeters,
   visibleMetrics,
   onOpenSystemInfo,
@@ -23,7 +25,9 @@ export function SystemSidebar({
 }: {
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
+  activeTabId: string | null
   collapsed: boolean
+  connectionStatus: TabStatus | null
   showResourceMeters: boolean
   visibleMetrics: ResourceMonitoringMetric[]
   onOpenSystemInfo(): void
@@ -75,13 +79,20 @@ export function SystemSidebar({
     setSelectedDiskMountPoint(defaultFileSystem?.mountPoint ?? '')
   }, [availableFileSystems, defaultFileSystem?.mountPoint, selectedDiskMountPoint])
 
-  useEffect(() => {
-    // Reconnects reuse the sidebar DOM node, so explicitly start the resource
-    // viewport at the top when the remote session changes connection state.
-    if (systemMetricsScrollRef.current) {
-      systemMetricsScrollRef.current.scrollTop = 0
+  useLayoutEffect(() => {
+    // Reconnects and kept-alive tabs reuse the sidebar DOM node. Reset both
+    // before paint and on the next frame so late metric hydration cannot leave
+    // the resource viewport anchored to the previous session's bottom edge.
+    const resetScroll = () => {
+      if (systemMetricsScrollRef.current) {
+        systemMetricsScrollRef.current.scrollTop = 0
+      }
     }
-  }, [activeSession?.connected, activeSession?.profileId])
+
+    resetScroll()
+    const frameId = window.requestAnimationFrame(resetScroll)
+    return () => window.cancelAnimationFrame(frameId)
+  }, [activeSession?.connected, activeSession?.profileId, activeTabId, connectionStatus, Boolean(metrics)])
 
   const selectedFileSystem =
     availableFileSystems.find((row) => row.mountPoint === selectedDiskMountPoint) ?? defaultFileSystem

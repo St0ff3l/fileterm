@@ -153,7 +153,7 @@ async fn upload_file<T: TokioTlsStream + Send + 'static>(
     let mut local = tokio::fs::File::open(local_path)
         .await
         .map_err(|error| error.to_string())?;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     let mut attempt_offset = resume_offset;
     let mut rebuilt_from_zero = false;
 
@@ -307,7 +307,7 @@ async fn download_file<T: TokioTlsStream + Send + 'static>(
     )
     .await
     .map_err(|error| error.to_string())?;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     let mut transferred = resume_offset;
     crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
     loop {

@@ -196,26 +196,28 @@
   box-sizing: border-box;
   height: 100%;
   min-height: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .terminal-inner {
   height: 100%;
   min-height: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .terminal-host .xterm {
   height: 100%;
-}
-
-.terminal-host .xterm {
   min-height: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .terminal-host .xterm .xterm-selection div {
   background: var(--terminal-selection-bg) !important;
 }
 
-.terminal-host .xterm .xterm-screen ::selection,
 .terminal-host .xterm textarea::selection {
   color: var(--terminal-text);
   background: var(--terminal-selection-bg);

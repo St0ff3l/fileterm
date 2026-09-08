@@ -101,6 +101,29 @@ fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Re
                 proxy.insert("password".to_string(), Value::String(value));
             }
         }
+        if let Some(proxy_profile_id) = profile_object
+            .get("proxyProfileId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+        {
+            if let Ok(Some(stored_proxy)) =
+                crate::services::proxies::get_internal(storage_root, proxy_profile_id)
+            {
+                let mut proxy_obj = Map::new();
+                proxy_obj.insert("type".to_string(), Value::String(stored_proxy.proxy_type));
+                proxy_obj.insert("host".to_string(), Value::String(stored_proxy.host));
+                proxy_obj.insert("port".to_string(), Value::Number(stored_proxy.port.into()));
+                if let Some(username) = stored_proxy.username {
+                    proxy_obj.insert("username".to_string(), Value::String(username));
+                }
+                if let Ok(Some(pwd)) =
+                    crate::services::proxies::get_secret_internal(storage_root, proxy_profile_id)
+                {
+                    proxy_obj.insert("password".to_string(), Value::String(pwd));
+                }
+                profile_object.insert("proxy".to_string(), Value::Object(proxy_obj));
+            }
+        }
     }
     Ok(())
 }

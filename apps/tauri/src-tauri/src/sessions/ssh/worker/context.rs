@@ -53,10 +53,7 @@ impl SshWorkerExit {
         }
     }
 
-    fn transport_closed(
-        disconnect_reason: SshDisconnectInfo,
-        connection_was_stable: bool,
-    ) -> Self {
+    fn transport_closed(disconnect_reason: SshDisconnectInfo, connection_was_stable: bool) -> Self {
         Self {
             kind: SshWorkerExitKind::TransportClosed,
             disconnect_reason: Some(disconnect_reason),
@@ -84,7 +81,9 @@ impl SshWorkerExit {
             }
             (SshWorkerExitKind::ShellClosed, _) => "shell channel closed".to_string(),
             (SshWorkerExitKind::InputClosed, _) => "worker command input closed".to_string(),
-            (SshWorkerExitKind::ExplicitDisconnect, _) => "explicit disconnect requested".to_string(),
+            (SshWorkerExitKind::ExplicitDisconnect, _) => {
+                "explicit disconnect requested".to_string()
+            }
             (SshWorkerExitKind::Cancelled, _) => "worker canceled".to_string(),
         }
     }
@@ -144,4 +143,10 @@ struct SshWorkerStartupContext<'a> {
     route_hint: &'static str,
     cancellation: &'a CancellationToken,
     state: &'a crate::services::workspace::WorkspaceState,
+}
+
+struct SshAuxiliaryReady {
+    sftp: Option<SharedSftpSession>,
+    sftp_unavailable_reason: Option<String>,
+    shell_setup_script: Option<&'static str>,
 }

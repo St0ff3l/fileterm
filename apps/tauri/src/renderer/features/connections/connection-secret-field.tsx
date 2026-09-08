@@ -7,6 +7,7 @@ export function ConnectionSecretField({
   value,
   hasSavedValue,
   canClear,
+  fullWidth = false,
   optional = false,
   disabled = false,
   onChange,
@@ -18,6 +19,7 @@ export function ConnectionSecretField({
   value: string | null | undefined
   hasSavedValue: boolean
   canClear: boolean
+  fullWidth?: boolean
   optional?: boolean
   disabled?: boolean
   onChange(value: string): void
@@ -28,7 +30,7 @@ export function ConnectionSecretField({
   const showClearButton = canClear && hasSavedValue && !markedForClear
 
   return (
-    <div className="ssh-secret-field span-2">
+    <div className={`ssh-secret-field${fullWidth ? ' span-2' : ''}`}>
       <div className="ssh-secret-field__header">
         <label htmlFor={id}>
           {label}

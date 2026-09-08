@@ -38,6 +38,17 @@ pub async fn create_upload(
         .unwrap_or_else(|| "user".to_string());
     if metadata.is_dir() {
         let (directories, files) = collect_local_tree(Path::new(&local_path)).await?;
+        let scanned_directory_count = directories.len();
+        let scanned_file_count = files.len();
+        let scanned_total_bytes = files.iter().map(|(_, identity)| identity.size).sum::<u64>();
+        crate::services::logging::info(
+            app,
+            "transfer",
+            format!(
+                "local directory scan completed directories={} files={} total_bytes={}",
+                scanned_directory_count, scanned_file_count, scanned_total_bytes
+            ),
+        );
         let task_id = format!("transfer-{}", uuid::Uuid::new_v4());
         let mut manifest_directories = vec![destination_path.clone()];
         manifest_directories.extend(directories.into_iter().map(|directory| {
@@ -108,7 +119,7 @@ pub async fn create_upload(
         };
         state.transfers.write().await.push(task.clone());
         persist(app).await?;
-        emit_task(app, task.clone()).await;
+        emit_task(app, &task).await;
         start(app.clone(), task.id).await?;
         return Ok(());
     }
@@ -154,7 +165,7 @@ pub async fn create_upload(
     };
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
-    emit_task(app, task.clone()).await;
+    emit_task(app, &task).await;
     start(app.clone(), task.id).await?;
     Ok(())
 }
@@ -229,7 +240,7 @@ pub async fn create_download(
     };
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
-    emit_task(app, task.clone()).await;
+    emit_task(app, &task).await;
     let task_id = task.id.clone();
     start(app.clone(), task_id.clone()).await?;
     Ok(task_id)
@@ -328,7 +339,7 @@ pub async fn create_download_directory(
     };
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
-    emit_task(app, task.clone()).await;
+    emit_task(app, &task).await;
     let task_id = task.id.clone();
     start(app.clone(), task_id.clone()).await?;
     Ok(task_id)

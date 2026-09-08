@@ -59,7 +59,7 @@ async fn upload_root_local_file(
     }
 
     let mut transferred = resume_offset;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
     loop {
         let read = read_local_transfer_chunk(&mut source, &mut buffer, &cancel).await?;

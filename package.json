@@ -1,6 +1,6 @@
 {
   "name": "fileterm",
-  "version": "2.2.8-beta.6",
+  "version": "2.2.8-beta.7",
   "private": true,
   "license": "MIT",
   "description": "Modern remote workspace for SSH, SFTP, and FTP.",
@@ -29,8 +29,7 @@
     "release:linux": "node ./scripts/workspace-run.mjs release:linux apps/tauri",
     "qa:ai-copilot-fixture": "node ./scripts/ai-copilot-fixture-provider.mjs",
     "qa:ai-copilot-fixture-smoke": "node ./scripts/ai-copilot-fixture-smoke.mjs",
-    "qa:mcp-stdio-smoke": "node ./scripts/mcp-stdio-smoke.mjs",
-    "postinstall": "node ./vendor/cpu-features-shim/apply-shim.mjs"
+    "qa:mcp-stdio-smoke": "node ./scripts/mcp-stdio-smoke.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

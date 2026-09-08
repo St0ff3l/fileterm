@@ -1,4 +1,4 @@
-import type { ConnectionFormMode, FileContentSnapshot } from '@fileterm/core'
+import type { ConnectionFormMode, FileContentSnapshot, TunnelProfileType } from '@fileterm/core'
 import { useAppDataOperations } from './hooks/use-app-data-operations'
 import { useAppResize } from './hooks/use-app-resize'
 import { useAppShellState, type InitialUiPreferences } from './hooks/use-app-shell-state'
@@ -13,16 +13,22 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const isCommandManagerWindow = windowMode === 'command-manager'
   const isConnectionFormWindow = windowMode === 'connection-form'
   const isCommandFormWindow = windowMode === 'command-form'
+  const isProxyFormWindow = windowMode === 'proxy-form'
+  const isTunnelFormWindow = windowMode === 'tunnel-form'
   const isFileEditorWindow = windowMode === 'file-editor'
   const isMainWorkspaceWindow =
     !isConnectionManagerWindow &&
     !isCommandManagerWindow &&
     !isConnectionFormWindow &&
     !isCommandFormWindow &&
+    !isProxyFormWindow &&
+    !isTunnelFormWindow &&
     !isFileEditorWindow
 
   const formWindowMode = (searchParams.get('mode') as ConnectionFormMode | null) ?? 'create'
   const formWindowProfileId = searchParams.get('profileId')
+  const formWindowProxyType = (searchParams.get('encoding') as 'socks5' | 'http' | null) ?? 'socks5'
+  const formWindowTunnelType = (searchParams.get('encoding') as TunnelProfileType | null) ?? 'ssh'
   const formWindowCommandId = searchParams.get('commandId')
   const formWindowFolderId = searchParams.get('folderId')
   const formWindowCommand = searchParams.get('command') ?? ''
@@ -153,10 +159,14 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           isCommandManagerWindow,
           isConnectionFormWindow,
           isCommandFormWindow,
+          isProxyFormWindow,
+          isTunnelFormWindow,
           isFileEditorWindow,
           isMainWorkspaceWindow,
           formWindowMode,
           formWindowProfileId,
+          formWindowProxyType,
+          formWindowTunnelType,
           formWindowCommandId,
           formWindowFolderId,
           formWindowCommand,

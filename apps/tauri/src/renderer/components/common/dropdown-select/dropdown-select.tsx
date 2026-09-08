@@ -24,6 +24,7 @@ export type DropdownOption = {
 const useNativeSelect = () => window.fileterm?.platform === 'darwin'
 
 export function DropdownSelect({
+  id,
   value,
   options,
   onChange,
@@ -42,6 +43,7 @@ export function DropdownSelect({
   forceCustomMenu = false,
   hideArrow = false
 }: {
+  id?: string
   value: string
   options: DropdownOption[]
   onChange(value: string): void
@@ -198,6 +200,7 @@ export function DropdownSelect({
         </span>
         <select
           ref={selectRef}
+          id={id}
           autoFocus={autoFocus}
           aria-label={ariaLabel}
           disabled={disabled}
@@ -272,6 +275,7 @@ export function DropdownSelect({
     <>
       <button
         ref={triggerRef}
+        id={id}
         type="button"
         autoFocus={autoFocus}
         aria-label={ariaLabel}

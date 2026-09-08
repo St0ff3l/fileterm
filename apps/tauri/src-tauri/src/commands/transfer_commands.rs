@@ -95,7 +95,7 @@ pub async fn app_cancel_transfer(
     app: AppHandle,
     transfer_id: String,
 ) -> Result<serde_json::Value, AppError> {
-    crate::services::transfers::discard(&app, transfer_id).await?;
+    crate::services::transfers::discard(&app, transfer_id, false).await?;
     get_workspace_snapshot(app).await
 }
 
@@ -121,8 +121,9 @@ pub async fn app_resume_transfer(
 pub async fn app_discard_transfer(
     app: AppHandle,
     transfer_id: String,
+    force: Option<bool>,
 ) -> Result<serde_json::Value, AppError> {
-    crate::services::transfers::discard(&app, transfer_id).await?;
+    crate::services::transfers::discard(&app, transfer_id, force.unwrap_or(false)).await?;
     get_workspace_snapshot(app).await
 }
 

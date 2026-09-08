@@ -43,6 +43,10 @@ const PORTABLE_DATA_ENTRIES: &[(&str, bool)] = &[
     ("ssh-keys.json", false),
     ("ssh-key-secrets.json", true),
     ("ssh-keys", true),
+    ("proxies.json", false),
+    ("proxy-secrets.json", true),
+    ("tunnels.json", false),
+    ("tunnel-secrets.json", true),
     ("secret-store-v1.key", true),
     (LEGACY_MIGRATION_MARKER, false),
 ];
@@ -116,6 +120,16 @@ const LEGACY_JSON_STORES: &[LegacyJsonStore] = &[
     LegacyJsonStore {
         name: "webdav-sync.json",
         mode: JsonMergeMode::CurrentFileWins,
+        confidential: true,
+    },
+    LegacyJsonStore {
+        name: "proxies.json",
+        mode: JsonMergeMode::ArrayById,
+        confidential: false,
+    },
+    LegacyJsonStore {
+        name: "proxy-secrets.json",
+        mode: JsonMergeMode::ObjectCurrentWins,
         confidential: true,
     },
 ];

@@ -25,22 +25,40 @@ pub async fn ensure_loaded(app: &AppHandle) -> Result<(), AppError> {
 pub async fn list(app: &AppHandle) -> Result<Vec<TransferTask>, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let transfers = state.transfers.read().await.clone();
+    let transfers = state
+        .transfers
+        .read()
+        .await
+        .iter()
+        .map(TransferTask::to_ui_task)
+        .collect();
     Ok(transfers)
 }
 
 async fn persist(app: &AppHandle) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let _write = state.transfer_journal_write.lock().await;
+    let write_guard = state.transfer_journal_write.clone().lock_owned().await;
     let tasks = state.transfers.read().await.clone();
-    write_journal(app, &tasks)
+    let journal_app = app.clone();
+    // Serialization and fsync for large directory journals must not occupy
+    // a Tokio worker also responsible for terminal IO and UI commands.
+    tokio::task::spawn_blocking(move || {
+        let _write = write_guard;
+        write_journal(&journal_app, &tasks)
+    })
+    .await
+    .map_err(|error| AppError::Storage(error.to_string()))?
 }
 
 // Transfer progress belongs to the main workspace window. Keep it separate
 // from workspace snapshots so standalone editors do not rehydrate while a
 // background upload or download advances.
-async fn emit_task(app: &AppHandle, task: TransferTask) {
-    let _ = app.emit_to(EventTarget::webview_window("main"), "transfer:update", task);
+async fn emit_task(app: &AppHandle, task: &TransferTask) {
+    let _ = app.emit_to(
+        EventTarget::webview_window("main"),
+        "transfer:update",
+        task.to_ui_task(),
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -50,14 +68,18 @@ enum PatchDelivery {
     PersistedEvent,
 }
 
-async fn patch_task(
+async fn patch_task_inner(
     app: &AppHandle,
     transfer_id: &str,
     patch: impl FnOnce(&mut TransferTask),
     delivery: PatchDelivery,
+    execution_result: bool,
 ) -> Result<Option<TransferTask>, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    // Silent 路径只更新内存状态，不需要事件载荷；跳过克隆可避免目录传输
+    // 期间对含数万条目 manifest 的反复深拷贝（每次高达数十 MB）。
+    let should_publish = !matches!(delivery, PatchDelivery::Silent);
     let task = {
         let mut tasks = state.transfers.write().await;
         let Some(task) = tasks.iter_mut().find(|task| task.id == transfer_id) else {
@@ -65,16 +87,21 @@ async fn patch_task(
         };
         patch(task);
         task.updated_at = Some(now_ms());
-        task.clone()
+        should_publish.then(|| {
+            if execution_result {
+                task.clone()
+            } else {
+                task.to_ui_task()
+            }
+        })
     };
     if matches!(delivery, PatchDelivery::PersistedEvent) {
         persist(app).await?;
     }
-    match delivery {
-        PatchDelivery::Silent => {}
-        PatchDelivery::Event | PatchDelivery::PersistedEvent => emit_task(app, task.clone()).await,
+    if let Some(task) = task.as_ref() {
+        emit_task(app, task).await;
     }
-    Ok(Some(task))
+    Ok(task)
 }
 
 pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u64, total: u64) {
@@ -88,6 +115,9 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
         }
         should_emit
     };
+    if !should_emit {
+        return;
+    }
     let speed = {
         let now = std::time::Instant::now();
         let mut samples = state.transfer_progress_samples.lock().await;
@@ -160,11 +190,7 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
             }
             task.resumable = true;
         },
-        if should_emit {
-            PatchDelivery::Event
-        } else {
-            PatchDelivery::Silent
-        },
+        PatchDelivery::Event,
     )
     .await;
 }
@@ -260,4 +286,24 @@ async fn worker_call_with_timeout<T>(
         }
     };
     response.map_err(transfer_error)
+}
+
+// Most patches need only the UI projection. Only starting execution needs
+// the durable manifest; progress updates never clone that collection.
+async fn patch_task(
+    app: &AppHandle,
+    transfer_id: &str,
+    patch: impl FnOnce(&mut TransferTask),
+    delivery: PatchDelivery,
+) -> Result<Option<TransferTask>, AppError> {
+    patch_task_inner(app, transfer_id, patch, delivery, false).await
+}
+
+async fn patch_task_for_execution(
+    app: &AppHandle,
+    transfer_id: &str,
+    patch: impl FnOnce(&mut TransferTask),
+    delivery: PatchDelivery,
+) -> Result<Option<TransferTask>, AppError> {
+    patch_task_inner(app, transfer_id, patch, delivery, true).await
 }

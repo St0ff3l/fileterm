@@ -61,7 +61,6 @@ html[data-platform='linux'][data-window-maximized='true'] #root {
 input,
 textarea,
 [contenteditable='true'],
-.xterm,
 .monaco-editor,
 .selectable-text {
   user-select: text;

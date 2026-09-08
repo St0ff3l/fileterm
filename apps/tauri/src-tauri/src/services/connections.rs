@@ -105,7 +105,9 @@ fn map_auth(value: Option<&Value>) -> &'static str {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if (value.contains("jumpserver") || value.contains("koko")) && value.contains("mfa") {
+    if value.contains("kubernetes") || value.contains("k8s") {
+        "kubernetes"
+    } else if (value.contains("jumpserver") || value.contains("koko")) && value.contains("mfa") {
         "jumpserver-koko-mfa"
     } else if value.contains("interactive") {
         "keyboard-interactive"
@@ -753,6 +755,23 @@ mod tests {
         )
         .unwrap();
         assert_eq!(profile["authType"], "jumpserver-koko-mfa");
+    }
+
+    #[test]
+    fn preserves_kubernetes_auth_mode_when_normalizing_compatible_json() {
+        let profile = normalize_external_profile(
+            &json!({
+                "name": "pod-shell",
+                "type": "ssh",
+                "host": "ssh.example.com",
+                "port": 22,
+                "username": "pod-7f8c9",
+                "authType": "Kubernetes mode"
+            }),
+            "fallback",
+        )
+        .unwrap();
+        assert_eq!(profile["authType"], "kubernetes");
     }
 
     #[test]

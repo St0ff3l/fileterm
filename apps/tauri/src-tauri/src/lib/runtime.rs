@@ -570,6 +570,13 @@ pub fn run() {
             crate::commands::app_start_ssh_tunnel,
             crate::commands::app_stop_ssh_tunnel,
             crate::commands::app_delete_ssh_tunnel,
+            crate::commands::app_list_tunnel_profiles,
+            crate::commands::app_save_tunnel_profile,
+            crate::commands::app_delete_tunnel_profile,
+            crate::commands::app_list_proxy_profiles,
+            crate::commands::app_save_proxy_profile,
+            crate::commands::app_delete_proxy_profile,
+            crate::commands::app_test_proxy_profile,
             // Phase 2: profile / folder / command CRUD
             crate::commands::app_create_profile,
             crate::commands::app_update_profile,

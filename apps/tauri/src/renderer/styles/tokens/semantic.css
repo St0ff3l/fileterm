@@ -11,6 +11,7 @@
   --surface-sidebar: var(--ref-surface-sidebar);
   --surface-panel: var(--ref-surface-panel);
   --surface-card: var(--ref-surface-card);
+  --surface-section: var(--ref-surface-section);
   --surface-elevated: var(--ref-surface-elevated);
   --surface-modal: var(--ref-surface-modal);
   --surface-context-menu: var(--ref-surface-context-menu, var(--surface-modal));

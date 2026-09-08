@@ -5,6 +5,8 @@ import { ConnectionFormHost } from '../connections/connection-form-host'
 import { ConnectionImportPreviewModal } from '../connections/connection-import-preview-modal'
 import { ConnectionManagerModal } from '../connections/connection-manager-modal'
 import { ConnectionModal } from '../connections/connection-modal'
+import { ProxyFormHost } from '../proxies/proxy-form-host'
+import { TunnelFormHost } from '../tunnels/tunnel-form-host'
 import { CloseButton } from '../common/close-button'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 import { SshInteractionPortal } from './modal-portal-manager'
@@ -26,8 +28,13 @@ export function AppStandaloneWindows({ model }: { model: AppViewModel }) {
     isCommandManagerWindow,
     isCommandFormWindow,
     isConnectionFormWindow,
+    isProxyFormWindow,
+    isTunnelFormWindow,
     isFileEditorWindow,
     formWindowMode,
+    formWindowProfileId,
+    formWindowProxyType,
+    formWindowTunnelType,
     formWindowCommandId,
     formWindowFolderId,
     formWindowCommand,
@@ -256,6 +263,44 @@ export function AppStandaloneWindows({ model }: { model: AppViewModel }) {
           onClose={closeCurrentWindow}
         />
         <SshInteractionPortal {...sshInteractionPortalProps} />
+      </StandaloneWindowFrame>
+    )
+  }
+
+  if (isProxyFormWindow) {
+    return (
+      <StandaloneWindowFrame
+        isWindows={isWindowsDesktop}
+        showPlatformTitlebar={false}
+        title={formWindowMode === 'edit' ? t.editProxy : t.newProxy}
+      >
+        <ProxyFormHost
+          mode={formWindowMode}
+          proxyId={formWindowProfileId}
+          initialType={formWindowProxyType}
+          standalone
+          onClose={closeCurrentWindow}
+        />
+      </StandaloneWindowFrame>
+    )
+  }
+
+  if (isTunnelFormWindow) {
+    return (
+      <StandaloneWindowFrame
+        isWindows={isWindowsDesktop}
+        showPlatformTitlebar={false}
+        title={
+          formWindowMode === 'edit' ? t.editTunnel : formWindowTunnelType === 'http' ? t.newHttpTunnel : t.newSshTunnel
+        }
+      >
+        <TunnelFormHost
+          mode={formWindowMode}
+          tunnelId={formWindowProfileId}
+          initialType={formWindowTunnelType}
+          standalone
+          onClose={closeCurrentWindow}
+        />
       </StandaloneWindowFrame>
     )
   }

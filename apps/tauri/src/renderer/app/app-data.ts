@@ -84,6 +84,8 @@ export const defaultForm: CreateProfileInput = {
   loginScript: '',
   proxy: { type: 'none', host: '', port: 1080, username: '' },
   proxyPassword: '',
+  proxyProfileId: undefined,
+  tunnelProfileId: undefined,
   sudoPassword: '',
   suPassword: '',
   forwards: [],
@@ -238,6 +240,11 @@ export function profileToForm(
       profile.type === 'ssh' || profile.type === 'telnet' || profile.type === 'ftp'
         ? (profile.proxy?.password ?? '')
         : '',
+    proxyProfileId:
+      profile.type === 'ssh' || profile.type === 'telnet' || profile.type === 'ftp'
+        ? profile.proxyProfileId
+        : undefined,
+    tunnelProfileId: profile.type === 'ssh' ? profile.tunnelProfileId : undefined,
     sudoPassword: '',
     suPassword: '',
     jumpProfileId: profile.type === 'ssh' ? profile.jumpProfileId : undefined,

@@ -352,8 +352,13 @@ export function registerTerminalInteractionHandlers(
   }
   const onDocumentSelectionChange = () => {
     const selection = window.getSelection()
-    const anchorNode = selection?.anchorNode
-    if (selection && !selection.isCollapsed && anchorNode && host && !host.contains(anchorNode)) {
+    if (!selection || selection.isCollapsed || !host) {
+      return
+    }
+    const anchorNode = selection.anchorNode
+    const focusNode = selection.focusNode
+    if (anchorNode && !host.contains(anchorNode) && focusNode && host.contains(focusNode)) {
+      selection.removeAllRanges()
       terminal.clearSelection()
     }
   }
@@ -492,13 +497,26 @@ export function registerTerminalInteractionHandlers(
     applyTerminalZoom(operation, 'gesture')
   }
 
+  const onHostPointerEnter = (event: PointerEvent) => {
+    markTerminalUnderPointer()
+    if (event.buttons !== 0) {
+      const selection = window.getSelection()
+      if (selection && !selection.isCollapsed) {
+        const anchorNode = selection.anchorNode
+        if (anchorNode && host && !host.contains(anchorNode)) {
+          selection.removeAllRanges()
+        }
+      }
+    }
+  }
+
   if (host) {
     // xterm's textarea focus event is not consistently forwarded after a
     // compositor-backed pointer interaction. Record the active pane from the
     // host's capture phase as well, before xterm consumes the event.
     host.addEventListener('focusin', markTerminalFocused)
     host.addEventListener('pointerdown', markTerminalFocused, true)
-    host.addEventListener('pointerenter', markTerminalUnderPointer)
+    host.addEventListener('pointerenter', onHostPointerEnter)
     host.addEventListener('pointerleave', clearTerminalUnderPointer)
     host.addEventListener('mousedown', onMouseDown, true)
     host.addEventListener('pointerdown', onPointerDown, true)
@@ -537,7 +555,7 @@ export function registerTerminalInteractionHandlers(
       offNativeTerminalGestureZoom?.()
       host?.removeEventListener('focusin', markTerminalFocused)
       host?.removeEventListener('pointerdown', markTerminalFocused, true)
-      host?.removeEventListener('pointerenter', markTerminalUnderPointer)
+      host?.removeEventListener('pointerenter', onHostPointerEnter)
       host?.removeEventListener('pointerleave', clearTerminalUnderPointer)
       host?.removeEventListener('mousedown', onMouseDown, true)
       host?.removeEventListener('pointerdown', onPointerDown, true)

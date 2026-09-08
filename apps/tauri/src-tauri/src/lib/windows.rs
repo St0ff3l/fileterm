@@ -17,7 +17,10 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         // Windows; rebuilding synchronously used to race with label removal,
         // leaving an old form/listener alive and making SSH prompts appear
         // intermittently.
-        if matches!(input.kind.as_str(), "connection-form" | "command-form") {
+        if matches!(
+            input.kind.as_str(),
+            "connection-form" | "command-form" | "proxy-form" | "tunnel-form"
+        ) {
             let current_url = window
                 .url()
                 .map_err(|error| AppError::Window(error.to_string()))?;
@@ -54,6 +57,8 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         "command-manager" => ("命令管理器", 860.0, 680.0, 760.0, 620.0, false),
         "connection-form" => ("连接", 860.0, 680.0, 760.0, 620.0, false),
         "command-form" => ("命令", 860.0, 680.0, 760.0, 620.0, false),
+        "proxy-form" => ("代理与隧道", 860.0, 680.0, 760.0, 620.0, false),
+        "tunnel-form" => ("隧道配置", 860.0, 680.0, 760.0, 620.0, false),
         "file-editor" => ("编辑文件", 1220.0, 780.0, 1040.0, 620.0, false),
         _ => return Ok(()),
     };

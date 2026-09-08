@@ -390,6 +390,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
             {
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(tab_id) {
+                    session.remote_files_loading = false;
                     session.sftp_unavailable_reason = Some(reason.clone());
                     // The interactive SSH shell is still usable, but the
                     // file capability must reflect the failed subsystem
