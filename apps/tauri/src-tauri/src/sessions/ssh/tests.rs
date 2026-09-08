@@ -19,12 +19,14 @@ mod tests {
         remote_bind_host_matches, resolve_shell_file_access, resolve_ssh_device_mode,
         resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
         root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
-        root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
-        root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
+        root_list_shell_command, root_read_shell_command, root_replace_remote_file_command,
+        root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
+        shell_cwd_setup_for_platform,
         shell_cwd_sftp_path_candidates, should_buffer_terminal_input_during_shell_setup,
         should_reinject_root_shell_setup, should_restart_keyboard_interactive,
         spawn_cancellable_file_operation, split_prompt_tail_for_setup_wait, ssh_terminal_type,
-        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        extract_root_read_base64, strip_su_exec_output, su_exec_command, suppress_shell_setup_echo,
+        track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
         try_keyboard_interactive_with_responder, tunnel_bind_address,
         validate_root_download_completion, validate_tunnel_rule,
@@ -168,6 +170,31 @@ mod tests {
         );
         assert!(replace_command.contains("readlink -f"));
         assert!(replace_command.contains("mv -f -- '/etc/.fileterm-edit' \"$target\""));
+    }
+
+    #[test]
+    fn root_file_reads_frame_base64_away_from_shell_diagnostics() {
+        let command = root_read_shell_command("/etc/issue");
+        assert!(command.contains("set -e"));
+        assert!(command.contains("base64 '/etc/issue' 2>/dev/null"));
+        assert!(command.contains("__FILETERM_READ_BASE64_START__"));
+        assert!(command.contains("__FILETERM_READ_BASE64_END__"));
+
+        assert_eq!(
+            extract_root_read_base64(
+                "sudo: warning: tty-less execution\n__FILETERM_READ_BASE64_START__\nSGVsbG8=\n__FILETERM_READ_BASE64_END__\n"
+            )
+            .unwrap(),
+            "SGVsbG8="
+        );
+        assert_eq!(
+            extract_root_read_base64(
+                "__FILETERM_READ_BASE64_START__\n__FILETERM_READ_BASE64_END__"
+            )
+            .unwrap(),
+            ""
+        );
+        assert!(extract_root_read_base64("base64 output without framing").is_err());
     }
 
     #[test]

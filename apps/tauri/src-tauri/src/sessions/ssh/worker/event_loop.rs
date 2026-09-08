@@ -108,6 +108,31 @@ async fn run_worker_event_loop(
                     sftp_arc = ready.sftp;
                     sftp_unavailable_reason = ready.sftp_unavailable_reason;
                     shell_setup_script = ready.shell_setup_script;
+                    // The shell can emit a CWD marker while the auxiliary
+                    // channels are still negotiating. `shell_data.rs` records
+                    // that marker, but cannot enqueue a follow request until
+                    // the SFTP handle exists. Replay the latest shell state at
+                    // this boundary so the SFTP pane does not remain on the
+                    // pre-startup directory until the next prompt.
+                    if let Some(sftp) = sftp_arc.as_ref() {
+                        let startup_cwd = state
+                            .sessions
+                            .read()
+                            .await
+                            .get(tab_id)
+                            .filter(|session| session.follow_shell_cwd)
+                            .and_then(|session| session.shell_cwd.clone());
+                        if let Some(cwd) = startup_cwd {
+                            cwd_refresh.send_replace(Some(CwdRefreshRequest {
+                                cwd,
+                                sftp: Arc::clone(sftp),
+                                file_access_mode: file_access_mode.clone(),
+                                root_file_access_method,
+                                sudo_user: sudo_user.clone(),
+                                sudo_password: root_password.clone(),
+                            }));
+                        }
+                    }
                     // Never inject a setup command into a command the user has
                     // already started while auxiliary initialization was pending.
                     if !terminal_input_started {

@@ -604,6 +604,37 @@ pub(crate) fn effective_remote_file_type(
 /// Read a file via the active root strategy + base64 (binary-safe over exec).
 /// Decodes the result using the given encoding (mirrors Electron's
 /// `readRemoteFileViaShell` + `decodeBuffer`).
+const ROOT_READ_BASE64_START: &str = "__FILETERM_READ_BASE64_START__";
+const ROOT_READ_BASE64_END: &str = "__FILETERM_READ_BASE64_END__";
+
+fn root_read_shell_command(path: &str) -> String {
+    // sudo/PTY implementations may put diagnostics on the same collected
+    // stream as stdout. Frame the payload so those diagnostics can never be
+    // mistaken for base64 data. `set -e` keeps a missing/unreadable file a
+    // failed command instead of turning it into a successful empty read.
+    format!(
+        "set -e\nprintf '%s\\n' {}\nbase64 {} 2>/dev/null\nprintf '%s\\n' {}",
+        shell_quote(ROOT_READ_BASE64_START),
+        shell_quote(path),
+        shell_quote(ROOT_READ_BASE64_END),
+    )
+}
+
+fn extract_root_read_base64(output: &str) -> Result<String, String> {
+    let start = output
+        .find(ROOT_READ_BASE64_START)
+        .ok_or_else(|| "root 文件命令未返回 base64 起始标记".to_string())?;
+    let payload_start = start + ROOT_READ_BASE64_START.len();
+    let payload = &output[payload_start..];
+    let end = payload
+        .find(ROOT_READ_BASE64_END)
+        .ok_or_else(|| "root 文件命令未返回 base64 结束标记".to_string())?;
+    Ok(payload[..end]
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect())
+}
+
 async fn exec_read_file_via_shell(
     handle: &Handle<ClientHandler>,
     path: &str,
@@ -612,10 +643,10 @@ async fn exec_read_file_via_shell(
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<String, String> {
-    let cmd = format!("base64 {}", shell_quote(path));
+    let cmd = root_read_shell_command(path);
     let output =
         exec_shell_file_command(handle, &cmd, access_method, sudo_user, sudo_password).await?;
-    let trimmed: String = output.chars().filter(|c| !c.is_whitespace()).collect();
+    let trimmed = extract_root_read_base64(&output)?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&trimmed)
         .map_err(|e| format!("base64 decode failed: {}", e))?;
