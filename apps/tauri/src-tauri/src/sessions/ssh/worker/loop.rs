@@ -142,25 +142,19 @@ async fn run_worker_loop(
     );
 
     // ── Shell channel ──────────────────────────────────────────────────────
-    // 三步都加 timeout：服务器在 PTY 协商阶段卡住（嵌入式 dropbear /
-    // 网络设备偶发）时 russh 默认无超时，会永久 await，worker 永远起
-    // 不来，所有后续命令（含 Ctrl+C）都进不了 cmd_rx。
-    let shell_channel = match timeout(SHELL_INIT_STEP_TIMEOUT, handle.channel_open_session()).await
-    {
-        Ok(Ok(c)) => c,
-        Ok(Err(e)) => {
-            let msg = format!("无法打开 shell channel: {e}");
-            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
-            return Err(msg);
-        }
-        Err(_) => {
-            let msg = "Shell channel 建立超时：服务器未响应 channel_open_session".to_string();
-            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
-            return Err(msg);
-        }
-    };
-    match timeout(
+    // Bound channel creation and request enqueueing, and stop immediately
+    // when the user closes the tab during startup.
+    let shell_channel = wait_for_shell_startup_step(
+        "channel_open_session",
         SHELL_INIT_STEP_TIMEOUT,
+        &cancellation,
+        handle.channel_open_session(),
+    )
+    .await?;
+    wait_for_shell_startup_step(
+        "request_pty",
+        SHELL_INIT_STEP_TIMEOUT,
+        &cancellation,
         shell_channel.request_pty(
             true,
             terminal_type,
@@ -174,20 +168,7 @@ async fn run_worker_loop(
             ],
         ),
     )
-    .await
-    {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => {
-            let msg = format!("request_pty failed: {err}");
-            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
-            return Err(msg);
-        }
-        Err(_) => {
-            let msg = "Shell channel 建立超时：服务器未响应 request_pty".to_string();
-            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
-            return Err(msg);
-        }
-    }
+    .await?;
     crate::services::logging::session(
         app,
         "INFO",
@@ -195,19 +176,13 @@ async fn run_worker_loop(
         tab_id,
         format!("pty requested terminal_type={terminal_type}"),
     );
-    match timeout(SHELL_INIT_STEP_TIMEOUT, shell_channel.request_shell(true)).await {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => {
-            let msg = format!("request_shell failed: {err}");
-            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
-            return Err(msg);
-        }
-        Err(_) => {
-            let msg = "Shell channel 建立超时：服务器未响应 request_shell".to_string();
-            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
-            return Err(msg);
-        }
-    }
+    wait_for_shell_startup_step(
+        "request_shell",
+        SHELL_INIT_STEP_TIMEOUT,
+        &cancellation,
+        shell_channel.request_shell(true),
+    )
+    .await?;
     crate::services::logging::session(
         app,
         "INFO",

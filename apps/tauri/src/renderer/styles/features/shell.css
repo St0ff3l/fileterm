@@ -846,6 +846,10 @@
 }
 
 .process-row span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
   box-sizing: border-box;
   height: 24px;
   padding: 2px 6px;
@@ -853,10 +857,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 20px;
+  text-align: center;
 }
 
 .process-row span:last-child {
   padding-right: 0;
+}
+
+.process-row span:last-child .metric-hover-detail-text {
+  text-align: center;
 }
 
 .process-empty {

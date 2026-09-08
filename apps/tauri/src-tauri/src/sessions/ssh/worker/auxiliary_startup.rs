@@ -180,48 +180,9 @@
     }
     let (sftp_arc, sftp_unavailable_reason) = initialize_sftp_session(&startup).await;
 
-    // Push the full snapshot (with files) to the renderer. Record both sides
-    // of this boundary: the backend emit result is useful when a WebView is
-    // not yet listening, while the renderer logs receipt/application of the
-    // same workspace revision.
-    match crate::commands::get_workspace_snapshot(app.clone()).await {
-        Ok(snapshot) => {
-            let workspace_revision = snapshot
-                .get("workspaceRevision")
-                .and_then(Value::as_u64)
-                .map(|revision| revision.to_string())
-                .unwrap_or_else(|| "unknown".to_string());
-            match app.emit("workspace:snapshot", snapshot) {
-                Ok(()) => crate::services::logging::session(
-                    app,
-                    "INFO",
-                    "ssh",
-                    tab_id,
-                    format!(
-                        "initial workspace snapshot emitted workspace_revision={workspace_revision} interactive_gateway={interactive_gateway}"
-                    ),
-                ),
-                Err(error) => crate::services::logging::session(
-                    app,
-                    "WARN",
-                    "ssh",
-                    tab_id,
-                    format!(
-                        "initial workspace snapshot emission failed workspace_revision={workspace_revision} interactive_gateway={interactive_gateway} error={error}"
-                    ),
-                ),
-            }
-        }
-        Err(error) => crate::services::logging::session(
-            app,
-            "WARN",
-            "ssh",
-            tab_id,
-            format!(
-                "initial workspace snapshot build failed interactive_gateway={interactive_gateway} error={error}"
-            ),
-        ),
-    }
+    // Library/transfer hydration must not hold back the ready SFTP handle
+    // or shell integration. Snapshot revisions preserve publication ordering.
+    schedule_workspace_snapshot_emit(app);
     if sftp_arc.is_some() {
         let cleanup_app = app.clone();
         let cleanup_tab_id = tab_id.to_string();
