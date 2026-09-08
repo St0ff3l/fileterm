@@ -1633,6 +1633,28 @@ mod tests {
     }
 
     #[test]
+    fn suppresses_replacement_prompt_when_startup_prompt_was_already_forwarded() {
+        // Auxiliary setup can finish after the login prompt has already been
+        // sent to the terminal. The hook redraws that prompt; releasing the
+        // redraw would render two identical username/host prompts.
+        let mut pending = Some(ShellSetupEchoSuppression::without_replacement_prompt());
+        assert_eq!(
+            suppress_shell_setup_echo(
+                &mut pending,
+                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7777;FileTermReady\u{7}"
+            ),
+            ""
+        );
+        assert!(pending.is_some());
+
+        // A slow SSH link may deliver the replacement prompt separately. It
+        // is still consumed as soon as it arrives, before the long fallback
+        // deadline can release anything.
+        assert_eq!(suppress_shell_setup_echo(&mut pending, "user@host:~$ "), "");
+        assert!(pending.is_none());
+    }
+
+    #[test]
     fn finish_suppression_releases_newline_when_prompt_never_arrives() {
         // ready marker 已看到但新 prompt 迟迟未到（settle/timeout 到期）：
         // 补换行让晚到的新 prompt 从新行开始，避免粘在旧 prompt 后面。

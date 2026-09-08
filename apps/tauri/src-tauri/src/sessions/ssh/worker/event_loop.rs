@@ -139,7 +139,12 @@ async fn run_worker_event_loop(
                         if let Some(setup) = shell_setup_script {
                             if looks_like_shell_prompt(&startup_prompt) {
                                 if write_shell_data(&shell_writer, format!(" {setup}\r").into_bytes()).await.is_ok() {
-                                    pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new(false));
+                                    // The first prompt was already forwarded while
+                                    // auxiliary channels were negotiating. The
+                                    // setup command redraws it, so suppress that
+                                    // replacement instead of displaying two
+                                    // identical username/host prompts.
+                                    pending_shell_setup_echo = Some(ShellSetupEchoSuppression::without_replacement_prompt());
                                     last_shell_setup_injection = Instant::now();
                                 }
                             } else {
