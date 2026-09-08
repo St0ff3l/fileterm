@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CreateProfileInput } from '@fileterm/core'
 import { t } from '../../i18n'
 import { DropdownSelect } from '../common/dropdown-select'
@@ -73,25 +73,82 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
   }
 
   const [isEditingProxy, setIsEditingProxy] = useState(false)
+  const [isCreatingProxy, setIsCreatingProxy] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const isWaitingForNewProxyRef = useRef(false)
+  const previousProxyIdsRef = useRef<Set<string>>(new Set(proxies.map((p) => p.id)))
+
+  useEffect(() => {
+    if (isWaitingForNewProxyRef.current) {
+      const newProxy = proxies.find((p) => !previousProxyIdsRef.current.has(p.id))
+      if (newProxy) {
+        handleSelectChange(`saved:${newProxy.id}`)
+        isWaitingForNewProxyRef.current = false
+      }
+    }
+    previousProxyIdsRef.current = new Set(proxies.map((p) => p.id))
+  }, [proxies])
+
+  useEffect(() => {
+    if (selectedProxy && form.proxyProfileId === selectedProxy.id) {
+      setForm((prev) => ({
+        ...prev,
+        proxy: {
+          type: selectedProxy.type,
+          host: selectedProxy.host,
+          port: selectedProxy.port,
+          username: selectedProxy.username
+        }
+      }))
+    }
+  }, [selectedProxy, form.proxyProfileId, setForm])
+
+  const handleCreateProxy = () => {
+    isWaitingForNewProxyRef.current = true
+    if (window.fileterm?.openProxyFormWindow) {
+      void window.fileterm.openProxyFormWindow('create')
+    } else {
+      setIsCreatingProxy(true)
+    }
+  }
+
+  const handleEditProxy = () => {
+    if (!selectedProxy) return
+    if (window.fileterm?.openProxyFormWindow) {
+      void window.fileterm.openProxyFormWindow('edit', selectedProxy.id)
+    } else {
+      setIsEditingProxy(true)
+    }
+  }
 
   return (
     <fieldset className="ssh-fieldset">
-      <legend className="proxy-section-legend">
-        <span>{t.proxyServer}</span>
-      </legend>
-      <div className="tunnel-intro proxy-library-hint">
-        <AppIcon name="info" size={15} className="tunnel-intro__icon" />
-        <p>{t.networkProfilesLocationHint}</p>
-      </div>
-      <div className="ssh-grid">
-        <label className="span-2">
-          {t.proxySource}:
-          <DropdownSelect value={selectValue} options={options} onChange={handleSelectChange} />
-        </label>
+      <legend>{t.proxyServer}</legend>
+      <div className="network-card__body">
+        <div className="network-setting-row">
+          <span className="network-setting-row__label">{t.proxySource}</span>
+          <div className="network-setting-row__control">
+            <DropdownSelect
+              className="network-select-control"
+              value={selectValue}
+              options={options}
+              onChange={handleSelectChange}
+            />
+            <button
+              type="button"
+              className="flat-button network-create-btn"
+              onClick={handleCreateProxy}
+              title={t.newProxy}
+            >
+              <AppIcon name="plus" size={13} />
+              <span>{t.newProxy}</span>
+            </button>
+          </div>
+        </div>
 
         {selectValue.startsWith('saved:') ? (
-          <div className="span-2 proxy-saved-selected-card">
+          <div className="proxy-saved-selected-card">
             <div className="proxy-saved-selected-header">
               <div className="proxy-saved-selected-info">
                 <span
@@ -112,7 +169,7 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
                 <button
                   type="button"
                   className="flat-button proxy-card-edit-btn"
-                  onClick={() => setIsEditingProxy(true)}
+                  onClick={handleEditProxy}
                   title={t.edit}
                 >
                   <AppIcon name="edit" size={13} />
@@ -128,9 +185,9 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
         ) : null}
 
         {selectValue === 'custom' ? (
-          <>
+          <div className="proxy-custom-grid">
             <label>
-              {t.proxyProtocol}:
+              <span>{t.proxyProtocol}</span>
               <DropdownSelect
                 value={form.proxy?.type ?? 'socks5'}
                 options={[
@@ -149,7 +206,7 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
               />
             </label>
             <label>
-              {t.host}:
+              <span>{t.host}</span>
               <input
                 value={form.proxy?.host ?? ''}
                 onChange={(event) =>
@@ -161,7 +218,7 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
               />
             </label>
             <label>
-              {t.port}:
+              <span>{t.port}</span>
               <input
                 inputMode="numeric"
                 value={form.proxy?.port ?? 1080}
@@ -174,7 +231,7 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
               />
             </label>
             <label>
-              {t.username}:
+              <span>{t.username}</span>
               <input
                 value={form.proxy?.username ?? ''}
                 onChange={(event) =>
@@ -186,18 +243,18 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
               />
             </label>
             <label>
-              {t.password}:
+              <span>{t.password}</span>
               <input
                 type="password"
                 value={form.proxyPassword ?? ''}
                 onChange={(event) => setForm((prev) => ({ ...prev, proxyPassword: event.target.value }))}
               />
             </label>
-          </>
+          </div>
         ) : null}
       </div>
 
-      {selectedProxy ? (
+      {selectedProxy && isEditingProxy ? (
         <ProxyEditDialog
           isOpen={isEditingProxy}
           initialProxy={selectedProxy}
@@ -208,6 +265,34 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
             try {
               const saved = await saveProxy(input)
               setIsEditingProxy(false)
+              setForm((prev) => ({
+                ...prev,
+                proxyProfileId: saved.id,
+                proxy: {
+                  type: saved.type,
+                  host: saved.host,
+                  port: saved.port,
+                  username: saved.username
+                }
+              }))
+            } finally {
+              setIsSubmitting(false)
+            }
+          }}
+          onTest={testProxy}
+        />
+      ) : null}
+
+      {isCreatingProxy ? (
+        <ProxyEditDialog
+          isOpen={isCreatingProxy}
+          isSubmitting={isSubmitting}
+          onClose={() => setIsCreatingProxy(false)}
+          onSave={async (input) => {
+            setIsSubmitting(true)
+            try {
+              const saved = await saveProxy(input)
+              setIsCreatingProxy(false)
               setForm((prev) => ({
                 ...prev,
                 proxyProfileId: saved.id,
