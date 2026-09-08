@@ -75,6 +75,8 @@ async fn run_worker_loop(
         ),
     );
 
+    let startup_started_at = Instant::now();
+
     // ── Main session (one authenticated handle for shell + auxiliary channels)
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
     // one authenticated handle for every channel when the target route is
@@ -111,7 +113,10 @@ async fn run_worker_loop(
         "INFO",
         "ssh",
         tab_id,
-        format!("SSH session established route_hint={route_hint}"),
+        format!(
+            "SSH session established route_hint={route_hint} startup_elapsed_ms={}",
+            startup_started_at.elapsed().as_millis()
+        ),
     );
     let remote_sshid = session.remote_sshid;
     let disconnect_reason = session.disconnect_reason;
@@ -203,7 +208,16 @@ async fn run_worker_loop(
             return Err(msg);
         }
     }
-    crate::services::logging::session(app, "INFO", "ssh", tab_id, "shell channel ready");
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!(
+            "shell channel ready startup_elapsed_ms={}",
+            startup_started_at.elapsed().as_millis()
+        ),
+    );
     let (shell_reader, shell_writer) = shell_channel.split();
     let shell_writer = Arc::new(shell_writer);
 
@@ -258,8 +272,19 @@ async fn run_worker_loop(
         state: &state,
     };
     initialize_ssh_session_snapshot(&startup).await;
-    update_tab_status_and_emit(app, tab_id, WorkspaceTabStatus::Connected).await;
+    update_tab_status_and_emit_without_snapshot(app, tab_id, WorkspaceTabStatus::Connected).await;
+    schedule_workspace_snapshot_emit(app);
     emit_terminal_data(app, tab_id, "连接主机成功\r\n").await;
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!(
+            "terminal ready startup_elapsed_ms={} auxiliary=background",
+            startup_started_at.elapsed().as_millis()
+        ),
+    );
     let transfer_sftp_slot: TransferSftpSlot = Arc::new(Mutex::new(None));
     let metrics_shutdown = Arc::new(tokio::sync::Notify::new());
     let (auxiliary_tx, auxiliary_rx) = oneshot::channel();

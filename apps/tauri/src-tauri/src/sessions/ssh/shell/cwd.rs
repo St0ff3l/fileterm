@@ -1,4 +1,44 @@
 async fn update_tab_status_and_emit(app: &AppHandle, tab_id: &str, status: WorkspaceTabStatus) {
+    update_tab_status_and_emit_with_snapshot(app, tab_id, status, true).await;
+}
+
+/// Publish a terminal state without synchronously rebuilding the whole
+/// workspace snapshot.
+///
+/// SSH uses this at the shell-ready boundary. `get_workspace_snapshot` also
+/// hydrates the transfer journal and reads/heals the connection and command
+/// libraries, so awaiting it here can keep the terminal worker out of its IO
+/// loop even though authentication and the PTY are already ready. The
+/// auxiliary startup phase emits the first full snapshot after SFTP/platform
+/// state is known; disconnect and failure paths continue to use the regular
+/// snapshot-bearing helper below.
+async fn update_tab_status_and_emit_without_snapshot(
+    app: &AppHandle,
+    tab_id: &str,
+    status: WorkspaceTabStatus,
+) {
+    update_tab_status_and_emit_with_snapshot(app, tab_id, status, false).await;
+}
+
+/// Reconcile the renderer's workspace state without making the SSH worker
+/// wait for library/transfer hydration. Snapshot revisions let this best
+/// effort task safely race the later SFTP/metrics snapshot: an older result is
+/// ignored by the renderer.
+fn schedule_workspace_snapshot_emit(app: &AppHandle) {
+    let snapshot_app = app.clone();
+    tokio::spawn(async move {
+        if let Ok(snapshot) = crate::commands::get_workspace_snapshot(snapshot_app.clone()).await {
+            let _ = snapshot_app.emit("workspace:snapshot", snapshot);
+        }
+    });
+}
+
+async fn update_tab_status_and_emit_with_snapshot(
+    app: &AppHandle,
+    tab_id: &str,
+    status: WorkspaceTabStatus,
+    emit_workspace_snapshot: bool,
+) {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let connected = status.is_connected();
     let mut summary = "连接已断开".to_string();
@@ -47,8 +87,10 @@ async fn update_tab_status_and_emit(app: &AppHandle, tab_id: &str, status: Works
     });
     let _ = app.emit("terminal:state", payload);
 
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    if emit_workspace_snapshot {
+        if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
     }
 }
 
