@@ -51,9 +51,9 @@ body,
 :root[data-platform='linux'] .system-sidebar-layout .process-row span {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   line-height: 1.3;
-  text-align: center;
+  text-align: left;
 }
 
 /* Noto Sans SC has a taller ascent than the platform UI fonts. Keep the

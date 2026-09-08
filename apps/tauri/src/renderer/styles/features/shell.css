@@ -848,7 +848,7 @@
 .process-row span {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
   box-sizing: border-box;
   height: 24px;
@@ -857,7 +857,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 20px;
-  text-align: center;
+  text-align: left;
 }
 
 .process-row span:last-child {
@@ -865,7 +865,7 @@
 }
 
 .process-row span:last-child .metric-hover-detail-text {
-  text-align: center;
+  text-align: left;
 }
 
 .process-empty {
