@@ -56,6 +56,12 @@ body,
   text-align: left;
 }
 
+:root[data-platform='linux'] .system-sidebar-layout .process-row span:nth-child(1),
+:root[data-platform='linux'] .system-sidebar-layout .process-row span:nth-child(2) {
+  justify-content: center;
+  text-align: center;
+}
+
 /* Noto Sans SC has a taller ascent than the platform UI fonts. Keep the
    prominent overview labels optically centered instead of relying on the
    font's default baseline. */
@@ -975,11 +981,19 @@ textarea:focus-visible,
 .process-row span {
   padding: 2px 6px;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  text-align: left;
 }
 
 .process-row span:last-child {
+  justify-content: flex-start;
   padding-right: 0;
+  text-align: left;
+}
+
+.process-row span:nth-child(1),
+.process-row span:nth-child(2) {
+  justify-content: center;
+  text-align: center;
 }
 
 .process-row span:nth-child(2) {

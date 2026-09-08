@@ -8,7 +8,7 @@ FileTerm 2.2.8-beta.7 聚焦 SSH/SFTP 启动响应、目录传输稳定性、连
 - **目录与批量传输**：支持把本地文件夹拖放到 SFTP 文件区域上传；目录 manifest 使用轻量增量更新和持久化检查点，降低多文件上传期间的 UI 和日志开销，并保留可恢复传输与失败重试。
 - **文件区域同步**：终端目录提示符即使路径不变也会刷新 SFTP 列表；提权读取使用有边界的 base64 正文，降低空文件和终端噪声导致的解码失败。
 - **终端与 AI 兼容性**：修复 SSH 数据包边界造成的 UTF-8 替换字符；密钥登录会话执行普通 AI 只读命令时不再要求空密码字段。
-- **连接配置与界面**：新增 Kubernetes SSH 连接预设，以及独立代理/隧道配置编辑入口；系统进程指标内容统一上下居中、左右左对齐，网络总计选择器取消蓝色焦点外圈并缩小文字。
+- **连接配置与界面**：新增 Kubernetes SSH 连接预设，以及独立代理/隧道配置编辑入口；系统进程表的内存和 CPU 数值上下居中、左右居中，命令文本上下居中、左右左对齐，重连后资源指标滚动区域回到顶部；网络总计选择器取消蓝色焦点外圈并缩小文字。
 - **安全边界**：敏感凭据、私钥口令、MFA/OTP 和终端内容不写入诊断日志；AI 工具调用不接受或保存一次性提权凭据。
 
 ### 本版本包含的主要 PR 和问题修复
@@ -39,7 +39,7 @@ FileTerm 2.2.8-beta.7 focuses on SSH/SFTP startup responsiveness, directory-tran
 - **Directory and batch transfers**: Drag local folders into the SFTP file area to upload them. Directory manifests use lightweight incremental updates and persistent checkpoints to reduce UI and logging overhead during multi-file uploads while retaining resumable transfers and transient retries.
 - **File-area synchronization**: SFTP listings refresh when terminal prompt markers repeat the same path, and privileged reads use framed base64 payloads to avoid decode failures from empty files and terminal noise.
 - **Terminal and AI compatibility**: Preserve UTF-8 characters split across SSH data packets, and do not require an empty password field for ordinary AI read-only commands in key-authenticated sessions.
-- **Connection configuration and UI**: Add a Kubernetes SSH preset and standalone proxy/tunnel editing flows. System process metrics are vertically centered and left aligned; the network total selector removes the blue focus ring and uses smaller text.
+- **Connection configuration and UI**: Add a Kubernetes SSH preset and standalone proxy/tunnel editing flows. Memory and CPU values in the system process table are centered in both axes, command text is vertically centered and left aligned, and the resource-metrics viewport returns to the top after reconnecting. The network total selector removes the blue focus ring and uses smaller text.
 - **Security boundaries**: Sensitive credentials, private-key passphrases, MFA/OTP values, and terminal contents are excluded from diagnostics. AI tool calls do not accept or persist one-shot privilege credentials.
 
 ### Main PRs and issues

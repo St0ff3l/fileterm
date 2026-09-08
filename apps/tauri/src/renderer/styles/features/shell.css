@@ -888,6 +888,12 @@
   padding-right: 0;
 }
 
+.process-row span:nth-child(1),
+.process-row span:nth-child(2) {
+  justify-content: center;
+  text-align: center;
+}
+
 .process-row span:last-child .metric-hover-detail-text {
   text-align: left;
 }

@@ -258,7 +258,9 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           <SystemSidebarShell
             activeProfile={activeProfile}
             activeSession={activeSession}
+            activeTabId={activeTab?.id ?? null}
             collapsed={isSystemSidebarCollapsed}
+            connectionStatus={activeTab?.status ?? null}
             showResourceMeters={isResourceMonitoringAvailable}
             visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
