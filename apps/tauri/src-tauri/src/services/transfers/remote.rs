@@ -248,6 +248,19 @@ fn parent_remote_path(path: &str) -> String {
     }
 }
 
+#[cfg(windows)]
+fn is_windows_reparse_point(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn is_windows_reparse_point(_metadata: &std::fs::Metadata) -> bool {
+    false
+}
+
 async fn collect_local_tree(
     root: &Path,
 ) -> Result<(Vec<PathBuf>, Vec<(PathBuf, TransferFileIdentity)>), AppError> {
@@ -268,14 +281,20 @@ async fn collect_local_tree(
                 .file_type()
                 .await
                 .map_err(|error| transfer_error(format!("无法读取本地文件类型: {error}")))?;
+            let metadata = entry
+                .metadata()
+                .await
+                .map_err(|error| transfer_error(format!("无法读取本地文件信息: {error}")))?;
+            if file_type.is_symlink() || is_windows_reparse_point(&metadata) {
+                return Err(transfer_error(format!(
+                    "无法递归扫描本地目录：不支持符号链接或 Windows Junction：{}",
+                    path.display()
+                )));
+            }
             if file_type.is_dir() {
                 directories.push(path.clone());
                 pending.push(path);
             } else if file_type.is_file() {
-                let metadata = entry
-                    .metadata()
-                    .await
-                    .map_err(|error| transfer_error(format!("无法读取本地文件信息: {error}")))?;
                 files.push((
                     path,
                     TransferFileIdentity {
@@ -287,6 +306,11 @@ async fn collect_local_tree(
                             .map(|value| value.as_millis() as u64),
                     },
                 ));
+            } else {
+                return Err(transfer_error(format!(
+                    "无法递归扫描本地目录：遇到不支持的文件类型（可能是重解析点）：{}",
+                    path.display()
+                )));
             }
         }
     }

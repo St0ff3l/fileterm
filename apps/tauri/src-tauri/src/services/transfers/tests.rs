@@ -4,11 +4,56 @@ mod tests {
         can_resume_from, failure_status, interrupt_status, is_permanent_transfer_error,
         is_root_upload_staging_path, join_remote_path, manifest_totals,
         normalize_root_upload_staging, partial_path, progress_event_due, relative_remote_path,
-        root_staging_path, select_journal_tasks, transient_retry_backoff, TransferFileIdentity,
-        TransferManifest, TransferManifestEntry, TransferTask, JOURNAL_MAX_TASKS,
-        TRANSIENT_MAX_ATTEMPTS, UPDATE_INTERVAL,
+        collect_local_tree, root_staging_path, select_journal_tasks, transient_retry_backoff,
+        TransferFileIdentity, TransferManifest, TransferManifestEntry, TransferTask,
+        JOURNAL_MAX_TASKS, TRANSIENT_MAX_ATTEMPTS, UPDATE_INTERVAL,
     };
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn local_directory_scan_includes_nested_and_hidden_files() {
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-transfer-scan-{}",
+            rand::random::<u64>()
+        ));
+        let nested = root.join("backend").join("src").join("nested");
+        tokio::fs::create_dir_all(&nested).await.unwrap();
+        tokio::fs::write(root.join(".env"), b"root").await.unwrap();
+        tokio::fs::write(root.join("backend").join("README.md"), b"readme")
+            .await
+            .unwrap();
+        tokio::fs::write(nested.join("main.rs"), b"main").await.unwrap();
+
+        let result = collect_local_tree(&root).await;
+
+        let _ = tokio::fs::remove_dir_all(&root).await;
+        let (directories, files) = result.unwrap();
+        assert_eq!(directories.len(), 3);
+        assert_eq!(files.len(), 3);
+        assert!(files.iter().any(|(path, _)| path.ends_with(".env")));
+        assert!(files
+            .iter()
+            .any(|(path, _)| path.ends_with("backend/src/nested/main.rs")));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn local_directory_scan_rejects_symlinks_instead_of_dropping_them() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-transfer-symlink-{}",
+            rand::random::<u64>()
+        ));
+        tokio::fs::create_dir_all(root.join("real")).await.unwrap();
+        symlink(root.join("real"), root.join("linked")).expect("create test symlink");
+
+        let result = collect_local_tree(&root).await;
+
+        let _ = tokio::fs::remove_dir_all(&root).await;
+        let error = result.expect_err("symlinks must not be silently skipped");
+        assert!(error.to_string().contains("linked"));
+    }
 
     #[test]
     fn creates_posix_paths_without_double_slashes() {
