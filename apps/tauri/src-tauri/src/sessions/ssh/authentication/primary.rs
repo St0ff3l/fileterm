@@ -246,7 +246,9 @@ fn configured_authentication_method(auth_type: &str) -> ConfiguredAuthentication
     match auth_type {
         // KoKo records the first password factor in its SSH session context
         // before it permits the MFA keyboard-interactive continuation.
-        "password" | "jumpserver-koko-mfa" => ConfiguredAuthenticationMethod::Password,
+        "password" | "jumpserver-koko-mfa" | "kubernetes" => {
+            ConfiguredAuthenticationMethod::Password
+        }
         "privateKey" => ConfiguredAuthenticationMethod::PrivateKey,
         "keyboard-interactive" => ConfiguredAuthenticationMethod::KeyboardInteractive,
         _ => ConfiguredAuthenticationMethod::System,

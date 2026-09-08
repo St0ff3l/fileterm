@@ -27,13 +27,14 @@ export function ConnectionSshAuthSection({
   setForm: ConnectionFormSetter
 }) {
   const isKeyboardInteractiveAuth = form.authType === 'keyboard-interactive' || form.authType === 'jumpserver-koko-mfa'
+  const isPasswordAuth = form.authType === 'password' || form.authType === 'kubernetes'
 
   return (
     <fieldset className="ssh-fieldset">
       <legend>{t.auth}</legend>
       <div className="ssh-grid ssh-grid-auth">
         {form.type === 'ssh' ? (
-          <label>
+          <label className="span-2">
             {t.method}:
             <DropdownSelect
               value={form.authType ?? 'password'}
@@ -42,6 +43,7 @@ export function ConnectionSshAuthSection({
                 { value: 'privateKey', label: t.privateKey },
                 { value: 'keyboard-interactive', label: t.keyboardInteractiveAuth },
                 { value: 'jumpserver-koko-mfa', label: t.jumpServerKokoMfaAuth },
+                { value: 'kubernetes', label: t.kubernetesAuth },
                 { value: 'system', label: t.systemSshAuth }
               ]}
               onChange={(value) => setForm((prev) => ({ ...prev, authType: value as CreateProfileInput['authType'] }))}
@@ -57,16 +59,17 @@ export function ConnectionSshAuthSection({
             />
           </label>
         ) : null}
-        {form.type === 'ftp' || form.authType === 'password' || isKeyboardInteractiveAuth ? (
+        {form.type === 'ftp' || isPasswordAuth || isKeyboardInteractiveAuth ? (
           <ConnectionSecretField
             id="connection-password"
             label={t.password}
             value={form.password}
             hasSavedValue={hasSavedPassword}
             canClear={mode === 'edit'}
+            fullWidth={form.type === 'ftp'}
             disabled={
               form.type === 'ssh' &&
-              form.authType === 'password' &&
+              isPasswordAuth &&
               effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
             }
             onChange={(value) =>
@@ -83,10 +86,11 @@ export function ConnectionSshAuthSection({
         {form.type === 'ssh' && form.authType === 'privateKey' ? (
           <SshPrivateKeyField form={form} setForm={setForm} />
         ) : null}
-        {form.type === 'ssh' && isKeyboardInteractiveAuth ? (
+        {form.type === 'ssh' && (isKeyboardInteractiveAuth || form.authType === 'kubernetes') ? (
           <div className="span-2 ssh-auth-hint">
-            <div>{t.keyboardInteractiveHint}</div>
+            {isKeyboardInteractiveAuth ? <div>{t.keyboardInteractiveHint}</div> : null}
             {form.authType === 'jumpserver-koko-mfa' ? <div>{t.jumpServerInteractiveGatewayHint}</div> : null}
+            {form.authType === 'kubernetes' ? <div>{t.kubernetesSshAuthHint}</div> : null}
           </div>
         ) : form.type === 'ftp' ? (
           <>

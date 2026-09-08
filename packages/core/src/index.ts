@@ -184,7 +184,12 @@ export interface RemoteFileCapabilities {
   hardlink: boolean
 }
 
-export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-interactive' | 'jumpserver-koko-mfa'
+/**
+ * SSH authentication presets. The Kubernetes preset keeps the container ID
+ * as the configured SSH username while using the normal password method.
+ */
+export type SshAuthType =
+  'password' | 'privateKey' | 'system' | 'keyboard-interactive' | 'jumpserver-koko-mfa' | 'kubernetes'
 
 /** 资源监控采集间隔，单位为秒。 */
 export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60

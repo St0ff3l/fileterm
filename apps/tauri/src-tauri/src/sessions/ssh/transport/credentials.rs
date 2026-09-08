@@ -1,10 +1,9 @@
 fn missing_password_credential(profile: &Value) -> Option<&'static str> {
-    if profile
+    let auth_type = profile
         .get("authType")
         .and_then(Value::as_str)
-        .unwrap_or("password")
-        != "password"
-    {
+        .unwrap_or("password");
+    if !matches!(auth_type, "password" | "kubernetes") {
         return None;
     }
     if profile

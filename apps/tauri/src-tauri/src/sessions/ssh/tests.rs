@@ -575,6 +575,14 @@ mod tests {
         });
         assert_eq!(missing_password_credential(&empty_password), None);
         assert_eq!(password_for_authentication(&empty_password), Some(""));
+
+        let kubernetes_password = serde_json::json!({
+            "authType": "kubernetes",
+            "username": "container-id",
+            "password": "container-password"
+        });
+        assert_eq!(missing_password_credential(&kubernetes_password), None);
+        assert_eq!(password_for_authentication(&kubernetes_password), Some("container-password"));
     }
 
     #[test]
@@ -2290,6 +2298,10 @@ mod tests {
         assert_eq!(
             configured_authentication_method("keyboard-interactive"),
             ConfiguredAuthenticationMethod::KeyboardInteractive
+        );
+        assert_eq!(
+            configured_authentication_method("kubernetes"),
+            ConfiguredAuthenticationMethod::Password
         );
     }
 

@@ -851,6 +851,7 @@ const zhCN = {
   authType: '认证方式',
   keyboardInteractiveAuth: 'Keyboard-interactive / MFA',
   jumpServerKokoMfaAuth: 'JumpServer / KoKo MFA Interactive',
+  kubernetesAuth: 'Kubernetes 模式',
   systemSshAuth: '系统 SSH（agent/默认私钥）',
   systemSshAuthHint: '优先复用本机 SSH agent，其次尝试 ~/.ssh 下的默认私钥。',
   password: '密码',
@@ -1781,6 +1782,8 @@ const zhCN = {
   keyboardInteractiveHint: '服务器需要 OTP/MFA 时，会弹出单独的验证码输入框。',
   jumpServerInteractiveGatewayHint:
     'JumpServer/KoKo：主机填堡垒机/跳板机地址；用户名填“堡垒机账号@目标机账号@目标机IP（即资产IP）”，亦支持带末尾“@堡垒机Host”。示例：主机=jump.example.com；用户名=alice@root@192.168.1.100（或 alice@root@192.168.1.100@jump.example.com）。',
+  kubernetesSshAuthHint:
+    'Kubernetes 模式：按 ssh -l <容器ID> <主机> -p <端口> 填写主机、端口和用户名；进入容器后的 shell 用户可能显示为 root。文件面板使用 SFTP，Exec 仅用于后台命令和资源监控。',
   disconnectBehavior: '断线行为',
   scrollCommandList: '滚动命令列表',
   discardTransferCheckpoint: '丢弃传输断点',
@@ -2677,6 +2680,7 @@ const enUS: typeof zhCN = {
   authType: 'Auth Type',
   keyboardInteractiveAuth: 'Keyboard-interactive / MFA',
   jumpServerKokoMfaAuth: 'JumpServer / KoKo MFA Interactive',
+  kubernetesAuth: 'Kubernetes mode',
   systemSshAuth: 'System SSH (agent/default key)',
   systemSshAuthHint: 'Reuse the local SSH agent first, then fall back to default keys under ~/.ssh.',
   password: 'Password',
@@ -3662,6 +3666,8 @@ const enUS: typeof zhCN = {
   keyboardInteractiveHint: 'A separate code prompt will appear when the server requires OTP/MFA.',
   jumpServerInteractiveGatewayHint:
     'JumpServer/KoKo: enter the bastion/jump host address in Host; in Username, enter bastion-user@target-account@target-ip (asset IP), optionally with trailing @bastion-host. Example: Host=jump.example.com; Username=alice@root@192.168.1.100 (or alice@root@192.168.1.100@jump.example.com).',
+  kubernetesSshAuthHint:
+    'Kubernetes mode: enter Host, Port, and Username as in ssh -l <container-id> <host> -p <port>. The shell user inside the container may appear as root. The file panel uses SFTP; Exec is reserved for background commands and resource monitoring.',
   disconnectBehavior: 'Disconnect behavior',
   appTitle: 'FileTerm',
   activateUpgrade: 'Activate / Upgrade',

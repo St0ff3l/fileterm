@@ -41,13 +41,15 @@ export function ConnectionSshAdvancedSection({
   setRoutingMode(value: 'direct' | 'jump'): void
   setSshConnectionSetting<K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]): void
 }) {
+  const isPasswordAuth = form.authType === 'password' || form.authType === 'kubernetes'
+
   return (
     <>
       {form.type === 'ssh' ? (
         <fieldset className="ssh-fieldset">
           <legend>{t.advanced}</legend>
           <div className="advanced-toggle-list">
-            {form.authType === 'password' ? (
+            {isPasswordAuth ? (
               <div className="advanced-toggle-row">
                 <label className="ssh-checkbox advanced-toggle-label">
                   <SelectionControl
