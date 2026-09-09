@@ -1,3 +1,4 @@
+import { PathBookmarksButton } from './path-bookmarks-button'
 import type {
   Dispatch,
   DragEvent,
@@ -200,7 +201,8 @@ export function FileManagerPanes({
       ) : null}
       <div
         className="local-pane"
-        onMouseDownCapture={() => {
+        onMouseDownCapture={(event) => {
+          if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return
           setKeyboardPane('local')
           focusContainer()
         }}
@@ -222,16 +224,19 @@ export function FileManagerPanes({
           onChange={setLocalPathInput}
           onSubmit={submitLocalPath}
           action={
-            isLocalNetworkShare ? (
-              <button
-                type="button"
-                className="pane-path-bar-action"
-                title={t.backToThisPC}
-                onClick={onBackToLocalComputer}
-              >
-                {t.localComputer}
-              </button>
-            ) : null
+            <div className="pane-path-bar-actions">
+              <PathBookmarksButton scope="local" path={localPath} onOpen={onOpenLocalItem} />
+              {isLocalNetworkShare ? (
+                <button
+                  type="button"
+                  className="pane-path-bar-action"
+                  title={t.backToThisPC}
+                  onClick={onBackToLocalComputer}
+                >
+                  {t.localComputer}
+                </button>
+              ) : null}
+            </div>
           }
         />
         <PaneFilterBar
@@ -338,7 +343,8 @@ export function FileManagerPanes({
       />
       <div
         className="pane remote-pane"
-        onMouseDownCapture={() => {
+        onMouseDownCapture={(event) => {
+          if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return
           setKeyboardPane('remote')
           focusContainer()
         }}
@@ -367,6 +373,13 @@ export function FileManagerPanes({
             value={remotePathInput}
             action={
               <div className="pane-path-bar-actions">
+                <PathBookmarksButton
+                  key={activeSession.profileId}
+                  scope={`remote:${activeSession.profileId}`}
+                  path={activeSession.remotePath}
+                  disabled={!canUseRemoteFiles}
+                  onOpen={onOpenRemoteItem}
+                />
                 {isSshSession ? (
                   <button
                     aria-pressed={activeSession.followShellCwd !== false}

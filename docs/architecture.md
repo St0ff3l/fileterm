@@ -628,7 +628,11 @@ tokens -> theme vars -> component skins -> terminal colors
 - 终端设置
 - 传输历史
 
-### 12.2 敏感信息
+### 12.2 路径收藏
+
+文件面板的路径收藏由 `PathBookmark` 共享类型、Tauri bridge 与 Rust `commands/path_bookmarks.rs` 管理，持久化到 `path-bookmarks.json`。本地收藏共享，远程按连接 profile ID 隔离；变更串行执行并原子写入。打开收藏复用已有文件操作链路，错误不触发自动删除。
+
+### 12.3 敏感信息
 
 当前策略：
 

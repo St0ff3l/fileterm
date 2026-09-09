@@ -489,6 +489,8 @@ pub fn run() {
             crate::commands::app_remove_ui_state_item,
             crate::commands::app_get_terminal_command_history,
             crate::commands::app_set_terminal_command_history,
+            crate::commands::app_get_path_bookmarks,
+            crate::commands::app_update_path_bookmark,
             crate::commands::app_get_command_send_preferences,
             crate::commands::app_set_command_send_preferences,
             crate::commands::app_get_snapshot,

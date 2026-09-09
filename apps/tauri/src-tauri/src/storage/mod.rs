@@ -27,6 +27,7 @@ const PORTABLE_DATA_ENTRIES: &[(&str, bool)] = &[
     ("command-folders.json", false),
     ("commands.json", false),
     ("command-history.json", false),
+    ("path-bookmarks.json", false),
     ("command-send-preferences.json", false),
     ("ui-state.json", false),
     ("ui-preferences.json", false),

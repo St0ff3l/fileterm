@@ -23,6 +23,7 @@ import type {
   TerminalStatePayload,
   TerminalCommandHistoryEntry,
   CommandSendPreferences,
+  PathBookmark,
   TransferTask,
   SessionMetricsUpdate,
   RemoteFilesUpdate,
@@ -429,6 +430,9 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onUpdateStatus: (listener: (status: AppUpdateStatus) => void) => subscribe('app:update-status', listener),
     readClipboardText: () => invoke<string>('app_read_clipboard_text'),
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
+    getPathBookmarks: (scope: string) => invoke<PathBookmark[]>('app_get_path_bookmarks', { scope }),
+    updatePathBookmark: (scope, action, bookmark) =>
+      invoke<PathBookmark[]>('app_update_path_bookmark', { scope, action, bookmark }),
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
     getSecuritySettings: () => invoke<SecuritySettings>('app_get_security_settings'),
