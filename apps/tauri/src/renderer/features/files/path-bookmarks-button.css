@@ -33,6 +33,31 @@
   height: 13px;
 }
 
+/* Dialog container focus reset and secondary focus state */
+.path-bookmarks-dialog.ft-dialog {
+  outline: none;
+}
+
+.path-bookmarks-dialog.ft-dialog:focus {
+  outline: none;
+}
+
+.path-bookmarks-dialog.ft-dialog:focus-visible {
+  outline: none;
+  border-color: var(--border-default);
+  box-shadow:
+    var(--shadow-modal),
+    0 0 0 1px var(--border-default);
+}
+
+/* Secondary focus ring for interactive elements inside the bookmarks dialog */
+.path-bookmarks-dialog .ft-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface-modal),
+    0 0 0 3px var(--border-default);
+}
+
 /* Dialog content container */
 .path-bookmarks {
   display: flex;
