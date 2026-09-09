@@ -574,9 +574,21 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         (&zoom, &zoom_superview),
     ];
     let window_height = ns_window.frame().size.height;
+    let Some(titlebar_container) = (unsafe { close_superview.superview() }) else {
+        return false;
+    };
 
     CATransaction::begin();
     CATransaction::setDisableActions(true);
+    // Match the native title-bar container to the renderer title bar before
+    // positioning its buttons. Moving only the buttons leaves AppKit's group
+    // hover region at the original title-bar height (above the visible lights).
+    // Tao's inset_traffic_lights uses the same native container adjustment.
+    let mut titlebar_frame = titlebar_container.frame();
+    titlebar_frame.size.height = MACOS_RENDERER_TITLEBAR_HEIGHT;
+    titlebar_frame.origin.y = window_height - MACOS_RENDERER_TITLEBAR_HEIGHT;
+    titlebar_container.setFrame(titlebar_frame);
+    titlebar_container.layoutSubtreeIfNeeded();
     for (index, (button, button_superview)) in buttons.into_iter().enumerate() {
         // The design target is expressed in window coordinates, independent
         // of AppKit's Debug/Release title-bar container geometry. Convert that
@@ -598,8 +610,15 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         origin.x = target_center.x - frame.size.width / 2.0;
         origin.y = target_center.y - frame.size.height / 2.0;
         button.setFrameOrigin(origin);
+        button.updateTrackingAreas();
         NSView::setNeedsDisplay(button, true);
     }
+    // Native hover glyphs are managed by the title-bar hierarchy as well as
+    // the buttons. Refresh both levels after all frame changes are complete.
+    close_superview.updateTrackingAreas();
+    miniaturize_superview.updateTrackingAreas();
+    zoom_superview.updateTrackingAreas();
+    titlebar_container.updateTrackingAreas();
     CATransaction::commit();
 
     true
