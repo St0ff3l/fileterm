@@ -6,6 +6,18 @@ const languageNames = {
 } as const
 
 const zhCN = {
+  pathBookmarks: '路径收藏',
+  bookmarkAdd: '添加到收藏',
+  bookmarkCurrent: '收藏当前目录',
+  bookmarkAlreadyAdded: '已收藏当前目录',
+  bookmarkRemove: '取消收藏',
+  bookmarkEmpty: '暂无收藏。可收藏当前目录，或右键收藏文件和目录。',
+  bookmarkEmptyTitle: '暂无收藏路径',
+  bookmarkEmptyHint: '可点击上方按钮收藏当前目录，方便快捷访问',
+  currentDirectory: '当前目录',
+  bookmarkUp: '上移',
+  bookmarkDown: '下移',
+
   appTitle: 'FileTerm',
   syncStatus: '同步状态',
   systemInfo: '系统信息',
@@ -1914,6 +1926,18 @@ const zhCN = {
 
 const enUS: typeof zhCN = {
   ...zhCN,
+  pathBookmarks: 'Path bookmarks',
+  bookmarkAdd: 'Add to bookmarks',
+  bookmarkCurrent: 'Bookmark current directory',
+  bookmarkAlreadyAdded: 'Current directory bookmarked',
+  bookmarkRemove: 'Remove bookmark',
+  bookmarkEmpty: 'No bookmarks yet. Bookmark this directory or use the file context menu.',
+  bookmarkEmptyTitle: 'No bookmarks yet',
+  bookmarkEmptyHint: 'Click the button above to bookmark the current directory for quick access',
+  currentDirectory: 'Current Directory',
+  bookmarkUp: 'Move up',
+  bookmarkDown: 'Move down',
+
   syncStatus: 'Sync Status',
   systemInfo: 'System Info',
   systemInfoDescription: 'View host overview, resource usage, network, and filesystem status.',

@@ -674,6 +674,15 @@ export interface RemoteFileItem {
   ownerGroup?: string
 }
 
+/** Local bookmarks are shared; remote bookmarks belong to a saved connection. */
+export interface PathBookmark {
+  id: string
+  scope: string
+  path: string
+  name: string
+  type: 'file' | 'folder'
+}
+
 export interface LocalFileItem extends RemoteFileItem {
   path: string
 }
@@ -2489,6 +2498,12 @@ export interface FileTermDesktopApi {
   onUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void
   readClipboardText(): Promise<string>
   writeClipboardText(text: string): Promise<void>
+  getPathBookmarks(scope: string): Promise<PathBookmark[]>
+  updatePathBookmark(
+    scope: string,
+    action: 'add' | 'remove' | 'up' | 'down',
+    bookmark: PathBookmark
+  ): Promise<PathBookmark[]>
   getUiPreferences(): Promise<UiPreferences>
   setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
   getSecuritySettings(): Promise<SecuritySettings>

@@ -1,3 +1,4 @@
+import { useAddPathBookmark } from './path-bookmark-provider'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import type { FileContextMenuState } from './file-manager-types'
 import { FileContextMenu } from './file-context-menu'
@@ -83,8 +84,10 @@ export function FileManagerContextMenuHost({
   setResetColumnsTrigger: (value: number | ((previous: number) => number)) => void
   singleContextItem: LocalFileItem | RemoteFileItem | null | undefined
 }) {
+  const addBookmark = useAddPathBookmark()
   return (
     <FileContextMenu
+      onBookmark={(item) => addBookmark(contextMenu.pane, item)}
       canChangePermissions={canChangeContextPermissions}
       canCopy={canCopyContextItems}
       canCopyPath={canCopyContextPath}

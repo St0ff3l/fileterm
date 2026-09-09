@@ -1,0 +1,258 @@
+.path-bookmarks-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Compact trigger button matching 20px toolbar baseline */
+.path-bookmarks-trigger.ft-btn {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.path-bookmarks-trigger.ft-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--surface-hover);
+}
+
+.path-bookmarks-trigger.ft-btn[aria-expanded='true'] {
+  color: var(--action-primary-bg);
+  background-color: var(--surface-hover);
+}
+
+.path-bookmarks-trigger .ft-btn__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+}
+
+/* Dialog content container */
+.path-bookmarks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Header card for current directory action */
+.path-bookmarks-header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--surface-panel);
+}
+
+.path-bookmarks-current-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.path-bookmarks-current-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.path-bookmarks-current-path {
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono, monospace);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.path-bookmarks-add-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Region and scrollable list */
+.path-bookmarks-region {
+  position: relative;
+  min-height: 100px;
+  min-width: 0;
+}
+
+.path-bookmarks-list {
+  max-height: min(320px, calc(100vh - 260px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding-right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.path-bookmarks-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* Each bookmark row as a card item */
+.path-bookmarks-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.path-bookmarks-row:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-subtle);
+}
+
+.path-bookmarks-open {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 36px;
+  padding: 4px 6px;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+}
+
+.path-bookmarks-open:hover:not(:disabled) {
+  background: transparent;
+}
+
+.path-bookmarks-open .ft-btn__icon {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.path-bookmarks-row-icon {
+  color: var(--color-folder, var(--text-secondary));
+}
+
+.path-bookmarks-open-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.path-bookmarks-open-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.path-bookmarks-open-path {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+/* Action button group on the right */
+.path-bookmarks-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.path-bookmarks-action-btn.ft-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.path-bookmarks-action-btn.ft-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--surface-active);
+}
+
+.path-bookmarks-action-btn.ft-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.path-bookmarks-delete-btn.ft-btn:hover:not(:disabled) {
+  color: var(--status-danger);
+  background-color: var(--status-danger-bg);
+}
+
+/* Empty state */
+.path-bookmarks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  text-align: center;
+  gap: 6px;
+}
+
+.path-bookmarks-empty-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full, 9999px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.path-bookmarks-empty-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.path-bookmarks-empty-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  max-width: 260px;
+  line-height: 1.4;
+}
+
+/* Error message */
+.path-bookmarks-error {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--status-danger);
+  overflow-wrap: anywhere;
+}

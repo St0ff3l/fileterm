@@ -3,6 +3,7 @@ import { t } from '../../i18n'
 import { ContextMenu } from '../common/context-menu'
 
 export function FileContextMenu({
+  onBookmark,
   canChangePermissions,
   canCopy,
   canCopyPath,
@@ -33,6 +34,7 @@ export function FileContextMenu({
   pane,
   position
 }: {
+  onBookmark(item: RemoteFileItem): void
   canChangePermissions: boolean
   canCopy: boolean
   canCopyPath: boolean
@@ -68,6 +70,13 @@ export function FileContextMenu({
   const items = [
     { label: t.refresh, action: onRefresh },
     { separator: true },
+    {
+      label: t.bookmarkAdd,
+      disabled: !canMutateItem,
+      action: () => {
+        if (item) onBookmark(item)
+      }
+    },
     { label: t.open, disabled: !canOpen, action: onOpen },
     { label: t.copy, disabled: !canCopy, action: onCopy },
     { label: t.cut, disabled: !canCut, action: onCut },

@@ -526,8 +526,8 @@ fn apply_macos_main_window_vibrancy(window: &WebviewWindow<Wry>) -> Result<(), S
 #[cfg(target_os = "macos")]
 fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSControlSize, NSView, NSWindowButton};
-    use objc2_quartz_core::{CATransaction, CATransform3D};
+    use objc2_app_kit::{NSView, NSWindowButton};
+    use objc2_quartz_core::CATransaction;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
     let Ok(handle) = window.window_handle() else {
@@ -574,7 +574,6 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         (&zoom, &zoom_superview),
     ];
     let window_height = ns_window.frame().size.height;
-    let content_scale = MACOS_TRAFFIC_LIGHT_FRAME_SIZE / MACOS_TRAFFIC_LIGHT_DRAWN_SIZE;
 
     CATransaction::begin();
     CATransaction::setDisableActions(true);
@@ -583,8 +582,6 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         // of AppKit's Debug/Release title-bar container geometry. Convert that
         // absolute center into each native button's own superview before
         // assigning its frame.
-        button.setControlSize(NSControlSize::Regular);
-        button.sizeToFit();
 
         let (target_center_x, target_center_y) =
             macos_traffic_light_target_center(window_height, index);
@@ -593,20 +590,14 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         target_center_in_window.y = target_center_y;
         let target_center = button_superview.convertPoint_fromView(target_center_in_window, None);
 
-        let mut frame = button.frame();
-        frame.origin.x = target_center.x - MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0;
-        frame.origin.y = target_center.y - MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0;
-        frame.size.width = MACOS_TRAFFIC_LIGHT_FRAME_SIZE;
-        frame.size.height = MACOS_TRAFFIC_LIGHT_FRAME_SIZE;
-        button.setFrame(frame);
-        button.setWantsLayer(true);
-        if let Some(layer) = button.layer() {
-            let mut transform = CATransform3D::new_scale(content_scale, content_scale, 1.0);
-            let centered_translation = MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0 * (1.0 - content_scale);
-            transform.m41 = centered_translation;
-            transform.m42 = centered_translation;
-            layer.setTransform(transform);
-        }
+        // Keep AppKit's native frame/bounds and drawing geometry. A standard
+        // title-bar button is not a generic NSButton: sizeToFit, forcing a
+        // square frame, or scaling its layer can distort its bezel on macOS 15.
+        let frame = button.frame();
+        let mut origin = frame.origin;
+        origin.x = target_center.x - frame.size.width / 2.0;
+        origin.y = target_center.y - frame.size.height / 2.0;
+        button.setFrameOrigin(origin);
         NSView::setNeedsDisplay(button, true);
     }
     CATransaction::commit();

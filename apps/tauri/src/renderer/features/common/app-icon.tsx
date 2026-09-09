@@ -1,4 +1,5 @@
 export type AppIconName =
+  | 'star'
   | 'brand'
   | 'terminal'
   | 'telnet'
@@ -82,6 +83,11 @@ export function AppIcon({
       viewBox="0 0 16 16"
       width={size}
     >
+      {name === 'star' ? (
+        <svg viewBox="0 -960 960 960" width="16" height="16" fill="currentColor">
+          <path d="m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Zm247-350Z" />
+        </svg>
+      ) : null}
       {name === 'brand' || name === 'terminal' ? (
         <>
           <rect {...commonProps} x="2.25" y="2.5" width="11.5" height="11" rx="2" />

@@ -1,3 +1,4 @@
+import { PathBookmarkProvider } from './path-bookmark-provider'
 import {
   useEffect,
   useMemo,
@@ -606,182 +607,184 @@ export function FileManager({
   }, [activeSession.remoteFiles, localItems])
 
   return (
-    <div
-      ref={containerRef}
-      className="file-manager"
-      onClick={() => setContextMenu(null)}
-      onKeyDown={(event) =>
-        handleFileManagerKeyboardShortcuts(event, {
-          canPaste: canPasteFromKeyboard,
-          keyboardPane,
-          keyboardSelection,
-          onClearCutState,
-          onCopyItems,
-          onCutItems,
-          onPasteIntoPane
-        })
-      }
-      tabIndex={0}
-      style={{ '--local-pane-width': `${commandPaneWidth}px` } as CSSProperties}
-    >
-      <FileManagerToolbar
-        activeSession={activeSession}
-        activeTab={activeTab}
-        activeView={activeView}
-        canManageTunnels={canManageTunnels}
-        canUseRemoteFiles={canUseRemoteFiles}
-        clipboardStatusText={clipboardStatusText}
-        isSshSession={isSshSession}
-        onChooseUploadFiles={onChooseUploadFiles}
-        onDownloadFiles={onDownloadFiles}
-        onOpenCommandManager={onOpenCommandManager}
-        onRefresh={onRefresh}
-        onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
-        remoteFileAccessMode={remoteFileAccessMode}
-        selectedRemoteDownloadItems={selectedRemoteDownloadItems}
-        setResetColumnsTrigger={setResetColumnsTrigger}
-        switchActiveView={switchActiveView}
-      />
-      {activeView === 'tunnel' && canManageTunnels && activeTab ? (
-        <div className="workspace-view-content">
-          <SshTunnelPanel tabId={activeTab.id} />
-          {isViewLoading || isWorkspaceSwitching ? (
-            <WorkspaceLoadingState className="workspace-loading-state--overlay" />
-          ) : null}
-        </div>
-      ) : activeView === 'command' && isSshSession ? (
-        <div className="workspace-view-content">
-          <CommandCenter
-            activeTab={activeTab}
-            commandFolders={commandFolders}
-            commandTemplates={commandTemplates}
-            isBusy={isBusy}
-            sendTargets={sendTargets}
-            onExecute={onExecuteCommand}
-            onSendTerminalCommand={onSendTerminalCommand}
-            onSaveTemporaryCommand={onSaveTemporaryCommand}
-            onUpdateCommand={onUpdateCommand}
-            paneWidth={commandPaneWidth}
-            onPaneWidthChange={onCommandPaneWidthChange}
-          />
-          {isViewLoading || isWorkspaceSwitching ? (
-            <WorkspaceLoadingState className="workspace-loading-state--overlay" />
-          ) : null}
-        </div>
-      ) : (
-        <FileManagerPanes
+    <PathBookmarkProvider profileId={activeSession.profileId}>
+      <div
+        ref={containerRef}
+        className="file-manager"
+        onClick={() => setContextMenu(null)}
+        onKeyDown={(event) =>
+          handleFileManagerKeyboardShortcuts(event, {
+            canPaste: canPasteFromKeyboard,
+            keyboardPane,
+            keyboardSelection,
+            onClearCutState,
+            onCopyItems,
+            onCutItems,
+            onPasteIntoPane
+          })
+        }
+        tabIndex={0}
+        style={{ '--local-pane-width': `${commandPaneWidth}px` } as CSSProperties}
+      >
+        <FileManagerToolbar
           activeSession={activeSession}
-          beginInternalFileDrag={beginInternalFileDrag}
+          activeTab={activeTab}
+          activeView={activeView}
+          canManageTunnels={canManageTunnels}
           canUseRemoteFiles={canUseRemoteFiles}
-          didDragSelect={didDragSelect}
-          extendLocalDragSelection={extendLocalDragSelection}
-          extendRemoteDragSelection={extendRemoteDragSelection}
-          filteredLocalItems={filteredLocalItems}
-          filteredRemoteFiles={filteredRemoteFiles}
-          focusContainer={focusContainer}
-          handleLocalPaneDrop={handleLocalPaneDrop}
-          handleRemotePaneDrop={handleRemotePaneDrop}
-          internalFileDragPreview={internalFileDragPreview}
-          isLocalDirectoryLoading={isLocalDirectoryLoading}
-          isLocalNetworkShare={isLocalNetworkShare}
-          isResizingFileSplit={isResizingFileSplit}
-          isSelectingLocal={isSelectingLocal}
-          isSelectingRemote={isSelectingRemote}
+          clipboardStatusText={clipboardStatusText}
           isSshSession={isSshSession}
-          isViewLoading={isViewLoading}
-          isWorkspaceRefreshing={isWorkspaceRefreshing}
-          isWorkspaceSwitching={isWorkspaceSwitching}
-          localAnchorPath={localAnchorPath}
-          localDragSelection={localDragSelection}
-          localFilter={localFilter}
-          localItems={localItems}
-          localPath={localPath}
-          localPathInput={localPathInput}
-          localScrollRef={localScrollRef}
-          localCutPaths={localCutPaths}
-          onBackToLocalComputer={onBackToLocalComputer}
-          onOpenLocalItem={onOpenLocalItem}
-          onOpenRemoteItem={onOpenRemoteItem}
-          onToggleFollowShellCwd={onToggleFollowShellCwd}
-          remoteAnchorPath={remoteAnchorPath}
-          remoteDragSelection={remoteDragSelection}
-          remoteFileAccessMode={remoteFileAccessMode}
-          remoteFilesUnavailableText={remoteFilesUnavailableText}
-          remoteFilter={remoteFilter}
-          remotePathInput={remotePathInput}
-          remoteScrollRef={remoteScrollRef}
-          remoteCutPaths={remoteCutPaths}
-          remoteSort={remoteSort}
-          resetColumnsTrigger={resetColumnsTrigger}
-          selectLocalItem={selectLocalItem}
-          selectRemoteItem={selectRemoteItem}
-          selectedLocalPaths={selectedLocalPaths}
-          selectedRemotePaths={selectedRemotePaths}
-          setContextMenu={setContextMenu}
-          setKeyboardPane={setKeyboardPane}
-          setLocalAnchorPath={setLocalAnchorPath}
-          setLocalFilter={setLocalFilter}
-          setLocalPathInput={setLocalPathInput}
-          setRemoteAnchorPath={setRemoteAnchorPath}
-          setRemoteFilter={setRemoteFilter}
-          setRemotePathInput={setRemotePathInput}
-          setRemoteSort={setRemoteSort}
-          setSelectedLocalPaths={setSelectedLocalPaths}
-          setSelectedRemotePaths={setSelectedRemotePaths}
-          showLocalDirectoryLoading={showLocalDirectoryLoading}
-          showPaneRemoteDirectoryLoading={showPaneRemoteDirectoryLoading}
-          showRemoteDirectoryLoading={showRemoteDirectoryLoading}
-          sortedRemoteRows={sortedRemoteRows}
-          submitLocalPath={submitLocalPath}
-          submitRemotePath={submitRemotePath}
-          suppressNextClearClick={suppressNextClearClick}
-          suppressNextSelectionClick={suppressNextSelectionClick}
-          splitRef={splitRef}
-        />
-      )}
-      {contextMenu ? (
-        <FileManagerContextMenuHost
-          activeSessionRemotePath={activeSession.remotePath}
-          canChangeContextPermissions={canChangeContextPermissions}
-          canCopyContextItems={canCopyContextItems}
-          canCopyContextPath={canCopyContextPath}
-          canCreateFromContext={canCreateFromContext}
-          canCutContextItems={canCutContextItems}
-          canDownloadContextItems={canDownloadContextItems}
-          canOpenContextItem={canOpenContextItem}
-          canPasteIntoContextPane={canPasteIntoContextPane}
-          canQuickDelete={canUseRemoteFiles && contextMenu.pane === 'remote' && activeTab?.sessionType === 'ssh'}
-          canRenameContextItem={canRenameContextItem}
-          canUploadContextItems={canUploadContextItems}
-          contextLocalItem={contextLocalItem}
-          contextLocalSelection={contextLocalSelection}
-          contextMenu={contextMenu}
-          contextRemoteItem={contextRemoteItem}
-          contextRemoteSelection={contextRemoteSelection}
-          localPath={localPath}
           onChooseUploadFiles={onChooseUploadFiles}
-          onClose={() => setContextMenu(null)}
-          onCopyItems={onCopyItems}
-          onCopyPath={copyContextPath}
-          onCutItems={onCutItems}
           onDownloadFiles={onDownloadFiles}
-          onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
-          onOpenLocalItem={onOpenLocalItem}
-          onOpenRemoteItem={onOpenRemoteItem}
-          onOpenContextTarget={openContextTarget}
-          onPasteIntoPane={onPasteIntoPane}
+          onOpenCommandManager={onOpenCommandManager}
           onRefresh={onRefresh}
-          onRequestChangePermissions={onRequestChangePermissions}
-          onRequestDelete={onRequestDelete}
-          onRequestNewFile={onRequestNewFile}
-          onRequestNewFolder={onRequestNewFolder}
-          onRequestQuickDelete={onRequestQuickDelete}
-          onRequestRename={onRequestRename}
-          onUploadFiles={onUploadFiles}
-          singleContextItem={singleContextItem}
+          onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
+          remoteFileAccessMode={remoteFileAccessMode}
+          selectedRemoteDownloadItems={selectedRemoteDownloadItems}
           setResetColumnsTrigger={setResetColumnsTrigger}
+          switchActiveView={switchActiveView}
         />
-      ) : null}
-    </div>
+        {activeView === 'tunnel' && canManageTunnels && activeTab ? (
+          <div className="workspace-view-content">
+            <SshTunnelPanel tabId={activeTab.id} />
+            {isViewLoading || isWorkspaceSwitching ? (
+              <WorkspaceLoadingState className="workspace-loading-state--overlay" />
+            ) : null}
+          </div>
+        ) : activeView === 'command' && isSshSession ? (
+          <div className="workspace-view-content">
+            <CommandCenter
+              activeTab={activeTab}
+              commandFolders={commandFolders}
+              commandTemplates={commandTemplates}
+              isBusy={isBusy}
+              sendTargets={sendTargets}
+              onExecute={onExecuteCommand}
+              onSendTerminalCommand={onSendTerminalCommand}
+              onSaveTemporaryCommand={onSaveTemporaryCommand}
+              onUpdateCommand={onUpdateCommand}
+              paneWidth={commandPaneWidth}
+              onPaneWidthChange={onCommandPaneWidthChange}
+            />
+            {isViewLoading || isWorkspaceSwitching ? (
+              <WorkspaceLoadingState className="workspace-loading-state--overlay" />
+            ) : null}
+          </div>
+        ) : (
+          <FileManagerPanes
+            activeSession={activeSession}
+            beginInternalFileDrag={beginInternalFileDrag}
+            canUseRemoteFiles={canUseRemoteFiles}
+            didDragSelect={didDragSelect}
+            extendLocalDragSelection={extendLocalDragSelection}
+            extendRemoteDragSelection={extendRemoteDragSelection}
+            filteredLocalItems={filteredLocalItems}
+            filteredRemoteFiles={filteredRemoteFiles}
+            focusContainer={focusContainer}
+            handleLocalPaneDrop={handleLocalPaneDrop}
+            handleRemotePaneDrop={handleRemotePaneDrop}
+            internalFileDragPreview={internalFileDragPreview}
+            isLocalDirectoryLoading={isLocalDirectoryLoading}
+            isLocalNetworkShare={isLocalNetworkShare}
+            isResizingFileSplit={isResizingFileSplit}
+            isSelectingLocal={isSelectingLocal}
+            isSelectingRemote={isSelectingRemote}
+            isSshSession={isSshSession}
+            isViewLoading={isViewLoading}
+            isWorkspaceRefreshing={isWorkspaceRefreshing}
+            isWorkspaceSwitching={isWorkspaceSwitching}
+            localAnchorPath={localAnchorPath}
+            localDragSelection={localDragSelection}
+            localFilter={localFilter}
+            localItems={localItems}
+            localPath={localPath}
+            localPathInput={localPathInput}
+            localScrollRef={localScrollRef}
+            localCutPaths={localCutPaths}
+            onBackToLocalComputer={onBackToLocalComputer}
+            onOpenLocalItem={onOpenLocalItem}
+            onOpenRemoteItem={onOpenRemoteItem}
+            onToggleFollowShellCwd={onToggleFollowShellCwd}
+            remoteAnchorPath={remoteAnchorPath}
+            remoteDragSelection={remoteDragSelection}
+            remoteFileAccessMode={remoteFileAccessMode}
+            remoteFilesUnavailableText={remoteFilesUnavailableText}
+            remoteFilter={remoteFilter}
+            remotePathInput={remotePathInput}
+            remoteScrollRef={remoteScrollRef}
+            remoteCutPaths={remoteCutPaths}
+            remoteSort={remoteSort}
+            resetColumnsTrigger={resetColumnsTrigger}
+            selectLocalItem={selectLocalItem}
+            selectRemoteItem={selectRemoteItem}
+            selectedLocalPaths={selectedLocalPaths}
+            selectedRemotePaths={selectedRemotePaths}
+            setContextMenu={setContextMenu}
+            setKeyboardPane={setKeyboardPane}
+            setLocalAnchorPath={setLocalAnchorPath}
+            setLocalFilter={setLocalFilter}
+            setLocalPathInput={setLocalPathInput}
+            setRemoteAnchorPath={setRemoteAnchorPath}
+            setRemoteFilter={setRemoteFilter}
+            setRemotePathInput={setRemotePathInput}
+            setRemoteSort={setRemoteSort}
+            setSelectedLocalPaths={setSelectedLocalPaths}
+            setSelectedRemotePaths={setSelectedRemotePaths}
+            showLocalDirectoryLoading={showLocalDirectoryLoading}
+            showPaneRemoteDirectoryLoading={showPaneRemoteDirectoryLoading}
+            showRemoteDirectoryLoading={showRemoteDirectoryLoading}
+            sortedRemoteRows={sortedRemoteRows}
+            submitLocalPath={submitLocalPath}
+            submitRemotePath={submitRemotePath}
+            suppressNextClearClick={suppressNextClearClick}
+            suppressNextSelectionClick={suppressNextSelectionClick}
+            splitRef={splitRef}
+          />
+        )}
+        {contextMenu ? (
+          <FileManagerContextMenuHost
+            activeSessionRemotePath={activeSession.remotePath}
+            canChangeContextPermissions={canChangeContextPermissions}
+            canCopyContextItems={canCopyContextItems}
+            canCopyContextPath={canCopyContextPath}
+            canCreateFromContext={canCreateFromContext}
+            canCutContextItems={canCutContextItems}
+            canDownloadContextItems={canDownloadContextItems}
+            canOpenContextItem={canOpenContextItem}
+            canPasteIntoContextPane={canPasteIntoContextPane}
+            canQuickDelete={canUseRemoteFiles && contextMenu.pane === 'remote' && activeTab?.sessionType === 'ssh'}
+            canRenameContextItem={canRenameContextItem}
+            canUploadContextItems={canUploadContextItems}
+            contextLocalItem={contextLocalItem}
+            contextLocalSelection={contextLocalSelection}
+            contextMenu={contextMenu}
+            contextRemoteItem={contextRemoteItem}
+            contextRemoteSelection={contextRemoteSelection}
+            localPath={localPath}
+            onChooseUploadFiles={onChooseUploadFiles}
+            onClose={() => setContextMenu(null)}
+            onCopyItems={onCopyItems}
+            onCopyPath={copyContextPath}
+            onCutItems={onCutItems}
+            onDownloadFiles={onDownloadFiles}
+            onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
+            onOpenLocalItem={onOpenLocalItem}
+            onOpenRemoteItem={onOpenRemoteItem}
+            onOpenContextTarget={openContextTarget}
+            onPasteIntoPane={onPasteIntoPane}
+            onRefresh={onRefresh}
+            onRequestChangePermissions={onRequestChangePermissions}
+            onRequestDelete={onRequestDelete}
+            onRequestNewFile={onRequestNewFile}
+            onRequestNewFolder={onRequestNewFolder}
+            onRequestQuickDelete={onRequestQuickDelete}
+            onRequestRename={onRequestRename}
+            onUploadFiles={onUploadFiles}
+            singleContextItem={singleContextItem}
+            setResetColumnsTrigger={setResetColumnsTrigger}
+          />
+        ) : null}
+      </div>
+    </PathBookmarkProvider>
   )
 }

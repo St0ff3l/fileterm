@@ -63,6 +63,8 @@ include!("serial_commands.rs");
 include!("ui_preferences_commands.rs");
 include!("ai_commands.rs");
 include!("workspace_commands.rs");
+mod path_bookmarks;
+pub use path_bookmarks::*;
 include!("import_commands.rs");
 include!("window_commands.rs");
 include!("session_runtime.rs");
