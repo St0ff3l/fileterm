@@ -54,9 +54,6 @@ export function PathBookmarksButton({
     const trigger = triggerRef.current
     return () => trigger?.focus()
   }, [open])
-  useEffect(() => {
-    if (open && !removing) dialogRef.current?.focus()
-  }, [open, removing])
   const update = async (action: 'add' | 'remove' | 'up' | 'down', item: PathBookmark) => {
     if (busy || !window.fileterm) return
     setBusy(true)
@@ -68,7 +65,6 @@ export function PathBookmarksButton({
       setError(String(cause))
     } finally {
       setBusy(false)
-      if (action !== 'remove') dialogRef.current?.focus()
     }
   }
   const current = toPathBookmark(scope, {
@@ -100,7 +96,6 @@ export function PathBookmarksButton({
         createPortal(
           <Dialog
             ref={dialogRef}
-            tabIndex={-1}
             isOpen={open}
             title={t.pathBookmarks}
             aria-label={t.pathBookmarks}
@@ -114,15 +109,14 @@ export function PathBookmarksButton({
               const targets = Array.from(
                 dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || []
               )
+              if (targets.length === 0) return
               const first = targets[0],
                 last = targets.at(-1)
-              if (
-                event.shiftKey &&
-                (document.activeElement === first || document.activeElement === dialogRef.current)
-              ) {
+              const active = document.activeElement
+              if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
                 event.preventDefault()
                 last?.focus()
-              } else if (!event.shiftKey && document.activeElement === last) {
+              } else if (!event.shiftKey && (active === last || !dialogRef.current?.contains(active))) {
                 event.preventDefault()
                 first?.focus()
               }

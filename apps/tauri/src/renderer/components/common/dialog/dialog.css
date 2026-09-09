@@ -31,6 +31,19 @@
   flex-direction: column;
   overflow: hidden;
   animation: ft-dialog-pop-in var(--transition-normal);
+  outline: none;
+}
+
+.ft-dialog:focus {
+  outline: none;
+}
+
+.ft-dialog:focus-visible {
+  outline: none;
+  border-color: var(--border-default);
+  box-shadow:
+    var(--shadow-modal),
+    0 0 0 1px var(--border-default);
 }
 
 .ft-dialog--sm {
