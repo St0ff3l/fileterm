@@ -1,17 +1,20 @@
 ## FileTerm 2.2.8-beta.9
 
-FileTerm 2.2.8-beta.9 improves macOS Overlay window-control hover behavior and refines the bookmark dialog focus experience.
+FileTerm 2.2.8-beta.9 improves folder upload reliability across platforms, adds actionable transfer diagnostics, and refines macOS Overlay window-control hover behavior and bookmark dialog focus.
 
 ### 2.2.8-beta.9 更新重点
 
 - **macOS 窗口控制**：同步原生标题栏容器与 Overlay 标题栏高度，修复鼠标位于可见控制按钮上时不显示按钮内容的问题。
 - **收藏弹窗焦点**：优化路径收藏弹窗的键盘焦点循环，保留按钮焦点反馈并避免弹窗容器显示多余描边。
+- **文件夹上传**：修复 Windows 重解析点目录、特殊文件名、空文件和空目录处理，确保 Linux、macOS、Windows 的单次上传完整遍历并在单个文件失败时继续诊断其余文件。
+- **传输诊断**：补充请求、扫描、目录准备、远端临时文件校验和失败路径日志，便于定位网络慢或平台差异导致的上传问题。
 - **兼容性**：修复适用于 macOS 26、27 及其他使用 Overlay 标题栏的环境，继续保留 AppKit 原生窗口控制绘制。
 
 ### 本版本包含的主要 PR 和问题修复
 
 - [PR #247](https://github.com/St0ff3l/fileterm/pull/247)：修复 macOS Overlay 窗口控制按钮的 hover 区域与可见位置不一致。
 - [PR #246](https://github.com/St0ff3l/fileterm/pull/246)：优化路径收藏弹窗的焦点管理与按钮焦点样式。
+- 文件夹上传诊断与跨平台完整性修复：覆盖 Windows 重解析点、特殊文件名、空文件/空目录和分批失败隔离。
 
 完整变更记录请查看 [v2.2.8-beta.8 与 v2.2.8-beta.9 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.8...v2.2.8-beta.9)。
 
@@ -24,18 +27,21 @@ FileTerm 2.2.8-beta.9 improves macOS Overlay window-control hover behavior and r
 
 ## FileTerm 2.2.8-beta.9
 
-FileTerm 2.2.8-beta.9 improves macOS Overlay window-control hover behavior and refines bookmark dialog focus handling.
+FileTerm 2.2.8-beta.9 improves folder upload reliability across platforms, adds actionable transfer diagnostics, and refines macOS Overlay window-control hover behavior and bookmark dialog focus handling.
 
 ### Highlights
 
 - **macOS window controls**: Align the native title-bar container with the Overlay title bar so control contents appear when the pointer is over the visible buttons.
 - **Bookmark dialog focus**: Improve keyboard focus trapping and preserve visible button focus feedback without an extra outline on the dialog container.
+- **Folder uploads**: Handle Windows reparse-point directories, special names, empty files, and empty directories correctly, while preserving complete traversal and isolating individual file failures on Linux, macOS, and Windows.
+- **Transfer diagnostics**: Add request, scan, directory-preparation, remote temporary-file verification, and path-specific failure logs for slow or platform-dependent uploads.
 - **Compatibility**: Fixes the behavior on macOS 26, 27, and other Overlay title-bar environments while retaining AppKit's native window-control rendering.
 
 ### Main PRs and issues
 
 - [PR #247](https://github.com/St0ff3l/fileterm/pull/247): Align the macOS Overlay window-control hover region with the visible controls.
 - [PR #246](https://github.com/St0ff3l/fileterm/pull/246): Refine bookmark dialog focus management and button focus styling.
+- Folder upload diagnostics and cross-platform completeness fixes covering Windows reparse points, special names, empty files/directories, and per-file failure isolation.
 
 See the [comparison between v2.2.8-beta.8 and v2.2.8-beta.9](https://github.com/St0ff3l/fileterm/compare/v2.2.8-beta.8...v2.2.8-beta.9) for the complete change set.
 

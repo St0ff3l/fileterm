@@ -20,7 +20,7 @@ async fn transfer_directory_entry_once(
     transfer_id: &str,
     tab_id: &str,
     direction: &str,
-    session_type: Option<&str>,
+    _session_type: Option<&str>,
     cancel: &CancellationToken,
     resume_requested: bool,
     manifest: &mut TransferManifest,
@@ -31,12 +31,18 @@ async fn transfer_directory_entry_once(
 ) -> Result<DirectoryEntryAttempt, AppError> {
     let entry = manifest.files[index].clone();
     let current_identity = if direction == "upload" {
-        stat_local_transfer_file(&entry.source_path)
+        stat_local_transfer_file_result(&entry.source_path)
             .await
+            .map_err(|error| {
+                transfer_error(format!(
+                    "无法读取本地上传文件 {}: {error}",
+                    entry.source_path
+                ))
+            })?
             .ok_or_else(|| {
                 transfer_error(format!(
-                    "上传源文件不存在或无法读取：{}",
-                    entry.relative_path
+                    "上传源文件不存在或无法读取：{} ({})",
+                    entry.relative_path, entry.source_path
                 ))
             })?
     } else {
@@ -185,16 +191,18 @@ async fn transfer_directory_entry_once(
             })
             .await?;
         }
-        // FTP 没有类似 SSH MAC 的传输层完整性保证，上传完成后需一次
-        // 远端大小比对兜底；SSH 传输层已保证完整性，跳过该往返。
-        if session_type == Some("ftp") && upload_plan.upload_needed {
+        // Transport integrity does not detect a source truncated or extended
+        // while reading. Check the staged size for both SSH and FTP before commit.
+        if upload_plan.upload_needed {
             let uploaded =
                 stat_remote_transfer_size(app, tab_id, &upload_plan.upload_path, Some(cancel))
                     .await?
-                    .unwrap_or(0);
+                    .ok_or_else(|| transfer_error(format!(
+                        "传输校验失败：远端文件不存在：{}", upload_plan.upload_path
+                    )))?;
             if uploaded != entry.source_identity.size {
                 return Err(transfer_error(format!(
-                    "FTP 传输校验失败：{} 实际 {uploaded} 字节，期望 {}",
+                    "传输校验失败：{} 实际 {uploaded} 字节，期望 {}",
                     entry.relative_path, entry.source_identity.size
                 )));
             }

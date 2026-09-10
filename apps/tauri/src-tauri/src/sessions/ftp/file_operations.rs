@@ -139,7 +139,7 @@ async fn upload_file<T: TokioTlsStream + Send + 'static>(
 ) -> Result<(), String> {
     let total = tokio::fs::metadata(local_path)
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|error| format!("无法读取本地上传文件 {local_path}: {error}"))?
         .len();
     if resume_offset > total {
         return Err("FTP 上传断点大于源文件".to_string());
@@ -152,7 +152,7 @@ async fn upload_file<T: TokioTlsStream + Send + 'static>(
     .await?;
     let mut local = tokio::fs::File::open(local_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("无法打开本地上传文件 {local_path}: {error}"))?;
     let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     let mut attempt_offset = resume_offset;
     let mut rebuilt_from_zero = false;

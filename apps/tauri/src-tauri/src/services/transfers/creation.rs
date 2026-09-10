@@ -13,12 +13,53 @@ pub async fn create_upload(
     remote_directory: String,
     target_name: Option<String>,
 ) -> Result<(), AppError> {
+    let request_id = format!("transfer-{}", uuid::Uuid::new_v4());
+    let started = std::time::Instant::now();
+    crate::services::logging::info(
+        app, &format!("transfer:{request_id}"),
+        format!("upload requested tab={tab_id} source={local_path:?} remote_directory={remote_directory:?} target_name={target_name:?}"),
+    );
+    let result = create_upload_task(
+        app,
+        tab_id,
+        local_path,
+        remote_directory,
+        target_name,
+        request_id.clone(),
+    )
+    .await;
+    match &result {
+        Ok(()) => crate::services::logging::info(
+            app,
+            &format!("transfer:{request_id}"),
+            format!("upload queued elapsed_ms={}", started.elapsed().as_millis()),
+        ),
+        Err(error) => crate::services::logging::error(
+            app,
+            &format!("transfer:{request_id}"),
+            format!(
+                "upload creation failed elapsed_ms={} error={error}",
+                started.elapsed().as_millis()
+            ),
+        ),
+    }
+    result
+}
+
+async fn create_upload_task(
+    app: &AppHandle,
+    tab_id: String,
+    local_path: String,
+    remote_directory: String,
+    target_name: Option<String>,
+    task_id: String,
+) -> Result<(), AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
     let metadata = tokio::fs::metadata(&local_path)
         .await
-        .map_err(|error| transfer_error(format!("无法读取本地上传文件: {error}")))?;
+        .map_err(|error| transfer_error(format!("无法读取本地上传路径 {local_path}: {error}")))?;
     let tab = state
         .tabs
         .read()
@@ -37,41 +78,34 @@ pub async fn create_upload(
         .map(|session| session.file_access_mode.clone())
         .unwrap_or_else(|| "user".to_string());
     if metadata.is_dir() {
+        crate::services::logging::info(app, &format!("transfer:{task_id}"), format!("local directory scan started source={local_path:?} protocol={} access={file_access_mode}", tab.session_type));
+        let scan_started = std::time::Instant::now();
         let (directories, files) = collect_local_tree(Path::new(&local_path)).await?;
         let scanned_directory_count = directories.len();
         let scanned_file_count = files.len();
         let scanned_total_bytes = files.iter().map(|(_, identity)| identity.size).sum::<u64>();
         crate::services::logging::info(
             app,
-            "transfer",
+            &format!("transfer:{task_id}"),
             format!(
-                "local directory scan completed directories={} files={} total_bytes={}",
-                scanned_directory_count, scanned_file_count, scanned_total_bytes
+                "local directory scan completed directories={} files={} total_bytes={} elapsed_ms={}",
+                scanned_directory_count, scanned_file_count, scanned_total_bytes, scan_started.elapsed().as_millis()
             ),
         );
-        let task_id = format!("transfer-{}", uuid::Uuid::new_v4());
         let mut manifest_directories = vec![destination_path.clone()];
-        manifest_directories.extend(directories.into_iter().map(|directory| {
-            let relative = directory
-                .strip_prefix(&local_path)
-                .unwrap_or(&directory)
-                .to_string_lossy()
-                .replace('\\', "/");
-            join_remote_path(&destination_path, &relative)
-        }));
+        for directory in directories {
+            let relative = local_upload_relative_path(Path::new(&local_path), &directory)?;
+            manifest_directories.push(join_remote_path(&destination_path, &relative));
+        }
         let manifest_files = files
             .into_iter()
             .map(|(source, source_identity)| {
-                let relative_path = source
-                    .strip_prefix(&local_path)
-                    .unwrap_or(&source)
-                    .to_string_lossy()
-                    .replace('\\', "/");
+                let relative_path = local_upload_relative_path(Path::new(&local_path), &source)?;
                 let entry_destination = join_remote_path(&destination_path, &relative_path);
                 let entry_partial = partial_path(&entry_destination);
                 let entry_staging =
                     (file_access_mode == "root").then(|| root_staging_path(&relative_path));
-                TransferManifestEntry {
+                Ok(TransferManifestEntry {
                     relative_path,
                     source_path: source.to_string_lossy().into_owned(),
                     destination_path: entry_destination,
@@ -80,9 +114,9 @@ pub async fn create_upload(
                     source_identity,
                     status: "pending".to_string(),
                     transferred_bytes: 0,
-                }
+                })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, AppError>>()?;
         let manifest = TransferManifest {
             version: 1,
             directories: manifest_directories,
@@ -130,7 +164,7 @@ pub async fn create_upload(
     let staging = (file_access_mode == "root").then(|| root_staging_path(&name));
     let now = now_ms();
     let task = TransferTask {
-        id: format!("transfer-{}", uuid::Uuid::new_v4()),
+        id: task_id,
         direction: "upload".to_string(),
         name,
         progress: 0.0,
