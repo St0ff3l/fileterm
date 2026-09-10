@@ -85,7 +85,7 @@ async fn upload_local_file(
 ) -> Result<(), String> {
     let metadata = tokio::fs::metadata(local_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("无法读取本地上传文件 {local_path}: {error}"))?;
     let total = metadata.len();
     if resume_offset > total {
         return Err("上传断点大于源文件".to_string());
@@ -93,7 +93,7 @@ async fn upload_local_file(
     ensure_transfer_parent_dir(sftp, remote_path).await?;
     let mut source = tokio::fs::File::open(local_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("无法打开本地上传文件 {local_path}: {error}"))?;
     source
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await

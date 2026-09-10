@@ -11,6 +11,63 @@ mod tests {
     use std::time::Duration;
 
     #[tokio::test]
+    async fn upload_scan_maps_every_entry_without_changing_names() {
+        let root = std::env::temp_dir().join(format!("fileterm-complete-{}", rand::random::<u64>()));
+        let names = ["files/preferences/中文 空格.json", "shared/runtime/empty.dll", ".hidden/config", "shared/runtime/data.bin"];
+        tokio::fs::create_dir_all(root.join("empty/nested")).await.unwrap();
+        for name in names {
+            let path = root.join(name);
+            tokio::fs::create_dir_all(path.parent().unwrap()).await.unwrap();
+            tokio::fs::write(path, if name.ends_with("empty.dll") { &b""[..] } else { &b"contents"[..] }).await.unwrap();
+        }
+        let (directories, files) = collect_local_tree(&root).await.unwrap();
+        let mapped: std::collections::BTreeSet<_> = files.iter().map(|(path, identity)| {
+            let relative = super::local_upload_relative_path(&root, path).unwrap();
+            assert_eq!(root.join(&relative), *path);
+            assert_eq!(identity.size, if relative.ends_with("empty.dll") { 0 } else { 8 });
+            relative
+        }).collect();
+        assert_eq!(mapped, names.into_iter().map(str::to_owned).collect());
+        assert!(directories.contains(&root.join("empty/nested")));
+        assert!(super::local_upload_relative_path(&root, &root).is_err());
+        assert!(super::local_upload_relative_path(&root, &root.join("../outside")).is_err());
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn upload_mapping_preserves_backslashes_and_rejects_lossy_names() {
+        use std::os::unix::ffi::OsStringExt;
+        let root = std::path::Path::new("/tmp/upload");
+        assert_eq!(super::local_upload_relative_path(root, &root.join("a\\b.txt")).unwrap(), "a\\b.txt");
+        let invalid = root.join(std::ffi::OsString::from_vec(vec![b'a', 0xff]));
+        assert!(super::local_upload_relative_path(root, &invalid).is_err());
+        assert!(super::local_upload_relative_path(root, std::path::Path::new("/tmp/other/file")).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn upload_mapping_handles_windows_drive_and_unc_roots() {
+        use std::path::Path;
+        for root in [r"C:\upload", r"\\server\share\upload", r"\\?\C:\upload"] {
+            let root = Path::new(root);
+            assert_eq!(super::local_upload_relative_path(root, &root.join(r"shared\runtime\文件.dll")).unwrap(), "shared/runtime/文件.dll");
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn upload_scan_reports_socket_instead_of_omitting_it() {
+        let root = std::env::temp_dir().join(format!("ft-socket-{}", rand::random::<u32>()));
+        tokio::fs::create_dir_all(&root).await.unwrap();
+        let socket = std::os::unix::net::UnixListener::bind(root.join("socket")).unwrap();
+        let error = collect_local_tree(&root).await.unwrap_err();
+        assert!(error.to_string().contains("socket"));
+        drop(socket);
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn local_directory_scan_includes_nested_and_hidden_files() {
         let root =
             std::env::temp_dir().join(format!("fileterm-transfer-scan-{}", rand::random::<u64>()));
@@ -53,6 +110,50 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&root).await;
         let error = result.expect_err("symlinks must not be silently skipped");
         assert!(error.to_string().contains("linked"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn local_directory_scan_rejects_symlink_root() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-transfer-symlink-root-{}",
+            rand::random::<u64>()
+        ));
+        let real = root.join("real");
+        let linked = root.join("linked");
+        tokio::fs::create_dir_all(&real).await.unwrap();
+        symlink(&real, &linked).expect("create root symlink");
+
+        let result = collect_local_tree(&linked).await;
+
+        let _ = tokio::fs::remove_dir_all(&root).await;
+        let error = result.expect_err("the selected root symlink must be rejected");
+        assert!(error.to_string().contains("linked"));
+    }
+
+    #[tokio::test]
+    async fn local_directory_scan_preserves_empty_folders() {
+        let root = std::env::temp_dir().join(format!("fileterm-empty-{}", rand::random::<u64>()));
+        tokio::fs::create_dir_all(root.join("files")).await.unwrap();
+        tokio::fs::create_dir_all(root.join("shared"))
+            .await
+            .unwrap();
+        let (directories, files) = collect_local_tree(&root).await.unwrap();
+        assert_eq!(directories, vec![root.join("files"), root.join("shared")]);
+        assert!(files.is_empty());
+        let (directories, files) = collect_local_tree(&root.join("files")).await.unwrap();
+        assert!(directories.is_empty());
+        assert!(files.is_empty());
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn local_directory_scan_reports_missing_root_path() {
+        let root = std::env::temp_dir().join(format!("fileterm-missing-{}", rand::random::<u64>()));
+        let error = collect_local_tree(&root).await.unwrap_err();
+        assert!(error.to_string().contains(root.to_str().unwrap()));
     }
 
     #[test]

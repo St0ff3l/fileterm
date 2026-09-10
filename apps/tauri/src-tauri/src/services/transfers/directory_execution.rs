@@ -7,15 +7,21 @@ fn same_transfer_identity(current: &TransferFileIdentity, expected: &TransferFil
 }
 
 async fn stat_local_transfer_file(path: &str) -> Option<TransferFileIdentity> {
-    let metadata = tokio::fs::metadata(path).await.ok()?;
-    metadata.is_file().then(|| TransferFileIdentity {
+    stat_local_transfer_file_result(path).await.ok().flatten()
+}
+
+async fn stat_local_transfer_file_result(
+    path: &str,
+) -> std::io::Result<Option<TransferFileIdentity>> {
+    let metadata = tokio::fs::metadata(path).await?;
+    Ok(metadata.is_file().then(|| TransferFileIdentity {
         size: metadata.len(),
         modified_at: metadata
             .modified()
             .ok()
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|value| value.as_millis() as u64),
-    })
+    }))
 }
 
 struct DirectoryTransferThrottler {
@@ -222,10 +228,17 @@ async fn run_directory_transfer(
                     if cancel.is_cancelled() {
                         return Ok(());
                     }
+                    crate::services::logging::warn(
+                        app,
+                        &format!("transfer:{transfer_id}"),
+                        format!("directory preparation failed direction={} protocol={:?} path={directory:?} attempt={attempt}/{TRANSIENT_MAX_ATTEMPTS} error={error}", task.direction, task.session_type),
+                    );
                     if is_permanent_transfer_error(&error.to_string())
                         || attempt >= TRANSIENT_MAX_ATTEMPTS
                     {
-                        return Err(error);
+                        return Err(transfer_error(format!(
+                            "无法准备传输目录 {directory}: {error}"
+                        )));
                     }
                     sleep_transient_backoff(&cancel, transient_retry_backoff(attempt)).await;
                     if cancel.is_cancelled() {

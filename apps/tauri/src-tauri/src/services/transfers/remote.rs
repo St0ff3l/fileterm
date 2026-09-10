@@ -249,21 +249,114 @@ fn parent_remote_path(path: &str) -> String {
 }
 
 #[cfg(windows)]
-fn is_windows_reparse_point(metadata: &std::fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
+fn windows_reparse_tag(path: &Path) -> std::io::Result<u32> {
+    use std::fs::OpenOptions;
+    use std::mem::size_of;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandleEx, FILE_ATTRIBUTE_TAG_INFO, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        FileAttributeTagInfo,
+    };
 
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    // Open the directory entry itself. Without OPEN_REPARSE_POINT Windows may
+    // resolve a junction/cloud provider before we can inspect its tag.
+    let handle = OpenOptions::new()
+        .access_mode(0)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let mut info = FILE_ATTRIBUTE_TAG_INFO::default();
+    let success = unsafe {
+        GetFileInformationByHandleEx(
+            handle.as_raw_handle(),
+            FileAttributeTagInfo,
+            (&mut info as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
+            size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+        )
+    };
+    if success == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(info.ReparseTag)
+}
+
+#[cfg(windows)]
+fn windows_reparse_rejection(path: &Path, metadata: &std::fs::Metadata) -> Option<String> {
+    use std::os::windows::fs::MetadataExt;
+    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+    use windows_sys::Win32::System::SystemServices::{
+        IO_REPARSE_TAG_CLOUD, IO_REPARSE_TAG_CLOUD_MASK, IO_REPARSE_TAG_FILE_PLACEHOLDER,
+        IO_REPARSE_TAG_MOUNT_POINT, IO_REPARSE_TAG_SYMLINK, IO_REPARSE_TAG_WOF,
+    };
+
+    // WOF-compressed files and cloud placeholders are data files handled by
+    // Windows transparently. They are reparse points, but not path redirects.
+
+    let attributes = metadata.file_attributes();
+    if attributes & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+        return None;
+    }
+    let tag = match windows_reparse_tag(path) {
+        Ok(tag) => tag,
+        Err(error) => {
+            return Some(format!(
+                "Windows 重解析点无法读取 tag: path={} attributes=0x{attributes:08x} error={error}",
+                path.display()
+            ));
+        }
+    };
+    let cloud_placeholder = (tag & !IO_REPARSE_TAG_CLOUD_MASK)
+        == (IO_REPARSE_TAG_CLOUD & !IO_REPARSE_TAG_CLOUD_MASK);
+    if matches!(tag, IO_REPARSE_TAG_FILE_PLACEHOLDER | IO_REPARSE_TAG_WOF)
+        || cloud_placeholder
+    {
+        return None;
+    }
+    if tag == IO_REPARSE_TAG_SYMLINK || tag == IO_REPARSE_TAG_MOUNT_POINT {
+        return Some(format!(
+            "Windows 符号链接/Junction: path={} tag=0x{tag:08x} attributes=0x{attributes:08x}",
+            path.display()
+        ));
+    }
+    Some(format!(
+        "Windows 不支持的重解析点: path={} tag=0x{tag:08x} attributes=0x{attributes:08x}",
+        path.display()
+    ))
 }
 
 #[cfg(not(windows))]
-fn is_windows_reparse_point(_metadata: &std::fs::Metadata) -> bool {
-    false
+fn windows_reparse_rejection(_path: &Path, _metadata: &std::fs::Metadata) -> Option<String> {
+    None
 }
 
 async fn collect_local_tree(
     root: &Path,
 ) -> Result<(Vec<PathBuf>, Vec<(PathBuf, TransferFileIdentity)>), AppError> {
+    let root_metadata = tokio::fs::symlink_metadata(root).await.map_err(|error| {
+        transfer_error(format!(
+            "无法读取本地目录 {}: {error}",
+            root.display()
+        ))
+    })?;
+    if let Some(reason) = windows_reparse_rejection(root, &root_metadata) {
+        return Err(transfer_error(format!(
+            "无法递归扫描本地目录：{reason}"
+        )));
+    }
+    if root_metadata.file_type().is_symlink() {
+        return Err(transfer_error(format!(
+            "无法递归扫描本地目录：不支持符号链接或 Windows Junction：{}",
+            root.display()
+        )));
+    }
+    if !root_metadata.is_dir() {
+        return Err(transfer_error(format!(
+            "无法递归扫描本地目录：源路径不是目录：{}",
+            root.display()
+        )));
+    }
     let mut directories = Vec::new();
     let mut files = Vec::new();
     let mut pending = vec![root.to_path_buf()];
@@ -271,21 +364,25 @@ async fn collect_local_tree(
         let mut entries = tokio::fs::read_dir(&directory).await.map_err(|error| {
             transfer_error(format!("无法读取本地目录 {}: {error}", directory.display()))
         })?;
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|error| transfer_error(format!("无法读取本地目录项: {error}")))?
-        {
+        while let Some(entry) = entries.next_entry().await.map_err(|error| {
+            transfer_error(format!(
+                "无法读取本地目录项 {}: {error}",
+                directory.display()
+            ))
+        })? {
             let path = entry.path();
-            let file_type = entry
-                .file_type()
-                .await
-                .map_err(|error| transfer_error(format!("无法读取本地文件类型: {error}")))?;
-            let metadata = entry
-                .metadata()
-                .await
-                .map_err(|error| transfer_error(format!("无法读取本地文件信息: {error}")))?;
-            if file_type.is_symlink() || is_windows_reparse_point(&metadata) {
+            let file_type = entry.file_type().await.map_err(|error| {
+                transfer_error(format!("无法读取本地文件类型 {}: {error}", path.display()))
+            })?;
+            let metadata = entry.metadata().await.map_err(|error| {
+                transfer_error(format!("无法读取本地文件信息 {}: {error}", path.display()))
+            })?;
+            if let Some(reason) = windows_reparse_rejection(&path, &metadata) {
+                return Err(transfer_error(format!(
+                    "无法递归扫描本地目录：{reason}"
+                )));
+            }
+            if file_type.is_symlink() {
                 return Err(transfer_error(format!(
                     "无法递归扫描本地目录：不支持符号链接或 Windows Junction：{}",
                     path.display()
@@ -317,6 +414,25 @@ async fn collect_local_tree(
     directories.sort();
     files.sort_by(|left, right| left.0.cmp(&right.0));
     Ok((directories, files))
+}
+
+// Convert separators using native path components, never characters inside a
+// filename (a backslash is a valid filename character on Unix).
+fn local_upload_relative_path(root: &Path, source: &Path) -> Result<String, AppError> {
+    use std::path::Component;
+    let invalid = || transfer_error(format!("无法无损映射本地上传路径：{}", source.display()));
+    let relative = source.strip_prefix(root).map_err(|_| invalid())?;
+    let mut names = Vec::new();
+    for component in relative.components() {
+        match component {
+            Component::Normal(name) => names.push(name.to_str().ok_or_else(invalid)?),
+            _ => return Err(invalid()),
+        }
+    }
+    if names.is_empty() || source.to_str().is_none() {
+        return Err(invalid());
+    }
+    Ok(names.join("/"))
 }
 
 async fn collect_remote_tree(

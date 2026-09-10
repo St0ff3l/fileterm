@@ -27,14 +27,14 @@ async fn upload_root_local_file(
     }
     let metadata = tokio::fs::metadata(local_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("无法读取本地上传文件 {local_path}: {error}"))?;
     let total = metadata.len();
     if resume_offset > total {
         return Err("上传断点大于源文件".to_string());
     }
     let mut source = tokio::fs::File::open(local_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("无法打开本地上传文件 {local_path}: {error}"))?;
     source
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await
@@ -139,14 +139,14 @@ async fn upload_root_local_file_via_su_pty(
 ) -> Result<(), String> {
     let metadata = tokio::fs::metadata(local_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("无法读取本地上传文件 {local_path}: {error}"))?;
     let total = metadata.len();
     if resume_offset > total {
         return Err("上传断点大于源文件".to_string());
     }
     let mut source = tokio::fs::File::open(local_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("无法打开本地上传文件 {local_path}: {error}"))?;
     source
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await

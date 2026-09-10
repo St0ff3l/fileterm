@@ -194,7 +194,12 @@ async fn run(
             let source_size = if task.direction == "upload" {
                 let metadata = tokio::fs::metadata(&source_path)
                     .await
-                    .map_err(|_| transfer_error("上传源文件不存在或无法读取"))?;
+                    .map_err(|error| {
+                        transfer_error(format!(
+                            "上传源文件不存在或无法读取 {}: {error}",
+                            source_path
+                        ))
+                    })?;
                 if !metadata.is_file() {
                     return Err(transfer_error("上传源不是普通文件"));
                 }

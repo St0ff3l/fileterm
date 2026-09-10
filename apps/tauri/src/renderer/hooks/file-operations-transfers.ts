@@ -1,5 +1,6 @@
 import { useEffect, type DragEvent } from 'react'
-import type { LocalFileItem, RemoteFileItem, WorkspaceSnapshot } from '@fileterm/core'
+import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
+import { createUploadBatch } from './upload-batch'
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
 import { t } from '../i18n'
 import type {
@@ -74,20 +75,15 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
       return
     }
 
-    const uniquePaths = Array.from(new Set(paths))
-    let latestSnapshot: WorkspaceSnapshot | null = null
-    try {
-      for (const sourcePath of uniquePaths) {
-        latestSnapshot = await desktopApi.uploadFile(activeTab.id, sourcePath, activeSession.remotePath)
-      }
-    } finally {
-      // Creating several durable tasks used to apply a full workspace snapshot
-      // once per source path. Transfer updates already stream independently;
-      // publish one final snapshot after the batch and keep the last successful
-      // snapshot visible if a later source fails.
-      if (latestSnapshot) {
-        onApplySnapshot(latestSnapshot)
-      }
+    const { latestSnapshot, failures } = await createUploadBatch(paths, (sourcePath) =>
+      desktopApi.uploadFile(activeTab.id, sourcePath, activeSession.remotePath)
+    )
+    // Transfer events stream independently; apply only the last successful snapshot.
+    if (latestSnapshot) {
+      onApplySnapshot(latestSnapshot)
+    }
+    if (failures.length) {
+      throw new Error(failures.map(({ path, error }) => formatError(path, error)).join('\n'))
     }
   }
 
