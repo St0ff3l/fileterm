@@ -74,7 +74,6 @@ export function ConnectionSshAuthSection({
             value={form.password}
             hasSavedValue={hasSavedPassword}
             canClear={mode === 'edit'}
-            fullWidth={form.type === 'ftp'}
             disabled={
               form.type === 'ssh' &&
               isPasswordAuth &&
@@ -132,9 +131,12 @@ export function ConnectionSshAuthSection({
           </div>
         ) : form.type === 'ftp' ? (
           <>
-            <label className="span-2">
-              {t.ftpSecurityMode}:
+            <div className="ssh-form-field">
+              <div className="ssh-form-field__header">
+                <label htmlFor="connection-ftp-security">{t.ftpSecurityMode}:</label>
+              </div>
               <DropdownSelect
+                id="connection-ftp-security"
                 value={form.securityMode ?? (form.secure ? 'explicit' : 'none')}
                 options={[
                   { value: 'none', label: t.ftpSecurityNone },
@@ -157,21 +159,13 @@ export function ConnectionSshAuthSection({
                   }))
                 }}
               />
-            </label>
-            {form.securityMode !== 'none' ? (
-              <label className="span-2">
-                {t.ftpCertificateFingerprint}:
-                <input
-                  value={form.certificateFingerprint ?? ''}
-                  placeholder="sha256:..."
-                  onChange={(event) => setForm((prev) => ({ ...prev, certificateFingerprint: event.target.value }))}
-                />
-                <span className="ssh-field-hint">{t.ftpCertificateFingerprintHint}</span>
-              </label>
-            ) : null}
-            <label className="span-2">
-              {t.ftpTransferMode}:
+            </div>
+            <div className="ssh-form-field">
+              <div className="ssh-form-field__header">
+                <label htmlFor="connection-ftp-transfer-mode">{t.ftpTransferMode}:</label>
+              </div>
               <DropdownSelect
+                id="connection-ftp-transfer-mode"
                 value={form.transferMode ?? 'passive'}
                 options={[
                   { value: 'passive', label: t.ftpTransferPassive },
@@ -184,8 +178,22 @@ export function ConnectionSshAuthSection({
                   }))
                 }
               />
-              <span className="ssh-field-hint">{t.ftpTransferModeHint}</span>
-            </label>
+            </div>
+            <div className="span-2 ssh-field-hint">{t.ftpTransferModeHint}</div>
+            {form.securityMode !== 'none' ? (
+              <div className="span-2 ssh-form-field">
+                <div className="ssh-form-field__header">
+                  <label htmlFor="connection-ftp-certificate-fingerprint">{t.ftpCertificateFingerprint}:</label>
+                </div>
+                <input
+                  id="connection-ftp-certificate-fingerprint"
+                  value={form.certificateFingerprint ?? ''}
+                  placeholder="sha256:..."
+                  onChange={(event) => setForm((prev) => ({ ...prev, certificateFingerprint: event.target.value }))}
+                />
+                <div className="ssh-field-hint">{t.ftpCertificateFingerprintHint}</div>
+              </div>
+            ) : null}
             <div className="span-2 ssh-auth-hint">
               <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
               <div className="ssh-auth-hint__content">
