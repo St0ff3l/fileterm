@@ -1145,6 +1145,12 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   margin-left: 24px;
 }
 
+.ssh-form-field .ssh-field-hint,
+.ssh-grid-auth .ssh-field-hint {
+  margin-top: 2px;
+  margin-left: 0;
+}
+
 /* Advanced section toggle list */
 .advanced-toggle-list {
   display: flex;
