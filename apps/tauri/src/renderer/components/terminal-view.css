@@ -1,0 +1,8 @@
+/* xterm's DOM renderer measures repeated glyphs before spacing individual cells.
+   Chromium's contextual CJK punctuation compression makes those widths differ.
+   Apply to the root so both visible rows and the hidden width cache inherit it.
+   Refs #254; https://github.com/xtermjs/xterm.js/issues/6058 */
+.terminal-host .xterm {
+  text-spacing-trim: space-all;
+  text-autospace: no-autospace;
+}
