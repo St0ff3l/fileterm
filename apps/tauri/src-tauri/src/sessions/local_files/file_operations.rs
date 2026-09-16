@@ -33,6 +33,7 @@ pub fn app_write_local_file(
 
 #[tauri::command]
 pub fn app_create_local_directory(dir_path: String, name: String) -> Result<(), AppError> {
+    validate_local_name(&name)?;
     let target = Path::new(&dir_path).join(&name);
     let result = fs::create_dir_all(&target).map_err(|e| AppError::Storage(e.to_string()));
     log_local_result("create directory", &result, None);
@@ -41,11 +42,17 @@ pub fn app_create_local_directory(dir_path: String, name: String) -> Result<(), 
 
 #[tauri::command]
 pub fn app_create_local_file(dir_path: String, name: String) -> Result<(), AppError> {
+    validate_local_name(&name)?;
     let target = Path::new(&dir_path).join(&name);
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
-    let result = fs::write(&target, b"").map_err(|e| AppError::Storage(e.to_string()));
+    let result = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .map(|_| ())
+        .map_err(|e| AppError::Storage(e.to_string()));
     log_local_result("create file", &result, Some(0));
     result
 }
@@ -58,22 +65,34 @@ pub fn app_copy_local_path(source_path: String, destination_path: String) -> Res
     if let Some(parent) = Path::new(&destination_path).parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
+    validate_copy_destination(Path::new(&source_path), Path::new(&destination_path))?;
     let result = copy_recursive(Path::new(&source_path), Path::new(&destination_path));
     log_local_result("copy path", &result, None);
     result
 }
 
 fn copy_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
-    let meta = fs::metadata(src).map_err(|e| AppError::Storage(e.to_string()))?;
+    let meta = fs::symlink_metadata(src).map_err(|e| AppError::Storage(e.to_string()))?;
+    if meta.file_type().is_symlink() {
+        return Err(AppError::Storage(
+            "复制不支持符号链接，请复制其实际目标".to_string(),
+        ));
+    }
     if meta.is_dir() {
         copy_dir_recursive(src, dst)
-    } else {
+    } else if meta.is_file() {
+        reject_unsafe_copy_destination(dst)?;
         fs::copy(src, dst).map_err(|e| AppError::Storage(e.to_string()))?;
         Ok(())
+    } else {
+        Err(AppError::Storage(
+            "复制不支持特殊文件（例如管道、设备或套接字）".to_string(),
+        ))
     }
 }
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
+    reject_unsafe_copy_destination(dst)?;
     fs::create_dir_all(dst).map_err(|e| AppError::Storage(e.to_string()))?;
     for entry in fs::read_dir(src).map_err(|e| AppError::Storage(e.to_string()))? {
         let entry = entry.map_err(|e| AppError::Storage(e.to_string()))?;
@@ -90,10 +109,16 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
         if file_type.is_symlink() {
             continue;
         }
+        reject_unsafe_copy_destination(&dst_child)?;
         if file_type.is_dir() {
             copy_dir_recursive(&src_child, &dst_child)?;
-        } else {
+        } else if file_type.is_file() {
             fs::copy(&src_child, &dst_child).map_err(|e| AppError::Storage(e.to_string()))?;
+        } else {
+            return Err(AppError::Storage(format!(
+                "复制不支持特殊文件：{}",
+                src_child.display()
+            )));
         }
     }
     Ok(())
@@ -107,12 +132,20 @@ pub fn app_move_local_path(source_path: String, destination_path: String) -> Res
     if let Some(parent) = Path::new(&destination_path).parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
+    // Rename moves the link itself, including dangling links; only real
+    // directories/files need the canonical destination guard.
+    if !fs::symlink_metadata(&source_path)
+        .map_err(|e| AppError::Storage(e.to_string()))?
+        .file_type().is_symlink()
+    {
+        validate_copy_destination(Path::new(&source_path), Path::new(&destination_path))?;
+    }
     let result = match fs::rename(&source_path, &destination_path) {
         Ok(()) => Ok(()),
         Err(error) => {
-            if error.raw_os_error() == Some(18) {
+            if error.kind() == std::io::ErrorKind::CrossesDevices {
                 // EXDEV — cross-device rename
-                copy_recursive(Path::new(&source_path), Path::new(&destination_path))?;
+                copy_for_move(Path::new(&source_path), Path::new(&destination_path))?;
                 remove_path(Path::new(&source_path))
             } else {
                 Err(AppError::Storage(error.to_string()))
@@ -125,6 +158,7 @@ pub fn app_move_local_path(source_path: String, destination_path: String) -> Res
 
 #[tauri::command]
 pub fn app_rename_local_path(target_path: String, new_name: String) -> Result<(), AppError> {
+    validate_local_name(&new_name)?;
     let parent = Path::new(&target_path)
         .parent()
         .ok_or_else(|| AppError::Storage("Cannot rename root".to_string()))?;

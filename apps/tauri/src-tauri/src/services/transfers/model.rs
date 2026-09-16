@@ -303,32 +303,23 @@ fn journal_paths(app: &AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), AppErro
     ))
 }
 
-/// Pick the tasks that should survive the next journal write.
-///
-/// `state.transfers` is append-only, so `take(N)` from the front would keep the
-/// oldest entries and silently drop the newly appended active/resumable tasks
-/// once the limit is exceeded. Instead, sort by `updated_at` (falling back to
-/// `created_at`, then the original append index for stability) and keep the
-/// most recent `limit` entries, preserving the on-disk ordering for readability.
+/// Retain every unfinished/resumable task and pending cleanup. The limit
+/// bounds disposable history only when required tasks leave room for it.
 fn select_journal_tasks(tasks: &[TransferTask], limit: usize) -> Vec<TransferTask> {
-    if tasks.len() <= limit {
-        return tasks.to_vec();
+    let mut kept = Vec::new();
+    let mut history = Vec::new();
+    for (index, task) in tasks.iter().enumerate() {
+        if !task.terminal() || task.resumable || task.cleanup_pending {
+            kept.push(index);
+        } else {
+            history.push((index, task.updated_at.or(task.created_at).unwrap_or(0)));
+        }
     }
-    let mut indexed: Vec<(usize, u64)> = tasks
-        .iter()
-        .enumerate()
-        .map(|(idx, task)| (idx, task.updated_at.or(task.created_at).unwrap_or(0)))
-        .collect();
-    // Most recent first; ties broken by append order so the later-appended
-    // task (higher index) is treated as newer and survives the cut.
-    indexed.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0)));
-    let mut kept: Vec<usize> = indexed
-        .into_iter()
-        .take(limit)
-        .map(|(idx, _)| idx)
-        .collect();
+    history.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0)));
+    let history_slots = limit.saturating_sub(kept.len());
+    kept.extend(history.into_iter().take(history_slots).map(|(index, _)| index));
     kept.sort_unstable();
-    kept.into_iter().map(|idx| tasks[idx].clone()).collect()
+    kept.into_iter().map(|index| tasks[index].clone()).collect()
 }
 
 fn write_journal(app: &AppHandle, tasks: &[TransferTask]) -> Result<(), AppError> {
@@ -368,15 +359,34 @@ fn write_journal(app: &AppHandle, tasks: &[TransferTask]) -> Result<(), AppError
 
 fn read_journal(app: &AppHandle) -> Result<Vec<TransferTask>, AppError> {
     let (path, _temporary, backup) = journal_paths(app)?;
+    read_journal_at(&path, &backup)
+}
+
+fn read_journal_at(path: &Path, backup: &Path) -> Result<Vec<TransferTask>, AppError> {
+    let mut failures = Vec::new();
     for candidate in [path, backup] {
-        let Ok(content) = std::fs::read_to_string(candidate) else {
-            continue;
+        let content = match std::fs::read_to_string(candidate) {
+            Ok(content) => content,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                failures.push(format!("{}: {error}", candidate.display()));
+                continue;
+            }
         };
-        let Ok(mut journal) = serde_json::from_str::<TransferJournal>(&content) else {
-            continue;
+        let mut journal = match serde_json::from_str::<TransferJournal>(&content) {
+            Ok(journal) => journal,
+            Err(error) => {
+                failures.push(format!("{}: {error}", candidate.display()));
+                continue;
+            }
         };
         if journal.version != JOURNAL_VERSION {
-            continue;
+            // A newer application may have written this file. Falling back
+            // and rewriting it with an older schema would lose its state.
+            return Err(AppError::Storage(format!(
+                "不支持的传输日志版本 {}：{}；日志已保留",
+                journal.version, candidate.display()
+            )));
         }
         for task in &mut journal.transfers {
             normalize_root_upload_staging(task);
@@ -393,5 +403,11 @@ fn read_journal(app: &AppHandle) -> Result<Vec<TransferTask>, AppError> {
         }
         return Ok(journal.transfers);
     }
-    Ok(Vec::new())
+    if failures.is_empty() {
+        Ok(Vec::new())
+    } else {
+        Err(AppError::Storage(format!(
+            "无法恢复传输日志，原文件已保留：{}", failures.join("；")
+        )))
+    }
 }

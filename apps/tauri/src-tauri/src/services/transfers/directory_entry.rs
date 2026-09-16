@@ -178,13 +178,13 @@ async fn transfer_directory_entry_once(
 
     if direction == "upload" {
         if upload_plan.upload_needed {
-            worker_data_call_with_cancel(app, tab_id, cancel, |respond_to, _token| {
+            worker_data_call_with_cancel(app, tab_id, cancel, |respond_to, token| {
                 WorkerCmd::UploadLocalFile {
                     local_path: entry.source_path.clone(),
                     remote_path: upload_plan.upload_path.clone(),
                     resume_offset: offset,
                     transfer_id: transfer_id.to_string(),
-                    cancel: cancel.clone(),
+                    cancel: token,
                     verify_checksum: false,
                     respond_to,
                 }
@@ -213,13 +213,13 @@ async fn transfer_directory_entry_once(
                 .await
                 .map_err(|error| transfer_error(error.to_string()))?;
         }
-        worker_data_call_with_cancel(app, tab_id, cancel, |respond_to, _token| {
+        worker_data_call_with_cancel(app, tab_id, cancel, |respond_to, token| {
             WorkerCmd::DownloadRemoteFile {
                 remote_path: entry.source_path.clone(),
                 local_path: entry.partial_path.clone(),
                 resume_offset: offset,
                 transfer_id: transfer_id.to_string(),
-                cancel: cancel.clone(),
+                cancel: token,
                 verify_checksum: false,
                 respond_to,
             }

@@ -227,9 +227,7 @@ async fn dispatch_file_cmd(
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
-                let dest_dir = std::path::Path::new(&destination_path)
-                    .parent()
-                    .map(|p| p.to_string_lossy().into_owned())
+                let dest_dir = parent_remote_path(&destination_path)
                     .unwrap_or_else(|| "/".to_string());
                 let cp_cmd = if target_type == "folder" {
                     "cp -R"
@@ -330,9 +328,7 @@ async fn dispatch_file_cmd(
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
-                let parent = std::path::Path::new(&target_path)
-                    .parent()
-                    .map(|p| p.to_string_lossy().into_owned())
+                let parent = parent_remote_path(&target_path)
                     .unwrap_or_else(|| "/".to_string());
                 let dest = format!("{}/{}", parent.trim_end_matches('/'), new_name);
                 let res = if fam == "root" {

@@ -329,6 +329,13 @@ export function createFileOperationsNavigation(context: FileOperationsRuntime) {
     if (!desktopApi || !fileClipboard) {
       return
     }
+    // Transfer commands acknowledge queueing, not successful completion.
+    // Cross-pane moves need a durable backend move operation before they can
+    // safely remove the source. Keep the clipboard available for same-pane use.
+    if (fileClipboard.operation === 'cut' && fileClipboard.pane !== pane) {
+      reportStatusError('粘贴文件', new Error(t.crossPaneCutUnsupported))
+      return
+    }
 
     void (async () => {
       try {
@@ -375,9 +382,6 @@ export function createFileOperationsNavigation(context: FileOperationsRuntime) {
               targetName: targetNames[index]
             })
             onApplySnapshot(snapshot)
-            if (fileClipboard.operation === 'cut') {
-              await desktopApi.deleteLocalPath(item.path)
-            }
           }
           await openLocalDirectory(localPath)
           await refreshCurrentPane('remote')
@@ -391,15 +395,6 @@ export function createFileOperationsNavigation(context: FileOperationsRuntime) {
               { targetName: targetNames[index] }
             )
             onApplySnapshot(snapshot)
-            if (fileClipboard.operation === 'cut') {
-              const deleteSnapshot = await desktopApi.deleteRemotePath(
-                fileClipboard.tabId!,
-                item.path,
-                item.type,
-                item.isSymlink
-              )
-              onApplySnapshot(deleteSnapshot)
-            }
           }
           await openLocalDirectory(localPath)
           if (fileClipboard.tabId === activeTab?.id) {

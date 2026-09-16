@@ -9,6 +9,7 @@ pub mod system_metrics;
 pub mod telnet;
 mod telnet_direct;
 pub mod terminal;
+pub(crate) mod transfer_file_safety;
 
 /// 传输数据块的读取/写入缓冲大小。
 ///

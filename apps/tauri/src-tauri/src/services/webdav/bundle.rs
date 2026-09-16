@@ -46,11 +46,13 @@ pub(crate) fn build_export_bundle(
 }
 
 fn profile_fingerprint(profile: &Value) -> Option<(String, String, String, u64, String)> {
+    let kind = profile.get("type")?.as_str()?.to_ascii_lowercase();
+    let endpoint_field = if kind == "serial" { "devicePath" } else { "host" };
     Some((
-        profile.get("type")?.as_str()?.to_ascii_lowercase(),
+        kind,
         profile.get("name")?.as_str()?.trim().to_string(),
         profile
-            .get("host")
+            .get(endpoint_field)
             .and_then(Value::as_str)
             .unwrap_or_default()
             .trim()
@@ -188,6 +190,27 @@ fn parse_bundle(
     backup_crypto::decode_bundle(bytes, password).map_err(|error| command_error(error.to_string()))
 }
 
+fn prepare_import_profiles(
+    incoming: Vec<Value>,
+    mode: DownloadMode,
+) -> Result<(Vec<Value>, u64), AppError> {
+    let mut profiles = Vec::with_capacity(incoming.len());
+    let mut skipped = 0;
+    for profile in incoming {
+        match sanitize_import_profile(&profile) {
+            Ok(profile) => profiles.push(profile),
+            Err(_) => skipped += 1,
+        }
+    }
+    // A partial restore must never silently replace a complete local library.
+    if mode == DownloadMode::OverwriteLocal && skipped > 0 {
+        return Err(command_error(format!(
+            "备份包含 {skipped} 个无效连接，已取消覆盖本地配置；请修复备份或使用合并模式"
+        )));
+    }
+    Ok((profiles, skipped))
+}
+
 pub(crate) struct ProfileImportSummary {
     pub imported: u64,
     pub updated: u64,
@@ -207,14 +230,7 @@ pub(crate) fn import_bundle(
 ) -> Result<ProfileImportSummary, AppError> {
     let decoded = parse_bundle(bytes, password)?;
     let (existing, _) = profile_ops::read_and_heal_profiles(app)?;
-    let mut profiles = Vec::with_capacity(decoded.profiles.len());
-    let mut skipped = 0_u64;
-    for profile in decoded.profiles {
-        match sanitize_import_profile(&profile) {
-            Ok(profile) => profiles.push(profile),
-            Err(_) => skipped += 1,
-        }
-    }
+    let (profiles, mut skipped) = prepare_import_profiles(decoded.profiles, mode)?;
 
     if mode == DownloadMode::OverwriteLocal {
         let replaced = existing.len() as u64;

@@ -102,15 +102,18 @@ pub async fn upload(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppErr
 async fn upload_inner(app: &AppHandle, mode: UploadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
-    let (remote_exists, _) = head_payload(&client, &config).await?;
+    let (remote_exists, mut remote_etag) = head_payload(&client, &config).await?;
     let password = backup_prompt::request(app, "upload", "WebDAV").await?;
     let (payload, content_hash) = if mode == UploadMode::MergeCloud && remote_exists {
-        let (remote_bytes, _) = download_payload(&client, &config).await?;
+        let (remote_bytes, downloaded_etag) = download_payload(&client, &config).await?;
+        remote_etag = Some(downloaded_etag.ok_or_else(|| command_error(
+            "WebDAV 合并需要服务器返回 ETag，已停止上传以避免覆盖其他设备的更新"
+        ))?);
         merge_bundle_with_local(app, &remote_bytes, &password)?
     } else {
         export_bundle(app, &password)?
     };
-    let next_etag = upload_payload(&client, &config, payload).await?;
+    let next_etag = upload_payload(&client, &config, payload, remote_etag.as_deref()).await?;
     config.last_etag = next_etag;
     config.last_synced_at = Some(export_timestamp());
     config.content_hash = Some(content_hash);
@@ -150,15 +153,17 @@ async fn head_payload(
 /// arguments so the protocol exchange can be exercised against a real WebDAV
 /// endpoint without a Tauri application data directory.  The caller remains
 /// responsible for persisting the returned ETag only after the PUT succeeds.
+/// The precondition is the version read before preparing the payload (GET for
+/// merge), never a fresh HEAD that could authorize overwriting unseen changes.
 async fn upload_payload(
     client: &Client,
     config: &StoredConfig,
     payload: Vec<u8>,
+    remote_etag: Option<&str>,
 ) -> Result<Option<String>, AppError> {
     let remote = remote_url(config)?;
-    let (_, remote_etag) = head_payload(client, config).await?;
     if let Some(last_etag) = config.last_etag.as_deref() {
-        if remote_etag.as_deref() != Some(last_etag) {
+        if remote_etag != Some(last_etag) {
             return Err(command_error(
                 "远端配置自上次同步后已变更。请先下载并确认冲突，再上传。",
             ));
@@ -171,7 +176,7 @@ async fn upload_payload(
             .body(payload),
         config,
     );
-    request = match remote_etag.as_deref() {
+    request = match remote_etag {
         Some(value) => request.header(IF_MATCH, value),
         None => request.header(IF_NONE_MATCH, "*"),
     };
@@ -185,7 +190,8 @@ async fn upload_payload(
     if !response.status().is_success() {
         return Err(response_error("上传", response.status()));
     }
-    Ok(etag(response.headers()).or(remote_etag))
+    // A missing response ETag must not retain the now-obsolete version.
+    Ok(etag(response.headers()))
 }
 
 pub async fn download(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppError> {
@@ -274,19 +280,7 @@ async fn download_payload(
     if !response.status().is_success() {
         return Err(response_error("下载", response.status()));
     }
-    if response
-        .content_length()
-        .is_some_and(|size| size as usize > MAX_BUNDLE_BYTES)
-    {
-        return Err(command_error("WebDAV 配置包超过 5 MB 限制"));
-    }
     let remote_etag = etag(response.headers());
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| command_error(format!("WebDAV 下载内容失败: {error}")))?;
-    if bytes.len() > MAX_BUNDLE_BYTES {
-        return Err(command_error("WebDAV 配置包超过 5 MB 限制"));
-    }
-    Ok((bytes.to_vec(), remote_etag))
+    let bytes = crate::services::webdav::read_bounded_bundle(response, MAX_BUNDLE_BYTES, "WebDAV").await?;
+    Ok((bytes, remote_etag))
 }

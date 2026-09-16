@@ -4,12 +4,14 @@ pub async fn ensure_loaded(app: &AppHandle) -> Result<(), AppError> {
     if *loaded {
         return Ok(());
     }
+    // Keep the journal mutex before the transfers lock, matching `persist`.
+    // The first load also rewrites the normalized snapshot; taking these
+    // locks in the opposite order would deadlock with a concurrent persist.
+    let _write = state.transfer_journal_write.lock().await;
     let tasks = read_journal(app)?;
     *state.transfers.write().await = tasks.clone();
-    {
-        let _write = state.transfer_journal_write.lock().await;
-        write_journal(app, &tasks)?;
-    }
+    write_journal(app, &tasks)?;
+    drop(_write);
     // Publish the loaded flag only after the normalized journal is durable.
     // Otherwise a concurrent mutation can write a newer snapshot and then be
     // overwritten by this initial, stale `tasks` clone.
@@ -257,10 +259,23 @@ async fn worker_call_with_timeout<T>(
         .get(tab_id)
         .cloned()
         .ok_or_else(|| transfer_error("传输会话未连接"))?;
+    dispatch_worker_command(sender, response_timeout, cancellation, make_command).await
+}
+
+async fn dispatch_worker_command<T>(
+    sender: tokio::sync::mpsc::Sender<WorkerCmd>,
+    response_timeout: Duration,
+    cancellation: Option<CancellationToken>,
+    make_command: impl FnOnce(oneshot::Sender<Result<T, String>>, CancellationToken) -> WorkerCmd,
+) -> Result<T, AppError> {
     let (respond_to, result) = oneshot::channel();
-    let cancellation = cancellation.unwrap_or_default();
+    // Operation timeouts must stop the worker without marking the whole run
+    // as user-canceled, otherwise its error never reaches fail_if_running.
+    let cancellation = cancellation.map(|parent| parent.child_token()).unwrap_or_default();
+    let _cancel_on_drop = cancellation.clone().drop_guard();
     let command = make_command(respond_to, cancellation.clone());
     let send_result = tokio::select! {
+        biased;
         _ = cancellation.cancelled() => return Err(transfer_error("传输已取消")),
         result = tokio::time::timeout(TRANSFER_WORKER_SEND_TIMEOUT, sender.send(command)) => result,
     };
@@ -274,6 +289,7 @@ async fn worker_call_with_timeout<T>(
     }
 
     let response = tokio::select! {
+        biased;
         _ = cancellation.cancelled() => return Err(transfer_error("传输已取消")),
         result = tokio::time::timeout(response_timeout, result) => result,
     };

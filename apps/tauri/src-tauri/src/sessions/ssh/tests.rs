@@ -2088,6 +2088,10 @@ mod tests {
             root_upload_shell_command("/etc/fileterm/config.toml", 12),
             "set -e\nmkdir -p '/etc/fileterm'\ncat >> '/etc/fileterm/config.toml'"
         );
+        assert_eq!(
+            root_upload_shell_command("/etc/literal\\name", 0),
+            "set -e\nmkdir -p '/etc'\ncat > '/etc/literal\\name'"
+        );
     }
 
     #[test]

@@ -434,19 +434,28 @@ async fn run_directory_transfer(
 }
 
 async fn replace_local_file(partial: &Path, destination: &Path) -> Result<(), AppError> {
+    crate::sessions::transfer_file_safety::existing_regular_local_transfer_file(
+        partial,
+        "本地下载断点",
+    )
+    .await
+    .map_err(transfer_error)?;
     let backup = destination.with_file_name(format!(
         "{}.fileterm-backup-{}",
         task_name(&destination.to_string_lossy()),
         uuid::Uuid::new_v4()
     ));
-    let moved_destination = if tokio::fs::try_exists(destination).await.unwrap_or(false) {
+    let moved_destination = crate::sessions::transfer_file_safety::existing_regular_local_transfer_file(
+        destination,
+        "本地下载目标",
+    )
+    .await
+    .map_err(transfer_error)?;
+    if moved_destination {
         tokio::fs::rename(destination, &backup)
             .await
             .map_err(|error| transfer_error(error.to_string()))?;
-        true
-    } else {
-        false
-    };
+    }
     if let Err(error) = tokio::fs::rename(partial, destination).await {
         if moved_destination {
             let _ = tokio::fs::rename(&backup, destination).await;
@@ -475,6 +484,7 @@ async fn fail_if_running(
     }
     if let Some(mut manifest) = task.manifest.clone() {
         let mut resumable = true;
+        let mut cleanup_pending = task.cleanup_pending;
         if let Some(entry) = manifest
             .files
             .iter_mut()
@@ -521,6 +531,9 @@ async fn fail_if_running(
             };
             if partial_size > entry.source_identity.size {
                 resumable = false;
+                // An oversized checkpoint cannot be resumed safely. Keep the
+                // task until discard/cleanup removes the stale artifact.
+                cleanup_pending = true;
             }
             entry.transferred_bytes = partial_size.min(entry.source_identity.size);
             entry.status = "pending".to_string();
@@ -542,6 +555,7 @@ async fn fail_if_running(
                     ((transferred as f64 / total as f64) * 100.0).min(99.0)
                 };
                 task.resumable = resumable;
+                task.cleanup_pending = cleanup_pending;
             },
             PatchDelivery::PersistedEvent,
         )
@@ -573,6 +587,7 @@ async fn fail_if_running(
         .or(task.total_bytes);
     let resumable =
         matches!((partial_size, source_size), (Some(partial), Some(total)) if partial <= total);
+    let cleanup_pending = task.cleanup_pending || (partial_size.is_some() && !resumable);
     patch_task(
         app,
         transfer_id,
@@ -588,6 +603,7 @@ async fn fail_if_running(
                 _ => task.progress,
             };
             task.resumable = resumable;
+            task.cleanup_pending = cleanup_pending;
         },
         PatchDelivery::PersistedEvent,
     )
