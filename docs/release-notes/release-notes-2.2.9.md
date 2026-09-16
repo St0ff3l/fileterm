@@ -12,7 +12,7 @@ FileTerm 2.2.9 聚焦文件管理与传输链路的安全性、可恢复性和�
 
 ### 本版本包含的主要 PR 和问题修复
 
-- 文件与备份质量审查覆盖传输路径、文件操作、后端并发、取消传播、协议断点和 renderer 回归。
+- [PR #253](https://github.com/St0ff3l/fileterm/pull/253)：完成文件与备份质量审查，覆盖传输路径、文件操作、后端并发、取消传播、协议断点和 renderer 回归。
 
 完整变更记录请查看 [v2.2.8 与 v2.2.9 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.8...v2.2.9)。
 
@@ -37,7 +37,7 @@ FileTerm 2.2.9 focuses on safer file management, more recoverable transfers, and
 
 ### Main PRs and issues
 
-- The release includes the file and backup quality audit covering transfer paths, file operations, backend concurrency, cancellation, protocol checkpoints, and renderer regressions.
+- [PR #253](https://github.com/St0ff3l/fileterm/pull/253): Complete the file and backup quality audit covering transfer paths, file operations, backend concurrency, cancellation, protocol checkpoints, and renderer regressions.
 
 See the [comparison between v2.2.8 and v2.2.9](https://github.com/St0ff3l/fileterm/compare/v2.2.8...v2.2.9) for the complete change set.
 
