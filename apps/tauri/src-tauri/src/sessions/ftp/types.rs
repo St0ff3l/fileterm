@@ -2,7 +2,6 @@ use base64::Engine;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use serde_json::Value;

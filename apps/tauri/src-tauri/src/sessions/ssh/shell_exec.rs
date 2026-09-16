@@ -65,10 +65,7 @@ async fn replace_root_remote_file(
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
-    let parent = std::path::Path::new(destination_path)
-        .parent()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = parent_remote_path(destination_path).unwrap_or_else(|| "/".to_string());
     let command = root_replace_remote_file_command(&parent, partial_path, destination_path);
     exec_shell_file_command(handle, &command, access_method, sudo_user, sudo_password)
         .await

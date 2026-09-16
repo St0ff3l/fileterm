@@ -192,7 +192,7 @@ async fn run(
                 .ok_or_else(|| transfer_error("传输任务缺少断点路径"))?;
             let staging = task.staging_path.clone();
             let source_size = if task.direction == "upload" {
-                let metadata = tokio::fs::metadata(&source_path)
+                let metadata = tokio::fs::symlink_metadata(&source_path)
                     .await
                     .map_err(|error| {
                         transfer_error(format!(
@@ -200,6 +200,11 @@ async fn run(
                             source_path
                         ))
                     })?;
+                if metadata.file_type().is_symlink() {
+                    return Err(transfer_error(
+                        "上传源文件是符号链接，不能继续旧断点；请选择实际文件",
+                    ));
+                }
                 if !metadata.is_file() {
                     return Err(transfer_error("上传源不是普通文件"));
                 }
@@ -315,13 +320,13 @@ async fn run(
                     .as_ref()
                     .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?;
                 if plan.upload_needed {
-                    worker_data_call_with_cancel(&app, &tab_id, &cancel, |respond_to, _token| {
+                    worker_data_call_with_cancel(&app, &tab_id, &cancel, |respond_to, token| {
                         WorkerCmd::UploadLocalFile {
                             local_path: source_path,
                             remote_path: plan.upload_path.clone(),
                             resume_offset: offset,
                             transfer_id: transfer_id.clone(),
-                            cancel: cancel.clone(),
+                            cancel: token,
                             verify_checksum: true,
                             respond_to,
                         }
@@ -334,13 +339,13 @@ async fn run(
                         .await
                         .map_err(|error| transfer_error(error.to_string()))?;
                 }
-                worker_data_call_with_cancel(&app, &tab_id, &cancel, |respond_to, _token| {
+                worker_data_call_with_cancel(&app, &tab_id, &cancel, |respond_to, token| {
                     WorkerCmd::DownloadRemoteFile {
                         remote_path: source_path,
                         local_path: partial.clone(),
                         resume_offset: offset,
                         transfer_id: transfer_id.clone(),
-                        cancel: cancel.clone(),
+                        cancel: token,
                         verify_checksum: true,
                         respond_to,
                     }

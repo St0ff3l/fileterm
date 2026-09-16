@@ -1,4 +1,29 @@
 // Remote path and permission commands.
+
+fn validate_remote_name(name: &str) -> Result<(), AppError> {
+    if name.is_empty()
+        || matches!(name, "." | "..")
+        || name.contains('/')
+        || name.chars().any(|character| character.is_control())
+    {
+        return Err(AppError::Command(
+            "名称必须是远端目录中的单个有效文件名".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+// Remote paths always use POSIX separators, including when FileTerm runs on
+// Windows. Do not use the host's Path parser for refresh paths: a backslash is
+// a valid remote filename character.
+fn remote_parent_path(path: &str) -> String {
+    let normalized = path.trim_end_matches('/');
+    match normalized.rfind('/') {
+        Some(0) | None => "/".to_string(),
+        Some(index) => normalized[..index].to_string(),
+    }
+}
+
 #[tauri::command]
 pub async fn app_open_remote_path(
     app: AppHandle,
@@ -149,10 +174,7 @@ pub async fn app_write_remote_file(
     })
     .await?;
 
-    let parent = std::path::Path::new(&target_path)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = remote_parent_path(&target_path);
     let _ = refresh_remote_files(&app, &tab_id, &parent).await;
     get_workspace_snapshot(app).await
 }
@@ -164,6 +186,7 @@ pub async fn app_create_remote_directory(
     parent_path: String,
     name: String,
 ) -> Result<serde_json::Value, AppError> {
+    validate_remote_name(&name)?;
     send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
         WorkerCmd::CreateRemoteDirectory {
             parent_path: parent_path.clone(),
@@ -185,6 +208,7 @@ pub async fn app_create_remote_file(
     parent_path: String,
     name: String,
 ) -> Result<serde_json::Value, AppError> {
+    validate_remote_name(&name)?;
     send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
         WorkerCmd::CreateRemoteFile {
             parent_path: parent_path.clone(),
@@ -218,10 +242,7 @@ pub async fn app_copy_remote_path(
     })
     .await?;
 
-    let parent = std::path::Path::new(&destination_path)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = remote_parent_path(&destination_path);
     let _ = refresh_remote_files(&app, &tab_id, &parent).await;
     get_workspace_snapshot(app).await
 }
@@ -243,14 +264,8 @@ pub async fn app_move_remote_path(
     })
     .await?;
 
-    let parent_src = std::path::Path::new(&target_path)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
-    let parent_dest = std::path::Path::new(&destination_path)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent_src = remote_parent_path(&target_path);
+    let parent_dest = remote_parent_path(&destination_path);
 
     let _ = refresh_remote_files(&app, &tab_id, &parent_src).await;
     if parent_src != parent_dest {
@@ -266,6 +281,7 @@ pub async fn app_rename_remote_path(
     target_path: String,
     new_name: String,
 ) -> Result<serde_json::Value, AppError> {
+    validate_remote_name(&new_name)?;
     send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
         WorkerCmd::RenameRemotePath {
             target_path: target_path.clone(),
@@ -276,10 +292,7 @@ pub async fn app_rename_remote_path(
     })
     .await?;
 
-    let parent = std::path::Path::new(&target_path)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = remote_parent_path(&target_path);
     let _ = refresh_remote_files(&app, &tab_id, &parent).await;
     get_workspace_snapshot(app).await
 }
@@ -303,10 +316,7 @@ pub async fn app_delete_remote_path(
     })
     .await?;
 
-    let parent = std::path::Path::new(&target_path)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = remote_parent_path(&target_path);
     let _ = refresh_remote_files(&app, &tab_id, &parent).await;
     get_workspace_snapshot(app).await
 }
@@ -379,10 +389,7 @@ pub async fn app_change_remote_permissions(
     })
     .await?;
 
-    let parent = std::path::Path::new(&target_path)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = remote_parent_path(&target_path);
     let _ = refresh_remote_files(&app, &tab_id, &parent).await;
     get_workspace_snapshot(app).await
 }
@@ -425,4 +432,25 @@ pub async fn app_set_remote_file_access_mode(
     .await?;
 
     get_workspace_snapshot(app).await
+}
+
+#[cfg(test)]
+mod remote_name_tests {
+    use super::{remote_parent_path, validate_remote_name};
+
+    #[test]
+    fn remote_name_operations_cannot_escape_the_parent_directory() {
+        for name in ["", ".", "..", "../outside", "nested/file", "bad\0name", "line\nfeed"] {
+            assert!(validate_remote_name(name).is_err(), "{name:?}");
+        }
+        assert!(validate_remote_name("safe name.txt").is_ok());
+        assert!(validate_remote_name(r"literal\name").is_ok());
+    }
+
+    #[test]
+    fn remote_parent_paths_ignore_host_platform_separators() {
+        assert_eq!(remote_parent_path("/srv/literal\\name"), "/srv");
+        assert_eq!(remote_parent_path("/srv/dir/file"), "/srv/dir");
+        assert_eq!(remote_parent_path("file"), "/");
+    }
 }

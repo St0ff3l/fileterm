@@ -1913,6 +1913,7 @@ const zhCN = {
   smbFolderSwitchUnsupported: '当前运行环境不支持切换 SMB 共享文件夹。',
   filesCutStatus: '已剪切 {count} 个文件，按 Esc 取消',
   filesCopiedStatus: '已复制 {count} 个文件，可在其他目录粘贴，按 Esc 取消',
+  crossPaneCutUnsupported: '暂不支持本地与远端之间剪切，请使用复制，确认传输完成后再删除源文件',
   crossSessionPasteUnsupported: '暂不支持跨远程会话粘贴，请在原会话内操作或先下载到本地',
   operationFailedSummary: '{action}失败：{failed}/{total} 个目标未完成',
   errorBoundaryTitle: '应用遇到错误',
@@ -3937,6 +3938,8 @@ const enUS: typeof zhCN = {
   smbFolderSwitchUnsupported: 'Switching SMB shared folders is not supported in this runtime.',
   filesCutStatus: '{count} file(s) cut. Press Esc to cancel',
   filesCopiedStatus: '{count} file(s) copied. Paste them in another directory or press Esc to cancel',
+  crossPaneCutUnsupported:
+    'Cutting between local and remote panes is not supported. Copy the files, verify the transfer, then delete the source.',
   crossSessionPasteUnsupported:
     'Pasting between remote sessions is not supported. Use the original session or download locally first.',
   operationFailedSummary: '{action} failed: {failed}/{total} targets did not complete',

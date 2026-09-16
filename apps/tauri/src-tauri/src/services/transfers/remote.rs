@@ -374,20 +374,26 @@ async fn collect_local_tree(
             let file_type = entry.file_type().await.map_err(|error| {
                 transfer_error(format!("无法读取本地文件类型 {}: {error}", path.display()))
             })?;
-            let metadata = entry.metadata().await.map_err(|error| {
-                transfer_error(format!("无法读取本地文件信息 {}: {error}", path.display()))
+            // Inspect the directory entry itself before following it for
+            // metadata. On Windows a Junction/reparse point can otherwise
+            // resolve to an ordinary directory and escape the scanned tree.
+            let link_metadata = tokio::fs::symlink_metadata(&path).await.map_err(|error| {
+                transfer_error(format!("无法读取本地文件属性 {}: {error}", path.display()))
             })?;
-            if let Some(reason) = windows_reparse_rejection(&path, &metadata) {
+            if let Some(reason) = windows_reparse_rejection(&path, &link_metadata) {
                 return Err(transfer_error(format!(
                     "无法递归扫描本地目录：{reason}"
                 )));
             }
-            if file_type.is_symlink() {
+            if link_metadata.file_type().is_symlink() || file_type.is_symlink() {
                 return Err(transfer_error(format!(
                     "无法递归扫描本地目录：不支持符号链接或 Windows Junction：{}",
                     path.display()
                 )));
             }
+            let metadata = entry.metadata().await.map_err(|error| {
+                transfer_error(format!("无法读取本地文件信息 {}: {error}", path.display()))
+            })?;
             if file_type.is_dir() {
                 directories.push(path.clone());
                 pending.push(path);
@@ -472,7 +478,7 @@ async fn collect_remote_tree(
                 .get("name")
                 .and_then(|value| value.as_str())
                 .unwrap_or_default();
-            if name == ".." || name.is_empty() {
+            if name == "." || name == ".." || name.is_empty() {
                 continue;
             }
             let path = entry
@@ -481,6 +487,8 @@ async fn collect_remote_tree(
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| transfer_error("远端目录返回了无效路径"))?
                 .to_string();
+            // Reject escaping/unrepresentable paths before traversing or statting them.
+            relative_remote_path(root, &path)?;
             if entry
                 .get("isSymlink")
                 .and_then(Value::as_bool)
@@ -554,6 +562,9 @@ fn relative_remote_path(root: &str, path: &str) -> Result<String, AppError> {
         .strip_prefix(root_segments.as_slice())
         .filter(|segments| !segments.is_empty())
         .ok_or_else(|| transfer_error(format!("路径 {path} 不在根目录 {root} 内")))?;
+    for segment in relative {
+        validate_transfer_name(segment, cfg!(windows))?;
+    }
     Ok(relative.join("/"))
 }
 

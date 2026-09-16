@@ -420,7 +420,7 @@ fn connect_macos_smb(
             let _ = std::process::Command::new("/sbin/umount")
                 .arg(&mount_root)
                 .status();
-            let _ = fs::remove_dir_all(&mount_root);
+            remove_empty_mount_directory(&mount_root);
             return Err(error);
         }
         register_mac_smb_mount(remote_root, mount_root.clone(), vec![mount_root.clone()]);
@@ -445,7 +445,7 @@ fn connect_macos_smb(
         ));
     }
 
-    let _ = fs::remove_dir_all(&mount_root);
+    remove_empty_mount_directory(&mount_root);
     Ok(LocalNetworkShareConnectionResult {
         kind: "select-share".to_string(),
         path: path.to_string(),
@@ -465,7 +465,7 @@ pub fn cleanup_network_mounts() {
                 .arg(mounted_path)
                 .status();
         }
-        let _ = fs::remove_dir_all(&mount.local_root);
+        remove_empty_mount_directory(&mount.local_root);
     }
 }
 
@@ -657,4 +657,10 @@ pub async fn app_connect_local_network_share(
     })
     .await
     .map_err(|error| AppError::Command(format!("SMB 连接任务失败: {error}")))?
+}
+
+// A failed unmount can leave the share reachable here. Never recurse into it.
+#[cfg(target_os = "macos")]
+fn remove_empty_mount_directory(path: &Path) {
+    let _ = fs::remove_dir(path);
 }

@@ -17,6 +17,7 @@
     "build:renderer": "vite build",
     "build:main": "node ./scripts/run-tauri.mjs build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:renderer": "node --test tests/*.test.mjs",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1",
     "clean:release": "node ./scripts/clean-release.mjs",
     "release:mac": "node ./scripts/run-tauri.mjs build --target aarch64-apple-darwin --config src-tauri/tauri.release.macos.conf.json",

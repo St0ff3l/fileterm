@@ -143,6 +143,8 @@ pub(crate) async fn send_worker_cmd_with_response_timeout<T>(
 /// command may already be queued while Copilot is waiting for its response;
 /// selecting cancellation here prevents the AI request from remaining stuck
 /// behind an unrelated worker operation until the normal response timeout.
+/// Timeouts also cancel the request token so an already accepted remote command
+/// cannot keep running after this IPC call has given up.
 pub(crate) async fn send_worker_cmd_with_response_timeout_cancellable<T>(
     app: &AppHandle,
     tab_id: &str,
@@ -181,9 +183,24 @@ pub(crate) async fn send_worker_cmd_with_response_timeout_cancellable<T>(
     } else {
         timeout(WORKER_FILE_CMD_SEND_TIMEOUT, sender.send(cmd)).await
     };
-    send_result
-        .map_err(|_| AppError::Storage("Worker busy: command send timeout".to_string()))?
-        .map_err(|e| AppError::Storage(e.to_string()))?;
+    let send_result = match send_result {
+        Ok(result) => result,
+        Err(_) => {
+            // The command may have become queued at the timeout boundary.
+            // Cancel the request before returning so a cancellable remote
+            // command cannot continue after its caller has given up.
+            if let Some(cancellation) = cancellation {
+                cancellation.cancel();
+            }
+            return Err(AppError::Storage("Worker busy: command send timeout".to_string()));
+        }
+    };
+    if let Err(error) = send_result {
+        if let Some(cancellation) = cancellation {
+            cancellation.cancel();
+        }
+        return Err(AppError::Storage(error.to_string()));
+    }
 
     let response = if let Some(cancellation) = cancellation {
         tokio::select! {
@@ -197,8 +214,16 @@ pub(crate) async fn send_worker_cmd_with_response_timeout_cancellable<T>(
     } else {
         timeout(response_timeout, rx).await
     };
+    let response = match response {
+        Ok(response) => response,
+        Err(_) => {
+            if let Some(cancellation) = cancellation {
+                cancellation.cancel();
+            }
+            return Err(AppError::Storage("远程操作超时，请检查连接后重试".to_string()));
+        }
+    };
     let res = response
-        .map_err(|_| AppError::Storage("远程操作超时，请检查连接后重试".to_string()))?
         .map_err(|e| AppError::Storage(e.to_string()))?
         .map_err(AppError::Storage)?;
     Ok(res)

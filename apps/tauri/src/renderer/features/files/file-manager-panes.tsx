@@ -1,3 +1,4 @@
+import './file-manager-panes.css'
 import { PathBookmarksButton } from './path-bookmarks-button'
 import type {
   Dispatch,
@@ -248,7 +249,7 @@ export function FileManagerPanes({
         />
         <div className="file-table-scroll-region">
           <div
-            className="file-table-shell local-file-table-shell"
+            className="file-table-shell file-table-shell--with-trailing-space local-file-table-shell"
             ref={localScrollRef}
             onContextMenu={(event) => {
               if (event.target !== event.currentTarget) return
@@ -411,7 +412,7 @@ export function FileManagerPanes({
           <div className="remote-file-table-region">
             <div
               ref={remoteScrollRef}
-              className="file-table-shell remote-file-table-shell"
+              className="file-table-shell file-table-shell--with-trailing-space remote-file-table-shell"
               onContextMenu={(event) => {
                 if (!canUseRemoteFiles) return
                 if (event.target !== event.currentTarget) return

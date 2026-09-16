@@ -44,6 +44,9 @@ jobs:
       - name: Build shared packages
         run: npm run build:packages
 
+      - name: Test renderer operation logic
+        run: npm run test:renderer -w @fileterm/tauri
+
       - name: Exercise AI Copilot fixture smoke
         run: npm run qa:ai-copilot-fixture-smoke
 

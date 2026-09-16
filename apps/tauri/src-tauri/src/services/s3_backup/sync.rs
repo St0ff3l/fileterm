@@ -125,7 +125,7 @@ pub async fn upload(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppErr
 async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
-    let remote_etag = head_object(&client, &config).await?;
+    let mut remote_etag = head_object(&client, &config).await?;
     if let Some(last_etag) = config.last_etag.as_deref() {
         if remote_etag.as_deref() != Some(last_etag) {
             return Err(command_error(
@@ -136,7 +136,14 @@ async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value
     let password = backup_prompt::request(app, "upload", "S3").await?;
     let (payload, content_hash) = if mode == webdav::UploadMode::MergeCloud {
         if remote_etag.is_some() {
-            let (remote_bytes, _) = download_payload(&client, &config).await?;
+            // The object can change after HEAD. Bind the conditional PUT to
+            // the exact version returned with the bytes we merged.
+            let (remote_bytes, downloaded_etag) = download_payload(&client, &config).await?;
+            remote_etag = Some(downloaded_etag.ok_or_else(|| {
+                command_error(
+                    "S3 合并需要服务器返回 ETag，已停止上传以避免覆盖其他设备的更新",
+                )
+            })?);
             webdav::merge_bundle_with_local(app, &remote_bytes, &password)?
         } else {
             webdav::export_bundle(app, &password)?
@@ -174,7 +181,10 @@ async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value
     if !response.status().is_success() {
         return Err(response_error("上传", response.status()));
     }
-    config.last_etag = etag(response.headers()).or(remote_etag);
+    // A PUT response without an ETag does not identify the newly stored
+    // object. Keeping the pre-upload ETag would make the next sync compare
+    // against a stale version and report a false conflict.
+    config.last_etag = etag(response.headers());
     config.last_synced_at = Some(webdav::export_timestamp());
     config.content_hash = Some(content_hash);
     write_config(app, &config)?;
@@ -282,19 +292,7 @@ async fn download_payload(
     if !response.status().is_success() {
         return Err(response_error("下载", response.status()));
     }
-    if response
-        .content_length()
-        .is_some_and(|size| size as usize > MAX_BUNDLE_BYTES)
-    {
-        return Err(command_error("S3 配置包超过 5 MB 限制"));
-    }
     let remote_etag = etag(response.headers());
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| command_error(format!("S3 下载内容失败: {error}")))?;
-    if bytes.len() > MAX_BUNDLE_BYTES {
-        return Err(command_error("S3 配置包超过 5 MB 限制"));
-    }
-    Ok((bytes.to_vec(), remote_etag))
+    let bytes = crate::services::webdav::read_bounded_bundle(response, MAX_BUNDLE_BYTES, "S3").await?;
+    Ok((bytes, remote_etag))
 }

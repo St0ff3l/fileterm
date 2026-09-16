@@ -196,10 +196,7 @@ async fn upload_root_local_file_via_su_pty(
 }
 
 fn root_upload_shell_command(remote_path: &str, resume_offset: u64) -> String {
-    let parent = std::path::Path::new(remote_path)
-        .parent()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = parent_remote_path(remote_path).unwrap_or_else(|| "/".to_string());
     let write_operator = if resume_offset == 0 { ">" } else { ">>" };
     format!(
         "set -e\nmkdir -p {}\ncat {} {}",
@@ -210,10 +207,7 @@ fn root_upload_shell_command(remote_path: &str, resume_offset: u64) -> String {
 }
 
 fn root_upload_base64_shell_command(remote_path: &str, resume_offset: u64) -> String {
-    let parent = std::path::Path::new(remote_path)
-        .parent()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = parent_remote_path(remote_path).unwrap_or_else(|| "/".to_string());
     let write_operator = if resume_offset == 0 { ">" } else { ">>" };
     format!(
         "set -e\nmkdir -p {}\nbase64 -d {} {}",
@@ -233,10 +227,7 @@ async fn commit_root_staging_file(
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
-    let parent = std::path::Path::new(partial_path)
-        .parent()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
+    let parent = parent_remote_path(partial_path).unwrap_or_else(|| "/".to_string());
     let command = format!(
         "set -e\nmkdir -p {}\nrm -f -- {}\ncat -- {} > {}\nrm -f -- {}",
         shell_quote(&parent),
@@ -285,20 +276,11 @@ async fn download_root_remote_file(
         )
         .await;
     }
-    if let Some(parent) = std::path::Path::new(local_path).parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|error| error.to_string())?;
-    }
-    let mut options = tokio::fs::OpenOptions::new();
-    options.write(true).create(true);
-    if resume_offset == 0 {
-        options.truncate(true);
-    }
-    let mut local = options
-        .open(local_path)
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut local = crate::sessions::transfer_file_safety::open_local_download_checkpoint(
+        local_path,
+        resume_offset,
+    )
+    .await?;
     local
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await
@@ -427,20 +409,11 @@ async fn download_root_remote_file_via_su_pty(
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
-    if let Some(parent) = std::path::Path::new(local_path).parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|error| error.to_string())?;
-    }
-    let mut options = tokio::fs::OpenOptions::new();
-    options.write(true).create(true);
-    if resume_offset == 0 {
-        options.truncate(true);
-    }
-    let mut local = options
-        .open(local_path)
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut local = crate::sessions::transfer_file_safety::open_local_download_checkpoint(
+        local_path,
+        resume_offset,
+    )
+    .await?;
     local
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await

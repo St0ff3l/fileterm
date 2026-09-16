@@ -155,20 +155,11 @@ async fn download_remote_file(
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await
         .map_err(|error| error.to_string())?;
-    if let Some(parent) = std::path::Path::new(local_path).parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|error| error.to_string())?;
-    }
-    let mut options = tokio::fs::OpenOptions::new();
-    options.write(true).create(true);
-    if resume_offset == 0 {
-        options.truncate(true);
-    }
-    let mut destination = options
-        .open(local_path)
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut destination = crate::sessions::transfer_file_safety::open_local_download_checkpoint(
+        local_path,
+        resume_offset,
+    )
+    .await?;
     destination
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await

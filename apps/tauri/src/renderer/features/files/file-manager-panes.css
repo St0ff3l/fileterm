@@ -1,0 +1,5 @@
+.file-table-shell--with-trailing-space {
+  /* Match four fixed-height file rows so a full directory can scroll past
+     its final entry and expose the pane-level context-menu target. */
+  padding-block-end: 96px;
+}

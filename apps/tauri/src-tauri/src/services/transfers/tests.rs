@@ -447,16 +447,19 @@ mod tests {
         }
     }
 
+    fn history_task(id: &str, updated_at: u64) -> TransferTask {
+        let mut task = sample_task(id, updated_at);
+        task.status = "done".to_string();
+        task
+    }
+
     #[test]
     fn journal_keeps_most_recent_tasks_when_over_limit() {
-        // Regression for S2: the previous `take(200)` kept the oldest 200
-        // entries from the append-only vector and silently dropped any
-        // active/resumable task appended after the limit was reached. The
-        // new selector must keep the most recently updated entries so
-        // in-flight transfers survive a restart.
+        // Disposable history keeps its most recent entries; unfinished
+        // tasks are covered separately and must never be evicted.
         let total = JOURNAL_MAX_TASKS + 50;
         let tasks: Vec<TransferTask> = (0..total)
-            .map(|index| sample_task(&format!("task-{index}"), index as u64))
+            .map(|index| history_task(&format!("task-{index}"), index as u64))
             .collect();
 
         let kept = select_journal_tasks(&tasks, JOURNAL_MAX_TASKS);
@@ -466,8 +469,7 @@ mod tests {
             "selector must cap at the configured limit"
         );
 
-        // The newest 200 tasks (indices 50..total) must survive — these are
-        // the ones a `take(200)` from the front would have dropped.
+        // The newest 200 completed tasks (indices 50..total) survive.
         let kept_ids: std::collections::HashSet<&str> =
             kept.iter().map(|task| task.id.as_str()).collect();
         for index in 0..50 {
@@ -490,7 +492,7 @@ mod tests {
         // every task in the original append order — the journal is append-only
         // and downstream code relies on stable ordering for display + cleanup.
         let tasks: Vec<TransferTask> = (0..10)
-            .map(|index| sample_task(&format!("task-{index}"), index as u64))
+            .map(|index| history_task(&format!("task-{index}"), index as u64))
             .collect();
 
         let kept = select_journal_tasks(&tasks, JOURNAL_MAX_TASKS);
@@ -507,8 +509,8 @@ mod tests {
         // selector keeps both (up to the limit) and breaks ties by the
         // original append index so older entries drop first.
         let tasks = vec![
-            sample_task("old-same-ts", 1000),
-            sample_task("new-same-ts", 1000),
+            history_task("old-same-ts", 1000),
+            history_task("new-same-ts", 1000),
         ];
         let kept = select_journal_tasks(&tasks, 1);
         assert_eq!(kept.len(), 1);

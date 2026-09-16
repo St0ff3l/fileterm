@@ -273,20 +273,11 @@ async fn download_file<T: TokioTlsStream + Send + 'static>(
     if resume_offset > total {
         return Err("FTP 下载断点大于源文件".to_string());
     }
-    if let Some(parent) = Path::new(local_path).parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|error| error.to_string())?;
-    }
-    let mut options = tokio::fs::OpenOptions::new();
-    options.write(true).create(true);
-    if resume_offset == 0 {
-        options.truncate(true);
-    }
-    let mut local = options
-        .open(local_path)
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut local = crate::sessions::transfer_file_safety::open_local_download_checkpoint(
+        local_path,
+        resume_offset,
+    )
+    .await?;
     local
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await

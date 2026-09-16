@@ -207,6 +207,28 @@ mod tests {
         assert_eq!(merged["password"], "new");
     }
 
+    #[test]
+    fn backup_identity_keeps_same_named_serial_devices_separate() {
+        let first = json!({"type":"serial", "name":"console", "devicePath":"/dev/ttyUSB0"});
+        let second = json!({"type":"serial", "name":"console", "devicePath":"/dev/ttyUSB1"});
+        assert_ne!(super::profile_fingerprint(&first), super::profile_fingerprint(&second));
+        let mut restored = first.clone();
+        restored["id"] = json!("another-installation-id");
+        assert_eq!(super::profile_fingerprint(&first), super::profile_fingerprint(&restored));
+    }
+
+    #[test]
+    fn overwrite_restore_rejects_partially_invalid_backup() {
+        let valid = json!({"type":"ssh", "name":"dev", "host":"example.test", "port":22});
+        for incoming in [vec![json!({})], vec![valid.clone(), json!({})]] {
+            assert!(super::prepare_import_profiles(incoming, DownloadMode::OverwriteLocal).is_err());
+        }
+        let (profiles, skipped) = super::prepare_import_profiles(vec![valid, json!({})], DownloadMode::MergeLocal).unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(skipped, 1);
+        assert!(super::prepare_import_profiles(vec![], DownloadMode::OverwriteLocal).unwrap().0.is_empty());
+    }
+
     #[tokio::test]
     async fn real_webdav_server_rejects_stale_etag_with_if_match() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -243,7 +265,9 @@ mod tests {
             last_etag: Some("\"etag-before-write\"".to_string()),
             content_hash: None,
         };
-        let result = upload_payload(&test_client(), &config, b"{}".to_vec()).await;
+        let client = test_client();
+        let (_, expected_etag) = super::head_payload(&client, &config).await.unwrap();
+        let result = upload_payload(&client, &config, b"{}".to_vec(), expected_etag.as_deref()).await;
         server.await.unwrap();
         let error = result.unwrap_err();
         assert!(error.to_string().contains("ETag 冲突"), "{error}");
@@ -292,13 +316,43 @@ mod tests {
             last_etag: None,
             content_hash: None,
         };
+        let client = test_client();
+        let (_, expected_etag) = super::head_payload(&client, &config).await.unwrap();
         assert_eq!(
-            upload_payload(&test_client(), &config, payload)
+            upload_payload(&client, &config, payload, expected_etag.as_deref())
                 .await
                 .unwrap(),
             Some("\"etag-after-write\"".to_string())
         );
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn merge_upload_uses_downloaded_etag_when_server_changes_before_put() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut get, _) = listener.accept().await.unwrap();
+            assert!(read_request(&mut get).await.starts_with("GET "));
+            get.write_all(b"HTTP/1.1 200 OK\r\nETag: \"downloaded-version\"\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await.unwrap();
+            let (mut put, _) = listener.accept().await.unwrap();
+            let request = read_request(&mut put).await;
+            // The server has changed now. A new HEAD here would give the new
+            // ETag and incorrectly authorize a PUT containing the old merge.
+            assert!(request.starts_with("PUT "));
+            assert!(request.contains("if-match: \"downloaded-version\"\r\n"));
+            put.write_all(b"HTTP/1.1 412 Precondition Failed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+        });
+        let config = StoredConfig {
+            enabled: true, url: format!("http://{address}"),
+            remote_path: "profiles.json".into(), allow_insecure_tls: Some(true),
+            ..StoredConfig::default()
+        };
+        let client = test_client();
+        let (bytes, version) = download_payload(&client, &config).await.unwrap();
+        let result = upload_payload(&client, &config, bytes, version.as_deref()).await;
+        server.await.unwrap();
+        assert!(result.unwrap_err().to_string().contains("ETag 冲突"));
     }
 
     #[tokio::test]

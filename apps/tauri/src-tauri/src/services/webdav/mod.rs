@@ -89,5 +89,6 @@ impl Default for StoredConfig {
 
 include!("config.rs");
 include!("bundle.rs");
+include!("download.rs");
 include!("sync.rs");
 include!("tests.rs");
