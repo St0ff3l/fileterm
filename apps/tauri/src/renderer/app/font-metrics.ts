@@ -10,9 +10,6 @@ import { APP_EVENT, onAppEvent } from '../lib/app-events'
 
 export const FILETERM_MONO_FONT_FAMILY = '"JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
 
-const FILETERM_MONO_FONT_FAMILY_REFRESH =
-  '"JetBrains Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
-
 export function getConfiguredMonoFontFamily() {
   if (typeof document === 'undefined') return FILETERM_MONO_FONT_FAMILY
   const configured = getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim()
@@ -20,10 +17,10 @@ export function getConfiguredMonoFontFamily() {
 }
 
 function nextPaint(callback: () => void) {
-  const firstFrame = window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(callback)
+  let frame = window.requestAnimationFrame(() => {
+    frame = window.requestAnimationFrame(callback)
   })
-  return () => window.cancelAnimationFrame(firstFrame)
+  return () => window.cancelAnimationFrame(frame)
 }
 
 /**
@@ -34,7 +31,6 @@ function nextPaint(callback: () => void) {
 export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) => void) {
   let disposed = false
   let cancelPaint: (() => void) | null = null
-  let useRefreshFontStack = false
   let pixelRatio = window.devicePixelRatio || 1
   let pixelRatioQuery = window.matchMedia(`(resolution: ${pixelRatio}dppx)`)
 
@@ -48,11 +44,13 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
       if (disposed) {
         return
       }
-      useRefreshFontStack = !useRefreshFontStack
       const configuredFontFamily = getConfiguredMonoFontFamily()
-      const refreshFontFamily =
-        configuredFontFamily === FILETERM_MONO_FONT_FAMILY ? FILETERM_MONO_FONT_FAMILY_REFRESH : configuredFontFamily
-      onMetricsChanged(useRefreshFontStack ? refreshFontFamily : configuredFontFamily)
+      // xterm ignores an unchanged fontFamily, and its DOM renderer has no
+      // texture atlas to clear. Pulse an equivalent stack to invalidate both
+      // glyph widths and cell metrics, then restore the configured value.
+      // Repeat the whole list: splitting on commas would break quoted names.
+      onMetricsChanged(`${configuredFontFamily}, ${configuredFontFamily}`)
+      if (!disposed) onMetricsChanged(configuredFontFamily)
     })
   }
 
@@ -80,6 +78,10 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
   window.addEventListener('resize', onViewportResize)
   window.visualViewport?.addEventListener('resize', onViewportResize)
   const disposeImportedFontsListener = onAppEvent(APP_EVENT.importedFontsChanged, notify)
+  // Theme changes and imported faces can start loading after the initial
+  // fonts.ready promise has already resolved. Remeasure their final glyphs too.
+  document.fonts.addEventListener('loadingdone', notify)
+  document.fonts.addEventListener('loadingerror', notify)
 
   const configuredFontFamily = getConfiguredMonoFontFamily()
   void Promise.all([
@@ -99,6 +101,8 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
     pixelRatioQuery.removeEventListener('change', onPixelRatioChanged)
     window.removeEventListener('resize', onViewportResize)
     window.visualViewport?.removeEventListener('resize', onViewportResize)
+    document.fonts.removeEventListener('loadingdone', notify)
+    document.fonts.removeEventListener('loadingerror', notify)
     disposeImportedFontsListener()
   }
 }

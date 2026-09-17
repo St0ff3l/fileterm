@@ -35,6 +35,27 @@ renderer 测试、Rust unit/contract 测试、Clippy（all-targets/all-features�
 
 ## 发布前平台复核
 
+### 字体延迟加载的补充回归
+
+`font-metrics.ts` 原先只为固定默认字体栈触发强制重新测量。设置中选择
+单个字体或导入字体时，相同 `fontFamily` 会被 xterm 忽略；DOM renderer
+也没有可由 `clearTextureAtlas()` 清理的纹理缓存，导致继续沿用回退字体网格。
+
+现在所有字体栈都会先通知一个等效的重复列表，再恢复配置值，以更新网格和
+字形宽度缓存。列表整体重复，不拆分含逗号的引号字体名。监听 FontFaceSet
+后续加载完成/失败事件，覆盖初始 `fonts.ready` 之后切换或导入字体；销毁时
+同时移除监听并取消待执行的第二帧回调。终端继续通过已有 resize 链路同步 PTY。
+
+```sh
+node apps/tauri/tests/browser/terminal-font-loading.mjs
+```
+
+该脚本执行真实的生产 observer 和事件总线，验证延迟加载后列数与新建终端
+一致（本机 Chrome 样例从回退的 52 列恢复到 81 列），以及带逗号的字体名、
+重复导入通知、销毁后的回调取消。旧代码运行该测试会失败。
+
+### 原生 WebView
+
 在 Windows 11 WebView2 连接 Ubuntu 22.04，用 nano 输入：
 
 ```text
