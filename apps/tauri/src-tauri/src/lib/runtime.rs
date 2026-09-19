@@ -187,7 +187,13 @@ pub fn run() {
                 .map_err(|error| error.to_string())?;
             #[cfg(target_os = "windows")]
             let tray_icon = windows_icon_image().map_err(|error| error.to_string())?;
-            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            #[cfg(target_os = "linux")]
+            // Tauri embeds the first Linux bundle PNG as raw pixels. The
+            // tray backend accepts 32bpp RGBA only, so use the checked-in
+            // 8-bit source directly instead of the generated window icon.
+            let tray_icon = Image::from_bytes(include_bytes!("../../icons/32x32.png"))
+                .map_err(|error| error.to_string())?;
+            #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
             let tray_icon = app
                 .default_window_icon()
                 .cloned()

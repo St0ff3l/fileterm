@@ -42,6 +42,20 @@ mod tests {
         assert!(!tray_icon_should_be_template("linux"));
     }
 
+    #[test]
+    fn linux_bundle_icons_are_8_bit_rgba() {
+        for icon in [
+            &include_bytes!("../../icons/32x32.png")[..],
+            &include_bytes!("../../icons/128x128.png")[..],
+            &include_bytes!("../../icons/128x128@2x.png")[..],
+        ] {
+            assert_eq!(&icon[..8], b"\x89PNG\r\n\x1a\n");
+            assert_eq!(&icon[12..16], b"IHDR");
+            assert_eq!(icon[24], 8, "Linux tray icons must use 8-bit channels");
+            assert_eq!(icon[25], 6, "Linux tray icons must use RGBA pixels");
+        }
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn loads_the_high_resolution_windows_icon_for_windows_surfaces() {
