@@ -28,3 +28,4 @@ Accepted / Proposed / Superseded
 
 - [ADR-0008：MCP、CLI 与 Agent 共享访问策略和凭据边界](./0008-mcp-cli-agent-access-policy.md)
 - [ADR-0009：MCP/CLI 使用进程级长连接 bridge 并按请求多路复用](./0009-mcp-cli-long-lived-bridge-session.md)
+- [ADR-0010：平台托盘图标使用专用的 8-bit 位图输入](./0010-platform-tray-icon-inputs.md)

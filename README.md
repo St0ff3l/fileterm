@@ -31,6 +31,8 @@
 - **Windows**：提供 x64 NSIS 安装包和免安装 portable `.exe`；已安装的正式版会在应用内下载、验签并在重启后更新。
 - **Linux**：提供 x64 `.deb` 安装包和 `.AppImage` 便携包。
 
+`.AppImage` 是可执行文件；如下载后不能双击启动，可在终端执行 `chmod +x FileTerm-*-linux-x86_64.AppImage`，再运行该文件。
+
 macOS 与 Linux 的“检查更新”会打开对应的 GitHub Release 下载页，由用户自行下载和安装；Windows 正式安装版使用签名的应用内更新。
 
 需要从源码运行或参与开发？请继续阅读 [从源码开始](#从源码开始)。

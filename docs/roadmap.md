@@ -4,7 +4,7 @@
 
 路线图目标不是一次把所有协议做全，而是尽快形成一个可工作的桌面端 MVP，然后逐步打磨成可发布版本。
 
-## 当前重构进度（2026-07-17）
+## 当前重构进度（2026-09-19）
 
 仓库当前处于 **单运行时收口：Tauri 是唯一受维护、构建和发布的运行时，功能实现接近收口，真实协议与发行候选验收进行中**。历史桌面实现已从仓库彻底移除（删除提交 `2a2eb7ff`），不再保留兼容基线。
 
@@ -13,7 +13,8 @@
 - Phase 3 的 russh SSH 主链路已实现：受管 SSH 私钥库与口令交互、shell、SFTP、MFA、host verification、系统指标、CWD/远端用户跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 出站代理及运行时 SSH `-L/-R/-D` 隧道均已接入 `apps/tauri/src-tauri`。
 - Phase 3 已有本地 OpenSSH 的认证、exec、SFTP、HTTP/SOCKS5 代理、local 与 dynamic direct-tcpip 回归；MFA 使用真实 SSH 协议夹具验证。真实 sshd 的跳板、远程转发、sudo/root、CWD 事件和完整指标流仍是发行候选手测门禁。
 - Phase 4 的 Transfer journal/断点、FTP/FTPS、Telnet、Serial、WebDAV、连接导入导出、偏好/窗口事件、CSP 和本地日志均已接入 Rust backend。显式/隐式 FTPS、WebDAV HEAD/PUT/GET + ETag/hash、Telnet HTTP CONNECT/SOCKS5 已有本地真实协议夹具；实体/虚拟串口、真实 Telnet 设备、真实 WebDAV 服务和三平台结果仍未全部取得。
-- Phase 5 进行中：macOS Tauri 生产 DMG 已可打包并已有本机性能基线；自动 legacy 数据迁移与回滚代码已落地，签名 in-app updater、公证、Windows/Linux 包与 CI 结果、迁移演练和正式切换仍是发行前置。
+- Phase 5 的三平台发布主链路已可用：Release Action 会构建 macOS arm64/x64 DMG、Windows 签名 NSIS/portable 包及 Linux x64 `.deb` / `.AppImage`，并在发布前执行质量与打包 smoke。Windows 使用签名的应用内更新；macOS 和 Linux 保持 GitHub Release 下载流。Linux tray 图标固定使用 8-bit RGBA 输入，避免 AppImage 在 GTK 环境初始化时因 16-bit 原始像素缓冲崩溃。
+- 自动 legacy 数据迁移与回滚代码已落地；真实 SSH/代理、实体/虚拟串口、数据迁移演练，以及 macOS 签名/公证策略仍需持续作为发行候选验收项推进。
 
 更细的差距和里程碑以已归档的 [`docs/plans/completed/tauri-migration-progress.md`](plans/completed/tauri-migration-progress.md) 为准；Rust 后端的模块级拆分以已归档的 [`rust-backend-migration-plan.md`](plans/completed/rust-backend-migration-plan.md) 为准。
 
@@ -138,13 +139,14 @@
 
 - macOS 安装包
 - Windows 安装包
+- Linux `.deb` 与 `.AppImage` 安装包
 - 自动更新策略预留
 - 崩溃日志和诊断信息
 - 基础文档完善
 
 验收标准：
 
-- 双平台可以安装运行
+- 三平台可以安装运行
 - 关键功能回归通过
 - 文档足够支持首次体验
 
@@ -152,7 +154,7 @@
 
 以下内容不进入第一版，但可作为下一轮优先池：
 
-- Linux 桌面专项适配
+- Linux 桌面环境兼容与体验深化
 - SSH 隧道 / 端口转发
 - 双远端面板
 - 本地文件面板
@@ -176,7 +178,7 @@
 
 当前优先级已经从历史结构拆分转为 Tauri/Rust 功能对齐：
 
-1. 触发并确认 Windows/Linux Tauri socket lifecycle CI。
-2. 配置 Tauri updater 的签名公钥、更新清单与 Windows/macOS 公证资产。
+1. 持续确认 PR 与 release 的三平台 Tauri socket lifecycle、质量及打包 smoke CI。
+2. 维护 Windows updater 的签名公钥和更新清单，并明确 macOS 签名/公证策略。
 3. 在真实 SSH/代理与实体/虚拟串口设备上执行发行候选手测。
-4. 完成三平台包签名、公证、数据迁移工具与回滚演练。
+4. 完成数据迁移工具与回滚演练，并持续验证三平台安装包。

@@ -31,6 +31,8 @@ Download the latest release from [GitHub Releases](https://github.com/St0ff3l/fi
 - **Windows**: x64 NSIS installer; installed production builds download, verify, and install updates after restart.
 - **Linux**: x64 `.deb` packages and `.AppImage` binaries.
 
+An `.AppImage` is executable. If it does not start when double-clicked, run `chmod +x FileTerm-*-linux-x86_64.AppImage` and then execute the file from a terminal.
+
 macOS and Linux update checks open the matching GitHub Release page for a user-selected download. Signed in-app updates are used by installed Windows releases.
 
 Want to run from source or contribute? Continue to [Getting Started from Source](#getting-started-from-source).
