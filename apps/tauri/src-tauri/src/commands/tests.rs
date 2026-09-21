@@ -19,9 +19,18 @@ mod command_template_tests {
 mod mcp_agent_setup_tests {
     use super::{
         app_get_mcp_agent_setup, append_home_cli_search_paths, opencode_extra_search_paths,
-        resolve_local_cli_from_paths,
+        resolve_local_cli_from_paths, quote_executable_argument, executable_invocation,
     };
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn separates_powershell_invocation_from_registration_argument() {
+        let argument = quote_executable_argument(r"C:\Program Files\O'Brien $Tools\FileTerm.exe", true);
+        assert_eq!(argument, r"'C:\Program Files\O''Brien $Tools\FileTerm.exe'");
+        assert_eq!(executable_invocation(&argument, true), format!("& {argument}"));
+        assert_eq!(executable_invocation(&argument, false), argument);
+        assert_eq!(quote_executable_argument("/opt/O'Brien/FileTerm", false), "'/opt/O'\"'\"'Brien/FileTerm'");
+    }
 
     #[test]
     fn resolves_cli_from_ordered_search_paths_without_running_it() {
@@ -177,7 +186,7 @@ mod mcp_agent_setup_tests {
         let setup = app_get_mcp_agent_setup().expect("MCP Agent setup should be readable");
         assert!(!setup.fileterm_command.is_empty());
         assert!(
-            setup.fileterm_command.starts_with('\'') || setup.fileterm_command.starts_with('"')
+            setup.fileterm_command.starts_with(if cfg!(target_os = "windows") { "& '" } else { "'" })
         );
 
         let claude = setup
@@ -199,6 +208,7 @@ mod mcp_agent_setup_tests {
             .registration_command
             .starts_with("codex mcp add fileterm -- "));
         assert!(codex.registration_command.ends_with(" mcp"));
+        assert!(!codex.registration_command.contains("-- & "));
 
         let opencode = setup
             .clients

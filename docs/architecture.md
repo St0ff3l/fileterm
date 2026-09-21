@@ -180,6 +180,10 @@ platform probe
 
 ## 4.2 Renderer 桌面壳与布局边界
 
+系统侧栏进程数据由远端采集器分别选取 CPU、内存和命令排序的前 40 条，去重后最多传输 120 条；renderer 根据当前排序展示 40 条。`SidebarProcessItem.commandOrder` 保留采集端命令排序，`memoryBytes` 用于数值排序，避免用已取整的展示文本排序。进程 CPU 使用整机百分比，Linux 以进程 tick / 全机 tick 的同窗口增量计算，并校验 PID 的启动时间；不能把前 40 条的合计冒充整机仪表，也不能按脚本解释器名称过滤用户进程。
+
+设置页提供的本地 CLI 直接调用片段在 Windows 上面向 PowerShell：使用 `& '可执行文件路径'`；MCP 注册片段中的可执行文件属于参数，仅引用路径，不插入调用运算符。POSIX shell 与 PowerShell 分别处理路径中的单引号。
+
 桌面壳相关状态目前属于 renderer 本地 UI 状态，不进入 main service：
 
 - 顶部标签栏、工作区焦点模式与标签切换动效由 `features/layout/tab-bar.tsx`、`features/workspace/workspace-stage.tsx` 和 `app.tsx` 协作。

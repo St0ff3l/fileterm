@@ -99,9 +99,13 @@ export function SystemSidebar({
   const sortedProcesses = useMemo(() => {
     const procs = [...(metrics?.topProcesses ?? [])]
     if (sortMode === 'command') {
-      // 按命令名字典序，便于找同名进程；同命令按 CPU 降序
+      // 使用采集端的命令排序，避免浏览器 locale 改变全局前 40 的候选范围。
       return procs
-        .sort((a, b) => a.command.localeCompare(b.command) || parseFloat(b.cpu) - parseFloat(a.cpu))
+        .sort((a, b) =>
+          a.commandOrder !== undefined && b.commandOrder !== undefined
+            ? a.commandOrder - b.commandOrder
+            : a.command.localeCompare(b.command) || parseFloat(b.cpu) - parseFloat(a.cpu)
+        )
         .slice(0, 40)
     }
     return procs
@@ -110,7 +114,7 @@ export function SystemSidebar({
           return parseFloat(b.cpu) - parseFloat(a.cpu)
         }
         if (sortMode === 'memory') {
-          return parseMemory(b.memory) - parseMemory(a.memory)
+          return (b.memoryBytes ?? parseMemory(b.memory) * 1024) - (a.memoryBytes ?? parseMemory(a.memory) * 1024)
         }
         return 0
       })

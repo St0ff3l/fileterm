@@ -506,6 +506,8 @@ const zhCN = {
   fileSystems: '文件系统',
   networkInterfaces: '网络接口',
   processList: '进程',
+  processCpuWholeMachine:
+    'CPU 整机占比，与上方进度条同一口径。仅展示当前排序前 40 个进程；未列出的进程、中断及虚拟化开销等可能产生差额。',
   model: '名称',
   cores: '核心数',
   frequency: '频率',
@@ -2443,6 +2445,8 @@ const enUS: typeof zhCN = {
   fileSystems: 'Filesystems',
   networkInterfaces: 'Network Interfaces',
   processList: 'Processes',
+  processCpuWholeMachine:
+    'CPU share of the whole machine, on the same scale as the gauge above. Only the first 40 processes for this sort are shown; unlisted processes, interrupts and virtualization overhead can account for the difference.',
   osName: 'Operating System',
   kernelName: 'Kernel',
   kernelVersion: 'Kernel Version',

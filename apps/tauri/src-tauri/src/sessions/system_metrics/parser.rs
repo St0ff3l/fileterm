@@ -466,15 +466,9 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
         }
     }
 
-    // Top processes: shell 端按瞬时 CPU 占用降序取 top 40，
-    // 这里按到达顺序逐行解析，不做 comm 分组。每行一个 PID，保留 pid/user
-    // 字段供排查使用，command 用 args（完整命令行）而非 comm。
+    // Collectors send the union of CPU/memory/command top 40, in command order.
+    // Never filter by executable name: bash/awk/etc. can be real user workloads.
     // 格式：pid|user|rss(M)|pcpu|pmem|args（args 内部空格保留）
-    let transient_collector_commands: std::collections::HashSet<&str> =
-        ["ps", "awk", "bash", "sleep", "sh", "powershell", "pwsh"]
-            .iter()
-            .cloned()
-            .collect();
     let mut top_processes: Vec<serde_json::Value> = Vec::new();
     for line in read_block("__PROCS_START__", "__PROCS_END__") {
         // splitn(6) 保留 args 内部所有字符（含 |），避免误切
@@ -495,17 +489,12 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
         let _mem_percent: f64 = parts[4].parse().unwrap_or(0.0);
         let command = parts[5].to_string();
 
-        // 过滤采集器自身（ps/awk/sh 等），按 args 首字段匹配
-        let comm = command.split_whitespace().next().unwrap_or("");
-        let comm_basename = comm.rsplit('/').next().unwrap_or(comm);
-        if transient_collector_commands.contains(comm_basename) {
-            continue;
-        }
-
         top_processes.push(serde_json::json!({
             "pid": pid,
             "user": user,
             "memory": format_process_megabytes(memory_mb),
+            "memoryBytes": (memory_mb.max(0.0) * 1024.0 * 1024.0) as u64,
+            "commandOrder": top_processes.len(),
             "cpu": format!("{:.1}", cpu_val),
             "command": command,
             "elapsedSeconds": 0_i64,

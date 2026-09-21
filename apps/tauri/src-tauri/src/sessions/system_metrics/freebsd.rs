@@ -569,15 +569,11 @@ NF >= 6 {
   if (account_scope + 0 > 0 && current_user != "" && user != current_user) next
   gsub(/\|/, " ", args)
   gsub(/\r/, "", args)
-  comm=args
-  sub(/^.*\//, "", comm)
-  sub(/[[:space:]].*$/, "", comm)
-  if (comm == "ps" || comm == "awk" || comm == "sh" || comm == "sleep" || comm == "head") next
   if (logical_cpu_count + 0 > 0) cpu=cpu/logical_cpu_count
   if (cpu < 0) cpu=0
   if (cpu > 100) cpu=100
   printf "%s|%s|%.1fM|%.1f|%.1f|%s\n", pid, user, rss/1024, cpu, mem, substr(args, 1, 200)
-}' | head -n 40)
+}')
 
 printf '%s\n' "__PLATFORM__freebsd"
 printf '%s\n' "__OS__$os_name"
@@ -612,10 +608,11 @@ printf '%s\n' "__FILESYSTEMS_START__"
 printf '%s\n' "$filesystems"
 printf '%s\n' "__FILESYSTEMS_END__"
 printf '%s\n' "__PROCS_START__"
+__SELECT_PROCESS_ROWS__
 printf '%s\n' "$procs"
 printf '%s\n' "__PROCS_END__"
 printf '%s\n' "__FILETERM_METRICS_COMPLETE__"
 
 
-"#.to_string()
+"#.replace("__SELECT_PROCESS_ROWS__", select_posix_process_rows_script())
 }
