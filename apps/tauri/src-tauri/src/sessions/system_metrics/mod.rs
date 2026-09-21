@@ -62,7 +62,9 @@ pub(crate) struct BackgroundExecChannel {
 include!("gateway.rs");
 include!("exec.rs");
 include!("parser.rs");
+include!("process_selection.rs");
 include!("posix.rs");
 include!("freebsd.rs");
 include!("windows.rs");
 include!("tests.rs");
+include!("process_selection_tests.rs");

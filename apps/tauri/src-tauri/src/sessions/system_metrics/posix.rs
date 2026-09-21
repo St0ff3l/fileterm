@@ -182,14 +182,22 @@ read_cpu_stat() {{
 }}
 read_process_ticks() {{
   awk '
-    {{
-      path=FILENAME
-      sub(/^\/proc\//, "", path)
-      sub(/\/stat$/, "", path)
-      line=$0
-      sub(/^[0-9]+ \(.+\) /, "", line)
-      count=split(line, fields, /[[:space:]]+/)
-      if (count >= 13) printf "%s|%s\n", path, fields[12] + fields[13]
+    BEGIN {{
+      # Processes can exit during enumeration. A failed open must not abort
+      # awk and drop every later PID from this snapshot.
+      for (file_index=1; file_index<ARGC; file_index++) {{
+        stat_file=ARGV[file_index]
+        read_ok=(getline line < stat_file)
+        close(stat_file)
+        if (read_ok <= 0) continue
+        path=stat_file
+        sub(/^\/proc\//, "", path)
+        sub(/\/stat$/, "", path)
+        sub(/^[0-9]+ \(.+\) /, "", line)
+        count=split(line, fields, /[[:space:]]+/)
+        if (count >= 20) printf "%s|%s|%s\n", path, fields[12] + fields[13], fields[20]
+      }}
+      exit
     }}
   ' /proc/[0-9]*/stat 2>/dev/null
 }}
@@ -717,23 +725,22 @@ filesystems=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK|%sK|%s|%sK
 # 同时它按单核百分比返回，多核机器还会出现与总 CPU 仪表不一致的问题。
 # 这里用进程 tick 增量 / 全局 CPU tick 增量，直接得到 0-100 的整机占比。
 if [ -s "$process_ticks_before_file" ] && [ -s "$process_ticks_after_file" ] && [ "$diff_total" -gt 0 ]; then
-  # A process delta larger than the global delta means the two /proc snapshots
-  # are not comparable (PID reuse, a broken proc reader, or a too-short sample).
-  # Reject the whole tick sample and use ps below rather than emitting values
-  # such as thousands of percent.
+  # Match PID and start time. One reused PID must not switch all processes
+  # back to lifetime-average CPU or manufacture a spike.
   if awk -F'|' -v diff_total="$diff_total" '
-    NR==FNR {{ before[$1]=$2; next }}
+    NR==FNR {{ before[$1]=$2; started[$1]=$3; next }}
     {{
       if (!($1 in before)) next
+      if (started[$1] != $3) next
       delta=$2-before[$1]
-      if (delta < 0 || delta > diff_total) {{ invalid=1; next }}
+      if (delta < 0 || delta > diff_total) next
       # Keep processes that consumed no CPU during this short sample too.
       # Filtering them out makes the top-process list randomly shrink to two
       # or three rows whenever fewer processes receive a tick in the window.
       printf "%s|%.4f\n", $1, delta * 100 / diff_total
       matched++
     }}
-    END {{ if (matched == 0 || invalid) exit 1 }}
+    END {{ if (matched == 0) exit 1 }}
   ' "$process_ticks_before_file" "$process_ticks_after_file" > "$process_cpu_tmp_file"; then
     mv "$process_cpu_tmp_file" "$process_cpu_file"
   else
@@ -752,51 +759,29 @@ if [ -s "$process_cpu_file" ]; then
     }}
     NF >= 5 {{
       pid=$1
-      if (!(pid in cpu)) next
+      # New/inaccessible processes still belong in memory/command rankings.
+      if (!(pid in cpu)) cpu[pid]=0
       args=$5
       for (i=6; i<=NF; i++) args=args" "$i
-      command_name=args
-      sub(/^[[:space:]]*/, "", command_name)
-      split(command_name, command_parts, /[[:space:]]+/)
-      comm=command_parts[1]
-      sub(/^.*\//, "", comm)
-      if (comm == "ps" || comm == "awk" || comm == "bash" || comm == "sleep" || comm == "sh" || comm == "powershell" || comm == "pwsh") next
       if (cpu[pid] < 0 || cpu[pid] > 100) next
-      row_count++
-      scores[row_count]=cpu[pid]
-      rows[row_count]=sprintf("%s|%s|%.1fM|%.1f|%s|%s", pid, $2, $3/1024, cpu[pid], $4, substr(args, 1, 200))
-    }}
-    END {{
-      for (rank=1; rank<=40 && rank<=row_count; rank++) {{
-        best=0
-        best_score=-1
-        for (i=1; i<=row_count; i++) {{
-          if (!used[i] && scores[i] > best_score) {{
-            best=i
-            best_score=scores[i]
-          }}
-        }}
-        if (best == 0) break
-        print rows[best]
-        used[best]=1
-      }}
+      printf "%s|%s|%.1fM|%.1f|%s|%s\n", pid, $2, $3/1024, cpu[pid], $4, substr(args, 1, 200)
     }}
   ')
 else
   # fallback：无法读取 /proc 进程 tick 或快照校验失败时，使用 ps 的
   # 生命周期平均值。ps 的 %CPU 按单核百分比返回，这里归一化到整机 0-100。
   if has_bounded_runner; then
-    procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu=$4+0; if (logical_cpu_count + 0 > 0) cpu=cpu/logical_cpu_count; if (cpu < 0) cpu=0; if (cpu > 100) cpu=100; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu, $5, substr(args,1,200)}}')
+    procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= 2>/dev/null | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu=$4+0; if (logical_cpu_count + 0 > 0) cpu=cpu/logical_cpu_count; if (cpu < 0) cpu=0; if (cpu > 100) cpu=100; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu, $5, substr(args,1,200)}}')
   else
-    procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu=$4+0; if (logical_cpu_count + 0 > 0) cpu=cpu/logical_cpu_count; if (cpu < 0) cpu=0; if (cpu > 100) cpu=100; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu, $5, substr(args,1,200)}}')
+    procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= 2>/dev/null | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu=$4+0; if (logical_cpu_count + 0 > 0) cpu=cpu/logical_cpu_count; if (cpu < 0) cpu=0; if (cpu > 100) cpu=100; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu, $5, substr(args,1,200)}}')
   fi
 fi
 if [ -z "$procs" ]; then
   # fallback：极简 ps（如某些 BusyBox 不支持 --sort 或 -o args=）
   if has_bounded_runner; then
-    procs=$(run_bounded 1 ps 2>/dev/null | head -n 40 | awk 'NR>1 && NF >= 5 {{printf "0|-|%.1fM|0|0|%s\n", $3/1024, $5}}')
+    procs=$(run_bounded 1 ps 2>/dev/null | awk 'NR>1 && NF >= 5 {{printf "0|-|%.1fM|0|0|%s\n", $3/1024, $5}}')
   else
-    procs=$(ps 2>/dev/null | head -n 40 | awk 'NR>1 && NF >= 5 {{printf "0|-|%.1fM|0|0|%s\n", $3/1024, $5}}')
+    procs=$(ps 2>/dev/null | awk 'NR>1 && NF >= 5 {{printf "0|-|%.1fM|0|0|%s\n", $3/1024, $5}}')
   fi
 fi
 echo "__PLATFORM__{}"
@@ -846,11 +831,13 @@ echo "__FILESYSTEMS_START__"
 echo "$filesystems"
 echo "__FILESYSTEMS_END__"
 echo "__PROCS_START__"
+{process_selection}
 echo "$procs"
 echo "__PROCS_END__"
 echo "{}"
 "#,
         build_posix_monitor_fallback_script(),
-        platform, complete_marker
+        platform, complete_marker,
+        process_selection = select_posix_process_rows_script()
     )
 }

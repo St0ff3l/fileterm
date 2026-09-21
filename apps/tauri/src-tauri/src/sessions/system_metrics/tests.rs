@@ -445,8 +445,11 @@ devil() {{
                 || command.contains("if (!($1 in before)) next")
         );
         assert!(command.contains("ps -eo pid=,user=,rss=,pmem=,args="));
-        assert!(command.contains("rank<=40 && rank<=row_count"));
-        assert!(command.contains("if (comm == \"ps\" || comm == \"awk\""));
+        assert!(command.contains("sort -t'|' -k4,4nr"));
+        assert!(command.contains("sort -t'|' -k3,3nr"));
+        assert!(command.contains("sort -t'|' -k6"));
+        assert!(command.contains("if (started[$1] != $3) next"));
+        assert!(!command.contains("if (comm =="));
         assert!(
             !command.contains("cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4")
         );
@@ -487,16 +490,19 @@ devil() {{
     }
 
     #[test]
-    fn parser_filters_transient_collector_processes() {
-        // ps/awk/bash 等采集器自身进程应被过滤，不显示给用户
+    fn parser_retains_processes_regardless_of_executable_name() {
+        // A name is not an identity: script interpreters may be user workloads.
         let metrics = parse_system_metrics(
             "__PLATFORM__linux\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__PROCS_START__\n100|root|1.0M|0.1|0.5|/usr/bin/sleep 1\n101|root|2.0M|0.2|1.0|/usr/sbin/nginx -g 'daemon off;'\n102|root|1.5M|0.3|0.8|ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu\n__PROCS_END__\n",
             "linux",
         );
 
         let procs = metrics["topProcesses"].as_array().unwrap();
-        assert_eq!(procs.len(), 1);
-        assert_eq!(procs[0]["command"], "/usr/sbin/nginx -g 'daemon off;'");
+        assert_eq!(procs.len(), 3);
+        assert_eq!(procs[1]["command"], "/usr/sbin/nginx -g 'daemon off;'");
+        assert_eq!(procs[0]["commandOrder"], 0);
+        assert_eq!(procs[1]["commandOrder"], 1);
+        assert_eq!(procs[1]["memoryBytes"], 2 * 1024 * 1024);
     }
 
     #[test]
@@ -599,7 +605,9 @@ devil() {{
         assert!(command.contains("Diagnostics.PerformanceCounter('Processor'"));
         assert!(command.contains("$processCpuPct = if"));
         assert!(command
-            .contains("'{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $processCpuPct, $_.ProcessName"));
+            .contains("'{0}||{1}M|{2}|0|{3}', $_.Id, $memMB, $processCpuPct, $_.ProcessName"));
+        assert!(!command.contains("-First 20"));
+        assert!(command.contains("Select-FileTermProcessRows $procLines"));
         assert!(command.contains("Write-Output ('__CPU__' + $cpuPct)"));
         assert!(command.contains("$nextEmitMs += 1000"));
         assert!(command.contains("while ($true)"));

@@ -19,7 +19,11 @@ export function ProcessMetricPanel({
         <span className={sortMode === 'memory' ? 'active' : ''} onClick={() => onSortModeChange('memory')}>
           {t.memory}
         </span>
-        <span className={sortMode === 'cpu' ? 'active' : ''} onClick={() => onSortModeChange('cpu')}>
+        <span
+          title={t.processCpuWholeMachine}
+          className={sortMode === 'cpu' ? 'active' : ''}
+          onClick={() => onSortModeChange('cpu')}
+        >
           {t.cpu}
         </span>
         <span className={sortMode === 'command' ? 'active' : ''} onClick={() => onSortModeChange('command')}>
@@ -60,7 +64,7 @@ function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
             key={row.pid === 0 && !row.command ? `empty-${i}` : `${row.pid}-${row.command}-${row.cpu}-${i}`}
           >
             <span>{row.memory}</span>
-            <span>{row.cpu ? `${row.cpu}%` : ''}</span>
+            <span title={row.cpu ? t.processCpuWholeMachine : undefined}>{row.cpu ? `${row.cpu}%` : ''}</span>
             <span>
               <MetricHoverDetail className="process-hover-detail" value={row.command} />
             </span>

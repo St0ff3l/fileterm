@@ -796,6 +796,10 @@ export interface SidebarProcessItem {
   pid: number
   user: string
   memory: string
+  memoryBytes?: number
+  /** Collector command order, shared by all clients regardless of locale. */
+  commandOrder?: number
+  /** Whole-machine percentage: one busy core on 32 logical cores is 3.125%. */
   cpu: string
   command: string
   elapsedSeconds: number
@@ -929,6 +933,7 @@ export interface SystemMetrics {
   networkRatesByInterface?: Record<string, NetworkRates>
   networkSamplesByInterface?: Record<string, NetworkSamplePoint[]>
   networkRawByInterface?: Record<string, RawNetworkInterfaceMetrics>
+  /** Union of global CPU/memory/command top 40 (at most 120); UI selects 40. */
   topProcesses: SidebarProcessItem[]
 }
 

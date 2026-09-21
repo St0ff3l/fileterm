@@ -1,6 +1,6 @@
 {
   "name": "fileterm",
-  "version": "2.2.11",
+  "version": "2.2.12",
   "private": true,
   "license": "MIT",
   "description": "Modern remote workspace for SSH, SFTP, and FTP.",

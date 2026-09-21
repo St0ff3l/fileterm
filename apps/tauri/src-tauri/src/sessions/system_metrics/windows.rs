@@ -6,6 +6,23 @@ $ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
+function Select-FileTermProcessRows([string[]]$Rows) {
+    $items = @($Rows | ForEach-Object {
+        $parts = $_ -split '\|', 6
+        [PSCustomObject]@{
+            Line = $_; Pid = [int]$parts[0]; Command = $parts[5]
+            Cpu = [double]::Parse($parts[3], [Globalization.CultureInfo]::InvariantCulture)
+            Memory = [double]::Parse($parts[2].TrimEnd('M'), [Globalization.CultureInfo]::InvariantCulture)
+        }
+    })
+    $selected = @(
+        $items | Sort-Object @{Expression='Cpu';Descending=$true}, Pid | Select-Object -First 40
+        $items | Sort-Object @{Expression='Memory';Descending=$true}, Pid | Select-Object -First 40
+        $items | Sort-Object Command, Pid | Select-Object -First 40
+    )
+    $selected | Sort-Object Pid -Unique | Sort-Object Command, Pid | ForEach-Object { $_.Line }
+}
+
 function Write-Metric([string]$Name, [object]$Value) {
     if ($null -eq $Value) { $Value = '' }
     Write-Output ('__' + $Name + '__' + [string]$Value)
@@ -180,11 +197,11 @@ foreach ($d in $disks) {
     $fsLines   += ('{0}|{1}|{2}|{3}%|{4}|{5}' -f $d.DeviceID, $sizeStr, $usedStr, $pct, $freeStr, $d.DeviceID)
 }
 
-$procs = Get-Process | Sort-Object -Property WS -Descending | Select-Object -First 20
+$procs = Get-Process | Where-Object { $_.Id -ne 0 }
 $procLines = @()
 foreach ($p in $procs) {
     $memMB = [Math]::Round($p.WorkingSet64 / 1MB, 1)
-    $procLines += ('{0}||{1}M|0|0|{2}' -f $p.Id, $memMB, $p.ProcessName)
+    $procLines += [string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}||{1}M|0|0|{2}', $p.Id, $memMB, $p.ProcessName)
 }
 
 $ifaces = (Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | Select-Object -ExpandProperty Name) -join ','
@@ -247,7 +264,7 @@ Write-Output '__FILESYSTEMS_START__'
 $fsLines | ForEach-Object { Write-Output $_ }
 Write-Output '__FILESYSTEMS_END__'
 Write-Output '__PROCS_START__'
-$procLines | ForEach-Object { Write-Output $_ }
+Select-FileTermProcessRows $procLines
 Write-Output '__PROCS_END__'
 Write-Output '__FILETERM_METRICS_COMPLETE__'
 "#.to_string()
@@ -334,8 +351,7 @@ while ($true) {
     $procLines = @()
     $currentProcCpuTimes = @{}
     Get-Process -ErrorAction SilentlyContinue |
-        Sort-Object -Property WorkingSet64 -Descending |
-        Select-Object -First 20 |
+        Where-Object { $_.Id -ne 0 } |
         ForEach-Object {
             $memMB = [Math]::Round($_.WorkingSet64 / 1MB, 1)
             $currentCpu = if ($_.CPU) { [double]$_.CPU } else { 0 }
@@ -343,7 +359,8 @@ while ($true) {
             $currentProcCpuTimes[$procId] = $currentCpu
             $prevCpu = $previousProcCpuTimes[$procId]
             $processCpuPct = if ($null -ne $prevCpu) { [Math]::Max(0, [Math]::Round((([double]$currentCpu - [double]$prevCpu) / $procElapsedSeconds) * 100 / $logicalProcessorCount, 1)) } else { 0 }
-            $procLines += ('{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $processCpuPct, $_.ProcessName)
+            $processCpuPct = [Math]::Min(100, $processCpuPct)
+            $procLines += [string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}||{1}M|{2}|0|{3}', $_.Id, $memMB, $processCpuPct, $_.ProcessName)
         }
     $previousProcCpuTimes = $currentProcCpuTimes
     $gpuRows = @(Get-GpuRows -Adapters $gpuAdapters)
@@ -391,7 +408,7 @@ while ($true) {
     $fsLines | ForEach-Object { Write-Output $_ }
     Write-Output '__FILESYSTEMS_END__'
     Write-Output '__PROCS_START__'
-    $procLines | ForEach-Object { Write-Output $_ }
+    Select-FileTermProcessRows $procLines
     Write-Output '__PROCS_END__'
     Write-Output '__FILETERM_METRICS_BLOCK__'
 }

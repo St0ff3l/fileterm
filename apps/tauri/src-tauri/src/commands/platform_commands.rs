@@ -5,11 +5,22 @@ pub fn app_get_platform() -> String {
 }
 
 fn shell_quote_path(path: &std::path::Path) -> String {
-    let raw = path.to_string_lossy();
-    if cfg!(target_os = "windows") {
-        format!("\"{}\"", raw.replace('"', "\\\""))
+    quote_executable_argument(&path.to_string_lossy(), cfg!(target_os = "windows"))
+}
+
+fn quote_executable_argument(raw: &str, powershell: bool) -> String {
+    if powershell {
+        format!("'{}'", raw.replace('\'', "''"))
     } else {
-        format!("'{}'", raw.replace('\'', "'\\\"'\\\"'"))
+        format!("'{}'", raw.replace('\'', "'\"'\"'"))
+    }
+}
+
+fn executable_invocation(quoted_argument: &str, powershell: bool) -> String {
+    if powershell {
+        format!("& {quoted_argument}")
+    } else {
+        quoted_argument.to_string()
     }
 }
 
@@ -373,7 +384,9 @@ pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
     };
 
     Ok(McpAgentSetup {
-        fileterm_command: fileterm_command.clone(),
+        // Registration uses a path argument; direct CLI/MCP execution needs
+        // PowerShell's call operator in front of that quoted path.
+        fileterm_command: executable_invocation(&fileterm_command, cfg!(target_os = "windows")),
         clients: vec![
             make_client(
                 "claude-code",
