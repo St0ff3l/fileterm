@@ -2034,6 +2034,10 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
 export type ThemeMode =
   'fileterm-dark' | 'fileterm-light' | 'codex-dark' | 'codex-light' | 'default-dark' | 'default-light'
 
+export const DEFAULT_FILE_LIST_FONT_SIZE = 11
+export const MIN_FILE_LIST_FONT_SIZE = 9
+export const MAX_FILE_LIST_FONT_SIZE = 24
+
 export interface UiPreferences {
   theme: ThemeMode
   locale: 'zhCN' | 'enUS'
@@ -2043,6 +2047,8 @@ export interface UiPreferences {
   autoCheckUpdates: boolean
   updateChannel: AppUpdateChannel
   terminalZoomLocked: boolean
+  fileListZoomLocked: boolean
+  fileListFontSize: number
   localTerminalShells: LocalTerminalShellPreferences
   filePanelRememberRatio: boolean
   resourceMonitoringMetrics: ResourceMonitoringMetric[]
@@ -2064,6 +2070,8 @@ export interface UiPreferencesInput {
   autoCheckUpdates?: boolean
   updateChannel?: UiPreferences['updateChannel']
   terminalZoomLocked?: boolean
+  fileListZoomLocked?: boolean
+  fileListFontSize?: number
   localTerminalShells?: Partial<LocalTerminalShellPreferences>
   filePanelRememberRatio?: boolean
   resourceMonitoringMetrics?: ResourceMonitoringMetric[]

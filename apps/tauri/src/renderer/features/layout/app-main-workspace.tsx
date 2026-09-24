@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react'
+import { DEFAULT_FILE_LIST_FONT_SIZE, MAX_FILE_LIST_FONT_SIZE, MIN_FILE_LIST_FONT_SIZE } from '@fileterm/core'
 import { AiCopilotPanel } from '../ai/ai-copilot-panel'
 import { CloseButton } from '../common/close-button'
 import { SystemSidebarShell } from '../system/system-sidebar-shell'
@@ -29,6 +30,10 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     setLocaleState,
     terminalZoomLocked,
     setTerminalZoomLocked,
+    fileListZoomLocked,
+    setFileListZoomLocked,
+    fileListFontSize,
+    setFileListFontSize,
     filePanelRememberRatio,
     sidebarWidth,
     setSidebarWidth,
@@ -240,7 +245,8 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
             '--brand-width': `${brandWidth}px`,
-            '--ai-copilot-panel-width': `${aiCopilotWidth}px`
+            '--ai-copilot-panel-width': `${aiCopilotWidth}px`,
+            '--file-list-font-size': `${fileListFontSize}px`
           } as CSSProperties
         }
       >
@@ -249,6 +255,18 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             desktopApi={desktopApi}
             isMaximized={isMaximized}
             terminalZoomLocked={terminalZoomLocked}
+            fileListZoomLocked={fileListZoomLocked}
+            onFileListFontSizeChange={(operation) => {
+              if (fileListZoomLocked) return
+              setFileListFontSize((current) => {
+                if (operation === 'reset') return DEFAULT_FILE_LIST_FONT_SIZE
+                return Math.max(
+                  MIN_FILE_LIST_FONT_SIZE,
+                  Math.min(MAX_FILE_LIST_FONT_SIZE, current + (operation === 'in' ? 1 : -1))
+                )
+              })
+            }}
+            onToggleFileListZoomLock={() => setFileListZoomLocked((current) => !current)}
             onToggleTerminalZoomLock={() => setTerminalZoomLocked((current) => !current)}
           />
         ) : null}

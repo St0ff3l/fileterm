@@ -66,6 +66,8 @@ export type UseWorkspaceIpcSyncOptions = {
   locale: AppLocale
   connectionDefaults: SshConnectionDefaults
   terminalZoomLocked: boolean
+  fileListZoomLocked: boolean
+  fileListFontSize: number
   filePanelRememberRatio: boolean
   resourceMonitoringMetrics: ResourceMonitoringMetric[]
   resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
@@ -81,6 +83,8 @@ export type UseWorkspaceIpcSyncOptions = {
   onLocaleChange(locale: AppLocale): void
   onConnectionDefaultsChange(value: Partial<SshConnectionDefaults>): void
   onTerminalZoomLockedChange(value: boolean): void
+  onFileListZoomLockedChange(value: boolean): void
+  onFileListFontSizeChange(value: number): void
   onFilePanelRememberRatioChange(value: boolean): void
   onResourceMonitoringMetricsChange(value: ResourceMonitoringMetric[]): void
   onResourceMonitoringMetricOrderChange(value: ResourceMonitoringMetric[]): void
@@ -126,6 +130,8 @@ export function useWorkspaceIpcSync({
   locale,
   connectionDefaults,
   terminalZoomLocked,
+  fileListZoomLocked,
+  fileListFontSize,
   filePanelRememberRatio,
   resourceMonitoringMetrics,
   resourceMonitoringMetricOrder,
@@ -141,6 +147,8 @@ export function useWorkspaceIpcSync({
   onLocaleChange,
   onConnectionDefaultsChange,
   onTerminalZoomLockedChange,
+  onFileListZoomLockedChange,
+  onFileListFontSizeChange,
   onFilePanelRememberRatioChange,
   onResourceMonitoringMetricsChange,
   onResourceMonitoringMetricOrderChange,
@@ -177,6 +185,8 @@ export function useWorkspaceIpcSync({
   const onLocaleChangeRef = useLatestRef(onLocaleChange)
   const onConnectionDefaultsChangeRef = useLatestRef(onConnectionDefaultsChange)
   const onTerminalZoomLockedChangeRef = useLatestRef(onTerminalZoomLockedChange)
+  const onFileListZoomLockedChangeRef = useLatestRef(onFileListZoomLockedChange)
+  const onFileListFontSizeChangeRef = useLatestRef(onFileListFontSizeChange)
   const onFilePanelRememberRatioChangeRef = useLatestRef(onFilePanelRememberRatioChange)
   const onResourceMonitoringMetricsChangeRef = useLatestRef(onResourceMonitoringMetricsChange)
   const onResourceMonitoringMetricOrderChangeRef = useLatestRef(onResourceMonitoringMetricOrderChange)
@@ -342,6 +352,8 @@ export function useWorkspaceIpcSync({
       }
       onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
       onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
+      onFileListZoomLockedChangeRef.current(preferences.fileListZoomLocked)
+      onFileListFontSizeChangeRef.current(preferences.fileListFontSize)
       onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
       onResourceMonitoringMetricsChangeRef.current(preferences.resourceMonitoringMetrics)
       onResourceMonitoringMetricOrderChangeRef.current(preferences.resourceMonitoringMetricOrder)
@@ -380,6 +392,8 @@ export function useWorkspaceIpcSync({
         }
         onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
         onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
+        onFileListZoomLockedChangeRef.current(preferences.fileListZoomLocked)
+        onFileListFontSizeChangeRef.current(preferences.fileListFontSize)
         onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
         onResourceMonitoringMetricsChangeRef.current(preferences.resourceMonitoringMetrics)
         onResourceMonitoringMetricOrderChangeRef.current(preferences.resourceMonitoringMetricOrder)
@@ -418,6 +432,8 @@ export function useWorkspaceIpcSync({
       locale,
       connectionDefaults,
       terminalZoomLocked,
+      fileListZoomLocked,
+      fileListFontSize,
       filePanelRememberRatio,
       resourceMonitoringMetrics,
       resourceMonitoringMetricOrder,
@@ -463,6 +479,8 @@ export function useWorkspaceIpcSync({
     overviewShowQuickActions,
     overviewSectionOrder,
     terminalZoomLocked,
+    fileListZoomLocked,
+    fileListFontSize,
     filePanelRememberRatio,
     resourceMonitoringMetrics,
     resourceMonitoringMetricOrder,

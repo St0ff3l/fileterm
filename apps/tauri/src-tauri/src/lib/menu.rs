@@ -100,9 +100,10 @@ pub(crate) fn install_localized_tray_menu(
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
     let platform = std::env::consts::OS;
     let quit_accelerator = application_quit_accelerator(platform);
-    let terminal_zoom_locked = crate::commands::app_get_ui_preferences(app.clone())
-        .map(|preferences| preferences.terminal_zoom_locked)
-        .unwrap_or(false);
+    let (terminal_zoom_locked, file_list_zoom_locked) =
+        crate::commands::app_get_ui_preferences(app.clone())
+            .map(|preferences| (preferences.terminal_zoom_locked, preferences.file_list_zoom_locked))
+            .unwrap_or((false, false));
     let new_connection_menu = MenuItemBuilder::with_id(
         "new-connection",
         localized(is_english, "New Connection", "新建连接"),
@@ -224,18 +225,44 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     let view_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "View", "视图"))
         .item(&view_split_vertical)
         .item(&view_split_horizontal);
-    // The macOS native menubar owns its displayed shortcuts. These dispatch
-    // terminal-only zoom requests back through the Tauri bridge instead of
-    // applying an application/WebView zoom level.
+    // Native View menu zoom controls stay click-only and adjust either the
+    // file list or terminal without changing the application/WebView zoom.
     #[cfg(target_os = "macos")]
     let view_submenu_builder = {
+        let file_list_zoom_in = MenuItemBuilder::with_id(
+            "view-file-list-zoom-in",
+            localized(is_english, "Zoom File List In", "文件列表放大"),
+        )
+        .enabled(!file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let file_list_zoom_out = MenuItemBuilder::with_id(
+            "view-file-list-zoom-out",
+            localized(is_english, "Zoom File List Out", "文件列表缩小"),
+        )
+        .enabled(!file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let file_list_zoom_reset = MenuItemBuilder::with_id(
+            "view-file-list-zoom-reset",
+            localized(is_english, "Reset File List Size", "重置文件列表字号"),
+        )
+        .enabled(!file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let file_list_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-file-list-zoom-lock",
+            localized(is_english, "Lock File List Zoom", "锁定文件列表缩放"),
+        )
+        .checked(file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
         let terminal_zoom_in = MenuItemBuilder::with_id(
             "view-terminal-zoom-in",
             localized(is_english, "Zoom Terminal In", "终端放大"),
         )
-        // `+` is Shift+Equal on the physical keyboard. The native accelerator
-        // uses the logical Equal key so macOS presents and accepts standard
-        // Cmd+ without asking for an additional Shift modifier.
+        // `+` is Shift+Equal on the physical keyboard. Use the logical Equal
+        // key so macOS keeps the existing Cmd+ zoom shortcut.
         .accelerator("Cmd+Equal")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
@@ -248,7 +275,7 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .map_err(|error| AppError::Window(error.to_string()))?;
         let terminal_zoom_reset = MenuItemBuilder::with_id(
             "view-terminal-zoom-reset",
-            localized(is_english, "Reset Terminal Zoom", "终端实际大小"),
+            localized(is_english, "Reset Terminal Zoom", "重置终端字号"),
         )
         .accelerator("Cmd+0")
         .build(app)
@@ -262,17 +289,48 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
+            .item(&file_list_zoom_in)
+            .item(&file_list_zoom_out)
+            .item(&file_list_zoom_reset)
+            .item(&file_list_zoom_lock)
+            .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)
             .item(&terminal_zoom_reset)
             .item(&terminal_zoom_lock)
     };
-    // Windows/Linux use a renderer-owned menubar, but native accelerators are
-    // still the only path that reaches us before WebView2/WebKitGTK consumes a
-    // browser-style zoom shortcut. They emit the same terminal-only request as
-    // the macOS menu and never alter the WebView zoom level.
+    // Windows/Linux use a renderer-owned menubar; keep native menu events
+    // available without registering zoom accelerators.
     #[cfg(not(target_os = "macos"))]
     let view_submenu_builder = {
+        let file_list_zoom_in = MenuItemBuilder::with_id(
+            "view-file-list-zoom-in",
+            localized(is_english, "Zoom File List In", "文件列表放大"),
+        )
+        .enabled(!file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let file_list_zoom_out = MenuItemBuilder::with_id(
+            "view-file-list-zoom-out",
+            localized(is_english, "Zoom File List Out", "文件列表缩小"),
+        )
+        .enabled(!file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let file_list_zoom_reset = MenuItemBuilder::with_id(
+            "view-file-list-zoom-reset",
+            localized(is_english, "Reset File List Size", "重置文件列表字号"),
+        )
+        .enabled(!file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let file_list_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-file-list-zoom-lock",
+            localized(is_english, "Lock File List Zoom", "锁定文件列表缩放"),
+        )
+        .checked(file_list_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
         let terminal_zoom_in = MenuItemBuilder::with_id(
             "view-terminal-zoom-in",
             localized(is_english, "Zoom Terminal In", "终端放大"),
@@ -289,7 +347,7 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .map_err(|error| AppError::Window(error.to_string()))?;
         let terminal_zoom_reset = MenuItemBuilder::with_id(
             "view-terminal-zoom-reset",
-            localized(is_english, "Reset Terminal Zoom", "终端实际大小"),
+            localized(is_english, "Reset Terminal Zoom", "重置终端字号"),
         )
         .accelerator("Ctrl+0")
         .build(app)
@@ -302,6 +360,11 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
+            .separator()
+            .item(&file_list_zoom_in)
+            .item(&file_list_zoom_out)
+            .item(&file_list_zoom_reset)
+            .item(&file_list_zoom_lock)
             .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)

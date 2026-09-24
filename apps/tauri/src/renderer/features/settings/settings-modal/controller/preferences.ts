@@ -28,6 +28,12 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     setIsSavingTerminalZoomPreference,
     terminalZoomPreferenceError,
     setTerminalZoomPreferenceError,
+    fileListZoomLocked,
+    setFileListZoomLocked,
+    isSavingFileListZoomPreference,
+    setIsSavingFileListZoomPreference,
+    fileListZoomPreferenceError,
+    setFileListZoomPreferenceError,
     localTerminalShells,
     setLocalTerminalShells,
     localTerminalShellDrafts,
@@ -47,6 +53,12 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     setIsSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelPreferenceError,
+    fileListFontSize,
+    setFileListFontSize,
+    isSavingFileListFontSize,
+    setIsSavingFileListFontSize,
+    fileListFontSizeError,
+    setFileListFontSizeError,
     connectionDefaults,
     setConnectionDefaults,
     isSavingConnectionDefaults,
@@ -165,6 +177,25 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
       .finally(() => setIsSavingTerminalZoomPreference(false))
   }
 
+  const setFileListZoomLockPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingFileListZoomPreference || nextValue === fileListZoomLocked) {
+      return
+    }
+
+    const previousValue = fileListZoomLocked
+    setFileListZoomLocked(nextValue)
+    setFileListZoomPreferenceError(null)
+    setIsSavingFileListZoomPreference(true)
+    void desktopApi
+      .setUiPreferences({ fileListZoomLocked: nextValue })
+      .then((preferences) => setFileListZoomLocked(preferences.fileListZoomLocked))
+      .catch(() => {
+        setFileListZoomLocked(previousValue)
+        setFileListZoomPreferenceError(t.fileListZoomPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingFileListZoomPreference(false))
+  }
+
   const updateLocalTerminalShellDraft = (platform: LocalTerminalPlatform, value: string) => {
     setLocalTerminalShellDrafts((current) => ({ ...current, [platform]: value }))
     setLocalTerminalShellMessage(null)
@@ -224,6 +255,25 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
       .finally(() => setIsSavingFilePanelPreference(false))
   }
 
+  const setFileListFontSizePreference = (nextValue: number) => {
+    if (!desktopApi || isSavingFileListFontSize || nextValue === fileListFontSize) {
+      return
+    }
+
+    const previousValue = fileListFontSize
+    setFileListFontSize(nextValue)
+    setFileListFontSizeError(null)
+    setIsSavingFileListFontSize(true)
+    void desktopApi
+      .setUiPreferences({ fileListFontSize: nextValue })
+      .then((preferences) => setFileListFontSize(preferences.fileListFontSize))
+      .catch(() => {
+        setFileListFontSize(previousValue)
+        setFileListFontSizeError(t.fileListFontSizeSaveFailed)
+      })
+      .finally(() => setIsSavingFileListFontSize(false))
+  }
+
   return {
     updateStatus,
     autoCheckUpdates,
@@ -254,9 +304,17 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     isSavingTerminalZoomPreference,
     terminalZoomPreferenceError,
     setTerminalZoomLockPreference,
+    fileListZoomLocked,
+    isSavingFileListZoomPreference,
+    fileListZoomPreferenceError,
+    setFileListZoomLockPreference,
     filePanelRememberRatio,
     isSavingFilePanelPreference,
     filePanelPreferenceError,
-    setFilePanelRememberRatioPreference
+    setFilePanelRememberRatioPreference,
+    fileListFontSize,
+    isSavingFileListFontSize,
+    fileListFontSizeError,
+    setFileListFontSizePreference
   }
 }

@@ -362,6 +362,42 @@ pub fn run() {
                     }
                 }
             }
+            "view-file-list-zoom-in" => {
+                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "in") {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to increase file list font size: {error}"),
+                    );
+                }
+            }
+            "view-file-list-zoom-out" => {
+                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "out") {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to decrease file list font size: {error}"),
+                    );
+                }
+            }
+            "view-file-list-zoom-reset" => {
+                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "reset") {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to reset file list font size: {error}"),
+                    );
+                }
+            }
+            "view-file-list-zoom-lock" => {
+                if let Err(error) = crate::commands::app_toggle_file_list_zoom_lock(app.clone()) {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to toggle file list zoom lock: {error}"),
+                    );
+                }
+            }
             "view-terminal-zoom-in" => {
                 if let Some(window) = focused_webview_window(app) {
                     let _ = window.emit("app:terminal-zoom-request", "in");
