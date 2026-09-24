@@ -130,7 +130,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 prefer_windows_native_rounded_corners(&main_window);
-                install_windows_terminal_zoom_interceptor(&main_window);
+                disable_windows_webview_zoom(&main_window);
                 main_window
                     .set_icon(windows_icon_image().map_err(|error| error.to_string())?)
                     .map_err(|error| error.to_string())?;

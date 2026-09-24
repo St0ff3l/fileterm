@@ -407,18 +407,13 @@ fn prefer_windows_native_rounded_corners(window: &WebviewWindow<Wry>) {
     }
 }
 
-/// WebView2 consumes precision-touchpad pinch gestures before they become DOM
-/// wheel events. Let WebView2 recognize the native gesture, immediately reset
-/// its page zoom, and relay only the direction back to the focused xterm pane.
-/// This keeps application/WebView zoom fixed at 100% while giving touchpad
-/// pinch the same terminal-only semantics as Ctrl+wheel.
+/// Keep browser zoom disabled in the main WebView. Wry configures both switches
+/// from zoomHotkeysEnabled=false; the terminal interaction layer handles wheel
+/// gestures only over xterm instead of scaling the whole application.
 #[cfg(target_os = "windows")]
-fn install_windows_terminal_zoom_interceptor(window: &WebviewWindow<Wry>) {
-    let event_window = window.clone();
-    let install_result = window.with_webview(move |webview| {
+fn disable_windows_webview_zoom(window: &WebviewWindow<Wry>) {
+    let install_result = window.with_webview(|webview| {
         let controller = webview.controller();
-        let callback_controller = controller.clone();
-        let callback_window = event_window.clone();
 
         unsafe {
             let Ok(core_webview) = controller.CoreWebView2() else {
@@ -428,39 +423,18 @@ fn install_windows_terminal_zoom_interceptor(window: &WebviewWindow<Wry>) {
                 return;
             };
 
-            // WebView2 otherwise swallows Ctrl+wheel and precision-touchpad
-            // pinch before the renderer can observe either input. The
-            // ZoomFactorChanged handler below converts them to terminal events
-            // and restores the page to 100% immediately.
-            let _ = settings.SetIsZoomControlEnabled(true);
+            // Enabling zoom here bypasses zoomHotkeysEnabled=false and makes
+            // Ctrl+wheel over any pane briefly resize the whole WebView.
+            let _ = settings.SetIsZoomControlEnabled(false);
             if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
-                // Keep Ctrl+0 available to the renderer/native menu for
-                // terminal reset instead of allowing WebView2 to consume it.
+                // Leave terminal shortcuts to the renderer/native menu.
                 let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
             }
             if let Ok(settings5) = settings.cast::<ICoreWebView2Settings5>() {
-                let _ = settings5.SetIsPinchZoomEnabled(true);
+                // Native pinch uses Page Scale, which is independent of
+                // ZoomFactor and cannot be undone by ZoomFactorChanged.
+                let _ = settings5.SetIsPinchZoomEnabled(false);
             }
-
-            let callback =
-                ZoomFactorChangedEventHandler::create(Box::new(move |_sender, _args| {
-                    let mut zoom_factor = 1.0;
-                    callback_controller.ZoomFactor(&mut zoom_factor)?;
-                    if (zoom_factor - 1.0).abs() < f64::EPSILON {
-                        return Ok(());
-                    }
-
-                    // Reset before emitting: SetZoomFactor emits its own
-                    // ZoomFactorChanged event, which is ignored at exactly 1.0.
-                    callback_controller.SetZoomFactor(1.0)?;
-                    let operation = if zoom_factor > 1.0 { "in" } else { "out" };
-                    // The renderer only applies this gesture event while the pointer is over a
-                    // terminal. Menu shortcuts continue to use app:terminal-zoom-request.
-                    let _ = callback_window.emit("app:terminal-gesture-zoom-request", operation);
-                    Ok(())
-                }));
-            let mut token = 0;
-            let _ = controller.add_ZoomFactorChanged(&callback, &mut token);
         }
     });
 
@@ -468,7 +442,7 @@ fn install_windows_terminal_zoom_interceptor(window: &WebviewWindow<Wry>) {
         crate::services::logging::warn(
             window.app_handle(),
             "window",
-            format!("failed to install WebView2 terminal zoom interceptor: {error}"),
+            format!("failed to disable WebView2 page zoom: {error}"),
         );
     }
 }

@@ -35,9 +35,8 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 use url::form_urlencoded::Serializer;
 #[cfg(target_os = "windows")]
-use webview2_com::{
-    Microsoft::Web::WebView2::Win32::{ICoreWebView2Settings3, ICoreWebView2Settings5},
-    ZoomFactorChangedEventHandler,
+use webview2_com::Microsoft::Web::WebView2::Win32::{
+    ICoreWebView2Settings3, ICoreWebView2Settings5,
 };
 #[cfg(target_os = "windows")]
 use windows::core::Interface;
