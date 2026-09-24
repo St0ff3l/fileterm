@@ -1324,6 +1324,19 @@ textarea:focus-visible,
   text-transform: none;
 }
 
+.file-manager .fs-file-table:not(.command-table) {
+  font-size: var(--file-list-font-size, 11px);
+}
+
+.file-manager .fs-file-table:not(.command-table) th {
+  height: max(24px, calc(var(--file-list-font-size, 11px) * 1.9));
+  font-size: calc(var(--file-list-font-size, 11px) - 1px);
+}
+
+.file-manager .fs-file-table:not(.command-table) td {
+  height: max(24px, calc(var(--file-list-font-size, 11px) * 1.9));
+}
+
 .file-icon {
   display: inline-flex;
   width: 14px;

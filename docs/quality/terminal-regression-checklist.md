@@ -146,6 +146,8 @@ printf 'FileTerm search Search\nhttps://example.com\nPowerline 字符 Emoji 😀
 - 切回后首次滚轮即可生效，滚动条 thumb 与 xterm 当前 buffer 位置一致，不依赖再次输出或再次点击终端。
 - Windows 本地 ConPTY 在切换和 resize 后不出现重复行、缺行或底部状态栏消失。
 - 普通滚轮、alternate-screen 滚轮和远程 mouse reporting 三种行为不会互相污染。
+- Windows：在侧栏、文件区和设置界面滚轮或触控板捏合时，整张应用页面始终保持 100%，不会出现放大镜式的页面缩放。
+- Windows：在终端区域使用 `Ctrl+滚轮`、终端缩放快捷键时，只改变终端字号；普通滚轮仍滚动终端内容。
 
 ## 3. 当前脆弱点
 

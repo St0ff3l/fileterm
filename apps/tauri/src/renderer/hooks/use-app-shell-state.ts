@@ -3,6 +3,7 @@ import {
   createCodexThemeConfig,
   createDefaultThemeConfig,
   DEFAULT_OVERVIEW_SECTION_ORDER,
+  DEFAULT_FILE_LIST_FONT_SIZE,
   DEFAULT_RESOURCE_MONITORING_METRICS,
   DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
@@ -40,6 +41,8 @@ export type InitialUiPreferences = Pick<
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
+  | 'fileListZoomLocked'
+  | 'fileListFontSize'
   | 'filePanelRememberRatio'
   | 'resourceMonitoringMetrics'
   | 'resourceMonitoringMetricOrder'
@@ -129,6 +132,10 @@ export function useAppShellState({
     ...(initialUiPreferences?.connectionDefaults ?? {})
   }))
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(() => initialUiPreferences?.terminalZoomLocked ?? false)
+  const [fileListZoomLocked, setFileListZoomLocked] = useState(() => initialUiPreferences?.fileListZoomLocked ?? false)
+  const [fileListFontSize, setFileListFontSize] = useState(
+    () => initialUiPreferences?.fileListFontSize ?? DEFAULT_FILE_LIST_FONT_SIZE
+  )
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(
     () => initialUiPreferences?.filePanelRememberRatio ?? true
   )
@@ -317,6 +324,8 @@ export function useAppShellState({
     locale,
     connectionDefaults,
     terminalZoomLocked,
+    fileListZoomLocked,
+    fileListFontSize,
     filePanelRememberRatio,
     resourceMonitoringMetrics,
     resourceMonitoringMetricOrder,
@@ -337,6 +346,8 @@ export function useAppShellState({
       setConnectionDefaults((currentDefaults) => ({ ...currentDefaults, ...nextDefaults }))
     },
     onTerminalZoomLockedChange: setTerminalZoomLocked,
+    onFileListZoomLockedChange: setFileListZoomLocked,
+    onFileListFontSizeChange: setFileListFontSize,
     onFilePanelRememberRatioChange: setFilePanelRememberRatio,
     onResourceMonitoringMetricsChange: setResourceMonitoringMetrics,
     onResourceMonitoringMetricOrderChange: (nextOrder) => {
@@ -485,6 +496,10 @@ export function useAppShellState({
     setConnectionDefaults,
     terminalZoomLocked,
     setTerminalZoomLocked,
+    fileListZoomLocked,
+    setFileListZoomLocked,
+    fileListFontSize,
+    setFileListFontSize,
     filePanelRememberRatio,
     setFilePanelRememberRatio,
     resourceMonitoringMetrics,

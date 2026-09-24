@@ -130,7 +130,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 prefer_windows_native_rounded_corners(&main_window);
-                install_windows_terminal_zoom_interceptor(&main_window);
+                disable_windows_webview_zoom(&main_window);
                 main_window
                     .set_icon(windows_icon_image().map_err(|error| error.to_string())?)
                     .map_err(|error| error.to_string())?;
@@ -360,6 +360,42 @@ pub fn run() {
                     } else {
                         window.open_devtools();
                     }
+                }
+            }
+            "view-file-list-zoom-in" => {
+                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "in") {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to increase file list font size: {error}"),
+                    );
+                }
+            }
+            "view-file-list-zoom-out" => {
+                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "out") {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to decrease file list font size: {error}"),
+                    );
+                }
+            }
+            "view-file-list-zoom-reset" => {
+                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "reset") {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to reset file list font size: {error}"),
+                    );
+                }
+            }
+            "view-file-list-zoom-lock" => {
+                if let Err(error) = crate::commands::app_toggle_file_list_zoom_lock(app.clone()) {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to toggle file list zoom lock: {error}"),
+                    );
                 }
             }
             "view-terminal-zoom-in" => {

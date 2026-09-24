@@ -29,9 +29,11 @@ export function useSettingsModalEffects({
     setAutoCheckUpdates,
     setUpdateChannel,
     setTerminalZoomLocked,
+    setFileListZoomLocked,
     setLocalTerminalShells,
     setLocalTerminalShellDrafts,
     setFilePanelRememberRatio,
+    setFileListFontSize,
     setMcpAgentPreferences,
     setConnectionDefaults,
     setOverviewShowStats,
@@ -124,9 +126,11 @@ export function useSettingsModalEffects({
       setAutoCheckUpdates(preferences.autoCheckUpdates)
       setUpdateChannel(preferences.updateChannel)
       setTerminalZoomLocked(preferences.terminalZoomLocked)
+      setFileListZoomLocked(preferences.fileListZoomLocked)
       setLocalTerminalShells({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
       setLocalTerminalShellDrafts({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
       setFilePanelRememberRatio(preferences.filePanelRememberRatio)
+      setFileListFontSize(preferences.fileListFontSize)
       setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
       setOverviewShowStats(preferences.overviewShowStats)

@@ -7,6 +7,7 @@ import type {
   TerminalAnsiColorName,
   ThemeConfig
 } from '@fileterm/core'
+import { MAX_FILE_LIST_FONT_SIZE, MIN_FILE_LIST_FONT_SIZE } from '@fileterm/core'
 import { AppIcon } from '../../../common/app-icon'
 import { managerDropClass } from '../../../common/manager-drag'
 import { targetsNestedManagerControl } from '../../../common/manager-interactions'
@@ -69,6 +70,14 @@ type InterfaceSettingsPanelContext = {
   isSavingFilePanelPreference: boolean
   filePanelPreferenceError: string | null
   setFilePanelRememberRatioPreference(nextValue: boolean): void
+  fileListZoomLocked: boolean
+  isSavingFileListZoomPreference: boolean
+  fileListZoomPreferenceError: string | null
+  setFileListZoomLockPreference(nextValue: boolean): void
+  fileListFontSize: number
+  isSavingFileListFontSize: boolean
+  fileListFontSizeError: string | null
+  setFileListFontSizePreference(nextValue: number): void
   overviewShowStats: boolean
   overviewShowRecent: boolean
   overviewShowAllConnections: boolean
@@ -134,6 +143,14 @@ export function InterfaceSettingsPanel() {
     isSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelRememberRatioPreference,
+    fileListZoomLocked,
+    isSavingFileListZoomPreference,
+    fileListZoomPreferenceError,
+    setFileListZoomLockPreference,
+    fileListFontSize,
+    isSavingFileListFontSize,
+    fileListFontSizeError,
+    setFileListFontSizePreference,
     overviewShowStats,
     overviewShowRecent,
     overviewShowAllConnections,
@@ -708,7 +725,36 @@ export function InterfaceSettingsPanel() {
       <section className="settings-section">
         <h3>{t.filePanelSettings}</h3>
         <p className="settings-tools-hint">{t.filePanelSettingsHint}</p>
+        <div className="theme-config-control">
+          <span className="theme-config-label">{t.fileListFontSize}</span>
+          <DropdownSelect
+            ariaLabel={t.fileListFontSize}
+            className="theme-config-select"
+            disabled={!desktopApi || isSavingFileListFontSize}
+            onChange={(value) => setFileListFontSizePreference(Number(value))}
+            options={Array.from({ length: MAX_FILE_LIST_FONT_SIZE - MIN_FILE_LIST_FONT_SIZE + 1 }, (_, index) => {
+              const size = index + MIN_FILE_LIST_FONT_SIZE
+              return { value: String(size), label: `${size}px` }
+            })}
+            value={String(fileListFontSize)}
+          />
+        </div>
+        {fileListFontSizeError ? <p className="modal-error">{fileListFontSizeError}</p> : null}
         <div className="overview-preference-list">
+          <label className="overview-preference-row">
+            <span className="overview-preference-copy">
+              <strong>{t.lockFileListZoom}</strong>
+              <p>{t.lockFileListZoomHint}</p>
+            </span>
+            <span className="command-toggle overview-preference-toggle">
+              <SelectionControl
+                checked={fileListZoomLocked}
+                disabled={!desktopApi || isSavingFileListZoomPreference}
+                onChange={(event) => setFileListZoomLockPreference(event.target.checked)}
+                type="checkbox"
+              />
+            </span>
+          </label>
           <label className="overview-preference-row">
             <span className="overview-preference-copy">
               <strong>{t.rememberFilePanelRatio}</strong>
@@ -724,6 +770,7 @@ export function InterfaceSettingsPanel() {
             </span>
           </label>
         </div>
+        {fileListZoomPreferenceError ? <p className="modal-error">{fileListZoomPreferenceError}</p> : null}
         {filePanelPreferenceError ? <p className="modal-error">{filePanelPreferenceError}</p> : null}
       </section>
 

@@ -47,6 +47,10 @@ pub struct UiPreferences {
     pub update_channel: String,
     #[serde(default)]
     pub terminal_zoom_locked: bool,
+    #[serde(default)]
+    pub file_list_zoom_locked: bool,
+    #[serde(default = "default_file_list_font_size")]
+    pub file_list_font_size: i32,
     #[serde(default = "default_local_terminal_shells")]
     pub local_terminal_shells: LocalTerminalShellPreferences,
     #[serde(default = "default_file_panel_remember_ratio")]
@@ -81,6 +85,8 @@ pub struct UiPreferencesInput {
     pub auto_check_updates: Option<bool>,
     pub update_channel: Option<String>,
     pub terminal_zoom_locked: Option<bool>,
+    pub file_list_zoom_locked: Option<bool>,
+    pub file_list_font_size: Option<i32>,
     pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
     pub file_panel_remember_ratio: Option<bool>,
     pub resource_monitoring_metrics: Option<Vec<String>>,
@@ -96,6 +102,9 @@ pub struct UiPreferencesInput {
 
 const DEFAULT_UI_THEME: &str = "fileterm-dark";
 const DEFAULT_UI_LOCALE: &str = "zhCN";
+const DEFAULT_FILE_LIST_FONT_SIZE: i32 = 11;
+const MIN_FILE_LIST_FONT_SIZE: i32 = 9;
+const MAX_FILE_LIST_FONT_SIZE: i32 = 24;
 const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
     ["stats", "recent", "allConnections", "quickActions"];
 
@@ -157,6 +166,10 @@ fn default_local_terminal_shells() -> LocalTerminalShellPreferences {
 
 fn default_file_panel_remember_ratio() -> bool {
     true
+}
+
+fn default_file_list_font_size() -> i32 {
+    DEFAULT_FILE_LIST_FONT_SIZE
 }
 
 fn default_resource_monitoring_metrics() -> Vec<String> {
@@ -407,6 +420,9 @@ fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
 }
 
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
+    preferences.file_list_font_size = preferences
+        .file_list_font_size
+        .clamp(MIN_FILE_LIST_FONT_SIZE, MAX_FILE_LIST_FONT_SIZE);
     if !matches!(
         preferences.theme.as_str(),
         "fileterm-dark"

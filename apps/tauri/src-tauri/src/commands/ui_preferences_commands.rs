@@ -34,6 +34,8 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             auto_check_updates: default_auto_check_updates(),
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_list_zoom_locked: false,
+            file_list_font_size: default_file_list_font_size(),
             local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: default_file_panel_remember_ratio(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -64,6 +66,7 @@ pub fn app_set_ui_preferences(
     let mut preferences = app_get_ui_preferences(app.clone())?;
     let previous_locale = preferences.locale.clone();
     let previous_terminal_zoom_locked = preferences.terminal_zoom_locked;
+    let previous_file_list_zoom_locked = preferences.file_list_zoom_locked;
     let theme_was_provided = input.theme.is_some();
     if let Some(theme) = input.theme {
         preferences.theme = theme;
@@ -93,6 +96,12 @@ pub fn app_set_ui_preferences(
     }
     if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
         preferences.terminal_zoom_locked = terminal_zoom_locked;
+    }
+    if let Some(file_list_zoom_locked) = input.file_list_zoom_locked {
+        preferences.file_list_zoom_locked = file_list_zoom_locked;
+    }
+    if let Some(file_list_font_size) = input.file_list_font_size {
+        preferences.file_list_font_size = file_list_font_size;
     }
     if let Some(local_terminal_shells) = input.local_terminal_shells {
         if let Some(value) = local_terminal_shells.win32 {
@@ -176,6 +185,7 @@ pub fn app_set_ui_preferences(
     std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
     if previous_locale != preferences.locale
         || previous_terminal_zoom_locked != preferences.terminal_zoom_locked
+        || previous_file_list_zoom_locked != preferences.file_list_zoom_locked
     {
         if let Err(error) =
             crate::install_localized_application_menu(&app, preferences.locale == "enUS")
@@ -273,6 +283,77 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             auto_check_updates: None,
             update_channel: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
+            file_list_zoom_locked: None,
+            file_list_font_size: None,
+            local_terminal_shells: None,
+            file_panel_remember_ratio: None,
+            resource_monitoring_metrics: None,
+            resource_monitoring_metric_order: None,
+            connection_defaults: None,
+            mcp_agent: None,
+            overview_show_stats: None,
+            overview_show_recent: None,
+            overview_show_all_connections: None,
+            overview_show_quick_actions: None,
+            overview_section_order: None,
+        },
+    )
+}
+
+/// Toggle file list font zoom from a native menu item while keeping the
+/// renderer and settings page on the same persisted preference/event path.
+pub fn app_toggle_file_list_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError> {
+    let current = app_get_ui_preferences(app.clone())?;
+    app_set_ui_preferences(
+        app,
+        UiPreferencesInput {
+            theme: None,
+            locale: None,
+            theme_config: None,
+            custom_themes: None,
+            auto_check_updates: None,
+            update_channel: None,
+            terminal_zoom_locked: None,
+            file_list_zoom_locked: Some(!current.file_list_zoom_locked),
+            file_list_font_size: None,
+            local_terminal_shells: None,
+            file_panel_remember_ratio: None,
+            resource_monitoring_metrics: None,
+            resource_monitoring_metric_order: None,
+            connection_defaults: None,
+            mcp_agent: None,
+            overview_show_stats: None,
+            overview_show_recent: None,
+            overview_show_all_connections: None,
+            overview_show_quick_actions: None,
+            overview_section_order: None,
+        },
+    )
+}
+
+/// Adjust the saved file list font size from a native View menu item.
+pub fn app_adjust_file_list_font_size(app: AppHandle, operation: &str) -> Result<UiPreferences, AppError> {
+    let current = app_get_ui_preferences(app.clone())?;
+    if current.file_list_zoom_locked {
+        return Ok(current);
+    }
+    let next = match operation {
+        "in" => current.file_list_font_size + 1,
+        "out" => current.file_list_font_size - 1,
+        _ => default_file_list_font_size(),
+    };
+    app_set_ui_preferences(
+        app,
+        UiPreferencesInput {
+            theme: None,
+            locale: None,
+            theme_config: None,
+            custom_themes: None,
+            auto_check_updates: None,
+            update_channel: None,
+            terminal_zoom_locked: None,
+            file_list_zoom_locked: None,
+            file_list_font_size: Some(next),
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
             resource_monitoring_metrics: None,
