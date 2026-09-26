@@ -1065,18 +1065,8 @@
   justify-content: center;
   padding: 0 14px;
   position: relative;
+  border-right: 1px solid var(--titlebar-brand-divider);
   --titlebar-brand-divider: var(--border-light);
-}
-
-.titlebar-brand::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--titlebar-brand-divider);
-  pointer-events: none;
 }
 
 .titlebar-brand.has-home-brand-content {
