@@ -134,7 +134,6 @@
 }
 
 :root[data-theme*='light'] .titlebar-brand {
-  border-right: 0 !important;
   --titlebar-brand-divider: var(--system-sidebar-frame);
 }
 

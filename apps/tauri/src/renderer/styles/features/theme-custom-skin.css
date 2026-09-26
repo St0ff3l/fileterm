@@ -326,12 +326,16 @@
 :root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-tabs-bar
-  .fs-tabbar::after,
+  .fs-tabbar::after {
+  background: var(--codex-glass-divider) !important;
+  transition: none !important;
+}
+
 :root[data-platform='darwin'][data-theme-base='codex']:not([data-theme*='light'])
   .fs-shell.is-home-active
   .home-tabs-bar
-  .titlebar-brand::after {
-  background: var(--codex-glass-divider) !important;
+  .titlebar-brand {
+  border-right-color: var(--codex-glass-divider) !important;
   transition: none !important;
 }
 
