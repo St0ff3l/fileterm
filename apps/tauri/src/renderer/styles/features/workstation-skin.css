@@ -1557,10 +1557,6 @@ textarea:focus-visible,
 }
 
 @media (max-width: 820px) {
-  .fs-tabbar {
-    grid-template-columns: minmax(156px, 34vw) minmax(0, 1fr);
-  }
-
   .titlebar-brand {
     padding: 0 12px;
   }

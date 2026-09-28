@@ -8,7 +8,7 @@ import { KeepAliveWorkspaceStage } from '../workspace/workspace-stage'
 import { TabBar, type TabBarProps, type TabContextTarget } from './tab-bar'
 import type { AppViewModel } from './app-view-model'
 import { WindowMenubar } from './window-menubar'
-import { STATUS_MESSAGE_TIMEOUT_MS } from '../../app/app-shell-utils'
+import { DEFAULT_SIDEBAR_WIDTH, STATUS_MESSAGE_TIMEOUT_MS } from '../../app/app-shell-utils'
 import { t, setLocale } from '../../i18n'
 
 export function AppMainWorkspace({ model }: { model: AppViewModel }) {
@@ -191,10 +191,9 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     activeProfile?.type === 'ssh' && activeProfile.jumpProfileId
       ? (workspace.profiles.find((profile) => profile.id === activeProfile.jumpProfileId) ?? null)
       : null
-  // Keep the home titlebar brand independent from the collapsed sidebar. When
-  // the sidebar is expanded, its live width still drives the brand column so
-  // the two boundaries track together during a resize.
-  const brandWidth = isHomeWorkspaceVisible && !isSystemSidebarCollapsed ? sidebarWidth : 214
+  // Home and session titlebars share the expanded sidebar's live width.
+  // A collapsed sidebar keeps enough titlebar space for the native window controls.
+  const brandWidth = isSystemSidebarCollapsed ? DEFAULT_SIDEBAR_WIDTH : resolvedSidebarWidth
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
