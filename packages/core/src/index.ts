@@ -2050,6 +2050,7 @@ export interface UiPreferences {
   terminalZoomLocked: boolean
   uiZoomLocked: boolean
   uiZoomPercent: number
+  rememberWindowSize: boolean
   localTerminalShells: LocalTerminalShellPreferences
   filePanelRememberRatio: boolean
   resourceMonitoringMetrics: ResourceMonitoringMetric[]
@@ -2073,6 +2074,7 @@ export interface UiPreferencesInput {
   terminalZoomLocked?: boolean
   uiZoomLocked?: boolean
   uiZoomPercent?: number
+  rememberWindowSize?: boolean
   localTerminalShells?: Partial<LocalTerminalShellPreferences>
   filePanelRememberRatio?: boolean
   resourceMonitoringMetrics?: ResourceMonitoringMetric[]

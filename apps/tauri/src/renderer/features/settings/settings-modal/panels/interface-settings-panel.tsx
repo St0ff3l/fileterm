@@ -70,6 +70,10 @@ type InterfaceSettingsPanelContext = {
   isSavingFilePanelPreference: boolean
   filePanelPreferenceError: string | null
   setFilePanelRememberRatioPreference(nextValue: boolean): void
+  rememberWindowSize: boolean
+  isSavingWindowSizePreference: boolean
+  windowSizePreferenceError: string | null
+  setRememberWindowSizePreference(nextValue: boolean): void
   uiZoomLocked: boolean
   isSavingUiZoomPreference: boolean
   uiZoomPreferenceError: string | null
@@ -143,6 +147,10 @@ export function InterfaceSettingsPanel() {
     isSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelRememberRatioPreference,
+    rememberWindowSize,
+    isSavingWindowSizePreference,
+    windowSizePreferenceError,
+    setRememberWindowSizePreference,
     uiZoomLocked,
     isSavingUiZoomPreference,
     uiZoomPreferenceError,
@@ -775,6 +783,27 @@ export function InterfaceSettingsPanel() {
         </div>
         {uiZoomPreferenceError ? <p className="modal-error">{uiZoomPreferenceError}</p> : null}
         {filePanelPreferenceError ? <p className="modal-error">{filePanelPreferenceError}</p> : null}
+      </section>
+
+      <section className="settings-section">
+        <h3>{t.windowStartupSettings}</h3>
+        <div className="overview-preference-list">
+          <label className="overview-preference-row">
+            <span className="overview-preference-copy">
+              <strong>{t.rememberWindowSize}</strong>
+              <p>{t.rememberWindowSizeHint}</p>
+            </span>
+            <span className="command-toggle overview-preference-toggle">
+              <SelectionControl
+                checked={rememberWindowSize}
+                disabled={!desktopApi || isSavingWindowSizePreference}
+                onChange={(event) => setRememberWindowSizePreference(event.target.checked)}
+                type="checkbox"
+              />
+            </span>
+          </label>
+        </div>
+        {windowSizePreferenceError ? <p className="modal-error">{windowSizePreferenceError}</p> : null}
       </section>
 
       <section className="settings-section">

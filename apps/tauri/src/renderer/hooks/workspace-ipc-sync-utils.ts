@@ -18,6 +18,7 @@ export type SyncedUiPreferences = Pick<
   | 'terminalZoomLocked'
   | 'uiZoomLocked'
   | 'uiZoomPercent'
+  | 'rememberWindowSize'
   | 'filePanelRememberRatio'
   | 'resourceMonitoringMetrics'
   | 'resourceMonitoringMetricOrder'
@@ -37,6 +38,7 @@ export function sameSyncedUiPreferences(left: SyncedUiPreferences, right: Synced
     left.terminalZoomLocked === right.terminalZoomLocked &&
     left.uiZoomLocked === right.uiZoomLocked &&
     left.uiZoomPercent === right.uiZoomPercent &&
+    left.rememberWindowSize === right.rememberWindowSize &&
     left.filePanelRememberRatio === right.filePanelRememberRatio &&
     JSON.stringify(left.resourceMonitoringMetrics) === JSON.stringify(right.resourceMonitoringMetrics) &&
     JSON.stringify(left.resourceMonitoringMetricOrder) === JSON.stringify(right.resourceMonitoringMetricOrder) &&
@@ -66,6 +68,7 @@ export function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPre
     terminalZoomLocked: preferences.terminalZoomLocked,
     uiZoomLocked: preferences.uiZoomLocked,
     uiZoomPercent: preferences.uiZoomPercent,
+    rememberWindowSize: preferences.rememberWindowSize,
     filePanelRememberRatio: preferences.filePanelRememberRatio,
     resourceMonitoringMetrics: [...preferences.resourceMonitoringMetrics],
     resourceMonitoringMetricOrder: [...preferences.resourceMonitoringMetricOrder],

@@ -47,6 +47,8 @@ pub struct UiPreferences {
     pub ui_zoom_locked: bool,
     #[serde(default = "default_ui_zoom_percent")]
     pub ui_zoom_percent: i32,
+    #[serde(default = "default_remember_window_size")]
+    pub remember_window_size: bool,
     // Preserve the previous file-list-only zoom when reading an older state
     // file, then omit the legacy key on the next preference save.
     #[serde(default, skip_serializing, alias = "fileListFontSize")]
@@ -87,6 +89,7 @@ pub struct UiPreferencesInput {
     pub terminal_zoom_locked: Option<bool>,
     pub ui_zoom_locked: Option<bool>,
     pub ui_zoom_percent: Option<i32>,
+    pub remember_window_size: Option<bool>,
     pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
     pub file_panel_remember_ratio: Option<bool>,
     pub resource_monitoring_metrics: Option<Vec<String>>,
@@ -166,6 +169,10 @@ fn default_local_terminal_shells() -> LocalTerminalShellPreferences {
 }
 
 fn default_file_panel_remember_ratio() -> bool {
+    true
+}
+
+fn default_remember_window_size() -> bool {
     true
 }
 

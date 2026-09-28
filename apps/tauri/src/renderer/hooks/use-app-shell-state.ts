@@ -44,6 +44,7 @@ export type InitialUiPreferences = Pick<
   | 'terminalZoomLocked'
   | 'uiZoomLocked'
   | 'uiZoomPercent'
+  | 'rememberWindowSize'
   | 'filePanelRememberRatio'
   | 'resourceMonitoringMetrics'
   | 'resourceMonitoringMetricOrder'
@@ -137,6 +138,7 @@ export function useAppShellState({
   const [uiZoomPercent, setUiZoomPercent] = useState(
     () => initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT
   )
+  const [rememberWindowSize, setRememberWindowSize] = useState(() => initialUiPreferences?.rememberWindowSize ?? true)
   useLayoutEffect(() => {
     void applyUiZoomPercent(uiZoomPercent)
   }, [uiZoomPercent])
@@ -330,6 +332,7 @@ export function useAppShellState({
     terminalZoomLocked,
     uiZoomLocked,
     uiZoomPercent,
+    rememberWindowSize,
     filePanelRememberRatio,
     resourceMonitoringMetrics,
     resourceMonitoringMetricOrder,
@@ -352,6 +355,7 @@ export function useAppShellState({
     onTerminalZoomLockedChange: setTerminalZoomLocked,
     onUiZoomLockedChange: setUiZoomLocked,
     onUiZoomPercentChange: setUiZoomPercent,
+    onRememberWindowSizeChange: setRememberWindowSize,
     onFilePanelRememberRatioChange: setFilePanelRememberRatio,
     onResourceMonitoringMetricsChange: setResourceMonitoringMetrics,
     onResourceMonitoringMetricOrderChange: (nextOrder) => {
@@ -504,6 +508,8 @@ export function useAppShellState({
     setUiZoomLocked,
     uiZoomPercent,
     setUiZoomPercent,
+    rememberWindowSize,
+    setRememberWindowSize,
     filePanelRememberRatio,
     setFilePanelRememberRatio,
     resourceMonitoringMetrics,

@@ -79,20 +79,41 @@ fn clamp_main_window_geometry(
     geometry
 }
 
-fn restore_main_window_geometry(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>) {
-    let geometry = match read_main_window_geometry(app) {
-        Ok(Some(geometry)) => geometry,
-        Ok(None) => return,
-        Err(error) => {
+fn restore_main_window_geometry(
+    app: &AppHandle<Wry>,
+    window: &WebviewWindow<Wry>,
+    remember_window_size: bool,
+) {
+    let geometry = if remember_window_size {
+        match read_main_window_geometry(app) {
+            Ok(Some(geometry)) => geometry,
+            Ok(None) => return,
+            Err(error) => {
+                crate::services::logging::warn(
+                    app,
+                    "window",
+                    format!("unable to read saved main window size: {error}"),
+                );
+                return;
+            }
+        }
+    } else {
+        MainWindowGeometry::default()
+    };
+    let geometry = if remember_window_size {
+        clamp_main_window_geometry(window, geometry)
+    } else {
+        geometry
+    };
+    if !geometry.maximized && window.is_maximized().unwrap_or(false) {
+        if let Err(error) = window.unmaximize() {
             crate::services::logging::warn(
                 app,
                 "window",
-                format!("unable to read saved main window size: {error}"),
+                format!("unable to unmaximize fixed-size main window: {error}"),
             );
-            return;
         }
-    };
-    let geometry = clamp_main_window_geometry(window, geometry);
+    }
     if let Err(error) = window.set_size(LogicalSize::new(geometry.width, geometry.height)) {
         crate::services::logging::warn(
             app,

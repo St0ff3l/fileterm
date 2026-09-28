@@ -53,6 +53,12 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     setIsSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelPreferenceError,
+    rememberWindowSize,
+    setRememberWindowSize,
+    isSavingWindowSizePreference,
+    setIsSavingWindowSizePreference,
+    windowSizePreferenceError,
+    setWindowSizePreferenceError,
     uiZoomPercent,
     setUiZoomPercent,
     isSavingUiZoomPercent,
@@ -255,6 +261,25 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
       .finally(() => setIsSavingFilePanelPreference(false))
   }
 
+  const setRememberWindowSizePreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingWindowSizePreference || nextValue === rememberWindowSize) {
+      return
+    }
+
+    const previousValue = rememberWindowSize
+    setRememberWindowSize(nextValue)
+    setWindowSizePreferenceError(null)
+    setIsSavingWindowSizePreference(true)
+    void desktopApi
+      .setUiPreferences({ rememberWindowSize: nextValue })
+      .then((preferences) => setRememberWindowSize(preferences.rememberWindowSize))
+      .catch(() => {
+        setRememberWindowSize(previousValue)
+        setWindowSizePreferenceError(t.windowSizePreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingWindowSizePreference(false))
+  }
+
   const setUiZoomPercentPreference = (nextValue: number) => {
     if (!desktopApi || isSavingUiZoomPercent || nextValue === uiZoomPercent) {
       return
@@ -312,6 +337,10 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     isSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelRememberRatioPreference,
+    rememberWindowSize,
+    isSavingWindowSizePreference,
+    windowSizePreferenceError,
+    setRememberWindowSizePreference,
     uiZoomPercent,
     isSavingUiZoomPercent,
     uiZoomPercentError,

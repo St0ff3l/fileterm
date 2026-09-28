@@ -60,6 +60,9 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(true)
   const [isSavingFilePanelPreference, setIsSavingFilePanelPreference] = useState(false)
   const [filePanelPreferenceError, setFilePanelPreferenceError] = useState<string | null>(null)
+  const [rememberWindowSize, setRememberWindowSize] = useState(true)
+  const [isSavingWindowSizePreference, setIsSavingWindowSizePreference] = useState(false)
+  const [windowSizePreferenceError, setWindowSizePreferenceError] = useState<string | null>(null)
   const [uiZoomPercent, setUiZoomPercent] = useState(DEFAULT_UI_ZOOM_PERCENT)
   const [isSavingUiZoomPercent, setIsSavingUiZoomPercent] = useState(false)
   const [uiZoomPercentError, setUiZoomPercentError] = useState<string | null>(null)
@@ -188,6 +191,12 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelPreferenceError,
+    rememberWindowSize,
+    setRememberWindowSize,
+    isSavingWindowSizePreference,
+    setIsSavingWindowSizePreference,
+    windowSizePreferenceError,
+    setWindowSizePreferenceError,
     uiZoomPercent,
     setUiZoomPercent,
     isSavingUiZoomPercent,

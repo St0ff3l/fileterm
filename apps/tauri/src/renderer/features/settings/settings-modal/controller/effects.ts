@@ -33,6 +33,7 @@ export function useSettingsModalEffects({
     setLocalTerminalShells,
     setLocalTerminalShellDrafts,
     setFilePanelRememberRatio,
+    setRememberWindowSize,
     setUiZoomPercent,
     setMcpAgentPreferences,
     setConnectionDefaults,
@@ -130,6 +131,7 @@ export function useSettingsModalEffects({
       setLocalTerminalShells({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
       setLocalTerminalShellDrafts({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
       setFilePanelRememberRatio(preferences.filePanelRememberRatio)
+      setRememberWindowSize(preferences.rememberWindowSize)
       setUiZoomPercent(preferences.uiZoomPercent)
       setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
