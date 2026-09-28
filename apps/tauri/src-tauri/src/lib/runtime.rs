@@ -362,39 +362,39 @@ pub fn run() {
                     }
                 }
             }
-            "view-file-list-zoom-in" => {
-                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "in") {
+            "view-ui-zoom-in" => {
+                if let Err(error) = crate::commands::app_adjust_ui_zoom(app.clone(), "in") {
                     crate::services::logging::warn(
                         app,
                         "ui-preferences",
-                        format!("failed to increase file list font size: {error}"),
+                        format!("failed to increase interface zoom: {error}"),
                     );
                 }
             }
-            "view-file-list-zoom-out" => {
-                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "out") {
+            "view-ui-zoom-out" => {
+                if let Err(error) = crate::commands::app_adjust_ui_zoom(app.clone(), "out") {
                     crate::services::logging::warn(
                         app,
                         "ui-preferences",
-                        format!("failed to decrease file list font size: {error}"),
+                        format!("failed to decrease interface zoom: {error}"),
                     );
                 }
             }
-            "view-file-list-zoom-reset" => {
-                if let Err(error) = crate::commands::app_adjust_file_list_font_size(app.clone(), "reset") {
+            "view-ui-zoom-reset" => {
+                if let Err(error) = crate::commands::app_adjust_ui_zoom(app.clone(), "reset") {
                     crate::services::logging::warn(
                         app,
                         "ui-preferences",
-                        format!("failed to reset file list font size: {error}"),
+                        format!("failed to reset interface zoom: {error}"),
                     );
                 }
             }
-            "view-file-list-zoom-lock" => {
-                if let Err(error) = crate::commands::app_toggle_file_list_zoom_lock(app.clone()) {
+            "view-ui-zoom-lock" => {
+                if let Err(error) = crate::commands::app_toggle_ui_zoom_lock(app.clone()) {
                     crate::services::logging::warn(
                         app,
                         "ui-preferences",
-                        format!("failed to toggle file list zoom lock: {error}"),
+                        format!("failed to toggle interface zoom lock: {error}"),
                     );
                 }
             }

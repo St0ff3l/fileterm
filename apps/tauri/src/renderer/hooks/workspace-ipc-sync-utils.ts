@@ -16,8 +16,8 @@ export type SyncedUiPreferences = Pick<
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
-  | 'fileListZoomLocked'
-  | 'fileListFontSize'
+  | 'uiZoomLocked'
+  | 'uiZoomPercent'
   | 'filePanelRememberRatio'
   | 'resourceMonitoringMetrics'
   | 'resourceMonitoringMetricOrder'
@@ -35,8 +35,8 @@ export function sameSyncedUiPreferences(left: SyncedUiPreferences, right: Synced
     JSON.stringify(left.customThemes) === JSON.stringify(right.customThemes) &&
     left.locale === right.locale &&
     left.terminalZoomLocked === right.terminalZoomLocked &&
-    left.fileListZoomLocked === right.fileListZoomLocked &&
-    left.fileListFontSize === right.fileListFontSize &&
+    left.uiZoomLocked === right.uiZoomLocked &&
+    left.uiZoomPercent === right.uiZoomPercent &&
     left.filePanelRememberRatio === right.filePanelRememberRatio &&
     JSON.stringify(left.resourceMonitoringMetrics) === JSON.stringify(right.resourceMonitoringMetrics) &&
     JSON.stringify(left.resourceMonitoringMetricOrder) === JSON.stringify(right.resourceMonitoringMetricOrder) &&
@@ -64,8 +64,8 @@ export function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPre
     locale: preferences.locale,
     connectionDefaults: { ...preferences.connectionDefaults },
     terminalZoomLocked: preferences.terminalZoomLocked,
-    fileListZoomLocked: preferences.fileListZoomLocked,
-    fileListFontSize: preferences.fileListFontSize,
+    uiZoomLocked: preferences.uiZoomLocked,
+    uiZoomPercent: preferences.uiZoomPercent,
     filePanelRememberRatio: preferences.filePanelRememberRatio,
     resourceMonitoringMetrics: [...preferences.resourceMonitoringMetrics],
     resourceMonitoringMetricOrder: [...preferences.resourceMonitoringMetricOrder],

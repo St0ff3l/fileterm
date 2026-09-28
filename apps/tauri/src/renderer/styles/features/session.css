@@ -271,7 +271,7 @@
   height: 24px;
   padding: 0 6px;
   border-radius: 5px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1;
   caret-color: var(--text-main);
@@ -464,7 +464,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-main);
   word-break: break-all;
@@ -487,7 +487,7 @@
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .history-token:hover {
@@ -725,7 +725,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-soft);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 14px;
   opacity: 0.65;
@@ -743,7 +743,7 @@
   text-overflow: ellipsis;
   background: transparent;
   color: var(--text-main);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 14px;
   white-space: nowrap;
@@ -1227,7 +1227,7 @@
   padding: 0 6px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -1349,7 +1349,7 @@
 
 .pane-filter-badge {
   font-size: 10px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--accent-highlight);
   background: var(--accent-tint);
   padding: 1px 5px;
@@ -1380,7 +1380,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .pane-filter-mode-btn:hover {
@@ -1688,7 +1688,7 @@
   padding: 0 10px;
   border: 1px solid var(--border-dark);
   border-radius: 5px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   pointer-events: none;
 }
@@ -1762,7 +1762,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-main);
-  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -1807,7 +1807,7 @@
   border: 1px solid var(--border-light);
   border-radius: 999px;
   color: var(--text-muted);
-  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.04em;

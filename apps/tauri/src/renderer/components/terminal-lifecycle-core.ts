@@ -8,6 +8,7 @@ import { isClinkAutosuggestHelpUrl } from '../app/terminal-transcript'
 import { t } from '../i18n'
 import { getConfiguredMonoFontFamily } from '../app/font-metrics'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
+import { scaleTerminalFontSizeForUiZoom } from '../app/ui-zoom'
 import {
   getTerminalFontSize,
   setTerminalFontSize,
@@ -39,7 +40,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
   const { isMac, isWindowsPty } = options
   const terminal = new Terminal({
     fontFamily: getConfiguredMonoFontFamily(),
-    fontSize: getTerminalFontSize(options.profileIdRef.current),
+    fontSize: scaleTerminalFontSizeForUiZoom(getTerminalFontSize(options.profileIdRef.current)),
     letterSpacing: 0.5,
     lineHeight: 1.05,
     cursorBlink: true,
@@ -124,7 +125,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
       return false
     }
 
-    const currentSize = terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE
+    const currentSize = getTerminalFontSize(options.profileIdRef.current)
     const nextSize = Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, currentSize + change))
     logTerminalZoom(terminal, 'font-size-requested', {
       change,
@@ -149,7 +150,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
     return true
   }
   const resetTerminalFontSize = () =>
-    adjustTerminalFontSize(TERMINAL_DEFAULT_FONT_SIZE - (terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE))
+    adjustTerminalFontSize(TERMINAL_DEFAULT_FONT_SIZE - getTerminalFontSize(options.profileIdRef.current))
   const applyTerminalZoom = (operation: TerminalZoomOperation, source: 'menu' | 'shortcut' | 'gesture', steps = 1) => {
     const changed =
       operation === 'reset' ? resetTerminalFontSize() : adjustTerminalFontSize((operation === 'in' ? 1 : -1) * steps)

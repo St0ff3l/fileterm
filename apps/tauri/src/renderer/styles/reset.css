@@ -2,6 +2,10 @@
  * Base CSS Reset & Viewport Constraints
  */
 
+:root {
+  --app-ui-zoom: 1;
+}
+
 *,
 *::before,
 *::after {

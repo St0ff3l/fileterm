@@ -670,6 +670,26 @@ mod ui_preferences_tests {
     }
 
     #[test]
+    fn migrates_legacy_file_list_zoom_to_app_interface_zoom() {
+        let legacy: UiPreferences = serde_json::from_value(serde_json::json!({
+            "theme": "default-dark",
+            "locale": "zhCN",
+            "fileListFontSize": 15,
+            "fileListZoomLocked": true
+        }))
+        .expect("legacy zoom preferences should deserialize");
+
+        let preferences = normalize_ui_preferences(legacy);
+
+        assert_eq!(preferences.ui_zoom_percent, 140);
+        assert!(preferences.ui_zoom_locked);
+        let serialized = serde_json::to_value(preferences).expect("preferences should serialize");
+        assert_eq!(serialized["uiZoomPercent"], 140);
+        assert_eq!(serialized["uiZoomLocked"], true);
+        assert!(serialized.get("fileListFontSize").is_none());
+    }
+
+    #[test]
     fn normalizes_saved_theme_identity_and_inherited_base() {
         let mut custom = default_theme_config();
         custom.code_theme_id = "custom".to_string();
@@ -697,9 +717,10 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -737,9 +758,10 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -768,9 +790,10 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "nightly".to_string(),
             terminal_zoom_locked: false,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -858,9 +881,10 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: false,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -908,9 +932,10 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -960,9 +985,10 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1002,9 +1028,10 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1174,9 +1201,10 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
-            file_list_zoom_locked: false,
+            ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
-            file_list_font_size: 11,
+            ui_zoom_percent: 100,
+            legacy_file_list_font_size: None,
             file_panel_remember_ratio: false,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),

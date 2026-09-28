@@ -2,8 +2,10 @@ import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import { type Terminal } from '@xterm/xterm'
 import { type FitAddon } from '@xterm/addon-fit'
 import { type SearchAddon } from '@xterm/addon-search'
+import { MAX_UI_ZOOM_PERCENT, MIN_UI_ZOOM_PERCENT } from '@fileterm/core'
 import { readClipboardText, writeClipboardText } from '../app/app-utils'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
+import { scaleTerminalFontSizeForUiZoom } from '../app/ui-zoom'
 import { TERMINAL_MAX_FONT_SIZE, TERMINAL_MIN_FONT_SIZE } from '../app/terminal-font-size-store'
 import { t } from '../i18n'
 import {
@@ -595,7 +597,9 @@ export function useTerminalViewActions({
       return false
     }
 
-    const nextSize = Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, fontSize))
+    const minimum = (TERMINAL_MIN_FONT_SIZE * 100) / MAX_UI_ZOOM_PERCENT
+    const maximum = (TERMINAL_MAX_FONT_SIZE * 100) / MIN_UI_ZOOM_PERCENT
+    const nextSize = Math.max(minimum, Math.min(maximum, scaleTerminalFontSizeForUiZoom(fontSize)))
     if (terminal.options.fontSize === nextSize) {
       return false
     }

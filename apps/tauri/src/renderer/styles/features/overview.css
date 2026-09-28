@@ -308,7 +308,7 @@
 }
 
 .type-badge {
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   padding: 0;
@@ -357,7 +357,7 @@
 }
 
 .recent-user {
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
   overflow: hidden;

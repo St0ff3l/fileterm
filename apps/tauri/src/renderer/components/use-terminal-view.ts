@@ -534,6 +534,9 @@ export function useTerminalView({
         terminal.clearTextureAtlas()
         terminal.refresh(0, Math.max(terminal.rows - 1, 0))
       }
+      if (terminal) {
+        applyTerminalFontSize(getTerminalFontSize(profileIdRef.current))
+      }
     })
 
     observer.observe(root, {

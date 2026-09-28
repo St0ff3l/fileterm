@@ -101,7 +101,7 @@
   border-radius: 4px;
   background-color: var(--bg-hover);
   color: var(--text-muted);
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
 }
@@ -697,7 +697,7 @@
 
 .col-path,
 .col-user {
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-muted);
   overflow: hidden;
@@ -709,7 +709,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   color: var(--text-muted);
@@ -854,7 +854,7 @@
 
 .footer-copyright {
   width: 100%;
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text-muted);
   display: flex;
@@ -864,7 +864,7 @@
 .footer-meta-separator {
   margin: 0 12px;
   color: var(--border-light);
-  font-family: sans-serif;
+  font-family: var(--font-ui);
   font-weight: 300;
   opacity: 0.6;
 }
@@ -883,7 +883,7 @@
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   cursor: pointer;
   padding: 4px 6px;

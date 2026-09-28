@@ -88,7 +88,6 @@ body,
 }
 
 :root[data-platform='linux'] .file-current-path {
-  font-family: var(--font-ui) !important;
   line-height: var(--button-line-height, 1.2);
 }
 
@@ -463,7 +462,7 @@ textarea:focus-visible,
   width: 40px;
   max-width: 40px;
   color: var(--text-main);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   line-height: 1;
@@ -474,7 +473,7 @@ textarea:focus-visible,
 
 .collapsed-resource-label {
   color: var(--text-muted);
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
   font-size: 10px;
   line-height: 1;
 }
@@ -519,7 +518,7 @@ textarea:focus-visible,
 .address-row strong {
   min-width: 0;
   overflow: hidden;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -694,7 +693,7 @@ textarea:focus-visible,
   overflow: hidden;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 500;
   white-space: nowrap;
@@ -974,7 +973,7 @@ textarea:focus-visible,
 .process-row {
   grid-template-columns: 64px 58px minmax(0, 1fr);
   min-height: 24px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -1005,7 +1004,7 @@ textarea:focus-visible,
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--border-light);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -1064,7 +1063,7 @@ textarea:focus-visible,
 .disk-row {
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
   height: 24px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -1150,7 +1149,7 @@ textarea:focus-visible,
   height: 22px;
   margin-left: 0;
   overflow: hidden;
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 400;
   line-height: 22px;
@@ -1224,7 +1223,7 @@ textarea:focus-visible,
 .file-toolbar > span {
   min-width: 0;
   overflow: hidden;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1277,14 +1276,8 @@ textarea:focus-visible,
 }
 
 .fs-file-table {
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-}
-
-/* The macOS/Windows monospace stack is absent on Ubuntu. Use the UI stack
- * there so CJK glyph metrics stay consistent with the rest of the window. */
-:root[data-platform='linux'] .fs-file-table {
-  font-family: var(--font-ui);
 }
 
 .fs-file-table th,
@@ -1325,16 +1318,16 @@ textarea:focus-visible,
 }
 
 .file-manager .fs-file-table:not(.command-table) {
-  font-size: var(--file-list-font-size, 11px);
+  font-size: 11px;
 }
 
 .file-manager .fs-file-table:not(.command-table) th {
-  height: max(24px, calc(var(--file-list-font-size, 11px) * 1.9));
-  font-size: calc(var(--file-list-font-size, 11px) - 1px);
+  height: 24px;
+  font-size: 10px;
 }
 
 .file-manager .fs-file-table:not(.command-table) td {
-  height: max(24px, calc(var(--file-list-font-size, 11px) * 1.9));
+  height: 24px;
 }
 
 .file-icon {
@@ -1475,7 +1468,7 @@ textarea:focus-visible,
 .system-description-row strong {
   min-width: 0;
   overflow: hidden;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -1489,7 +1482,7 @@ textarea:focus-visible,
 .system-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 

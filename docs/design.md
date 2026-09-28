@@ -73,6 +73,8 @@ tokens -> theme vars -> component skins -> terminal colors
 - UI 字体：`SF Pro Text`, `PingFang SC`, `Microsoft YaHei`, `Segoe UI`, sans-serif。
 - 数字和终端周边：`SF Mono`, `JetBrains Mono`, `Menlo`, `Consolas`, monospace。
 - 终端内容由 xterm 主题控制，必须保证等宽、行高稳定、选择态可见。
+- 组件必须使用 `--font-ui` 或 `--font-mono`，让用户导入或选择的字体覆盖首页、文件区、系统信息、命令和会话控件；固定字体只保留给品牌字标和图标字形。
+- 界面缩放由 WebView 的界面缩放偏好统一控制，文件区、系统信息栏、设置和弹窗一起缩放；终端内容字号由终端自己的缩放偏好独立控制。
 
 字号建议：
 
