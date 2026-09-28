@@ -35,10 +35,6 @@ pub struct UiPreferences {
     pub locale: String,
     #[serde(default = "default_theme_config")]
     pub theme_config: ThemeConfig,
-    /// The app version that last reset the active theme family to FileTerm.
-    /// A different version means the user has installed an update.
-    #[serde(default)]
-    pub fileterm_theme_reset_app_version: Option<String>,
     #[serde(default)]
     pub custom_themes: Vec<SavedTheme>,
     #[serde(default = "default_auto_check_updates")]
@@ -47,10 +43,16 @@ pub struct UiPreferences {
     pub update_channel: String,
     #[serde(default)]
     pub terminal_zoom_locked: bool,
-    #[serde(default)]
-    pub file_list_zoom_locked: bool,
-    #[serde(default = "default_file_list_font_size")]
-    pub file_list_font_size: i32,
+    #[serde(default, alias = "fileListZoomLocked")]
+    pub ui_zoom_locked: bool,
+    #[serde(default = "default_ui_zoom_percent")]
+    pub ui_zoom_percent: i32,
+    #[serde(default = "default_remember_window_size")]
+    pub remember_window_size: bool,
+    // Preserve the previous file-list-only zoom when reading an older state
+    // file, then omit the legacy key on the next preference save.
+    #[serde(default, skip_serializing, alias = "fileListFontSize")]
+    pub legacy_file_list_font_size: Option<i32>,
     #[serde(default = "default_local_terminal_shells")]
     pub local_terminal_shells: LocalTerminalShellPreferences,
     #[serde(default = "default_file_panel_remember_ratio")]
@@ -85,8 +87,9 @@ pub struct UiPreferencesInput {
     pub auto_check_updates: Option<bool>,
     pub update_channel: Option<String>,
     pub terminal_zoom_locked: Option<bool>,
-    pub file_list_zoom_locked: Option<bool>,
-    pub file_list_font_size: Option<i32>,
+    pub ui_zoom_locked: Option<bool>,
+    pub ui_zoom_percent: Option<i32>,
+    pub remember_window_size: Option<bool>,
     pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
     pub file_panel_remember_ratio: Option<bool>,
     pub resource_monitoring_metrics: Option<Vec<String>>,
@@ -102,9 +105,10 @@ pub struct UiPreferencesInput {
 
 const DEFAULT_UI_THEME: &str = "fileterm-dark";
 const DEFAULT_UI_LOCALE: &str = "zhCN";
-const DEFAULT_FILE_LIST_FONT_SIZE: i32 = 11;
-const MIN_FILE_LIST_FONT_SIZE: i32 = 9;
-const MAX_FILE_LIST_FONT_SIZE: i32 = 24;
+const DEFAULT_UI_ZOOM_PERCENT: i32 = 100;
+const MIN_UI_ZOOM_PERCENT: i32 = 80;
+const MAX_UI_ZOOM_PERCENT: i32 = 200;
+const UI_ZOOM_PERCENT_STEP: i32 = 10;
 const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
     ["stats", "recent", "allConnections", "quickActions"];
 
@@ -168,8 +172,12 @@ fn default_file_panel_remember_ratio() -> bool {
     true
 }
 
-fn default_file_list_font_size() -> i32 {
-    DEFAULT_FILE_LIST_FONT_SIZE
+fn default_remember_window_size() -> bool {
+    false
+}
+
+fn default_ui_zoom_percent() -> i32 {
+    DEFAULT_UI_ZOOM_PERCENT
 }
 
 fn default_resource_monitoring_metrics() -> Vec<String> {
@@ -420,9 +428,20 @@ fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
 }
 
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
-    preferences.file_list_font_size = preferences
-        .file_list_font_size
-        .clamp(MIN_FILE_LIST_FONT_SIZE, MAX_FILE_LIST_FONT_SIZE);
+    if let Some(legacy_size) = preferences.legacy_file_list_font_size.take() {
+        // The previous control used 11px as its 100% baseline. Convert saved
+        // values proportionally so existing users keep a similar visual size.
+        let legacy_size = legacy_size.clamp(9, 24);
+        if preferences.ui_zoom_percent == DEFAULT_UI_ZOOM_PERCENT {
+            let migrated_percent = (legacy_size * 100 + 5) / 11;
+            preferences.ui_zoom_percent =
+                ((migrated_percent + UI_ZOOM_PERCENT_STEP / 2) / UI_ZOOM_PERCENT_STEP)
+                    * UI_ZOOM_PERCENT_STEP;
+        }
+    }
+    preferences.ui_zoom_percent = preferences
+        .ui_zoom_percent
+        .clamp(MIN_UI_ZOOM_PERCENT, MAX_UI_ZOOM_PERCENT);
     if !matches!(
         preferences.theme.as_str(),
         "fileterm-dark"
@@ -507,24 +526,6 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     );
     preferences.custom_themes = normalize_saved_themes(preferences.custom_themes);
     preferences
-}
-
-/// Apply the product-default theme after an application update. The selected
-/// dark/light variant and saved theme library remain intact; only the active
-/// theme family changes. Reopening the same app version is a no-op.
-fn reset_active_theme_for_app_version(preferences: &mut UiPreferences, app_version: &str) -> bool {
-    if preferences.fileterm_theme_reset_app_version.as_deref() == Some(app_version) {
-        return false;
-    }
-
-    let variant = if is_light_theme_mode(&preferences.theme) {
-        "light"
-    } else {
-        "dark"
-    };
-    preferences.theme_config = default_theme_config_for_variant(variant);
-    preferences.fileterm_theme_reset_app_version = Some(app_version.to_string());
-    true
 }
 
 /// Resolve the effective SSH behavior for a live session without mutating the

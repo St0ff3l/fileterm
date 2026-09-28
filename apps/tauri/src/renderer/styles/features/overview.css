@@ -127,45 +127,6 @@
   transform: translateY(0);
 }
 
-/* Stats */
-.overview-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0;
-  padding: 18px 0;
-  border-top: 1px solid var(--border-light);
-  border-bottom: 1px solid var(--border-light);
-}
-
-.stat-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: 0 24px;
-  transition: color 0.2s ease;
-  box-shadow: none;
-}
-
-.stat-card:hover {
-  transform: none;
-  box-shadow: none;
-}
-
-.stat-card:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: 1px;
-  height: 72px;
-  background: var(--border-light);
-  transform: translateY(-50%);
-}
-
 .stat-icon {
   width: 28px;
   height: 28px;
@@ -308,7 +269,7 @@
 }
 
 .type-badge {
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   padding: 0;
@@ -357,7 +318,7 @@
 }
 
 .recent-user {
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
   overflow: hidden;
@@ -510,20 +471,6 @@
   height: 36px;
   padding: 0 16px;
   font-size: 12px;
-}
-
-.fs-shell.has-ai-copilot .overview-stats {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 16px;
-  padding: 14px 0;
-}
-
-.fs-shell.has-ai-copilot .stat-card {
-  padding: 0 8px;
-}
-
-.fs-shell.has-ai-copilot .stat-card::after {
-  display: none !important;
 }
 
 .fs-shell.has-ai-copilot .recent-grid {

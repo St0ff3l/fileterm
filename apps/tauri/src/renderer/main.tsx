@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { DEFAULT_UI_ZOOM_PERCENT } from '@fileterm/core'
 import { App } from './app'
 import { ErrorBoundary } from './features/common/error-boundary'
 import { createTauriApi } from '../bridge/tauri-api'
@@ -7,6 +8,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { defaultLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
+import { applyUiZoomPercent } from './app/ui-zoom'
 import './styles/index.css'
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
@@ -80,7 +82,7 @@ void createTauriApi()
         console.warn('Failed to load UI preferences:', error)
         return undefined
       })
-      .then((initialUiPreferences) => {
+      .then(async (initialUiPreferences) => {
         const searchParams = new URLSearchParams(window.location.search)
         const queryTheme = searchParams.get('theme')
         const isThemeMode = (val: unknown): val is ThemeMode =>
@@ -107,6 +109,7 @@ void createTauriApi()
         // Apply the loaded values before the first React render so CSS and the
         // proxy-backed translation table agree with App's initial state.
         applyThemeVariables(initialTheme, initialUiPreferences?.themeConfig)
+        await applyUiZoomPercent(initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT)
         setLocale(initialLocale)
 
         root.render(

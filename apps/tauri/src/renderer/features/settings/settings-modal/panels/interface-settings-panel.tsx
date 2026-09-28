@@ -7,7 +7,7 @@ import type {
   TerminalAnsiColorName,
   ThemeConfig
 } from '@fileterm/core'
-import { MAX_FILE_LIST_FONT_SIZE, MIN_FILE_LIST_FONT_SIZE } from '@fileterm/core'
+import { MAX_UI_ZOOM_PERCENT, MIN_UI_ZOOM_PERCENT, UI_ZOOM_PERCENT_STEP } from '@fileterm/core'
 import { AppIcon } from '../../../common/app-icon'
 import { managerDropClass } from '../../../common/manager-drag'
 import { targetsNestedManagerControl } from '../../../common/manager-interactions'
@@ -70,14 +70,18 @@ type InterfaceSettingsPanelContext = {
   isSavingFilePanelPreference: boolean
   filePanelPreferenceError: string | null
   setFilePanelRememberRatioPreference(nextValue: boolean): void
-  fileListZoomLocked: boolean
-  isSavingFileListZoomPreference: boolean
-  fileListZoomPreferenceError: string | null
-  setFileListZoomLockPreference(nextValue: boolean): void
-  fileListFontSize: number
-  isSavingFileListFontSize: boolean
-  fileListFontSizeError: string | null
-  setFileListFontSizePreference(nextValue: number): void
+  rememberWindowSize: boolean
+  isSavingWindowSizePreference: boolean
+  windowSizePreferenceError: string | null
+  setRememberWindowSizePreference(nextValue: boolean): void
+  uiZoomLocked: boolean
+  isSavingUiZoomPreference: boolean
+  uiZoomPreferenceError: string | null
+  setUiZoomLockPreference(nextValue: boolean): void
+  uiZoomPercent: number
+  isSavingUiZoomPercent: boolean
+  uiZoomPercentError: string | null
+  setUiZoomPercentPreference(nextValue: number): void
   overviewShowStats: boolean
   overviewShowRecent: boolean
   overviewShowAllConnections: boolean
@@ -143,14 +147,18 @@ export function InterfaceSettingsPanel() {
     isSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelRememberRatioPreference,
-    fileListZoomLocked,
-    isSavingFileListZoomPreference,
-    fileListZoomPreferenceError,
-    setFileListZoomLockPreference,
-    fileListFontSize,
-    isSavingFileListFontSize,
-    fileListFontSizeError,
-    setFileListFontSizePreference,
+    rememberWindowSize,
+    isSavingWindowSizePreference,
+    windowSizePreferenceError,
+    setRememberWindowSizePreference,
+    uiZoomLocked,
+    isSavingUiZoomPreference,
+    uiZoomPreferenceError,
+    setUiZoomLockPreference,
+    uiZoomPercent,
+    isSavingUiZoomPercent,
+    uiZoomPercentError,
+    setUiZoomPercentPreference,
     overviewShowStats,
     overviewShowRecent,
     overviewShowAllConnections,
@@ -723,34 +731,37 @@ export function InterfaceSettingsPanel() {
       </section>
 
       <section className="settings-section">
-        <h3>{t.filePanelSettings}</h3>
-        <p className="settings-tools-hint">{t.filePanelSettingsHint}</p>
+        <h3>{t.displayAndFilePanelSettings}</h3>
+        <p className="settings-tools-hint">{t.displayAndFilePanelSettingsHint}</p>
         <div className="theme-config-control">
-          <span className="theme-config-label">{t.fileListFontSize}</span>
+          <span className="theme-config-label">{t.uiZoomPercent}</span>
           <DropdownSelect
-            ariaLabel={t.fileListFontSize}
+            ariaLabel={t.uiZoomPercent}
             className="theme-config-select"
-            disabled={!desktopApi || isSavingFileListFontSize}
-            onChange={(value) => setFileListFontSizePreference(Number(value))}
-            options={Array.from({ length: MAX_FILE_LIST_FONT_SIZE - MIN_FILE_LIST_FONT_SIZE + 1 }, (_, index) => {
-              const size = index + MIN_FILE_LIST_FONT_SIZE
-              return { value: String(size), label: `${size}px` }
-            })}
-            value={String(fileListFontSize)}
+            disabled={!desktopApi || isSavingUiZoomPercent}
+            onChange={(value) => setUiZoomPercentPreference(Number(value))}
+            options={Array.from(
+              { length: (MAX_UI_ZOOM_PERCENT - MIN_UI_ZOOM_PERCENT) / UI_ZOOM_PERCENT_STEP + 1 },
+              (_, index) => {
+                const percent = MIN_UI_ZOOM_PERCENT + index * UI_ZOOM_PERCENT_STEP
+                return { value: String(percent), label: `${percent}%` }
+              }
+            )}
+            value={String(uiZoomPercent)}
           />
         </div>
-        {fileListFontSizeError ? <p className="modal-error">{fileListFontSizeError}</p> : null}
+        {uiZoomPercentError ? <p className="modal-error">{uiZoomPercentError}</p> : null}
         <div className="overview-preference-list">
           <label className="overview-preference-row">
             <span className="overview-preference-copy">
-              <strong>{t.lockFileListZoom}</strong>
-              <p>{t.lockFileListZoomHint}</p>
+              <strong>{t.lockUiZoom}</strong>
+              <p>{t.lockUiZoomHint}</p>
             </span>
             <span className="command-toggle overview-preference-toggle">
               <SelectionControl
-                checked={fileListZoomLocked}
-                disabled={!desktopApi || isSavingFileListZoomPreference}
-                onChange={(event) => setFileListZoomLockPreference(event.target.checked)}
+                checked={uiZoomLocked}
+                disabled={!desktopApi || isSavingUiZoomPreference}
+                onChange={(event) => setUiZoomLockPreference(event.target.checked)}
                 type="checkbox"
               />
             </span>
@@ -770,8 +781,29 @@ export function InterfaceSettingsPanel() {
             </span>
           </label>
         </div>
-        {fileListZoomPreferenceError ? <p className="modal-error">{fileListZoomPreferenceError}</p> : null}
+        {uiZoomPreferenceError ? <p className="modal-error">{uiZoomPreferenceError}</p> : null}
         {filePanelPreferenceError ? <p className="modal-error">{filePanelPreferenceError}</p> : null}
+      </section>
+
+      <section className="settings-section">
+        <h3>{t.windowStartupSettings}</h3>
+        <div className="overview-preference-list">
+          <label className="overview-preference-row">
+            <span className="overview-preference-copy">
+              <strong>{t.rememberWindowSize}</strong>
+              <p>{t.rememberWindowSizeHint}</p>
+            </span>
+            <span className="command-toggle overview-preference-toggle">
+              <SelectionControl
+                checked={rememberWindowSize}
+                disabled={!desktopApi || isSavingWindowSizePreference}
+                onChange={(event) => setRememberWindowSizePreference(event.target.checked)}
+                type="checkbox"
+              />
+            </span>
+          </label>
+        </div>
+        {windowSizePreferenceError ? <p className="modal-error">{windowSizePreferenceError}</p> : null}
       </section>
 
       <section className="settings-section">

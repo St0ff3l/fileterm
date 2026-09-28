@@ -1,0 +1,136 @@
+/* Solarized Dark reference tokens.
+ * Palette source and attribution: docs/quality/iterm2-color-scheme-attribution.md.
+ */
+
+:root[data-theme='fileterm-dark'][data-theme-preset='iterm2-solarized'] {
+  --ref-surface-canvas: #002b36;
+  --ref-surface-sidebar: #07303b;
+  --ref-surface-panel: #07303b;
+  --ref-surface-card: #07303b;
+  --ref-surface-section: #07303b;
+  --ref-surface-elevated: #103842;
+  --ref-surface-modal: #07303b;
+  --ref-surface-context-menu: #103842;
+  --ref-surface-overlay: rgba(0, 0, 0, 0.62);
+  --ref-surface-hover: #234851;
+  --ref-surface-active: #254951;
+  --ref-surface-input: #002731;
+  --ref-surface-input-focus: #10343d;
+  --ref-surface-toolbar: #07303b;
+  --ref-surface-titlebar: #07303b;
+  --ref-surface-terminal: #002b36;
+  --ref-surface-chip: rgba(131, 148, 150, 0.14);
+  --ref-surface-inset: rgba(131, 148, 150, 0.05);
+  --ref-surface-inset-border: rgba(131, 148, 150, 0.1);
+  --ref-text-primary: #839496;
+  --ref-text-secondary: #6b8185;
+  --ref-text-muted: #49656c;
+  --ref-text-disabled: #2d4f57;
+  --ref-text-inverse: #002b36;
+  --ref-text-context-menu: #839496;
+  --ref-border-subtle: rgba(131, 148, 150, 0.06);
+  --ref-border-default: rgba(131, 148, 150, 0.1);
+  --ref-border-strong: rgba(131, 148, 150, 0.18);
+  --ref-border-glass: rgba(131, 148, 150, 0.08);
+  --ref-border-context-menu: rgba(131, 148, 150, 0.1);
+  --ref-accent: #839496;
+  --ref-accent-hover: #96a4a6;
+  --ref-accent-active: #5e6b6c;
+  --ref-accent-muted: rgba(131, 148, 150, 0.15);
+  --ref-accent-focus: rgba(147, 161, 161, 0.28);
+  --ref-accent-secondary: #93a1a1;
+  --ref-focus-outline: #93a1a1;
+  --ref-status-success: #586e75;
+  --ref-status-success-bg: rgba(88, 110, 117, 0.14);
+  --ref-status-warning: #657b83;
+  --ref-status-warning-text: #657b83;
+  --ref-status-warning-bg: rgba(101, 123, 131, 0.08);
+  --ref-status-danger: #cb4b16;
+  --ref-status-danger-hover: #b34213;
+  --ref-status-danger-bg: rgba(203, 75, 22, 0.14);
+  --ref-status-info: #93a1a1;
+  --ref-status-info-bg: rgba(147, 161, 161, 0.14);
+  --ref-color-folder: #93a1a1;
+  --ref-color-skill: #6c71c4;
+  --ref-color-total: #839496;
+  --ref-color-telnet: #93a1a1;
+  --ref-color-ftp: #6c71c4;
+  --ref-color-network-rx: #93a1a1;
+  --ref-color-network-tx: #cb4b16;
+  --ref-color-diff-added: #586e75;
+  --ref-color-diff-removed: #cb4b16;
+  --ref-color-keyword: #657b83;
+  --ref-action-primary-bg: #496062;
+  --ref-action-primary-hover: #64787a;
+  --ref-action-primary-active: #354547;
+  --ref-action-primary-text: #ffffff;
+  --ref-action-danger-bg: #bd4f2a;
+  --ref-action-danger-hover: #a64625;
+  --ref-action-danger-active: #973f22;
+  --ref-action-danger-text: #ffffff;
+  --ref-shadow-context-menu: 0 16px 40px rgba(0, 0, 0, 0.34);
+  --ref-monaco-editor-bg: #002b36;
+  --ref-monaco-editor-foreground: #839496;
+  --ref-monaco-line-number: #49656c;
+  --ref-monaco-line-number-active: #6b8185;
+  --ref-monaco-cursor: #839496;
+  --ref-monaco-selection: #073642;
+  --ref-monaco-inactive-selection: rgba(131, 148, 150, 0.18);
+  --ref-monaco-line-highlight: rgba(131, 148, 150, 0.06);
+  --ref-monaco-indent-guide: rgba(131, 148, 150, 0.06);
+  --ref-monaco-indent-guide-active: rgba(131, 148, 150, 0.18);
+  --ref-file-editor-primary-shadow: 0 2px 10px rgba(131, 148, 150, 0.35);
+  --ref-terminal-frame-gradient:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px,
+      transparent 10px
+    ),
+    linear-gradient(to top, color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px, transparent 10px),
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px,
+      transparent 10px
+    ),
+    linear-gradient(to left, color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px, transparent 10px);
+  --ref-terminal-frame-shadow: inset 0 0 14px
+    color-mix(in srgb, color-mix(in srgb, var(--ref-terminal-background) 60%, #000000 40%) 30%, transparent 70%);
+  --ref-terminal-background: #002b36;
+  --ref-terminal-foreground: #839496;
+  --ref-terminal-cursor: #839496;
+  --ref-terminal-cursor-accent: #073642;
+  --ref-terminal-selection-background: #073642;
+  --ref-terminal-selection-foreground: #839496;
+  --ref-terminal-search-match-background: #b58900;
+  --ref-terminal-search-match-ruler: #657b83;
+  --ref-terminal-search-active-background: #657b83;
+  --ref-terminal-search-active-text: #002b36;
+  --ref-terminal-search-active-border: #b58900;
+  --ref-terminal-search-active-ruler: #657b83;
+  --ref-terminal-black: #073642;
+  --ref-terminal-red: #dc322f;
+  --ref-terminal-green: #859900;
+  --ref-terminal-yellow: #b58900;
+  --ref-terminal-blue: #268bd2;
+  --ref-terminal-magenta: #d33682;
+  --ref-terminal-cyan: #2aa198;
+  --ref-terminal-white: #eee8d5;
+  --ref-terminal-bright-black: #002b36;
+  --ref-terminal-bright-red: #cb4b16;
+  --ref-terminal-bright-green: #586e75;
+  --ref-terminal-bright-yellow: #657b83;
+  --ref-terminal-bright-blue: #839496;
+  --ref-terminal-bright-magenta: #6c71c4;
+  --ref-terminal-bright-cyan: #93a1a1;
+  --ref-terminal-bright-white: #fdf6e3;
+  --ref-preview-dark-canvas: #002b36;
+  --ref-preview-dark-header: #07303b;
+  --ref-preview-dark-divider: rgba(131, 148, 150, 0.12);
+  --ref-preview-dark-sidebar: #07303b;
+  --ref-preview-dark-content: #103842;
+  --ref-preview-light-canvas: #fdf6e3;
+  --ref-preview-light-header: #fef9ee;
+  --ref-preview-light-divider: rgba(101, 123, 131, 0.14);
+  --ref-preview-light-sidebar: #f3ecda;
+  --ref-preview-light-content: #e9e2ce;
+}

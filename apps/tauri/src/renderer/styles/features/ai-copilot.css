@@ -2675,7 +2675,7 @@
   background: var(--surface-raised);
   color: var(--text-secondary);
   font-size: 11px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;

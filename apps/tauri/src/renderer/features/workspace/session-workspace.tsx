@@ -222,11 +222,13 @@ export function SessionWorkspace({
   const appliedWorkspaceFocusMode = useRef<boolean | null>(null)
   const isFilePanelEffectivelyCollapsed = isFilePanelCollapsed && !isFileOnly
   const effectiveFilePanelHeight = isFilePanelEffectivelyCollapsed ? 0 : filePanelHeight
-  const clampFilePanelHeight = (workspaceHeight: number, nextHeight: number) => {
+  const clampFilePanelHeight = (workspaceHeight: number, nextHeight: number, allowSnapPastRatioLimit = false) => {
     const minHeight = 25 // Allow it to shrink to just the tabs row height
+    const terminalHeightLimit = workspaceHeight - MIN_TERMINAL_PANEL_HEIGHT
+    const ratioHeightLimit = (workspaceHeight * MAX_FILE_PANEL_RATIO) / 100
     const maxHeight = Math.max(
       minHeight,
-      Math.min((workspaceHeight * MAX_FILE_PANEL_RATIO) / 100, workspaceHeight - MIN_TERMINAL_PANEL_HEIGHT)
+      allowSnapPastRatioLimit ? terminalHeightLimit : Math.min(ratioHeightLimit, terminalHeightLimit)
     )
     return Math.min(maxHeight, Math.max(minHeight, nextHeight))
   }
@@ -255,7 +257,10 @@ export function SessionWorkspace({
     }
 
     const nextHeight = workspaceRect.bottom - targetRect.top
-    const clampedHeight = clampFilePanelHeight(workspaceRect.height, nextHeight)
+    // Page zoom makes the sidebar sections taller while the workspace keeps a
+    // fixed viewport. Let a snap reach those reflowed anchors past the normal
+    // 70% drag limit, while still preserving the terminal's minimum height.
+    const clampedHeight = clampFilePanelHeight(workspaceRect.height, nextHeight, true)
     return Math.abs(nextHeight - clampedHeight) <= 0.5 ? clampedHeight : null
   }
 
@@ -374,7 +379,7 @@ export function SessionWorkspace({
       }
       filePanelSnapTargetRef.current = snappedTarget?.target ?? null
       dragStateRef.current.latestSnapTarget = snappedTarget?.target ?? null
-      dragStateRef.current.latestHeight = clampFilePanelHeight(height, nextHeight)
+      dragStateRef.current.latestHeight = clampFilePanelHeight(height, nextHeight, Boolean(snappedTarget))
 
       if (dragFrame) {
         window.cancelAnimationFrame(dragFrame)
@@ -382,7 +387,7 @@ export function SessionWorkspace({
 
       dragFrame = window.requestAnimationFrame(() => {
         setFilePanelHeight((prev) => {
-          const clamped = clampFilePanelHeight(height, nextHeight)
+          const clamped = clampFilePanelHeight(height, nextHeight, Boolean(snappedTarget))
           return prev === clamped ? prev : clamped
         })
       })

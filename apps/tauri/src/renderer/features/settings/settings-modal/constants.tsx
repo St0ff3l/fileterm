@@ -14,7 +14,7 @@ import {
   type TerminalAnsiColorName,
   type ThemeConfig
 } from '@fileterm/core'
-import { getSavedThemeConfig } from '../../../app/theme-config'
+import { getSavedThemeConfig, getThemeConfigFromTokenPreset, type Iterm2ThemePresetId } from '../../../app/theme-config'
 import { type LocaleMessages } from '../../../i18n'
 import { type AppIconName } from '../../common/app-icon'
 
@@ -63,7 +63,7 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
 ]
 
 export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
-  interface: 'appearance overview theme color font ui 外观 概览 主题 颜色 字体',
+  interface: 'appearance overview theme color font ui window startup size 外观 概览 主题 颜色 字体 窗口 启动 大小',
   'local-terminal': 'terminal shell powershell pwsh bash zsh fish nushell 本地终端 shell',
   ai: 'ai provider model api key openai anthropic 模型 服务 密钥',
   agent: 'agent mcp cli command tool automation 代理 命令 工具',
@@ -76,7 +76,16 @@ export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
   language: 'language locale chinese english 中文 英文 语言'
 }
 
-export type ThemePresetFamily = 'fileterm' | 'codex'
+const ITERM2_THEME_PRESETS: Array<{ id: Iterm2ThemePresetId; labelKey: keyof LocaleMessages }> = [
+  { id: 'iterm2-dracula', labelKey: 'themePresetDracula' },
+  { id: 'iterm2-nord', labelKey: 'themePresetNord' },
+  { id: 'iterm2-gruvbox', labelKey: 'themePresetGruvbox' },
+  { id: 'iterm2-catppuccin', labelKey: 'themePresetCatppuccin' },
+  { id: 'iterm2-solarized', labelKey: 'themePresetSolarized' },
+  { id: 'iterm2-tokyonight', labelKey: 'themePresetTokyoNight' }
+]
+
+export type ThemePresetFamily = 'fileterm' | 'codex' | Iterm2ThemePresetId
 export type ThemePresetVariant = ThemeConfig['variant']
 
 export const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
@@ -165,7 +174,7 @@ export function localTerminalShellOptionsFor(detectedOptions: LocalTerminalShell
 
 export const THEME_PRESETS: Array<{
   id: ThemePresetFamily
-  labelKey: 'themePresetFileTerm' | 'themePresetCodex'
+  labelKey: keyof LocaleMessages
   getConfig: (variant: ThemePresetVariant) => ThemeConfig
 }> = [
   {
@@ -177,7 +186,11 @@ export const THEME_PRESETS: Array<{
     id: 'codex',
     labelKey: 'themePresetCodex',
     getConfig: (variant) => createCodexThemeConfig(variant)
-  }
+  },
+  ...ITERM2_THEME_PRESETS.map((preset) => ({
+    ...preset,
+    getConfig: (variant: ThemePresetVariant) => getThemeConfigFromTokenPreset(preset.id, variant)
+  }))
 ]
 
 export function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESETS)[number] | undefined {
@@ -189,9 +202,11 @@ export function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME
         ? normalizedTheme.codeThemeId === 'fileterm' ||
           normalizedTheme.codeThemeId === 'fileterm-dark' ||
           normalizedTheme.codeThemeId === 'fileterm-light'
-        : normalizedTheme.codeThemeId === 'codex' ||
-          normalizedTheme.codeThemeId === 'codex-dark' ||
-          normalizedTheme.codeThemeId === 'codex-light'
+        : preset.id === 'codex'
+          ? normalizedTheme.codeThemeId === 'codex' ||
+            normalizedTheme.codeThemeId === 'codex-dark' ||
+            normalizedTheme.codeThemeId === 'codex-light'
+          : normalizedTheme.codeThemeId === preset.id
     // Preset identity is authoritative. User edits and saved/imported custom
     // themes are assigned `custom`, while legacy FileTerm/Codex color tokens
     // can legitimately differ from the current renderer defaults.

@@ -2,6 +2,7 @@ import type { ConnectionFolder, ConnectionProfile, OverviewSectionId } from '@fi
 import { DEFAULT_OVERVIEW_SECTION_ORDER } from '@fileterm/core'
 import { t } from '../../i18n'
 import { buildConnectionTree, flattenConnectionProfiles } from '../connections/connection-tree'
+import './overview-page.css'
 
 export function OverviewPage({
   profiles,

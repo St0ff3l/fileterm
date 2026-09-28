@@ -42,7 +42,7 @@ export class ErrorBoundary extends Component<Props, State> {
           padding: 24,
           background: 'var(--modal-backdrop-bg, rgba(0, 0, 0, 0.78))',
           color: 'var(--text-main, #e0e0e0)',
-          fontFamily: "'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif",
+          fontFamily: 'var(--font-ui, sans-serif)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
           overflow: 'auto'

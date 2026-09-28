@@ -73,6 +73,8 @@ tokens -> theme vars -> component skins -> terminal colors
 - UI 字体：`SF Pro Text`, `PingFang SC`, `Microsoft YaHei`, `Segoe UI`, sans-serif。
 - 数字和终端周边：`SF Mono`, `JetBrains Mono`, `Menlo`, `Consolas`, monospace。
 - 终端内容由 xterm 主题控制，必须保证等宽、行高稳定、选择态可见。
+- 组件必须使用 `--font-ui` 或 `--font-mono`，让用户导入或选择的字体覆盖首页、文件区、系统信息、命令和会话控件；固定字体只保留给品牌字标和图标字形。
+- 界面缩放由 WebView 的界面缩放偏好统一控制，文件区、系统信息栏、设置和弹窗一起缩放；终端内容字号由终端自己的缩放偏好独立控制。
 
 字号建议：
 
@@ -138,15 +140,15 @@ macOS 主窗口使用 AppKit 原生红黄绿按钮，以下参数是 Beta 9 已�
 
 | 参数                    |         基线值 | 原生校准后的含义                                         |
 | ----------------------- | -------------: | -------------------------------------------------------- |
-| renderer 顶部标签栏高度 |           48pt | 原生按钮中心对齐其垂直中心，即距窗口顶部 24pt            |
-| 按钮 frame              |      14 × 14pt | 原生按钮点击与布局 frame                                 |
-| 可见圆点直径            |           14pt | AppKit 12pt 绘制层中心缩放至 14pt，Retina 下为 28px      |
-| 左侧起点                |           20pt | 关闭按钮 frame 的 `x`                                    |
+| renderer 顶部标签栏高度 |           48pt | 100% 界面缩放基线；实际高度为 `48 × uiZoomPercent / 100` |
+| 按钮 frame              |    AppKit 原生 | 保留系统 frame/bounds，仅移动 origin                     |
+| 可见圆点直径            |    AppKit 原生 | 保留系统圆形绘制，不强制方形 frame 或缩放 layer          |
+| 左侧起点参考            |           20pt | 按 14pt 基准定位中心，实际 frame 由 AppKit 决定          |
 | 中心间距                |           23pt | 关闭/最小化/缩放按钮的中心间距                           |
-| 三个 frame 的 `x`       | 20 / 43 / 66pt | 对应中心 `x` 为 27 / 50 / 73pt                           |
+| 三个按钮中心的 `x`      | 27 / 50 / 73pt | 横向位置及原生按钮尺寸不随 WebView 界面缩放              |
 | `FileTerm` 字标         |           16px | Tauri/macOS 专用基线不额外下移（相对 renderer 基线 0px） |
 
-这些值是设计规格，不是 Debug/Release 补偿值。按钮位置必须由 Rust 在页面加载后读取 `NSWindow` 真实 frame，并经 `NSView` 坐标转换写入 AppKit 原生按钮；`tauri*.conf.json` 不得再保存 traffic-light 坐标，Rust 也不得根据 `debug_assertions` 添加垂直偏移。renderer 仅负责 48px 顶栏和字标，不绘制或伪造红黄绿按钮。
+这些值是设计规格，不是 Debug/Release 补偿值。按钮位置必须由 Rust 在页面加载后读取 `NSWindow` 真实 frame 与保存的界面缩放，并经 `NSView` 坐标转换写入 AppKit 原生按钮。原生标题栏容器与按钮垂直中心跟随缩放后的 renderer 顶栏；改变界面缩放时主动校准，窗口 resize、DPI 变化及全屏恢复也沿用相同校准。`tauri*.conf.json` 不得再保存 traffic-light 坐标，Rust 也不得根据 `debug_assertions` 添加垂直偏移。renderer 仅负责 48px 基准顶栏和字标，不绘制或伪造红黄绿按钮。
 
 ### Overview
 
@@ -200,6 +202,7 @@ macOS 主窗口使用 AppKit 原生红黄绿按钮，以下参数是 Beta 9 已�
 - active：当前项有明确边界或背景；不要仅依赖颜色。
 - focus：使用可见焦点环，键盘操作必须能定位当前元素。
 - resize：侧栏和文件面板拖拽时只改变尺寸，不重排主结构。
+- 侧栏展开时，首页与会话页的顶部品牌列和侧栏共用实时宽度；界面缩放与窄窗口样式不得单独改变顶部品牌列宽度。
 - context menu：顶部标签、文件页、终端右键菜单使用统一菜单组件。
 - destructive action：必须有确认或清晰危险态，不只靠红色文字。
 

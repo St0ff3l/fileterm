@@ -497,7 +497,7 @@
 }
 
 .command-temporary-history-title strong {
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   white-space: nowrap;
@@ -617,7 +617,7 @@
 
 .command-temporary-history-item time {
   color: var(--text-muted);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -1102,7 +1102,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: var(--surface-inset);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1972,7 +1972,7 @@
   min-height: 200px;
   padding: 12px;
   resize: vertical;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   line-height: 1.55;
 }
 
@@ -2214,7 +2214,7 @@
   line-height: 20px;
   padding: 0 10px;
   font-size: 11px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -2225,7 +2225,7 @@
   min-height: 0;
   padding: 4px 12px;
   resize: none;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   line-height: 20px;
   font-size: 13px;
   border: none;

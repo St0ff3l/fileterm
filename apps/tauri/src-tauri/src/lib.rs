@@ -45,6 +45,7 @@ include!("lib/error.rs");
 include!("lib/state.rs");
 include!("lib/menu.rs");
 include!("lib/platform.rs");
+include!("lib/window_geometry.rs");
 include!("lib/windows.rs");
 include!("lib/runtime.rs");
 include!("lib/tests.rs");

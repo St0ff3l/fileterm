@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import {
+  DEFAULT_UI_ZOOM_PERCENT,
   DEFAULT_LOCAL_TERMINAL_SHELLS,
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
@@ -41,9 +42,9 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
   const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
-  const [fileListZoomLocked, setFileListZoomLocked] = useState(false)
-  const [isSavingFileListZoomPreference, setIsSavingFileListZoomPreference] = useState(false)
-  const [fileListZoomPreferenceError, setFileListZoomPreferenceError] = useState<string | null>(null)
+  const [uiZoomLocked, setUiZoomLocked] = useState(false)
+  const [isSavingUiZoomPreference, setIsSavingUiZoomPreference] = useState(false)
+  const [uiZoomPreferenceError, setUiZoomPreferenceError] = useState<string | null>(null)
   const [localTerminalShells, setLocalTerminalShells] = useState<LocalTerminalShellPreferences>(() => ({
     ...DEFAULT_LOCAL_TERMINAL_SHELLS
   }))
@@ -59,9 +60,12 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(true)
   const [isSavingFilePanelPreference, setIsSavingFilePanelPreference] = useState(false)
   const [filePanelPreferenceError, setFilePanelPreferenceError] = useState<string | null>(null)
-  const [fileListFontSize, setFileListFontSize] = useState(11)
-  const [isSavingFileListFontSize, setIsSavingFileListFontSize] = useState(false)
-  const [fileListFontSizeError, setFileListFontSizeError] = useState<string | null>(null)
+  const [rememberWindowSize, setRememberWindowSize] = useState(false)
+  const [isSavingWindowSizePreference, setIsSavingWindowSizePreference] = useState(false)
+  const [windowSizePreferenceError, setWindowSizePreferenceError] = useState<string | null>(null)
+  const [uiZoomPercent, setUiZoomPercent] = useState(DEFAULT_UI_ZOOM_PERCENT)
+  const [isSavingUiZoomPercent, setIsSavingUiZoomPercent] = useState(false)
+  const [uiZoomPercentError, setUiZoomPercentError] = useState<string | null>(null)
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
   const [fontImportKind, setFontImportKind] = useState<'ui' | 'code' | null>(null)
   const [fontImportError, setFontImportError] = useState<string | null>(null)
@@ -159,12 +163,12 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsSavingTerminalZoomPreference,
     terminalZoomPreferenceError,
     setTerminalZoomPreferenceError,
-    fileListZoomLocked,
-    setFileListZoomLocked,
-    isSavingFileListZoomPreference,
-    setIsSavingFileListZoomPreference,
-    fileListZoomPreferenceError,
-    setFileListZoomPreferenceError,
+    uiZoomLocked,
+    setUiZoomLocked,
+    isSavingUiZoomPreference,
+    setIsSavingUiZoomPreference,
+    uiZoomPreferenceError,
+    setUiZoomPreferenceError,
     localTerminalShells,
     setLocalTerminalShells,
     localTerminalShellDrafts,
@@ -187,12 +191,18 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsSavingFilePanelPreference,
     filePanelPreferenceError,
     setFilePanelPreferenceError,
-    fileListFontSize,
-    setFileListFontSize,
-    isSavingFileListFontSize,
-    setIsSavingFileListFontSize,
-    fileListFontSizeError,
-    setFileListFontSizeError,
+    rememberWindowSize,
+    setRememberWindowSize,
+    isSavingWindowSizePreference,
+    setIsSavingWindowSizePreference,
+    windowSizePreferenceError,
+    setWindowSizePreferenceError,
+    uiZoomPercent,
+    setUiZoomPercent,
+    isSavingUiZoomPercent,
+    setIsSavingUiZoomPercent,
+    uiZoomPercentError,
+    setUiZoomPercentError,
     importedFonts,
     setImportedFonts,
     fontImportKind,

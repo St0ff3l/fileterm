@@ -94,7 +94,7 @@
 
 .root-access-meta strong {
   color: var(--text-main);
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 .root-access-note {
@@ -165,7 +165,7 @@
 
 .ssh-verification-box strong {
   color: var(--text-main);
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   word-break: break-all;
 }
@@ -496,7 +496,7 @@
   border: 1px solid color-mix(in srgb, var(--copy-link) 42%, var(--border-light));
   background: var(--input-bg);
   color: var(--copy-link);
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 16px;
   text-align: center;
   letter-spacing: 0.08em;
@@ -2667,7 +2667,7 @@
 
 .info-value {
   color: var(--text-main);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .logs-shortcut-card {

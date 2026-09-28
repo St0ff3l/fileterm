@@ -39,7 +39,7 @@ static MACOS_TRAFFIC_LIGHTS_CALIBRATED: AtomicBool = AtomicBool::new(false);
 static MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(target_os = "macos")]
-const MACOS_RENDERER_TITLEBAR_HEIGHT: f64 = 48.0;
+const MACOS_RENDERER_TITLEBAR_BASE_HEIGHT: f64 = 48.0;
 #[cfg(target_os = "macos")]
 const MACOS_TRAFFIC_LIGHT_FRAME_SIZE: f64 = 14.0;
 #[cfg(target_os = "macos")]
@@ -50,12 +50,21 @@ const MACOS_TRAFFIC_LIGHT_CENTER_SPACING: f64 = 23.0;
 const MACOS_TRAFFIC_LIGHT_RECALIBRATION_DELAY_MS: u64 = 140;
 
 #[cfg(target_os = "macos")]
-fn macos_traffic_light_target_center(window_height: f64, index: usize) -> (f64, f64) {
+fn macos_renderer_titlebar_height(ui_zoom_percent: i32) -> f64 {
+    MACOS_RENDERER_TITLEBAR_BASE_HEIGHT * f64::from(ui_zoom_percent) / 100.0
+}
+
+#[cfg(target_os = "macos")]
+fn macos_traffic_light_target_center(
+    window_height: f64,
+    titlebar_height: f64,
+    index: usize,
+) -> (f64, f64) {
     (
         MACOS_TRAFFIC_LIGHT_LEFT_INSET
             + MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0
             + index as f64 * MACOS_TRAFFIC_LIGHT_CENTER_SPACING,
-        window_height - MACOS_RENDERER_TITLEBAR_HEIGHT / 2.0,
+        window_height - titlebar_height / 2.0,
     )
 }
 

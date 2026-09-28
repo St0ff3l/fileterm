@@ -19,7 +19,7 @@ const SHORTCUT_CLOSE_WINDOW = 'Alt+F4'
 const SHORTCUT_TERMINAL_ZOOM_IN = 'Ctrl+Shift++'
 const SHORTCUT_TERMINAL_ZOOM_OUT = 'Ctrl+Shift+-'
 const SHORTCUT_TERMINAL_ZOOM_RESET = 'Ctrl+0'
-type FileListFontSizeOperation = 'in' | 'out' | 'reset'
+type UiZoomPercentOperation = 'in' | 'out' | 'reset'
 
 // dev 构建才显示"开发者工具"项，与 Rust 端 `#[cfg(debug_assertions)]`
 // 行为一致：生产构建不暴露 devtools 入口。
@@ -29,17 +29,17 @@ export function WindowMenubar({
   desktopApi,
   isMaximized,
   terminalZoomLocked,
-  fileListZoomLocked,
-  onFileListFontSizeChange,
-  onToggleFileListZoomLock,
+  uiZoomLocked,
+  onUiZoomPercentChange,
+  onToggleUiZoomLock,
   onToggleTerminalZoomLock
 }: {
   desktopApi?: FileTermDesktopApi
   isMaximized: boolean
   terminalZoomLocked: boolean
-  fileListZoomLocked: boolean
-  onFileListFontSizeChange(operation: FileListFontSizeOperation): void
-  onToggleFileListZoomLock(): void
+  uiZoomLocked: boolean
+  onUiZoomPercentChange(operation: UiZoomPercentOperation): void
+  onToggleUiZoomLock(): void
   onToggleTerminalZoomLock(): void
 }) {
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null)
@@ -83,24 +83,24 @@ export function WindowMenubar({
       items.push(
         { separator: true },
         {
-          label: t.fileListZoomIn,
-          disabled: fileListZoomLocked,
-          action: () => onFileListFontSizeChange('in')
+          label: t.uiZoomIn,
+          disabled: uiZoomLocked,
+          action: () => onUiZoomPercentChange('in')
         },
         {
-          label: t.fileListZoomOut,
-          disabled: fileListZoomLocked,
-          action: () => onFileListFontSizeChange('out')
+          label: t.uiZoomOut,
+          disabled: uiZoomLocked,
+          action: () => onUiZoomPercentChange('out')
         },
         {
-          label: t.fileListZoomReset,
-          disabled: fileListZoomLocked,
-          action: () => onFileListFontSizeChange('reset')
+          label: t.uiZoomReset,
+          disabled: uiZoomLocked,
+          action: () => onUiZoomPercentChange('reset')
         },
         {
-          label: t.lockFileListZoom,
-          checked: fileListZoomLocked,
-          action: onToggleFileListZoomLock
+          label: t.lockUiZoom,
+          checked: uiZoomLocked,
+          action: onToggleUiZoomLock
         },
         { separator: true },
         {

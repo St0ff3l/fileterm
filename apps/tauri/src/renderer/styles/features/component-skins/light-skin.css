@@ -247,7 +247,7 @@
 :root[data-theme*='light'] .system-sidebar-layout .address-line .value,
 :root[data-theme*='light'] .system-sidebar-layout .disk-row,
 :root[data-theme*='light'] .system-sidebar-layout .process-row {
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 

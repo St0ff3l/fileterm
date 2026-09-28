@@ -548,6 +548,12 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         (&zoom, &zoom_superview),
     ];
     let window_height = ns_window.frame().size.height;
+    // WebView page zoom scales the renderer's 48px title bar, while AppKit
+    // stays in logical points. Use the same persisted zoom for native layout.
+    let ui_zoom_percent = crate::commands::app_get_ui_preferences(window.app_handle().clone())
+        .map(|preferences| preferences.ui_zoom_percent)
+        .unwrap_or(100);
+    let titlebar_height = macos_renderer_titlebar_height(ui_zoom_percent);
     let Some(titlebar_container) = (unsafe { close_superview.superview() }) else {
         return false;
     };
@@ -559,8 +565,8 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     // hover region at the original title-bar height (above the visible lights).
     // Tao's inset_traffic_lights uses the same native container adjustment.
     let mut titlebar_frame = titlebar_container.frame();
-    titlebar_frame.size.height = MACOS_RENDERER_TITLEBAR_HEIGHT;
-    titlebar_frame.origin.y = window_height - MACOS_RENDERER_TITLEBAR_HEIGHT;
+    titlebar_frame.size.height = titlebar_height;
+    titlebar_frame.origin.y = window_height - titlebar_height;
     titlebar_container.setFrame(titlebar_frame);
     titlebar_container.layoutSubtreeIfNeeded();
     for (index, (button, button_superview)) in buttons.into_iter().enumerate() {
@@ -570,7 +576,7 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         // assigning its frame.
 
         let (target_center_x, target_center_y) =
-            macos_traffic_light_target_center(window_height, index);
+            macos_traffic_light_target_center(window_height, titlebar_height, index);
         let mut target_center_in_window = button.frame().origin;
         target_center_in_window.x = target_center_x;
         target_center_in_window.y = target_center_y;
@@ -599,7 +605,7 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-fn schedule_macos_traffic_light_recalibration(app: &AppHandle<Wry>) {
+pub(crate) fn schedule_macos_traffic_light_recalibration(app: &AppHandle<Wry>) {
     let generation =
         MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
     let app = app.clone();

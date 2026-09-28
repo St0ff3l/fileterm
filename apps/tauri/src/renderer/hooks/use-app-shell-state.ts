@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   createCodexThemeConfig,
   createDefaultThemeConfig,
   DEFAULT_OVERVIEW_SECTION_ORDER,
-  DEFAULT_FILE_LIST_FONT_SIZE,
+  DEFAULT_UI_ZOOM_PERCENT,
   DEFAULT_RESOURCE_MONITORING_METRICS,
   DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
@@ -20,6 +20,7 @@ import {
 } from '@fileterm/core'
 import { deriveThemeVariant, normalizeSavedTheme, themeVariantForMode } from '../app/theme-config'
 import { registerImportedFonts } from '../app/imported-fonts'
+import { applyUiZoomPercent } from '../app/ui-zoom'
 import { formatAppError, reportError, type ErrorDetails } from '../app/app-error-utils'
 import { DEFAULT_SIDEBAR_WIDTH, FILE_PANEL_PREFERENCES_KEY, MAX_FILE_PANEL_RATIO } from '../app/app-shell-utils'
 import { defaultLocale, setLocale, type AppLocale } from '../i18n'
@@ -41,8 +42,9 @@ export type InitialUiPreferences = Pick<
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
-  | 'fileListZoomLocked'
-  | 'fileListFontSize'
+  | 'uiZoomLocked'
+  | 'uiZoomPercent'
+  | 'rememberWindowSize'
   | 'filePanelRememberRatio'
   | 'resourceMonitoringMetrics'
   | 'resourceMonitoringMetricOrder'
@@ -132,10 +134,14 @@ export function useAppShellState({
     ...(initialUiPreferences?.connectionDefaults ?? {})
   }))
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(() => initialUiPreferences?.terminalZoomLocked ?? false)
-  const [fileListZoomLocked, setFileListZoomLocked] = useState(() => initialUiPreferences?.fileListZoomLocked ?? false)
-  const [fileListFontSize, setFileListFontSize] = useState(
-    () => initialUiPreferences?.fileListFontSize ?? DEFAULT_FILE_LIST_FONT_SIZE
+  const [uiZoomLocked, setUiZoomLocked] = useState(() => initialUiPreferences?.uiZoomLocked ?? false)
+  const [uiZoomPercent, setUiZoomPercent] = useState(
+    () => initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT
   )
+  const [rememberWindowSize, setRememberWindowSize] = useState(() => initialUiPreferences?.rememberWindowSize ?? false)
+  useLayoutEffect(() => {
+    void applyUiZoomPercent(uiZoomPercent)
+  }, [uiZoomPercent])
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(
     () => initialUiPreferences?.filePanelRememberRatio ?? true
   )
@@ -324,8 +330,9 @@ export function useAppShellState({
     locale,
     connectionDefaults,
     terminalZoomLocked,
-    fileListZoomLocked,
-    fileListFontSize,
+    uiZoomLocked,
+    uiZoomPercent,
+    rememberWindowSize,
     filePanelRememberRatio,
     resourceMonitoringMetrics,
     resourceMonitoringMetricOrder,
@@ -346,8 +353,9 @@ export function useAppShellState({
       setConnectionDefaults((currentDefaults) => ({ ...currentDefaults, ...nextDefaults }))
     },
     onTerminalZoomLockedChange: setTerminalZoomLocked,
-    onFileListZoomLockedChange: setFileListZoomLocked,
-    onFileListFontSizeChange: setFileListFontSize,
+    onUiZoomLockedChange: setUiZoomLocked,
+    onUiZoomPercentChange: setUiZoomPercent,
+    onRememberWindowSizeChange: setRememberWindowSize,
     onFilePanelRememberRatioChange: setFilePanelRememberRatio,
     onResourceMonitoringMetricsChange: setResourceMonitoringMetrics,
     onResourceMonitoringMetricOrderChange: (nextOrder) => {
@@ -496,10 +504,12 @@ export function useAppShellState({
     setConnectionDefaults,
     terminalZoomLocked,
     setTerminalZoomLocked,
-    fileListZoomLocked,
-    setFileListZoomLocked,
-    fileListFontSize,
-    setFileListFontSize,
+    uiZoomLocked,
+    setUiZoomLocked,
+    uiZoomPercent,
+    setUiZoomPercent,
+    rememberWindowSize,
+    setRememberWindowSize,
     filePanelRememberRatio,
     setFilePanelRememberRatio,
     resourceMonitoringMetrics,

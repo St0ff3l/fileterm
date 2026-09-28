@@ -413,7 +413,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 }
 .tunnel-rule-index {
   color: var(--text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
 }

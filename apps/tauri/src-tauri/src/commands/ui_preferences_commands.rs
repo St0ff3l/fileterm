@@ -7,35 +7,20 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             .map_err(|error| AppError::Storage(error.to_string()))?;
         let preferences: UiPreferences = serde_json::from_str(&content)
             .map_err(|error| AppError::Serialization(error.to_string()))?;
-        let mut preferences = normalize_ui_preferences(preferences);
-        let persist_reset = reset_active_theme_for_app_version(
-            &mut preferences,
-            &app.package_info().version.to_string(),
-        );
-        if persist_reset {
-            let content = serde_json::to_string_pretty(&preferences)
-                .map_err(|error| AppError::Serialization(error.to_string()))?;
-            if let Err(error) = std::fs::write(&path, content) {
-                crate::services::logging::warn(
-                    &app,
-                    "ui-preferences",
-                    format!("unable to persist default theme reset: {error}"),
-                );
-            }
-        }
-        Ok(preferences)
+        Ok(normalize_ui_preferences(preferences))
     } else {
         Ok(UiPreferences {
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
             theme_config: default_theme_config(),
-            fileterm_theme_reset_app_version: Some(app.package_info().version.to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: default_auto_check_updates(),
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
-            file_list_zoom_locked: false,
-            file_list_font_size: default_file_list_font_size(),
+            ui_zoom_locked: false,
+            ui_zoom_percent: default_ui_zoom_percent(),
+            remember_window_size: default_remember_window_size(),
+            legacy_file_list_font_size: None,
             local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: default_file_panel_remember_ratio(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -66,7 +51,9 @@ pub fn app_set_ui_preferences(
     let mut preferences = app_get_ui_preferences(app.clone())?;
     let previous_locale = preferences.locale.clone();
     let previous_terminal_zoom_locked = preferences.terminal_zoom_locked;
-    let previous_file_list_zoom_locked = preferences.file_list_zoom_locked;
+    let previous_ui_zoom_locked = preferences.ui_zoom_locked;
+    #[cfg(target_os = "macos")]
+    let previous_ui_zoom_percent = preferences.ui_zoom_percent;
     let theme_was_provided = input.theme.is_some();
     if let Some(theme) = input.theme {
         preferences.theme = theme;
@@ -97,11 +84,14 @@ pub fn app_set_ui_preferences(
     if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
         preferences.terminal_zoom_locked = terminal_zoom_locked;
     }
-    if let Some(file_list_zoom_locked) = input.file_list_zoom_locked {
-        preferences.file_list_zoom_locked = file_list_zoom_locked;
+    if let Some(ui_zoom_locked) = input.ui_zoom_locked {
+        preferences.ui_zoom_locked = ui_zoom_locked;
     }
-    if let Some(file_list_font_size) = input.file_list_font_size {
-        preferences.file_list_font_size = file_list_font_size;
+    if let Some(ui_zoom_percent) = input.ui_zoom_percent {
+        preferences.ui_zoom_percent = ui_zoom_percent;
+    }
+    if let Some(remember_window_size) = input.remember_window_size {
+        preferences.remember_window_size = remember_window_size;
     }
     if let Some(local_terminal_shells) = input.local_terminal_shells {
         if let Some(value) = local_terminal_shells.win32 {
@@ -185,7 +175,7 @@ pub fn app_set_ui_preferences(
     std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
     if previous_locale != preferences.locale
         || previous_terminal_zoom_locked != preferences.terminal_zoom_locked
-        || previous_file_list_zoom_locked != preferences.file_list_zoom_locked
+        || previous_ui_zoom_locked != preferences.ui_zoom_locked
     {
         if let Err(error) =
             crate::install_localized_application_menu(&app, preferences.locale == "enUS")
@@ -212,6 +202,12 @@ pub fn app_set_ui_preferences(
         }
     }
     let _ = app.emit("app:ui-preferences-changed", &preferences);
+    // Page zoom changes renderer layout without a native window resize.
+    // Reposition AppKit controls after broadcasting the new renderer zoom.
+    #[cfg(target_os = "macos")]
+    if previous_ui_zoom_percent != preferences.ui_zoom_percent {
+        crate::schedule_macos_traffic_light_recalibration(&app);
+    }
     Ok(preferences)
 }
 
@@ -283,8 +279,9 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             auto_check_updates: None,
             update_channel: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
-            file_list_zoom_locked: None,
-            file_list_font_size: None,
+            ui_zoom_locked: None,
+            ui_zoom_percent: None,
+            remember_window_size: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
             resource_monitoring_metrics: None,
@@ -300,9 +297,9 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
     )
 }
 
-/// Toggle file list font zoom from a native menu item while keeping the
+/// Toggle app interface zoom from a native menu item while keeping the
 /// renderer and settings page on the same persisted preference/event path.
-pub fn app_toggle_file_list_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError> {
+pub fn app_toggle_ui_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError> {
     let current = app_get_ui_preferences(app.clone())?;
     app_set_ui_preferences(
         app,
@@ -314,8 +311,9 @@ pub fn app_toggle_file_list_zoom_lock(app: AppHandle) -> Result<UiPreferences, A
             auto_check_updates: None,
             update_channel: None,
             terminal_zoom_locked: None,
-            file_list_zoom_locked: Some(!current.file_list_zoom_locked),
-            file_list_font_size: None,
+            ui_zoom_locked: Some(!current.ui_zoom_locked),
+            ui_zoom_percent: None,
+            remember_window_size: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
             resource_monitoring_metrics: None,
@@ -331,16 +329,16 @@ pub fn app_toggle_file_list_zoom_lock(app: AppHandle) -> Result<UiPreferences, A
     )
 }
 
-/// Adjust the saved file list font size from a native View menu item.
-pub fn app_adjust_file_list_font_size(app: AppHandle, operation: &str) -> Result<UiPreferences, AppError> {
+/// Adjust the saved app interface zoom from a native View menu item.
+pub fn app_adjust_ui_zoom(app: AppHandle, operation: &str) -> Result<UiPreferences, AppError> {
     let current = app_get_ui_preferences(app.clone())?;
-    if current.file_list_zoom_locked {
+    if current.ui_zoom_locked {
         return Ok(current);
     }
     let next = match operation {
-        "in" => current.file_list_font_size + 1,
-        "out" => current.file_list_font_size - 1,
-        _ => default_file_list_font_size(),
+        "in" => current.ui_zoom_percent + UI_ZOOM_PERCENT_STEP,
+        "out" => current.ui_zoom_percent - UI_ZOOM_PERCENT_STEP,
+        _ => default_ui_zoom_percent(),
     };
     app_set_ui_preferences(
         app,
@@ -352,8 +350,9 @@ pub fn app_adjust_file_list_font_size(app: AppHandle, operation: &str) -> Result
             auto_check_updates: None,
             update_channel: None,
             terminal_zoom_locked: None,
-            file_list_zoom_locked: None,
-            file_list_font_size: Some(next),
+            ui_zoom_locked: None,
+            ui_zoom_percent: Some(next),
+            remember_window_size: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
             resource_monitoring_metrics: None,

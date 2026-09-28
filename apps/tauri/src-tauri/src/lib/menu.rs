@@ -100,9 +100,9 @@ pub(crate) fn install_localized_tray_menu(
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
     let platform = std::env::consts::OS;
     let quit_accelerator = application_quit_accelerator(platform);
-    let (terminal_zoom_locked, file_list_zoom_locked) =
+    let (terminal_zoom_locked, ui_zoom_locked) =
         crate::commands::app_get_ui_preferences(app.clone())
-            .map(|preferences| (preferences.terminal_zoom_locked, preferences.file_list_zoom_locked))
+            .map(|preferences| (preferences.terminal_zoom_locked, preferences.ui_zoom_locked))
             .unwrap_or((false, false));
     let new_connection_menu = MenuItemBuilder::with_id(
         "new-connection",
@@ -226,35 +226,35 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .item(&view_split_vertical)
         .item(&view_split_horizontal);
     // Native View menu zoom controls stay click-only and adjust either the
-    // file list or terminal without changing the application/WebView zoom.
+    // renderer interface or terminal without using native WebView zoom.
     #[cfg(target_os = "macos")]
     let view_submenu_builder = {
-        let file_list_zoom_in = MenuItemBuilder::with_id(
-            "view-file-list-zoom-in",
-            localized(is_english, "Zoom File List In", "文件列表放大"),
+        let ui_zoom_in = MenuItemBuilder::with_id(
+            "view-ui-zoom-in",
+            localized(is_english, "Zoom Interface In", "放大界面"),
         )
-        .enabled(!file_list_zoom_locked)
+        .enabled(!ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let file_list_zoom_out = MenuItemBuilder::with_id(
-            "view-file-list-zoom-out",
-            localized(is_english, "Zoom File List Out", "文件列表缩小"),
+        let ui_zoom_out = MenuItemBuilder::with_id(
+            "view-ui-zoom-out",
+            localized(is_english, "Zoom Interface Out", "缩小界面"),
         )
-        .enabled(!file_list_zoom_locked)
+        .enabled(!ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let file_list_zoom_reset = MenuItemBuilder::with_id(
-            "view-file-list-zoom-reset",
-            localized(is_english, "Reset File List Size", "重置文件列表字号"),
+        let ui_zoom_reset = MenuItemBuilder::with_id(
+            "view-ui-zoom-reset",
+            localized(is_english, "Reset Interface Zoom", "重置界面缩放"),
         )
-        .enabled(!file_list_zoom_locked)
+        .enabled(!ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let file_list_zoom_lock = CheckMenuItemBuilder::with_id(
-            "view-file-list-zoom-lock",
-            localized(is_english, "Lock File List Zoom", "锁定文件列表缩放"),
+        let ui_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-ui-zoom-lock",
+            localized(is_english, "Lock Interface Zoom", "锁定界面缩放"),
         )
-        .checked(file_list_zoom_locked)
+        .checked(ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
         let terminal_zoom_in = MenuItemBuilder::with_id(
@@ -289,10 +289,10 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
-            .item(&file_list_zoom_in)
-            .item(&file_list_zoom_out)
-            .item(&file_list_zoom_reset)
-            .item(&file_list_zoom_lock)
+            .item(&ui_zoom_in)
+            .item(&ui_zoom_out)
+            .item(&ui_zoom_reset)
+            .item(&ui_zoom_lock)
             .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)
@@ -303,32 +303,32 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     // available without registering zoom accelerators.
     #[cfg(not(target_os = "macos"))]
     let view_submenu_builder = {
-        let file_list_zoom_in = MenuItemBuilder::with_id(
-            "view-file-list-zoom-in",
-            localized(is_english, "Zoom File List In", "文件列表放大"),
+        let ui_zoom_in = MenuItemBuilder::with_id(
+            "view-ui-zoom-in",
+            localized(is_english, "Zoom Interface In", "放大界面"),
         )
-        .enabled(!file_list_zoom_locked)
+        .enabled(!ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let file_list_zoom_out = MenuItemBuilder::with_id(
-            "view-file-list-zoom-out",
-            localized(is_english, "Zoom File List Out", "文件列表缩小"),
+        let ui_zoom_out = MenuItemBuilder::with_id(
+            "view-ui-zoom-out",
+            localized(is_english, "Zoom Interface Out", "缩小界面"),
         )
-        .enabled(!file_list_zoom_locked)
+        .enabled(!ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let file_list_zoom_reset = MenuItemBuilder::with_id(
-            "view-file-list-zoom-reset",
-            localized(is_english, "Reset File List Size", "重置文件列表字号"),
+        let ui_zoom_reset = MenuItemBuilder::with_id(
+            "view-ui-zoom-reset",
+            localized(is_english, "Reset Interface Zoom", "重置界面缩放"),
         )
-        .enabled(!file_list_zoom_locked)
+        .enabled(!ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let file_list_zoom_lock = CheckMenuItemBuilder::with_id(
-            "view-file-list-zoom-lock",
-            localized(is_english, "Lock File List Zoom", "锁定文件列表缩放"),
+        let ui_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-ui-zoom-lock",
+            localized(is_english, "Lock Interface Zoom", "锁定界面缩放"),
         )
-        .checked(file_list_zoom_locked)
+        .checked(ui_zoom_locked)
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
         let terminal_zoom_in = MenuItemBuilder::with_id(
@@ -361,10 +361,10 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
-            .item(&file_list_zoom_in)
-            .item(&file_list_zoom_out)
-            .item(&file_list_zoom_reset)
-            .item(&file_list_zoom_lock)
+            .item(&ui_zoom_in)
+            .item(&ui_zoom_out)
+            .item(&ui_zoom_reset)
+            .item(&ui_zoom_lock)
             .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)

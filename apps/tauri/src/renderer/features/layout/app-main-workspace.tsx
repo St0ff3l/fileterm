@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react'
-import { DEFAULT_FILE_LIST_FONT_SIZE, MAX_FILE_LIST_FONT_SIZE, MIN_FILE_LIST_FONT_SIZE } from '@fileterm/core'
+import { DEFAULT_UI_ZOOM_PERCENT, MAX_UI_ZOOM_PERCENT, MIN_UI_ZOOM_PERCENT, UI_ZOOM_PERCENT_STEP } from '@fileterm/core'
 import { AiCopilotPanel } from '../ai/ai-copilot-panel'
 import { CloseButton } from '../common/close-button'
 import { SystemSidebarShell } from '../system/system-sidebar-shell'
@@ -8,7 +8,7 @@ import { KeepAliveWorkspaceStage } from '../workspace/workspace-stage'
 import { TabBar, type TabBarProps, type TabContextTarget } from './tab-bar'
 import type { AppViewModel } from './app-view-model'
 import { WindowMenubar } from './window-menubar'
-import { STATUS_MESSAGE_TIMEOUT_MS } from '../../app/app-shell-utils'
+import { DEFAULT_SIDEBAR_WIDTH, STATUS_MESSAGE_TIMEOUT_MS } from '../../app/app-shell-utils'
 import { t, setLocale } from '../../i18n'
 
 export function AppMainWorkspace({ model }: { model: AppViewModel }) {
@@ -30,10 +30,9 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     setLocaleState,
     terminalZoomLocked,
     setTerminalZoomLocked,
-    fileListZoomLocked,
-    setFileListZoomLocked,
-    fileListFontSize,
-    setFileListFontSize,
+    uiZoomLocked,
+    setUiZoomLocked,
+    setUiZoomPercent,
     filePanelRememberRatio,
     sidebarWidth,
     setSidebarWidth,
@@ -192,10 +191,9 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     activeProfile?.type === 'ssh' && activeProfile.jumpProfileId
       ? (workspace.profiles.find((profile) => profile.id === activeProfile.jumpProfileId) ?? null)
       : null
-  // Keep the home titlebar brand independent from the collapsed sidebar. When
-  // the sidebar is expanded, its live width still drives the brand column so
-  // the two boundaries track together during a resize.
-  const brandWidth = isHomeWorkspaceVisible && !isSystemSidebarCollapsed ? sidebarWidth : 214
+  // Home and session titlebars share the expanded sidebar's live width.
+  // A collapsed sidebar keeps enough titlebar space for the native window controls.
+  const brandWidth = isSystemSidebarCollapsed ? DEFAULT_SIDEBAR_WIDTH : resolvedSidebarWidth
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
@@ -245,8 +243,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
             '--brand-width': `${brandWidth}px`,
-            '--ai-copilot-panel-width': `${aiCopilotWidth}px`,
-            '--file-list-font-size': `${fileListFontSize}px`
+            '--ai-copilot-panel-width': `${aiCopilotWidth}px`
           } as CSSProperties
         }
       >
@@ -255,18 +252,21 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             desktopApi={desktopApi}
             isMaximized={isMaximized}
             terminalZoomLocked={terminalZoomLocked}
-            fileListZoomLocked={fileListZoomLocked}
-            onFileListFontSizeChange={(operation) => {
-              if (fileListZoomLocked) return
-              setFileListFontSize((current) => {
-                if (operation === 'reset') return DEFAULT_FILE_LIST_FONT_SIZE
+            uiZoomLocked={uiZoomLocked}
+            onUiZoomPercentChange={(operation) => {
+              if (uiZoomLocked) return
+              setUiZoomPercent((current) => {
+                if (operation === 'reset') return DEFAULT_UI_ZOOM_PERCENT
                 return Math.max(
-                  MIN_FILE_LIST_FONT_SIZE,
-                  Math.min(MAX_FILE_LIST_FONT_SIZE, current + (operation === 'in' ? 1 : -1))
+                  MIN_UI_ZOOM_PERCENT,
+                  Math.min(
+                    MAX_UI_ZOOM_PERCENT,
+                    current + (operation === 'in' ? UI_ZOOM_PERCENT_STEP : -UI_ZOOM_PERCENT_STEP)
+                  )
                 )
               })
             }}
-            onToggleFileListZoomLock={() => setFileListZoomLocked((current) => !current)}
+            onToggleUiZoomLock={() => setUiZoomLocked((current) => !current)}
             onToggleTerminalZoomLock={() => setTerminalZoomLocked((current) => !current)}
           />
         ) : null}

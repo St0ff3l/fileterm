@@ -31,6 +31,21 @@ const ANSI_VARIABLE_NAMES: Array<[TerminalAnsiColorName, string]> = [
   ['brightWhite', '--terminal-bright-white']
 ]
 
+const ITERM2_THEME_PRESET_IDS = [
+  'iterm2-dracula',
+  'iterm2-nord',
+  'iterm2-gruvbox',
+  'iterm2-catppuccin',
+  'iterm2-solarized',
+  'iterm2-tokyonight'
+] as const
+
+export type Iterm2ThemePresetId = (typeof ITERM2_THEME_PRESET_IDS)[number]
+
+function isIterm2ThemePresetId(value: string): value is Iterm2ThemePresetId {
+  return ITERM2_THEME_PRESET_IDS.some((presetId) => presetId === value)
+}
+
 const appliedThemeVariableNames = new Set<string>()
 
 export function themeVariantForMode(themeMode: ThemeMode): ThemeVariant {
@@ -57,6 +72,20 @@ function alpha(color: string, alphaPercent: number) {
   return `color-mix(in srgb, ${color} ${percent}%, transparent ${100 - percent}%)`
 }
 
+function terminalFrameGradient(background: string) {
+  const edge = blend(background, '#000000', 18)
+  return [
+    `linear-gradient(to bottom, ${edge} 0px, transparent 10px)`,
+    `linear-gradient(to top, ${edge} 0px, transparent 10px)`,
+    `linear-gradient(to right, ${edge} 0px, transparent 10px)`,
+    `linear-gradient(to left, ${edge} 0px, transparent 10px)`
+  ].join(', ')
+}
+
+function terminalFrameShadow(background: string) {
+  return `inset 0 0 14px ${alpha(blend(background, '#000000', 40), 30)}`
+}
+
 // Sidebar frosted glass depends on native window translucency, which only
 // macOS provides via vibrancy. Windows and Linux main windows are opaque, so
 // a blurred translucent sidebar there only costs GPU with nothing real to
@@ -79,11 +108,17 @@ function resolveCompactUiVariables(
   const accent = theme.accent
   const secondaryAccent = theme.semanticColors.secondary
 
-  const sidebar = isCodex ? surfaceSecondary : isLight ? surfaceElevated : '#242424'
+  const sidebar = isCodex ? surfaceSecondary : isLight ? surfaceElevated : surfaceSecondary
   const card = surfaceSecondary
-  const section = isCodex ? (isLight ? '#f6f6f8' : '#1d1d20') : isLight ? '#f5f5f7' : '#242424'
+  const section = isCodex
+    ? isLight
+      ? '#f6f6f8'
+      : '#1d1d20'
+    : isLight
+      ? '#f5f5f7'
+      : blend(surfaceSecondary, surfaceElevated, 20)
   const elevated = surfaceElevated
-  const input = isCodex ? surfaceElevated : isLight ? surfaceElevated : '#1a1a1a'
+  const input = isCodex ? surfaceElevated : isLight ? surfaceElevated : blend(surface, '#000000', 10)
   const hover =
     isCodex && !isLight
       ? '#2a2a2a'
@@ -97,9 +132,9 @@ function resolveCompactUiVariables(
     : isLight
       ? blend(surfaceElevated, accent, 12)
       : blend(surfaceElevated, accent, 18)
-  const titlebar = isCodex ? surfaceElevated : isLight ? surface : '#272727'
+  const titlebar = isCodex ? surfaceElevated : isLight ? surface : surfaceSecondary
   const tabbar = isCodex ? surfaceElevated : isLight ? surface : surfaceSecondary
-  const managerHeadBg = isCodex ? surfaceSecondary : isLight ? surface : '#242424'
+  const managerHeadBg = isCodex ? surfaceSecondary : isLight ? surface : surfaceSecondary
 
   const secondaryText = theme.semanticColors.textSecondary
   const softText = isLight ? blend(surface, secondaryText, 72) : blend(surface, secondaryText, 68)
@@ -152,12 +187,92 @@ function resolveCompactUiVariables(
       ? '0 20px 40px rgba(0, 0, 0, 0.4)'
       : '0 16px 40px rgba(0, 0, 0, 0.34)'
 
-  const folderAccent = isCodex ? (isLight ? '#3b82f6' : '#fbbf24') : isLight ? '#3b82f6' : '#65a9ff'
-  const kernelAccent = isCodex ? accent : isLight ? '#2563eb' : '#65a9ff'
-  const copyLink = isCodex ? (isLight ? '#0284c7' : '#38bdf8') : isLight ? '#4f7cff' : '#65a9ff'
-  const copyLinkHover = isCodex ? (isLight ? '#0369a1' : '#7dd3fc') : isLight ? '#2f5fef' : '#8bbfff'
+  const folderAccent = isCodex ? (isLight ? '#3b82f6' : '#fbbf24') : secondaryAccent
+  const kernelAccent = isCodex ? accent : accent
+  const copyLink = isCodex ? (isLight ? '#0284c7' : '#38bdf8') : accent
+  const copyLinkHover = isCodex ? (isLight ? '#0369a1' : '#7dd3fc') : accentHover
+  const accentActive = isLight ? blend(accent, '#000000', 22) : blend(accent, '#000000', 28)
+  const inputFocus = isLight ? blend(input, accent, 8) : blend(input, accent, 12)
+  const overlay = alpha('#000000', isLight ? 32 : 62)
 
   return {
+    '--ref-surface-canvas': surface,
+    '--ref-surface-sidebar': sidebarBackground,
+    '--ref-surface-panel': card,
+    '--ref-surface-card': card,
+    '--ref-surface-section': section,
+    '--ref-surface-elevated': elevated,
+    '--ref-surface-modal': card,
+    '--ref-surface-context-menu': contextMenuSurface,
+    '--ref-surface-overlay': overlay,
+    '--ref-surface-hover': hover,
+    '--ref-surface-active': active,
+    '--ref-surface-input': input,
+    '--ref-surface-input-focus': inputFocus,
+    '--ref-surface-toolbar': managerHeadBg,
+    '--ref-surface-titlebar': titlebar,
+    '--ref-surface-terminal': theme.terminal.background,
+    '--ref-surface-chip': alpha(ink, isLight ? 8 : 14),
+    '--ref-surface-inset': alpha(ink, isLight ? 3 : 5),
+    '--ref-surface-inset-border': border,
+    '--ref-text-primary': ink,
+    '--ref-text-secondary': secondaryText,
+    '--ref-text-muted': softText,
+    '--ref-text-disabled': disabledText,
+    '--ref-text-inverse': isLight ? '#ffffff' : surface,
+    '--ref-text-context-menu': ink,
+    '--ref-border-subtle': subtleBorder,
+    '--ref-border-default': border,
+    '--ref-border-strong': strongBorder,
+    '--ref-border-glass': alpha(ink, 8),
+    '--ref-border-context-menu': border,
+    '--ref-accent': accent,
+    '--ref-accent-hover': accentHover,
+    '--ref-accent-active': accentActive,
+    '--ref-accent-muted': alpha(accent, isLight ? 12 : 15),
+    '--ref-accent-focus': alpha(focus, isLight ? 24 : 28),
+    '--ref-accent-secondary': secondaryAccent,
+    '--ref-focus-outline': focus,
+    '--ref-status-success': success,
+    '--ref-status-success-bg': successSurface,
+    '--ref-status-warning': warning,
+    '--ref-status-warning-text': warningText,
+    '--ref-status-warning-bg': warningSurface,
+    '--ref-status-danger': danger,
+    '--ref-status-danger-hover': dangerHover,
+    '--ref-status-danger-bg': dangerSurface,
+    '--ref-status-info': info,
+    '--ref-status-info-bg': infoSurface,
+    '--ref-color-folder': folderAccent,
+    '--ref-color-skill': theme.semanticColors.skill,
+    '--ref-color-total': total,
+    '--ref-color-telnet': telnet,
+    '--ref-color-ftp': ftp,
+    '--ref-color-network-rx': networkRx,
+    '--ref-color-network-tx': networkTx,
+    '--ref-color-diff-added': theme.semanticColors.diffAdded,
+    '--ref-color-diff-removed': theme.semanticColors.diffRemoved,
+    '--ref-color-keyword': theme.semanticColors.keyword,
+    '--ref-action-primary-bg': primaryAction,
+    '--ref-action-primary-hover': primaryActionHover,
+    '--ref-action-primary-active': isLight ? blend(primaryAction, '#000000', 22) : blend(primaryAction, '#000000', 28),
+    '--ref-action-primary-text': '#ffffff',
+    '--ref-action-danger-bg': dangerAction,
+    '--ref-action-danger-hover': dangerActionHover,
+    '--ref-action-danger-active': blend(dangerAction, '#000000', 20),
+    '--ref-action-danger-text': '#ffffff',
+    '--ref-monaco-editor-bg': theme.terminal.background,
+    '--ref-monaco-editor-foreground': theme.terminal.foreground,
+    '--ref-monaco-line-number': softText,
+    '--ref-monaco-line-number-active': secondaryText,
+    '--ref-monaco-cursor': accent,
+    '--ref-monaco-selection': theme.terminal.selectionBackground,
+    '--ref-monaco-inactive-selection': alpha(accent, isLight ? 12 : 18),
+    '--ref-monaco-line-highlight': alpha(ink, isLight ? 4 : 6),
+    '--ref-monaco-indent-guide': subtleBorder,
+    '--ref-monaco-indent-guide-active': strongBorder,
+    '--ref-terminal-frame-gradient': isCodex || isLight ? 'none' : terminalFrameGradient(theme.terminal.background),
+    '--ref-terminal-frame-shadow': isCodex || isLight ? 'none' : terminalFrameShadow(theme.terminal.background),
     '--bg-main': surface,
     '--bg-primary': surface,
     '--bg-secondary': surfaceSecondary,
@@ -175,9 +290,7 @@ function resolveCompactUiVariables(
     '--surface-raised': elevated,
     '--surface-secondary': surfaceSecondary,
     '--surface-section': section,
-    '--ref-surface-section': section,
     '--surface-elevated': surfaceElevated,
-    '--ref-surface-context-menu': contextMenuSurface,
     '--surface-hover': alpha(ink, isLight ? 5 : 7),
     '--surface-chip': alpha(ink, isLight ? 8 : 14),
     '--surface-inset': alpha(ink, isLight ? 3 : 5),
@@ -189,7 +302,6 @@ function resolveCompactUiVariables(
     '--border-dark': strongBorder,
     '--border': border,
     '--border-subtle': subtleBorder,
-    '--ref-border-context-menu': border,
     '--text-main': ink,
     '--text-primary': ink,
     '--text-secondary': secondaryText,
@@ -223,15 +335,6 @@ function resolveCompactUiVariables(
     '--theme-success-surface': successSurface,
     '--theme-info': info,
     '--theme-info-surface': infoSurface,
-    '--ref-status-warning': warning,
-    '--ref-status-warning-bg': warningSurface,
-    '--ref-status-warning-text': warningText,
-    '--ref-status-danger': danger,
-    '--ref-status-danger-bg': dangerSurface,
-    '--ref-status-success': success,
-    '--ref-status-success-bg': successSurface,
-    '--ref-status-info': info,
-    '--ref-status-info-bg': infoSurface,
     '--status-warning': warning,
     '--status-warning-bg': warningSurface,
     '--status-warning-text': warningText,
@@ -274,8 +377,8 @@ function resolveCompactUiVariables(
     '--memory-warn': warning,
     '--network-tx': networkTx,
     '--network-rx': networkRx,
-    '--button-primary-bg': isLight ? primaryAction : blend(primaryAction, '#000000', 25),
-    '--button-primary-hover': isLight ? primaryActionHover : blend(primaryAction, '#000000', 12),
+    '--button-primary-bg': primaryAction,
+    '--button-primary-hover': primaryActionHover,
     '--button-primary-border': border,
     '--button-primary-text': '#FFFFFF',
     '--action-primary-bg': primaryAction,
@@ -298,7 +401,6 @@ function resolveCompactUiVariables(
     '--system-sidebar-toggle-hover-shadow': isLight
       ? '0 6px 16px rgba(0, 0, 0, 0.08)'
       : '0 10px 22px rgba(15, 23, 42, 0.16)',
-    '--ref-text-context-menu': ink,
     '--ref-shadow-context-menu': contextMenuShadow,
     '--popover-bg': elevated,
     '--popover-border': border,
@@ -356,11 +458,6 @@ function resolveCompactUiVariables(
     '--file-editor-primary-shadow': `0 2px 10px ${alpha(accent, 35)}`,
     '--terminal-cmd-bg': alpha(ink, isLight ? 8 : 16),
     '--terminal-cmd-text': ink,
-    '--terminal-frame-gradient':
-      isCodex || isLight
-        ? 'none'
-        : 'linear-gradient(to bottom, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to top, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to right, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px), linear-gradient(to left, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px)',
-    '--terminal-frame-shadow': isCodex || isLight ? 'none' : 'inset 0 0 14px rgba(0, 0, 0, 0.3)',
     '--terminal-right-frame-outer': sidebar,
     '--terminal-right-frame-accent': border,
     '--theme-terminal-dock-surface': surfaceElevated,
@@ -530,6 +627,107 @@ export function getSavedThemeConfig(savedTheme: SavedTheme, variant: ThemeVarian
   return deriveThemeVariant(source, variant)
 }
 
+/**
+ * Reads a built-in palette from its static token stylesheet. Theme colors stay
+ * in styles/tokens; this config snapshot is only used by the settings editor
+ * and theme import/export flow.
+ */
+export function getThemeConfigFromTokenPreset(codeThemeId: string, variant: ThemeVariant): ThemeConfig {
+  const config = createDefaultThemeConfig(variant)
+  if (!isIterm2ThemePresetId(codeThemeId)) return config
+  config.codeThemeId = codeThemeId
+  config.baseThemeId = 'fileterm'
+  if (typeof document === 'undefined') return config
+
+  const root = document.documentElement
+  const attributes = ['data-theme', 'data-theme-base', 'data-theme-preset', 'data-theme-custom'] as const
+  const previousAttributes = new Map(attributes.map((name) => [name, root.getAttribute(name)]))
+  const previousColorScheme = root.style.getPropertyValue('color-scheme')
+  const previousColorSchemePriority = root.style.getPropertyPriority('color-scheme')
+  const previousInlineVariables = new Map(
+    [...appliedThemeVariableNames].map((name) => [
+      name,
+      { value: root.style.getPropertyValue(name), priority: root.style.getPropertyPriority(name) }
+    ])
+  )
+
+  try {
+    for (const name of appliedThemeVariableNames) root.style.removeProperty(name)
+    root.dataset.theme = `fileterm-${variant}`
+    root.dataset.themeBase = 'fileterm'
+    root.dataset.themePreset = codeThemeId
+    root.dataset.themeCustom = 'true'
+    root.style.colorScheme = variant
+
+    const tokens = window.getComputedStyle(root)
+    const read = (name: string, fallback: string) => tokens.getPropertyValue(name).trim() || fallback
+    const { theme } = config
+    theme.accent = read('--ref-accent', theme.accent)
+    theme.ink = read('--ref-text-primary', theme.ink)
+    theme.surface = read('--ref-surface-canvas', theme.surface)
+    theme.surfaceSecondary = read('--ref-surface-panel', theme.surfaceSecondary)
+    theme.surfaceElevated = read('--ref-surface-elevated', theme.surfaceElevated)
+    theme.semanticColors = {
+      ...theme.semanticColors,
+      diffAdded: read('--ref-color-diff-added', theme.semanticColors.diffAdded),
+      diffRemoved: read('--ref-color-diff-removed', theme.semanticColors.diffRemoved),
+      skill: read('--ref-color-skill', theme.semanticColors.skill),
+      keyword: read('--ref-color-keyword', theme.semanticColors.keyword),
+      total: read('--ref-color-total', theme.semanticColors.total),
+      telnet: read('--ref-color-telnet', theme.semanticColors.telnet),
+      ftp: read('--ref-color-ftp', theme.semanticColors.ftp),
+      networkRx: read('--ref-color-network-rx', theme.semanticColors.networkRx),
+      networkTx: read('--ref-color-network-tx', theme.semanticColors.networkTx),
+      secondary: read('--ref-accent-secondary', theme.semanticColors.secondary),
+      textSecondary: read('--ref-text-secondary', theme.semanticColors.textSecondary),
+      info: read('--ref-status-info', theme.semanticColors.info),
+      warning: read('--ref-status-warning', theme.semanticColors.warning),
+      error: read('--ref-status-danger', theme.semanticColors.error),
+      success: read('--ref-status-success', theme.semanticColors.success),
+      primaryAction: read('--ref-action-primary-bg', theme.semanticColors.primaryAction ?? theme.accent),
+      dangerAction: read('--ref-action-danger-bg', theme.semanticColors.dangerAction ?? theme.semanticColors.error)
+    }
+    theme.terminal = {
+      ...theme.terminal,
+      background: read('--ref-terminal-background', theme.terminal.background),
+      foreground: read('--ref-terminal-foreground', theme.terminal.foreground),
+      cursor: read('--ref-terminal-cursor', theme.terminal.cursor),
+      cursorAccent: read('--ref-terminal-cursor-accent', theme.terminal.cursorAccent),
+      selectionBackground: read('--ref-terminal-selection-background', theme.terminal.selectionBackground),
+      selectionForeground: read('--ref-terminal-selection-foreground', theme.terminal.selectionForeground),
+      ansi: Object.fromEntries(
+        Object.entries(theme.terminal.ansi).map(([name, fallback]) => [
+          name,
+          read(`--ref-terminal-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, fallback)
+        ])
+      ) as ThemeConfig['theme']['terminal']['ansi'],
+      search: {
+        matchBackground: read('--ref-terminal-search-match-background', theme.terminal.search.matchBackground),
+        matchRuler: read('--ref-terminal-search-match-ruler', theme.terminal.search.matchRuler),
+        activeMatchBackground: read(
+          '--ref-terminal-search-active-background',
+          theme.terminal.search.activeMatchBackground
+        ),
+        activeMatchText: read('--ref-terminal-search-active-text', theme.terminal.search.activeMatchText),
+        activeMatchBorder: read('--ref-terminal-search-active-border', theme.terminal.search.activeMatchBorder),
+        activeMatchRuler: read('--ref-terminal-search-active-ruler', theme.terminal.search.activeMatchRuler)
+      }
+    }
+    return normalizeThemeConfig(config, variant)
+  } finally {
+    for (const name of attributes) {
+      const value = previousAttributes.get(name)
+      if (value === null || value === undefined) root.removeAttribute(name)
+      else root.setAttribute(name, value)
+    }
+    root.style.removeProperty('color-scheme')
+    if (previousColorScheme) root.style.setProperty('color-scheme', previousColorScheme, previousColorSchemePriority)
+    for (const [name, property] of previousInlineVariables) {
+      root.style.setProperty(name, property.value, property.priority)
+    }
+  }
+}
+
 export function normalizeSavedTheme(savedTheme: SavedTheme): SavedTheme {
   const current = normalizeThemeConfig(savedTheme.config, savedTheme.config.variant)
   const variants = {
@@ -683,9 +881,20 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
     root.style.removeProperty(name)
   }
   appliedThemeVariableNames.clear()
+  delete root.dataset.themePreset
 
   const variant = themeVariantForMode(themeMode)
   const normalizedInput = normalizeThemeConfig({ ...config, variant }, variant)
+
+  if (isIterm2ThemePresetId(normalizedInput.codeThemeId) && !normalizedInput.theme.overrides) {
+    root.dataset.theme = normalizedInput.baseThemeId === 'codex' ? `codex-${variant}` : `fileterm-${variant}`
+    root.dataset.themeBase = normalizedInput.baseThemeId ?? 'fileterm'
+    root.dataset.themePreset = normalizedInput.codeThemeId
+    root.dataset.themeCustom = 'true'
+    root.style.colorScheme = variant
+    return
+  }
+
   const current = buildThemeVariables(themeMode, normalizedInput, !isBuiltInTheme(normalizedInput))
   const customTheme = !isBuiltInTheme(current.normalized)
   const baseConfig = customTheme ? baseThemeConfigFor(current.normalized, variant) : null
@@ -738,6 +947,7 @@ export function clearThemeVariables() {
   }
   appliedThemeVariableNames.clear()
   delete root.dataset.theme
+  delete root.dataset.themePreset
   delete root.dataset.themeCustom
   delete root.dataset.themeBase
 }
