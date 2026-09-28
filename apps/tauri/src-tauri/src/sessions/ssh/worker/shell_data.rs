@@ -226,11 +226,12 @@
         }
     }
 
-    let setup_echo_was_pending = pending_shell_setup_echo.is_some();
-    let mut visible = suppress_shell_setup_echo(&mut pending_shell_setup_echo, &text);
-    if setup_echo_was_pending && pending_shell_setup_echo.is_none() {
-        flush_deferred_terminal_input(&mut deferred_terminal_input, &terminal_write_tx)?;
-    }
+    let mut visible = filter_shell_setup_output(
+        &mut pending_shell_setup_echo,
+        &mut deferred_terminal_input,
+        &terminal_write_tx,
+        &text,
+    )?;
     // A newly-created root login shell prints its first
     // prompt before FileTerm can inject the CWD hook. Do
     // not forward that prompt yet: the hook intentionally

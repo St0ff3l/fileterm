@@ -7,7 +7,7 @@
 struct ShellSetupEchoSuppression {
     buffer: String,
     started_at: Instant,
-    visible_prefix_length: Option<usize>,
+    visible_prefix: Option<String>,
     marker_seen_at: Option<Instant>,
     preserve_visible_prefix: bool,
     release_replacement_prompt: bool,
@@ -33,7 +33,7 @@ impl ShellSetupEchoSuppression {
         Self {
             buffer: String::new(),
             started_at: Instant::now(),
-            visible_prefix_length: None,
+            visible_prefix: None,
             marker_seen_at: None,
             preserve_visible_prefix,
             release_replacement_prompt,
@@ -85,15 +85,13 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
         // 第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存（不 forward），
         // 所以这里释放新 prompt——让用户看到一个完整 prompt，而不是空白。
         if state.marker_seen_at.is_some() && state.release_replacement_prompt {
-            // buffer 里同时含 setup echo、ready marker 和新 prompt。找到 marker
-            // 的结束位置，释放它之后的部分（新 prompt），
-            // 吞掉 setup echo 和 marker。marker 后可能直接接 prompt（无换行），
-            // 所以不能用 rfind('\n') 切分。
-            if let Some(marker_end) = last_shell_setup_marker_end(&state.buffer) {
-                let after_marker = &state.buffer[marker_end..];
-                if looks_like_shell_prompt(after_marker) {
-                    return after_marker.to_string();
-                }
+            // Once ready is observed, buffer contains only the replacement
+            // prompt; the potentially large command echo has been discarded.
+            // The ready marker is the boundary, not the prompt's spelling.
+            // Preserve custom prompts and incomplete ANSI sequences so the
+            // next packet can complete them without losing colours/text.
+            if !state.buffer.is_empty() {
+                return state.buffer;
             }
             // 新 prompt 还没到（慢设备，settle/timeout 到期仍未见）：补换行
             // 让晚到的新 prompt 从新行开始。
@@ -111,10 +109,7 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
         // fallback and therefore releases nothing when the marker is absent.
         return state.fallback_visible.unwrap_or_default();
     }
-    state
-        .visible_prefix_length
-        .map(|length| state.buffer[..length].to_string())
-        .unwrap_or_default()
+    state.visible_prefix.unwrap_or_default()
 }
 
 // Pre-compiled private ready marker used by `suppress_shell_setup_echo` while
@@ -132,8 +127,8 @@ fn last_shell_setup_marker_end(value: &str) -> Option<usize> {
 }
 
 /// Suppresses the echo and replacement prompt from an internal CWD-hook
-/// injection. The bounded timeout fails closed: a malformed shell must not
-/// expose the hidden command in the user's terminal transcript.
+/// injection. The timeout discards retained echo and restores input; data
+/// arriving after that recovery is forwarded to keep the terminal usable.
 fn suppress_shell_setup_echo(
     pending: &mut Option<ShellSetupEchoSuppression>,
     chunk: &str,
@@ -154,17 +149,35 @@ fn suppress_shell_setup_echo(
     state.buffer.push_str(chunk);
     const HOOK_MARKER: &str = "__tdcwd";
 
+    // Save the visible banner before rotating the echo buffer. Indices into
+    // that buffer would become invalid once old redraws have been discarded.
+    if state.preserve_visible_prefix && state.visible_prefix.is_none() {
+        if let Some(length) = state
+            .buffer
+            .find("test -z \"${FISH_VERSION-}\"")
+            .or_else(|| state.buffer.find("__tdcwd(){"))
+            .or_else(|| state.buffer.find(HOOK_MARKER))
+        {
+            let mut prefix = state.buffer[..length].to_string();
+            trim_string_front(&mut prefix, MAX_SHELL_SETUP_BUFFER_BYTES);
+            state.visible_prefix = Some(prefix);
+        }
+    }
+
     if let Some(marker_end) = last_shell_setup_marker_end(&state.buffer) {
         state.marker_seen_at.get_or_insert(now);
-        if state.visible_prefix_length.is_none() {
-            state.visible_prefix_length = Some(
-                state
-                    .buffer
-                    .find("test -z \"${FISH_VERSION-}\"")
-                    .or_else(|| state.buffer.find("__tdcwd(){"))
-                    .or_else(|| state.buffer.find(HOOK_MARKER))
-                    .unwrap_or(0),
-            );
+        state.buffer.drain(..marker_end);
+    }
+
+    // Syntax-highlighting line editors may emit many redraws for one setup
+    // command. Reaching the memory limit is not an execution acknowledgement:
+    // keep suppressing until ready/timeout, retaining enough tail for a ready
+    // marker split across SSH packets (and never splitting UTF-8 characters).
+    if state.marker_seen_at.is_some() {
+        // Output after ready belongs to the new prompt. It must not lose its
+        // beginning (possibly an ANSI sequence) under the echo memory limit.
+        if state.buffer.len() > MAX_SHELL_SETUP_BUFFER_BYTES {
+            return finish_shell_setup_suppression(pending);
         }
         // marker 已看到后，setup 命令执行完 shell 会输出新 prompt。一旦新 prompt
         // 到达（ready marker 之后的部分匹配 prompt 结尾），立即结束 suppress 并
@@ -174,20 +187,30 @@ fn suppress_shell_setup_echo(
         // 改为检测到 prompt 就提前结束，无论快慢设备都只显示一个 prompt。
         // 仅 preserve_visible_prefix == false（首次注入）路径生效；sudo 重注入
         // 路径需要保留 visible prefix，仍走 settle delay 释放。
-        if !state.preserve_visible_prefix {
-            if let Some(after_marker) = state.buffer.get(marker_end..) {
-                if looks_like_shell_prompt(after_marker) {
-                    return finish_shell_setup_suppression(pending);
-                }
-            }
+        if !state.preserve_visible_prefix && looks_like_shell_prompt(&state.buffer) {
+            return finish_shell_setup_suppression(pending);
         }
-    }
-
-    if state.buffer.len() > MAX_SHELL_SETUP_BUFFER_BYTES {
-        return finish_shell_setup_suppression(pending);
+    } else {
+        trim_string_front(&mut state.buffer, MAX_SHELL_SETUP_BUFFER_BYTES);
     }
 
     String::new()
+}
+
+/// Both SSH Data and ExtendedData may carry setup output. Completing setup
+/// through either stream must also release queued user input exactly once.
+fn filter_shell_setup_output(
+    pending: &mut Option<ShellSetupEchoSuppression>,
+    deferred_input: &mut Vec<Vec<u8>>,
+    terminal_write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+    chunk: &str,
+) -> Result<String, String> {
+    let was_pending = pending.is_some();
+    let visible = suppress_shell_setup_echo(pending, chunk);
+    if was_pending && pending.is_none() {
+        flush_deferred_terminal_input(deferred_input, terminal_write_tx)?;
+    }
+    Ok(visible)
 }
 
 /// Returns the POSIX shell CWD setup script for the given platform.
@@ -239,3 +262,8 @@ const SHELL_CWD_SETUP: &str = concat!(
 /// small interactive line-editing buffer. Mirrors Electron's
 /// `BUSYBOX_SHELL_CWD_SETUP` constant.
 const BUSYBOX_SHELL_CWD_SETUP: &str = "__tdcwd(){ printf '\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007' \"$(pwd -P 2>/dev/null)\" \"$(id -un 2>/dev/null)\";};PS1='$(__tdcwd)'\"${PS1-}\";__tdcwd;printf '\\033]7777;FileTermReady\\007'";
+
+#[cfg(test)]
+mod shell_setup_echo_tests {
+    include!("setup_echo_tests.rs");
+}
