@@ -31,6 +31,7 @@ const PORTABLE_DATA_ENTRIES: &[(&str, bool)] = &[
     ("command-send-preferences.json", false),
     ("ui-state.json", false),
     ("ui-preferences.json", false),
+    ("window-state.json", false),
     ("transfer-journal.json", false),
     ("webdav-sync.json", true),
     ("s3-backup.json", true),

@@ -105,6 +105,7 @@ pub fn run() {
                 ),
             );
             app.manage(crate::services::WorkspaceState::default());
+            app.manage(MainWindowGeometryPersistence::default());
             crate::services::serial_ports::start_watcher(app.handle());
             crate::services::mcp::start_runtime(app.handle())?;
             app.manage(FileEditorCloseRegistry::default());
@@ -145,14 +146,18 @@ pub fn run() {
                 );
             }
 
+            restore_main_window_geometry(app.handle(), &main_window);
+
             let app_handle = app.handle().clone();
             main_window.on_window_event(move |event| match event {
                 WindowEvent::CloseRequested { api, .. } => {
                     crate::services::logging::info(&app_handle, "window", "main close requested");
+                    flush_main_window_geometry(&app_handle);
                     api.prevent_close();
                     request_main_window_close(&app_handle, false);
                 }
                 WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                    schedule_main_window_geometry_save(&app_handle);
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = app_handle.emit(
                             "app:window-maximized-change",
@@ -667,6 +672,7 @@ pub fn run() {
             }
 
             if matches!(_event, tauri::RunEvent::Exit) {
+                flush_main_window_geometry(_app_handle);
                 crate::services::mcp::remove_runtime_descriptor(_app_handle);
             }
 
