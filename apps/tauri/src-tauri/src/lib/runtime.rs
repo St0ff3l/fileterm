@@ -148,7 +148,7 @@ pub fn run() {
 
             let remember_window_size = crate::commands::app_get_ui_preferences(app.handle().clone())
                 .map(|preferences| preferences.remember_window_size)
-                .unwrap_or(true);
+                .unwrap_or(false);
             restore_main_window_geometry(app.handle(), &main_window, remember_window_size);
 
             let app_handle = app.handle().clone();

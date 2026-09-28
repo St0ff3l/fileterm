@@ -60,7 +60,7 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(true)
   const [isSavingFilePanelPreference, setIsSavingFilePanelPreference] = useState(false)
   const [filePanelPreferenceError, setFilePanelPreferenceError] = useState<string | null>(null)
-  const [rememberWindowSize, setRememberWindowSize] = useState(true)
+  const [rememberWindowSize, setRememberWindowSize] = useState(false)
   const [isSavingWindowSizePreference, setIsSavingWindowSizePreference] = useState(false)
   const [windowSizePreferenceError, setWindowSizePreferenceError] = useState<string | null>(null)
   const [uiZoomPercent, setUiZoomPercent] = useState(DEFAULT_UI_ZOOM_PERCENT)

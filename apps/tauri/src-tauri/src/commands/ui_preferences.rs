@@ -173,7 +173,7 @@ fn default_file_panel_remember_ratio() -> bool {
 }
 
 fn default_remember_window_size() -> bool {
-    true
+    false
 }
 
 fn default_ui_zoom_percent() -> i32 {
