@@ -8,6 +8,7 @@
 
 ### 本版本包含的主要 PR 和问题修复
 
+- [PR #265](https://github.com/St0ff3l/fileterm/pull/265)：修复 SSH 初始化期间目录跟踪脚本回显到终端的问题。
 - [Issue #264](https://github.com/St0ff3l/fileterm/issues/264)：修复 SSH 连接后内部目录跟踪脚本回显到终端的问题。
 
 完整变更记录请查看 [v2.2.14 与 v2.2.15 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.14...v2.2.15)。
@@ -29,6 +30,7 @@ Fix SSH sessions occasionally displaying FileTerm's internal CWD setup script an
 
 ### Main PRs and issues
 
+- [PR #265](https://github.com/St0ff3l/fileterm/pull/265): Fix the CWD setup hook appearing during SSH initialization.
 - [Issue #264](https://github.com/St0ff3l/fileterm/issues/264): Fix the internal CWD setup script appearing in the terminal after connecting over SSH.
 
 See the [comparison between v2.2.14 and v2.2.15](https://github.com/St0ff3l/fileterm/compare/v2.2.14...v2.2.15) for the complete change set.
