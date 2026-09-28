@@ -35,10 +35,6 @@ pub struct UiPreferences {
     pub locale: String,
     #[serde(default = "default_theme_config")]
     pub theme_config: ThemeConfig,
-    /// The app version that last reset the active theme family to FileTerm.
-    /// A different version means the user has installed an update.
-    #[serde(default)]
-    pub fileterm_theme_reset_app_version: Option<String>,
     #[serde(default)]
     pub custom_themes: Vec<SavedTheme>,
     #[serde(default = "default_auto_check_updates")]
@@ -507,24 +503,6 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     );
     preferences.custom_themes = normalize_saved_themes(preferences.custom_themes);
     preferences
-}
-
-/// Apply the product-default theme after an application update. The selected
-/// dark/light variant and saved theme library remain intact; only the active
-/// theme family changes. Reopening the same app version is a no-op.
-fn reset_active_theme_for_app_version(preferences: &mut UiPreferences, app_version: &str) -> bool {
-    if preferences.fileterm_theme_reset_app_version.as_deref() == Some(app_version) {
-        return false;
-    }
-
-    let variant = if is_light_theme_mode(&preferences.theme) {
-        "light"
-    } else {
-        "dark"
-    };
-    preferences.theme_config = default_theme_config_for_variant(variant);
-    preferences.fileterm_theme_reset_app_version = Some(app_version.to_string());
-    true
 }
 
 /// Resolve the effective SSH behavior for a live session without mutating the

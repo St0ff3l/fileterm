@@ -220,6 +220,34 @@
   --network-rx: var(--theme-semantic-network-rx, var(--ref-color-network-rx));
 
   /* Terminal */
+  --terminal-background: var(--ref-terminal-background, var(--ref-surface-terminal));
+  --terminal-foreground: var(--ref-terminal-foreground, var(--ref-text-primary));
+  --terminal-cursor: var(--ref-terminal-cursor, var(--ref-accent));
+  --terminal-cursor-accent: var(--ref-terminal-cursor-accent, var(--ref-surface-terminal));
+  --terminal-selection-background: var(--ref-terminal-selection-background, var(--ref-accent-focus));
+  --terminal-selection-foreground: var(--ref-terminal-selection-foreground, var(--ref-text-primary));
+  --terminal-search-match-background: var(--ref-terminal-search-match-background, var(--ref-status-warning));
+  --terminal-search-match-ruler: var(--ref-terminal-search-match-ruler, var(--ref-status-warning));
+  --terminal-search-active-background: var(--ref-terminal-search-active-background, var(--ref-status-warning));
+  --terminal-search-active-text: var(--ref-terminal-search-active-text, var(--ref-text-inverse));
+  --terminal-search-active-border: var(--ref-terminal-search-active-border, var(--ref-status-warning));
+  --terminal-search-active-ruler: var(--ref-terminal-search-active-ruler, var(--ref-status-warning));
+  --terminal-black: var(--ref-terminal-black, var(--ref-surface-context-menu));
+  --terminal-red: var(--ref-terminal-red, var(--status-danger));
+  --terminal-green: var(--ref-terminal-green, var(--status-success));
+  --terminal-yellow: var(--ref-terminal-yellow, var(--status-warning));
+  --terminal-blue: var(--ref-terminal-blue, var(--ref-accent));
+  --terminal-magenta: var(--ref-terminal-magenta, var(--ref-color-skill));
+  --terminal-cyan: var(--ref-terminal-cyan, var(--status-info));
+  --terminal-white: var(--ref-terminal-white, var(--text-primary));
+  --terminal-bright-black: var(--ref-terminal-bright-black, var(--text-muted));
+  --terminal-bright-red: var(--ref-terminal-bright-red, var(--status-danger));
+  --terminal-bright-green: var(--ref-terminal-bright-green, var(--status-success));
+  --terminal-bright-yellow: var(--ref-terminal-bright-yellow, var(--status-warning));
+  --terminal-bright-blue: var(--ref-terminal-bright-blue, var(--ref-accent));
+  --terminal-bright-magenta: var(--ref-terminal-bright-magenta, var(--ref-color-skill));
+  --terminal-bright-cyan: var(--ref-terminal-bright-cyan, var(--status-info));
+  --terminal-bright-white: var(--ref-terminal-bright-white, var(--text-primary));
   --terminal-bg: var(--surface-terminal);
   --terminal-text: var(--text-primary);
   --terminal-selection-bg: var(--ref-accent-focus);

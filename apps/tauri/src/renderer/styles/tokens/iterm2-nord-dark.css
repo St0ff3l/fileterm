@@ -1,0 +1,136 @@
+/* Nord Dark reference tokens.
+ * Palette source and attribution: docs/quality/iterm2-color-scheme-attribution.md.
+ */
+
+:root[data-theme='fileterm-dark'][data-theme-preset='iterm2-nord'] {
+  --ref-surface-canvas: #2e3440;
+  --ref-surface-sidebar: #363c48;
+  --ref-surface-panel: #363c48;
+  --ref-surface-card: #363c48;
+  --ref-surface-section: #363c48;
+  --ref-surface-elevated: #424854;
+  --ref-surface-modal: #363c48;
+  --ref-surface-context-menu: #424854;
+  --ref-surface-overlay: rgba(0, 0, 0, 0.62);
+  --ref-surface-hover: #515762;
+  --ref-surface-active: #4d5868;
+  --ref-surface-input: #292f3a;
+  --ref-surface-input-focus: #343d4a;
+  --ref-surface-toolbar: #363c48;
+  --ref-surface-titlebar: #363c48;
+  --ref-surface-terminal: #2e3440;
+  --ref-surface-chip: rgba(216, 222, 233, 0.14);
+  --ref-surface-inset: rgba(216, 222, 233, 0.05);
+  --ref-surface-inset-border: rgba(216, 222, 233, 0.1);
+  --ref-text-primary: #d8dee9;
+  --ref-text-secondary: #b9bfcb;
+  --ref-text-muted: #8d939f;
+  --ref-text-disabled: #686e7a;
+  --ref-text-inverse: #2e3440;
+  --ref-text-context-menu: #d8dee9;
+  --ref-border-subtle: rgba(216, 222, 233, 0.06);
+  --ref-border-default: rgba(216, 222, 233, 0.1);
+  --ref-border-strong: rgba(216, 222, 233, 0.18);
+  --ref-border-glass: rgba(216, 222, 233, 0.08);
+  --ref-border-context-menu: rgba(216, 222, 233, 0.1);
+  --ref-accent: #81a1c1;
+  --ref-accent-hover: #94afca;
+  --ref-accent-active: #5d748b;
+  --ref-accent-muted: rgba(129, 161, 193, 0.15);
+  --ref-accent-focus: rgba(143, 188, 187, 0.28);
+  --ref-accent-secondary: #8fbcbb;
+  --ref-focus-outline: #8fbcbb;
+  --ref-status-success: #a3be8c;
+  --ref-status-success-bg: rgba(163, 190, 140, 0.14);
+  --ref-status-warning: #ebcb8b;
+  --ref-status-warning-text: #ebcb8b;
+  --ref-status-warning-bg: rgba(235, 203, 139, 0.08);
+  --ref-status-danger: #bf616a;
+  --ref-status-danger-hover: #a8555d;
+  --ref-status-danger-bg: rgba(191, 97, 106, 0.14);
+  --ref-status-info: #8fbcbb;
+  --ref-status-info-bg: rgba(143, 188, 187, 0.14);
+  --ref-color-folder: #8fbcbb;
+  --ref-color-skill: #b48ead;
+  --ref-color-total: #81a1c1;
+  --ref-color-telnet: #8fbcbb;
+  --ref-color-ftp: #b48ead;
+  --ref-color-network-rx: #8fbcbb;
+  --ref-color-network-tx: #bf616a;
+  --ref-color-diff-added: #a3be8c;
+  --ref-color-diff-removed: #bf616a;
+  --ref-color-keyword: #ebcb8b;
+  --ref-action-primary-bg: #455d75;
+  --ref-action-primary-hover: #61758a;
+  --ref-action-primary-active: #324354;
+  --ref-action-primary-text: #ffffff;
+  --ref-action-danger-bg: #b0525d;
+  --ref-action-danger-hover: #9b4852;
+  --ref-action-danger-active: #8d424a;
+  --ref-action-danger-text: #ffffff;
+  --ref-shadow-context-menu: 0 16px 40px rgba(0, 0, 0, 0.34);
+  --ref-monaco-editor-bg: #2e3440;
+  --ref-monaco-editor-foreground: #d8dee9;
+  --ref-monaco-line-number: #8d939f;
+  --ref-monaco-line-number-active: #b9bfcb;
+  --ref-monaco-cursor: #81a1c1;
+  --ref-monaco-selection: #eceff4;
+  --ref-monaco-inactive-selection: rgba(129, 161, 193, 0.18);
+  --ref-monaco-line-highlight: rgba(216, 222, 233, 0.06);
+  --ref-monaco-indent-guide: rgba(216, 222, 233, 0.06);
+  --ref-monaco-indent-guide-active: rgba(216, 222, 233, 0.18);
+  --ref-file-editor-primary-shadow: 0 2px 10px rgba(129, 161, 193, 0.35);
+  --ref-terminal-frame-gradient:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px,
+      transparent 10px
+    ),
+    linear-gradient(to top, color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px, transparent 10px),
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px,
+      transparent 10px
+    ),
+    linear-gradient(to left, color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px, transparent 10px);
+  --ref-terminal-frame-shadow: inset 0 0 14px
+    color-mix(in srgb, color-mix(in srgb, var(--ref-terminal-background) 60%, #000000 40%) 30%, transparent 70%);
+  --ref-terminal-background: #2e3440;
+  --ref-terminal-foreground: #d8dee9;
+  --ref-terminal-cursor: #eceff4;
+  --ref-terminal-cursor-accent: #282828;
+  --ref-terminal-selection-background: #eceff4;
+  --ref-terminal-selection-foreground: #d8dee9;
+  --ref-terminal-search-match-background: #ebcb8b;
+  --ref-terminal-search-match-ruler: #ebcb8b;
+  --ref-terminal-search-active-background: #ebcb8b;
+  --ref-terminal-search-active-text: #2e3440;
+  --ref-terminal-search-active-border: #ebcb8b;
+  --ref-terminal-search-active-ruler: #ebcb8b;
+  --ref-terminal-black: #3b4252;
+  --ref-terminal-red: #bf616a;
+  --ref-terminal-green: #a3be8c;
+  --ref-terminal-yellow: #ebcb8b;
+  --ref-terminal-blue: #81a1c1;
+  --ref-terminal-magenta: #b48ead;
+  --ref-terminal-cyan: #88c0d0;
+  --ref-terminal-white: #e5e9f0;
+  --ref-terminal-bright-black: #4c566a;
+  --ref-terminal-bright-red: #bf616a;
+  --ref-terminal-bright-green: #a3be8c;
+  --ref-terminal-bright-yellow: #ebcb8b;
+  --ref-terminal-bright-blue: #81a1c1;
+  --ref-terminal-bright-magenta: #b48ead;
+  --ref-terminal-bright-cyan: #8fbcbb;
+  --ref-terminal-bright-white: #eceff4;
+  --ref-preview-dark-canvas: #2e3440;
+  --ref-preview-dark-header: #363c48;
+  --ref-preview-dark-divider: rgba(216, 222, 233, 0.12);
+  --ref-preview-dark-sidebar: #363c48;
+  --ref-preview-dark-content: #424854;
+  --ref-preview-light-canvas: #e5e9f0;
+  --ref-preview-light-header: #eff1f6;
+  --ref-preview-light-divider: rgba(65, 72, 88, 0.14);
+  --ref-preview-light-sidebar: #dce0e6;
+  --ref-preview-light-content: #d5dbe4;
+}

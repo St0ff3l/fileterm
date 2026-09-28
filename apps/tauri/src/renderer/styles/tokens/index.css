@@ -3,4 +3,16 @@
 @import './fileterm-light.css';
 @import './codex-dark.css';
 @import './codex-light.css';
+@import './iterm2-dracula-dark.css';
+@import './iterm2-dracula-light.css';
+@import './iterm2-nord-dark.css';
+@import './iterm2-nord-light.css';
+@import './iterm2-gruvbox-dark.css';
+@import './iterm2-gruvbox-light.css';
+@import './iterm2-catppuccin-dark.css';
+@import './iterm2-catppuccin-light.css';
+@import './iterm2-solarized-dark.css';
+@import './iterm2-solarized-light.css';
+@import './iterm2-tokyonight-dark.css';
+@import './iterm2-tokyonight-light.css';
 @import './semantic.css';

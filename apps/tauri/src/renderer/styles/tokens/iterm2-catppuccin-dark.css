@@ -1,0 +1,136 @@
+/* Catppuccin Dark reference tokens.
+ * Palette source and attribution: docs/quality/iterm2-color-scheme-attribution.md.
+ */
+
+:root[data-theme='fileterm-dark'][data-theme-preset='iterm2-catppuccin'] {
+  --ref-surface-canvas: #1e1e2e;
+  --ref-surface-sidebar: #272738;
+  --ref-surface-panel: #272738;
+  --ref-surface-card: #272738;
+  --ref-surface-section: #272738;
+  --ref-surface-elevated: #333446;
+  --ref-surface-modal: #272738;
+  --ref-surface-context-menu: #333446;
+  --ref-surface-overlay: rgba(0, 0, 0, 0.62);
+  --ref-surface-hover: #434455;
+  --ref-surface-active: #494f67;
+  --ref-surface-input: #1b1b29;
+  --ref-surface-input-focus: #2d3042;
+  --ref-surface-toolbar: #272738;
+  --ref-surface-titlebar: #272738;
+  --ref-surface-terminal: #1e1e2e;
+  --ref-surface-chip: rgba(205, 214, 244, 0.14);
+  --ref-surface-inset: rgba(205, 214, 244, 0.05);
+  --ref-surface-inset-border: rgba(205, 214, 244, 0.1);
+  --ref-text-primary: #cdd6f4;
+  --ref-text-secondary: #aeb5d0;
+  --ref-text-muted: #80859c;
+  --ref-text-disabled: #5a5d72;
+  --ref-text-inverse: #1e1e2e;
+  --ref-text-context-menu: #cdd6f4;
+  --ref-border-subtle: rgba(205, 214, 244, 0.06);
+  --ref-border-default: rgba(205, 214, 244, 0.1);
+  --ref-border-strong: rgba(205, 214, 244, 0.18);
+  --ref-border-glass: rgba(205, 214, 244, 0.08);
+  --ref-border-context-menu: rgba(205, 214, 244, 0.1);
+  --ref-accent: #aeccfc;
+  --ref-accent-hover: #bad4fc;
+  --ref-accent-active: #7d93b5;
+  --ref-accent-muted: rgba(174, 204, 252, 0.15);
+  --ref-accent-focus: rgba(177, 234, 225, 0.28);
+  --ref-accent-secondary: #b1eae1;
+  --ref-focus-outline: #b1eae1;
+  --ref-status-success: #c2ecbf;
+  --ref-status-success-bg: rgba(194, 236, 191, 0.14);
+  --ref-status-warning: #fcd682;
+  --ref-status-warning-text: #fcd682;
+  --ref-status-warning-bg: rgba(252, 214, 130, 0.08);
+  --ref-status-danger: #f7aec2;
+  --ref-status-danger-hover: #d999ab;
+  --ref-status-danger-bg: rgba(247, 174, 194, 0.14);
+  --ref-status-info: #b1eae1;
+  --ref-status-info-bg: rgba(177, 234, 225, 0.14);
+  --ref-color-folder: #b1eae1;
+  --ref-color-skill: #f398da;
+  --ref-color-total: #aeccfc;
+  --ref-color-telnet: #b1eae1;
+  --ref-color-ftp: #f398da;
+  --ref-color-network-rx: #b1eae1;
+  --ref-color-network-tx: #f7aec2;
+  --ref-color-diff-added: #c2ecbf;
+  --ref-color-diff-removed: #f7aec2;
+  --ref-color-keyword: #fcd682;
+  --ref-action-primary-bg: #455880;
+  --ref-action-primary-hover: #617193;
+  --ref-action-primary-active: #323f5c;
+  --ref-action-primary-text: #ffffff;
+  --ref-action-danger-bg: #ad536d;
+  --ref-action-danger-hover: #984960;
+  --ref-action-danger-active: #8a4257;
+  --ref-action-danger-text: #ffffff;
+  --ref-shadow-context-menu: 0 16px 40px rgba(0, 0, 0, 0.34);
+  --ref-monaco-editor-bg: #1e1e2e;
+  --ref-monaco-editor-foreground: #cdd6f4;
+  --ref-monaco-line-number: #80859c;
+  --ref-monaco-line-number-active: #aeb5d0;
+  --ref-monaco-cursor: #aeccfc;
+  --ref-monaco-selection: #f5e0dc;
+  --ref-monaco-inactive-selection: rgba(174, 204, 252, 0.18);
+  --ref-monaco-line-highlight: rgba(205, 214, 244, 0.06);
+  --ref-monaco-indent-guide: rgba(205, 214, 244, 0.06);
+  --ref-monaco-indent-guide-active: rgba(205, 214, 244, 0.18);
+  --ref-file-editor-primary-shadow: 0 2px 10px rgba(174, 204, 252, 0.35);
+  --ref-terminal-frame-gradient:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px,
+      transparent 10px
+    ),
+    linear-gradient(to top, color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px, transparent 10px),
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px,
+      transparent 10px
+    ),
+    linear-gradient(to left, color-mix(in srgb, var(--ref-terminal-background) 82%, #000000 18%) 0px, transparent 10px);
+  --ref-terminal-frame-shadow: inset 0 0 14px
+    color-mix(in srgb, color-mix(in srgb, var(--ref-terminal-background) 60%, #000000 40%) 30%, transparent 70%);
+  --ref-terminal-background: #1e1e2e;
+  --ref-terminal-foreground: #cdd6f4;
+  --ref-terminal-cursor: #f5e0dc;
+  --ref-terminal-cursor-accent: #1e1e2e;
+  --ref-terminal-selection-background: #f5e0dc;
+  --ref-terminal-selection-foreground: #cdd6f4;
+  --ref-terminal-search-match-background: #f9e2af;
+  --ref-terminal-search-match-ruler: #fcd682;
+  --ref-terminal-search-active-background: #fcd682;
+  --ref-terminal-search-active-text: #1e1e2e;
+  --ref-terminal-search-active-border: #f9e2af;
+  --ref-terminal-search-active-ruler: #fcd682;
+  --ref-terminal-black: #45475a;
+  --ref-terminal-red: #f38ba8;
+  --ref-terminal-green: #a6e3a1;
+  --ref-terminal-yellow: #f9e2af;
+  --ref-terminal-blue: #89b4fa;
+  --ref-terminal-magenta: #f5c2e7;
+  --ref-terminal-cyan: #94e2d5;
+  --ref-terminal-white: #bac2de;
+  --ref-terminal-bright-black: #585b70;
+  --ref-terminal-bright-red: #f7aec2;
+  --ref-terminal-bright-green: #c2ecbf;
+  --ref-terminal-bright-yellow: #fcd682;
+  --ref-terminal-bright-blue: #aeccfc;
+  --ref-terminal-bright-magenta: #f398da;
+  --ref-terminal-bright-cyan: #b1eae1;
+  --ref-terminal-bright-white: #a6adc8;
+  --ref-preview-dark-canvas: #1e1e2e;
+  --ref-preview-dark-header: #272738;
+  --ref-preview-dark-divider: rgba(205, 214, 244, 0.12);
+  --ref-preview-dark-sidebar: #272738;
+  --ref-preview-dark-content: #333446;
+  --ref-preview-light-canvas: #eff1f5;
+  --ref-preview-light-header: #f5f6f9;
+  --ref-preview-light-divider: rgba(76, 79, 105, 0.14);
+  --ref-preview-light-sidebar: #e5e7eb;
+  --ref-preview-light-content: #d9dce7;
+}

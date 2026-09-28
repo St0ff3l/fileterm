@@ -7,29 +7,12 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             .map_err(|error| AppError::Storage(error.to_string()))?;
         let preferences: UiPreferences = serde_json::from_str(&content)
             .map_err(|error| AppError::Serialization(error.to_string()))?;
-        let mut preferences = normalize_ui_preferences(preferences);
-        let persist_reset = reset_active_theme_for_app_version(
-            &mut preferences,
-            &app.package_info().version.to_string(),
-        );
-        if persist_reset {
-            let content = serde_json::to_string_pretty(&preferences)
-                .map_err(|error| AppError::Serialization(error.to_string()))?;
-            if let Err(error) = std::fs::write(&path, content) {
-                crate::services::logging::warn(
-                    &app,
-                    "ui-preferences",
-                    format!("unable to persist default theme reset: {error}"),
-                );
-            }
-        }
-        Ok(preferences)
+        Ok(normalize_ui_preferences(preferences))
     } else {
         Ok(UiPreferences {
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
             theme_config: default_theme_config(),
-            fileterm_theme_reset_app_version: Some(app.package_info().version.to_string()),
             custom_themes: Vec::new(),
             auto_check_updates: default_auto_check_updates(),
             update_channel: default_update_channel(),
