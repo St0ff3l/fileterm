@@ -423,7 +423,13 @@ async fn run_worker_event_loop(
                                 );
                             }
                         }
-                        batch_buffer.extend_from_slice(text.as_bytes());
+                        let visible = filter_shell_setup_output(
+                            &mut pending_shell_setup_echo,
+                            &mut deferred_terminal_input,
+                            &terminal_write_tx,
+                            &text,
+                        )?;
+                        batch_buffer.extend_from_slice(visible.as_bytes());
                         if batch_buffer.len() >= TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD {
                             flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                             last_emit = Instant::now();
