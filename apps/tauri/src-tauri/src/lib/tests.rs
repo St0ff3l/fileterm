@@ -12,20 +12,42 @@ mod tests {
     use super::windows_icon_image;
 
     #[cfg(target_os = "macos")]
-    use super::{macos_traffic_light_target_center, MACOS_TRAFFIC_LIGHT_FRAME_SIZE};
+    use super::{
+        macos_renderer_titlebar_height, macos_traffic_light_target_center,
+        MACOS_TRAFFIC_LIGHT_FRAME_SIZE,
+    };
 
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_traffic_lights_use_absolute_renderer_titlebar_geometry() {
         let window_height = 820.0;
-        let close = macos_traffic_light_target_center(window_height, 0);
-        let miniaturize = macos_traffic_light_target_center(window_height, 1);
-        let zoom = macos_traffic_light_target_center(window_height, 2);
+        let titlebar_height = macos_renderer_titlebar_height(100);
+        let close = macos_traffic_light_target_center(window_height, titlebar_height, 0);
+        let miniaturize = macos_traffic_light_target_center(window_height, titlebar_height, 1);
+        let zoom = macos_traffic_light_target_center(window_height, titlebar_height, 2);
 
         assert_eq!(close, (27.0, 796.0));
         assert_eq!(miniaturize, (50.0, 796.0));
         assert_eq!(zoom, (73.0, 796.0));
         assert_eq!(close.0 - MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0, 20.0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_traffic_lights_stay_centered_when_interface_zoom_changes() {
+        for (percent, expected_top_inset) in
+            [(80, 19.2), (100, 24.0), (120, 28.8), (140, 33.6), (200, 48.0)]
+        {
+            for window_height in [820.0, 1000.0] {
+                let titlebar_height = macos_renderer_titlebar_height(percent);
+                for (index, expected_x) in [27.0, 50.0, 73.0].into_iter().enumerate() {
+                    let (x, y) =
+                        macos_traffic_light_target_center(window_height, titlebar_height, index);
+                    assert_eq!(x, expected_x);
+                    assert!((window_height - y - expected_top_inset).abs() < 1e-9);
+                }
+            }
+        }
     }
 
     #[test]

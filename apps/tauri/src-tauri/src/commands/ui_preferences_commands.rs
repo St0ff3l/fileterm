@@ -52,6 +52,8 @@ pub fn app_set_ui_preferences(
     let previous_locale = preferences.locale.clone();
     let previous_terminal_zoom_locked = preferences.terminal_zoom_locked;
     let previous_ui_zoom_locked = preferences.ui_zoom_locked;
+    #[cfg(target_os = "macos")]
+    let previous_ui_zoom_percent = preferences.ui_zoom_percent;
     let theme_was_provided = input.theme.is_some();
     if let Some(theme) = input.theme {
         preferences.theme = theme;
@@ -200,6 +202,12 @@ pub fn app_set_ui_preferences(
         }
     }
     let _ = app.emit("app:ui-preferences-changed", &preferences);
+    // Page zoom changes renderer layout without a native window resize.
+    // Reposition AppKit controls after broadcasting the new renderer zoom.
+    #[cfg(target_os = "macos")]
+    if previous_ui_zoom_percent != preferences.ui_zoom_percent {
+        crate::schedule_macos_traffic_light_recalibration(&app);
+    }
     Ok(preferences)
 }
 
