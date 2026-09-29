@@ -282,6 +282,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             showResourceMeters={isResourceMonitoringAvailable}
             visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
+            onMonitoringSnapshot={shell.applySnapshot}
             onOpenSystemInfo={openSystemInfo}
             onResizeStart={startSidebarResize}
             onRestoreWidth={() => setSidebarWidth(214)}

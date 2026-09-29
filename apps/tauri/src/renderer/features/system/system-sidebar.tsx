@@ -1,5 +1,14 @@
+import './system-sidebar-controls.css'
+import { MonitoringToggle } from './monitoring-toggle'
+import { MonitoringOverlay, monitoringIsObscured } from './monitoring-overlay'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ConnectionProfile, ResourceMonitoringMetric, SessionSnapshot, TabStatus } from '@fileterm/core'
+import type {
+  ConnectionProfile,
+  ResourceMonitoringMetric,
+  SessionSnapshot,
+  TabStatus,
+  WorkspaceSnapshot
+} from '@fileterm/core'
 import { t } from '../../i18n'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import {
@@ -20,6 +29,7 @@ export function SystemSidebar({
   connectionStatus,
   showResourceMeters,
   visibleMetrics,
+  onMonitoringSnapshot,
   onOpenSystemInfo,
   onToggleCollapsed
 }: {
@@ -30,10 +40,12 @@ export function SystemSidebar({
   connectionStatus: TabStatus | null
   showResourceMeters: boolean
   visibleMetrics: ResourceMonitoringMetric[]
+  onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
   onOpenSystemInfo(): void
   onToggleCollapsed(): void
 }) {
   const [sortMode, setSortMode] = useState<'memory' | 'cpu' | 'command'>('cpu')
+  const obscured = monitoringIsObscured(activeSession)
   const metrics = activeSession?.systemMetrics
   const internalIp = metrics?.ip || '-'
   const accessAddress = activeProfile?.host || activeSession?.accessHost || '-'
@@ -121,60 +133,85 @@ export function SystemSidebar({
       .slice(0, 40)
   }, [metrics?.topProcesses, sortMode])
 
+  const sidebarToggle = (
+    <button
+      aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+      className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
+      onClick={onToggleCollapsed}
+      title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+      type="button"
+    >
+      <svg
+        className="system-sidebar-toggle-icon"
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" />
+        <path d="M5.25 1.5V14.5" />
+      </svg>
+    </button>
+  )
+
   return (
     <div className={`system-sidebar-layout ${collapsed ? 'is-collapsed' : ''}`}>
-      <button
-        aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
-        className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
-        onClick={onToggleCollapsed}
-        title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
-        type="button"
-      >
-        <svg
-          className="system-sidebar-toggle-icon"
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" />
-          <path d="M5.25 1.5V14.5" />
-        </svg>
-      </button>
+      {collapsed ? sidebarToggle : null}
+      <MonitoringOverlay
+        key={`overlay:${activeTabId}:${activeSession?.monitoring?.generation}`}
+        session={activeSession}
+        tabId={activeTabId}
+        collapsed={collapsed}
+        connectionStatus={connectionStatus}
+        onSnapshot={onMonitoringSnapshot}
+      />
       {!collapsed ? (
         <>
           <section className="sys-card">
             <div className="connection-summary">
-              <AddressLine label={t.privateIp} value={internalIp} />
-              <AddressLine label={t.accessAddress} value={accessAddress} />
+              <div className="connection-addresses" inert={obscured}>
+                <AddressLine label={t.privateIp} value={internalIp} />
+                <AddressLine label={t.accessAddress} value={accessAddress} />
+              </div>
+              <div className="system-sidebar-controls">
+                {sidebarToggle}
+                <MonitoringToggle
+                  key={`toggle:${activeTabId}:${activeSession?.monitoring?.generation}`}
+                  onSnapshot={onMonitoringSnapshot}
+                  session={activeSession}
+                  tabId={activeTabId}
+                />
+              </div>
             </div>
-            <button
-              className="system-title"
-              data-file-panel-snap-target="system-title"
-              onClick={onOpenSystemInfo}
-              type="button"
-            >
-              {t.systemInfo}
-            </button>
-            <ResourceMetricCards
-              availableFileSystems={availableFileSystems}
-              fileSystem={selectedFileSystem}
-              metrics={metrics}
-              onFileSystemChange={setSelectedDiskMountPoint}
-              scrollRef={systemMetricsScrollRef}
-              visibleMetrics={visibleMetrics}
-            />
-            {visibleMetrics.includes('processes') ? (
-              <ProcessMetricPanel onSortModeChange={setSortMode} rows={sortedProcesses} sortMode={sortMode} />
-            ) : null}
-            {visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
+            <div inert={obscured}>
+              <button
+                className="system-title"
+                data-file-panel-snap-target="system-title"
+                onClick={onOpenSystemInfo}
+                type="button"
+              >
+                {t.systemInfo}
+              </button>
+              <ResourceMetricCards
+                availableFileSystems={availableFileSystems}
+                fileSystem={selectedFileSystem}
+                metrics={metrics}
+                onFileSystemChange={setSelectedDiskMountPoint}
+                scrollRef={systemMetricsScrollRef}
+                visibleMetrics={visibleMetrics}
+              />
+              {visibleMetrics.includes('processes') ? (
+                <ProcessMetricPanel onSortModeChange={setSortMode} rows={sortedProcesses} sortMode={sortMode} />
+              ) : null}
+              {visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
+            </div>
           </section>
-          <section className="disk-table">
+          <section className="disk-table" inert={obscured}>
             <div className="disk-head" data-file-panel-snap-target="disk-header">
               <span>{t.path}</span>
               <span>{t.availableSize}</span>

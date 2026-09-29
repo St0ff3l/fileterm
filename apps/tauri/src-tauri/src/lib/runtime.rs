@@ -580,6 +580,8 @@ pub fn run() {
             crate::commands::app_attach_background_session,
             crate::commands::app_detach_session_to_background,
             crate::commands::app_reconnect_tab,
+            crate::commands::app_retry_monitoring,
+            crate::commands::app_set_monitoring_enabled,
             crate::commands::app_disconnect_tab,
             crate::commands::app_close_tab,
             crate::commands::app_split_tab,

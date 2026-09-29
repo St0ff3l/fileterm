@@ -374,6 +374,8 @@ pub struct SessionSnapshot {
     /// sudo_user 是用户显式配置的 sudo 目标，shell_user 是终端实际运行用户。
     pub shell_user: Option<String>,
     pub connected: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitoring: Option<MonitoringState>,
     pub system_metrics: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_monitoring_unavailable_reason: Option<String>,

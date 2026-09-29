@@ -178,6 +178,17 @@ platform probe
         -> localized renderer presentation
 ```
 
+SSH 资源监控由 `sessions/ssh/worker/metrics/` 的独立管理任务拥有持久采集通道。采集能力与
+`SessionSnapshot.monitoring` 运行健康状态分离：暂时无有效样本不撤销能力、不清空数据；
+后端按有效间隔计算暂停/恢复阈值，并提供最多五次恢复及手动跳过退避。状态与样本经
+`workspace:sessionMetrics` 和完整快照同步，generation/revision 拒绝旧任务和乱序事件。
+Renderer 只显示遮罩、倒计时和操作反馈，`app_retry_monitoring` 只重试监控通道。
+父监控管理任务保留重启上下文和控制接收端，采集子任务异常退出后可手动重建；
+监控断开与 `ssh-disconnected` 分别展示监控重试和现有 `reconnectTab` 会话重连入口。
+监控开关的手动关闭状态在同一标签 SSH 重连后保留。
+关闭标签、断开会话或显式禁用监控会取消任务。网络历史以 `breakBefore` 标记中断。
+详细参数、启停交互和自动化验证见 [监控恢复、侧栏遮罩与启停控制](./plans/completed/monitoring-recovery-overlay.md)。
+
 ## 4.2 Renderer 桌面壳与布局边界
 
 系统侧栏进程数据由远端采集器分别选取 CPU、内存和命令排序的前 40 条，去重后最多传输 120 条；renderer 根据当前排序展示 40 条。`SidebarProcessItem.commandOrder` 保留采集端命令排序，`memoryBytes` 用于数值排序，避免用已取整的展示文本排序。进程 CPU 使用整机百分比，Linux 以进程 tick / 全机 tick 的同窗口增量计算，并校验 PID 的启动时间；不能把前 40 条的合计冒充整机仪表，也不能按脚本解释器名称过滤用户进程。

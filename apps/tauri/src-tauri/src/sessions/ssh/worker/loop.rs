@@ -261,7 +261,7 @@ async fn run_worker_loop(
         ),
     );
     let transfer_sftp_slot: TransferSftpSlot = Arc::new(Mutex::new(None));
-    let metrics_shutdown = Arc::new(tokio::sync::Notify::new());
+    let metrics_shutdown = cancellation.child_token();
     let (auxiliary_tx, auxiliary_rx) = oneshot::channel();
     let auxiliary_startup = async {
         let ready = include!("auxiliary_startup.rs");
@@ -286,7 +286,7 @@ async fn run_worker_loop(
         shell_setup_script: None,
         terminal_write_tx,
     };
-    run_with_auxiliary_startup(
+    let worker_result = run_with_auxiliary_startup(
         run_worker_event_loop(
             context,
             shell_reader,
@@ -296,5 +296,7 @@ async fn run_worker_loop(
         ),
         auxiliary_startup,
     )
-    .await
+    .await;
+    metrics_shutdown.cancel();
+    worker_result
 }

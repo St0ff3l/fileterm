@@ -28,6 +28,7 @@ pub struct LocalTerminalRuntimeGate {
     pub(crate) emit_lock: Mutex<()>,
 }
 
+include!("monitoring.rs");
 include!("model.rs");
 include!("profiles.rs");
 include!("state.rs");

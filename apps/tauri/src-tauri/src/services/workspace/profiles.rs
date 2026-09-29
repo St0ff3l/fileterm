@@ -110,6 +110,8 @@ pub struct PendingActionApproval {
 }
 
 pub struct WorkspaceState {
+    pub monitoring_controls: Arc<RwLock<HashMap<String, MonitoringControl>>>,
+    pub next_monitoring_generation: AtomicU64,
     pub tabs: Arc<RwLock<Vec<WorkspaceTab>>>,
     pub active_tab_id: Arc<RwLock<Option<String>>>,
     pub sessions: Arc<RwLock<HashMap<String, SessionSnapshot>>>,

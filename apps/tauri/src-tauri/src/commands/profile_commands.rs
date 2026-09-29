@@ -35,6 +35,7 @@ pub async fn app_update_profile(
         }
     }
     drop(sessions);
+    stop_disabled_monitoring(&app, &resolved_profile).await;
     get_workspace_snapshot_and_emit(&app).await
 }
 

@@ -23,7 +23,7 @@ async fn run_worker_event_loop(
     let cancellation = context.cancellation.clone();
     let disconnect_reason = Arc::clone(&context.disconnect_reason);
     let connected_at = context.connected_at;
-    let metrics_shutdown = Arc::clone(&context.metrics_shutdown);
+    let metrics_shutdown = context.metrics_shutdown.clone();
     let mut shell_setup_script = context.shell_setup_script;
     let mut auxiliary_pending = true;
     let mut startup_prompt = String::new();
@@ -158,13 +158,13 @@ async fn run_worker_event_loop(
             }
             _ = cancellation.cancelled() => {
                 flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
-                metrics_shutdown.notify_waiters();
+                metrics_shutdown.cancel();
                 return Ok(SshWorkerExit::cancelled());
             }
             input = terminal_input_rx.recv() => {
                 let Some(data) = input else {
                     flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
-                    metrics_shutdown.notify_waiters();
+                    metrics_shutdown.cancel();
                     return Ok(SshWorkerExit::input_closed());
                 };
                 let data = coalesce_terminal_input(data, terminal_input_rx);
@@ -275,7 +275,7 @@ async fn run_worker_event_loop(
             cmd = cmd_rx.recv() => {
                 if cmd.is_none() {
                     flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
-                    metrics_shutdown.notify_waiters();
+                    metrics_shutdown.cancel();
                     return Ok(SshWorkerExit::input_closed());
                 }
                 if let Some(WorkerCmd::WriteTerminal(data)) = &cmd {
@@ -315,7 +315,7 @@ async fn run_worker_event_loop(
                         batch_buffer.extend_from_slice(stdout_decoder.finish().as_bytes());
                         batch_buffer.extend_from_slice(stderr_decoder.finish().as_bytes());
                         flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
-                        metrics_shutdown.notify_waiters();
+                        metrics_shutdown.cancel();
                         return Ok(SshWorkerExit::explicit_disconnect());
                     }
                     Ok(false) => {}
@@ -443,7 +443,7 @@ async fn run_worker_event_loop(
                         batch_buffer.extend_from_slice(stdout_decoder.finish().as_bytes());
                         batch_buffer.extend_from_slice(stderr_decoder.finish().as_bytes());
                         flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
-                        metrics_shutdown.notify_waiters();
+                        metrics_shutdown.cancel();
                         let disconnect = disconnect_reason
                             .lock()
                             .ok()

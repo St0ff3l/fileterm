@@ -1,0 +1,86 @@
+.system-sidebar-layout .connection-summary {
+  position: relative;
+  padding-right: 40px;
+}
+
+.connection-addresses {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.connection-addresses .address-row {
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: 4px;
+}
+
+.system-sidebar-controls {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 4;
+}
+
+.system-sidebar-layout :is(.system-sidebar-toggle, .monitoring-toggle) {
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: inherit;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-sidebar) 82%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--system-sidebar-toggle-shadow);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.system-sidebar-layout :is(.system-sidebar-toggle, .monitoring-toggle):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-sidebar) 82%, transparent);
+  border-color: var(--border-subtle);
+  transform: translateX(-1px);
+  box-shadow: var(--system-sidebar-toggle-hover-shadow);
+}
+
+.system-sidebar-layout > .system-sidebar-toggle.is-collapsed {
+  position: static;
+  margin: 0 auto;
+}
+
+.system-sidebar-toggle-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.system-sidebar-layout :is(.system-sidebar-toggle, .monitoring-toggle):focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+.monitoring-toggle .ft-btn__icon {
+  display: inline-flex;
+}
+
+:root[data-theme*='light'] .system-sidebar-layout :is(.system-sidebar-toggle, .monitoring-toggle) {
+  border-color: var(--system-sidebar-control-border);
+}
+
+:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-'])
+  .system-sidebar-layout
+  :is(.system-sidebar-toggle, .monitoring-toggle) {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
