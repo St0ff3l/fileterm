@@ -15,6 +15,7 @@ import { useWorkspaceModals } from './use-workspace-modals'
 import { useFileEditor } from './use-file-editor'
 import { useFileOperations } from './use-file-operations'
 import { useSshInteractions } from './use-ssh-interactions'
+import { acceptConnectionTestHostTrust } from './connection-host-trust'
 import { useBackupPasswordInteractions } from './use-backup-password-interactions'
 import { useSudoPasswordPrompt } from './use-sudo-password-prompt'
 import type { WorkspacePaneFocusRequest, WorkspaceSplitPaneRequest } from './use-workspace-ipc-sync'
@@ -560,6 +561,9 @@ export function useAppWorkspace({
     isMainWorkspaceWindow,
     isConnectionFormWindow,
     isConnectionFormOpen: showConnectionForm,
+    onHostTrustAccepted: (request) => {
+      setForm((current) => acceptConnectionTestHostTrust(current, request, editingProfileId))
+    },
     onError
   })
 

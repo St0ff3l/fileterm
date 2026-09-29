@@ -9,6 +9,7 @@ import type {
 } from '@fileterm/core'
 import { defaultForm, profileToForm } from '../app/app-data'
 import { t } from '../i18n'
+import { invalidateChangedConnectionHostTrust } from './connection-host-trust'
 
 export type WindowCloseConfirmState = {
   isQuit: boolean
@@ -134,7 +135,9 @@ export function useWorkspaceModals({
   }, [formWindowMode, formWindowProfileId, hasLoadedInitialSnapshot, isConnectionFormWindow, profiles])
 
   const updateForm = (updater: CreateProfileInput | ((current: CreateProfileInput) => CreateProfileInput)) => {
-    setForm((current) => (typeof updater === 'function' ? updater(current) : updater))
+    setForm((current) =>
+      invalidateChangedConnectionHostTrust(current, typeof updater === 'function' ? updater(current) : updater)
+    )
     setFormError(null)
   }
 
