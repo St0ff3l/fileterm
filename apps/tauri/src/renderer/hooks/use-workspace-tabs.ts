@@ -1,3 +1,4 @@
+import { DIAGNOSTIC_SCOPES, writeDiagnosticLog } from '../lib/diagnostic-log'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ConnectionProfile, PaneFocusDirection, SessionSnapshot } from '@fileterm/core'
 import { homeTabKey, sessionTabKey } from '../app/app-utils'
@@ -380,6 +381,12 @@ export function useWorkspaceTabs({
     }
 
     const tabId = activeTab.id
+    writeDiagnosticLog(
+      'INFO',
+      DIAGNOSTIC_SCOPES.monitoring,
+      `sidebar collapse requested tab_id=${tabId} previous_user_collapsed=${isSystemSidebarCollapsed} requested_collapsed=${nextCollapsed}`,
+      desktopApi
+    )
     setSystemSidebarCollapsedByTabId((currentByTabId) => {
       const currentCollapsed = currentByTabId[tabId] ?? false
       if (currentCollapsed === nextCollapsed) {

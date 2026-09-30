@@ -1,3 +1,4 @@
+import { DIAGNOSTIC_SCOPES, writeDiagnosticLog } from '../lib/diagnostic-log'
 import type {
   UseWorkspaceIpcSyncOptions,
   UseWorkspaceIpcSyncResult,
@@ -143,7 +144,7 @@ export function useWorkspaceIpcSync({
       // Diagnostics must never make a workspace event handler fail. The
       // backend logger is best-effort and also performs secret redaction and
       // size bounding before writing app.log.
-      void desktopApi.writeDiagnosticLog(level, 'renderer:workspace', message).catch(() => undefined)
+      writeDiagnosticLog(level, DIAGNOSTIC_SCOPES.workspace, message, desktopApi)
     },
     [desktopApi]
   )

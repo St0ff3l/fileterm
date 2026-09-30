@@ -1,3 +1,4 @@
+import { useMonitoringDiagnostics } from "./use-monitoring-diagnostics"
 import './system-sidebar-controls.css'
 import { MonitoringToggle } from './monitoring-toggle'
 import { MonitoringOverlay, monitoringIsObscured } from './monitoring-overlay'
@@ -44,6 +45,12 @@ export function SystemSidebar({
   onOpenSystemInfo(): void
   onToggleCollapsed(): void
 }) {
+  const logMonitoringAction = useMonitoringDiagnostics({
+    tabId: activeTabId,
+    session: activeSession,
+    collapsed,
+    connectionStatus
+  })
   const [sortMode, setSortMode] = useState<'memory' | 'cpu' | 'command'>('cpu')
   const obscured = monitoringIsObscured(activeSession)
   const metrics = activeSession?.systemMetrics
@@ -137,7 +144,10 @@ export function SystemSidebar({
     <button
       aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
       className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
-      onClick={onToggleCollapsed}
+      onClick={() => {
+        logMonitoringAction("toggle-sidebar")
+        onToggleCollapsed()
+      }}
       title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
       type="button"
     >
@@ -192,7 +202,10 @@ export function SystemSidebar({
               <button
                 className="system-title"
                 data-file-panel-snap-target="system-title"
-                onClick={onOpenSystemInfo}
+                onClick={() => {
+                  logMonitoringAction("open-system-info")
+                  onOpenSystemInfo()
+                }}
                 type="button"
               >
                 {t.systemInfo}
