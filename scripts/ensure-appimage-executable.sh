@@ -21,42 +21,32 @@ for launcher in AppRun AppRun.wrapped; do
   test -f "$appdir/$launcher"
 done
 
-needs_rebuild=false
-if find "$appdir" -type d ! -perm -0555 -print -quit | grep -q .; then
-  needs_rebuild=true
-fi
-if find "$appdir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; then
-  needs_rebuild=true
-fi
-if find "$appdir/AppRun" "$appdir/AppRun.wrapped" -maxdepth 0 ! -perm -0001 -print -quit | grep -q .; then
-  needs_rebuild=true
-fi
+# The runtime creates the extraction prefix with mode 0700 for privacy. That
+# synthetic directory is not the AppDir root stored in the SquashFS image.
+# Normalize it before repacking so the embedded AppDir root is traversable by
+# Firejail, then exclude the synthetic prefix from post-packaging checks.
+find "$appdir" -type d -exec chmod 755 {} +
+find "$appdir" -type f -perm /0111 -exec chmod a+rx {} +
+chmod 755 "$appdir/AppRun" "$appdir/AppRun.wrapped"
 
-if [ "$needs_rebuild" = true ]; then
-  # Firejail runs AppImage payloads as an unprivileged user. Root-owned 700
-  # directories in the extracted AppDir prevent it from reaching AppRun.
-  find "$appdir" -type d -exec chmod 755 {} +
-  find "$appdir" -type f -perm /0111 -exec chmod a+rx {} +
-  chmod 755 "$appdir/AppRun" "$appdir/AppRun.wrapped"
+tool="$work_dir/appimagetool-x86_64.AppImage"
+curl --fail --location --silent --show-error \
+  'https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage' \
+  --output "$tool"
+printf 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  %s\n' "$tool" | sha256sum --check --status
+chmod a+x "$tool"
 
-  tool="$work_dir/appimagetool-x86_64.AppImage"
-  curl --fail --location --silent --show-error \
-    'https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage' \
-    --output "$tool"
-  echo 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  '"$tool" | sha256sum --check --status
-  chmod a+x "$tool"
+rebuilt="$work_dir/FileTerm-rebuilt.AppImage"
+ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" "$appdir" "$rebuilt"
+chmod a+x "$rebuilt"
 
-  rebuilt="$work_dir/FileTerm-rebuilt.AppImage"
-  ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" "$appdir" "$rebuilt"
-  chmod a+x "$rebuilt"
-  mv "$rebuilt" "$appimage_file"
+mv "$rebuilt" "$appimage_file"
 
-  rm -rf "$appdir"
-  (
-    cd "$work_dir"
-    "$appimage_file" --appimage-extract >/dev/null
-  )
-fi
+rm -rf "$appdir"
+(
+  cd "$work_dir"
+  "$appimage_file" --appimage-extract >/dev/null
+)
 
 for launcher in AppRun AppRun.wrapped; do
   test -n "$(find "$appdir/$launcher" -maxdepth 0 -perm -0001 -print -quit)" || {
@@ -65,9 +55,9 @@ for launcher in AppRun AppRun.wrapped; do
   }
 done
 
-untraversable_dir="$(find "$appdir" -type d ! -perm -0001 -print -quit)"
+untraversable_dir="$(find "$appdir" -mindepth 1 -type d ! -perm -0005 -print -quit)"
 if [ -n "$untraversable_dir" ]; then
-  echo "An AppImage directory is not traversable by other users in $appimage_file: $(stat -c '%a %u:%g %n' "$untraversable_dir")" >&2
+  echo "An AppImage directory is not readable and traversable by other users in $appimage_file: $(stat -c '%a %u:%g %n' "$untraversable_dir")" >&2
   exit 1
 fi
 if find "$appdir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; then
@@ -75,4 +65,4 @@ if find "$appdir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; th
   exit 1
 fi
 
-echo "AppImage directories and launchers are accessible by all users: $appimage_file"
+echo "AppImage payload permissions are accessible by other users: $appimage_file"

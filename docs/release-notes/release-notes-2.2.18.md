@@ -1,10 +1,10 @@
 ## FileTerm 2.2.18
 
-修复 Linux AppImage 在 AppImageHub Firejail 测试中因目录权限不足而无法启动的问题，并调整发行文件名以符合 AppImageHub 命名要求。
+修复 Linux AppImage 在 Firejail 沙箱中因 AppDir 根目录权限不足而无法启动的问题，并调整发行文件名以符合 AppImageHub 命名要求。
 
 ### 2.2.18 更新重点
 
-- **Linux AppImage**：打包前将 AppDir 目录规范为可供普通用户遍历，并确保可执行文件具有通用执行权限，修复 Firejail 沙箱启动失败。
+- **Linux AppImage**：规范打包进 SquashFS 的 AppDir 根目录、内部目录和启动器权限，确保 Firejail 可遍历并启动应用。
 - **AppImageHub 兼容性**：移除 AppImage 资产名中的 `linux`，符合其文件名检查规则。
 
 ### 本版本包含的主要 PR 和问题修复
@@ -22,11 +22,11 @@
 
 ## FileTerm 2.2.18
 
-Fix Linux AppImage startup failures in AppImageHub's Firejail test caused by insufficient directory permissions, and update the release asset name to meet AppImageHub's naming requirements.
+Fix Linux AppImage startup failures in Firejail caused by restrictive AppDir root permissions, and update the release asset name to meet AppImageHub's naming requirements.
 
 ### Highlights
 
-- **Linux AppImage**: Normalize AppDir directories for traversal by unprivileged users and ensure executable files can be launched by them, fixing startup in the Firejail sandbox.
+- **Linux AppImage**: Normalize the AppDir root, internal directory, and launcher permissions embedded in SquashFS so Firejail can traverse and launch the application.
 - **AppImageHub compatibility**: Remove `linux` from the AppImage asset name to satisfy its filename check.
 
 ### Main PRs and issues
