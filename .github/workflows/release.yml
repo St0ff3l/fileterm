@@ -296,8 +296,9 @@ jobs:
           test -n "$(find "$bundle_root/deb" -name '*.deb' -print -quit)"
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$appimage_file"
-          if [[ "${appimage_file,,}" == *linux* ]]; then
-            echo "AppImageHub rejects Linux-specific text in the AppImage filename: $appimage_file" >&2
+          appimage_name="$(basename "$appimage_file")"
+          if [[ "${appimage_name,,}" == *linux* ]]; then
+            echo "AppImageHub rejects Linux-specific text in the AppImage filename: $appimage_name" >&2
             exit 1
           fi
 
