@@ -11,7 +11,7 @@
     "pretypecheck": "node ../../scripts/workspace-run.mjs sync:version . && node ../../scripts/workspace-run.mjs build:packages .",
     "prepackage:mac": "npm --prefix ../.. run sync:version",
     "prepackage:win": "npm --prefix ../.. run sync:version",
-    "dev": "node ./scripts/run-tauri.mjs dev",
+    "dev": "node ./scripts/run-tauri.mjs dev --config src-tauri/tauri.dev.conf.json",
     "dev:renderer": "vite",
     "build": "node ./scripts/run-tauri.mjs build",
     "build:renderer": "vite build",
