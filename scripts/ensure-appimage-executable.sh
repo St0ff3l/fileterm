@@ -9,7 +9,7 @@ fi
 command -v zsyncmake >/dev/null
 command -v python3 >/dev/null
 appimage_file="$(realpath "$1")"
-update_information="${2:-gh-releases-zsync|St0ff3l|fileterm|latest|FileTerm-*-x86_64.AppImage.zsync}"
+update_information="${2:-gh-releases-zsync|St0ff3l|fileterm|latest|FileTerm-*-linux-x86_64.AppImage.zsync}"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 

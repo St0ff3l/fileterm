@@ -21,7 +21,7 @@ FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的�
 2. 按仓库 release SOP 从 `main` 创建 `release/x.y.z` 分支并推送。
 3. 在 `release/x.y.z` 分支的最新提交上打 `vx.y.z` tag 并推送，等待 `release.yml` 完成构建与 GitHub Release 创建。
 4. 打开 GitHub Release，确认 Windows（exe / sig / latest.json）、macOS（arm64 + x64 dmg）、Linux（deb / AppImage / zsync）均已作为资产附加。
-5. 确认 Linux AppImage 的 AppDir 根目录、内部目录对其他用户可读和遍历，所有可执行文件及 `AppRun`、`AppRun.wrapped` 对其他用户可执行。Release 工作流会在上传前校正权限，并直接检查内嵌 SquashFS 的权限元数据。AppImage 资产名不得包含 `linux`，以符合 AppImageHub 的命名检查。
+5. 确认 Linux AppImage 的 AppDir 根目录、内部目录对其他用户可读和遍历，所有可执行文件及 `AppRun`、`AppRun.wrapped` 对其他用户可执行。Release 工作流会在上传前校正权限，并直接检查内嵌 SquashFS 的权限元数据。AppImage 资产统一命名为 `FileTerm-<version>-linux-x86_64.AppImage`，与其他平台产物保持一致。AppImageHub 会对 `linux` 字样给出命名建议警告，该警告不影响运行，也不作为本仓库的发布失败条件。
 
 ## 升级验收
 
@@ -45,7 +45,7 @@ FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的�
 ### Linux（AppImageUpdate 外部更新）
 
 - `scripts/ensure-appimage-executable.sh` 在修正权限后，通过固定版本的 `appimagetool -u` 重打包并生成 `.zsync`。最终文件名必须在重打包前确定，禁止生成校验文件后再修改 AppImage 内容。
-- 正式版使用 `gh-releases-zsync|St0ff3l|fileterm|latest|FileTerm-*-x86_64.AppImage.zsync`；预发布版使用 `latest-pre`，避免正式版升级到测试版。
+- 正式版使用 `gh-releases-zsync|St0ff3l|fileterm|latest|FileTerm-*-linux-x86_64.AppImage.zsync`；预发布版使用 `latest-pre`，避免正式版升级到测试版。
 - 上传前验证内嵌更新信息，并检查 `.zsync` 的 Filename、URL、Length、SHA-1 与最终 AppImage 一致；两者必须上传至同一个 Release。
 - 首次发布后，用 `--appimage-updateinformation` 检查发布资产，并使用 AppImageUpdate 检查更新；下一次正式发布后，再从旧的可更新 AppImage 实测差量升级。2.2.18 的已发布资产没有内嵌更新信息，无法自动获得此能力。
 - 规范参考：[AppImage 更新指南](https://docs.appimage.org/packaging-guide/optional/updates.html)。
