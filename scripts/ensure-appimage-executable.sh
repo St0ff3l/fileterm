@@ -21,10 +21,8 @@ for launcher in AppRun AppRun.wrapped; do
   test -f "$appdir/$launcher"
 done
 
-# The runtime creates the extraction prefix with mode 0700 for privacy. That
-# synthetic directory is not the AppDir root stored in the SquashFS image.
-# Normalize it before repacking so the embedded AppDir root is traversable by
-# Firejail, then exclude the synthetic prefix from post-packaging checks.
+# Runtime extraction may apply private permissions to its temporary tree, so
+# verify the repacked SquashFS directly instead of inspecting that temp tree.
 find "$appdir" -type d -exec chmod 755 {} +
 find "$appdir" -type f -perm /0111 -exec chmod a+rx {} +
 chmod 755 "$appdir/AppRun" "$appdir/AppRun.wrapped"
@@ -42,25 +40,29 @@ chmod a+x "$rebuilt"
 
 mv "$rebuilt" "$appimage_file"
 
-rm -rf "$appdir"
-(
-  cd "$work_dir"
-  "$appimage_file" --appimage-extract >/dev/null
-)
+squashfs_offset="$("$appimage_file" --appimage-offset)"
+root_access="$(unsquashfs -lls -no-progress -offset "$squashfs_offset" "$appimage_file" | awk '$NF == "squashfs-root" { print substr($1, 8, 1) substr($1, 10, 1); exit }')"
+if [ "$root_access" != "rx" ]; then
+  echo "AppImage root directory is not readable and traversable by other users: ${root_access:-missing metadata}" >&2
+  exit 1
+fi
+
+payload_dir="$work_dir/verified-payload"
+unsquashfs -no-progress -offset "$squashfs_offset" -d "$payload_dir" "$appimage_file" >/dev/null
 
 for launcher in AppRun AppRun.wrapped; do
-  test -n "$(find "$appdir/$launcher" -maxdepth 0 -perm -0001 -print -quit)" || {
+  test -n "$(find "$payload_dir/$launcher" -maxdepth 0 -perm -0001 -print -quit)" || {
     echo "$launcher is not executable by other users in $appimage_file" >&2
     exit 1
   }
 done
 
-untraversable_dir="$(find "$appdir" -mindepth 1 -type d ! -perm -0005 -print -quit)"
+untraversable_dir="$(find "$payload_dir" -mindepth 1 -type d ! -perm -0005 -print -quit)"
 if [ -n "$untraversable_dir" ]; then
   echo "An AppImage directory is not readable and traversable by other users in $appimage_file: $(stat -c '%a %u:%g %n' "$untraversable_dir")" >&2
   exit 1
 fi
-if find "$appdir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; then
+if find "$payload_dir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; then
   echo "An AppImage executable is not readable and executable by all users in $appimage_file" >&2
   exit 1
 fi

@@ -21,7 +21,7 @@ FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的�
 2. 按仓库 release SOP 从 `main` 创建 `release/x.y.z` 分支并推送。
 3. 在 `release/x.y.z` 分支的最新提交上打 `vx.y.z` tag 并推送，等待 `release.yml` 完成构建与 GitHub Release 创建。
 4. 打开 GitHub Release，确认 Windows（exe / sig / latest.json）、macOS（arm64 + x64 dmg）、Linux（deb / AppImage）均已作为资产附加。
-5. 确认 Linux AppImage 的 AppDir 根目录、内部目录对其他用户可读和遍历，所有可执行文件及 `AppRun`、`AppRun.wrapped` 对其他用户可执行。Release 工作流会在上传前校正并检查权限；检查时忽略 runtime 创建的 `0700` 临时解包目录。AppImage 资产名不得包含 `linux`，以符合 AppImageHub 的命名检查。
+5. 确认 Linux AppImage 的 AppDir 根目录、内部目录对其他用户可读和遍历，所有可执行文件及 `AppRun`、`AppRun.wrapped` 对其他用户可执行。Release 工作流会在上传前校正权限，并直接检查内嵌 SquashFS 的权限元数据。AppImage 资产名不得包含 `linux`，以符合 AppImageHub 的命名检查。
 
 ## 升级验收
 
