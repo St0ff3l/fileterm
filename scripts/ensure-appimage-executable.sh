@@ -21,7 +21,22 @@ for launcher in AppRun AppRun.wrapped; do
   test -f "$appdir/$launcher"
 done
 
-if [ -n "$(find "$appdir/AppRun" "$appdir/AppRun.wrapped" -maxdepth 0 ! -perm -0001 -print -quit)" ]; then
+needs_rebuild=false
+if find "$appdir" -type d ! -perm -0555 -print -quit | grep -q .; then
+  needs_rebuild=true
+fi
+if find "$appdir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; then
+  needs_rebuild=true
+fi
+if find "$appdir/AppRun" "$appdir/AppRun.wrapped" -maxdepth 0 ! -perm -0001 -print -quit | grep -q .; then
+  needs_rebuild=true
+fi
+
+if [ "$needs_rebuild" = true ]; then
+  # Firejail runs AppImage payloads as an unprivileged user. Root-owned 700
+  # directories in the extracted AppDir prevent it from reaching AppRun.
+  find "$appdir" -type d -exec chmod 755 {} +
+  find "$appdir" -type f -perm /0111 -exec chmod a+rx {} +
   chmod 755 "$appdir/AppRun" "$appdir/AppRun.wrapped"
 
   tool="$work_dir/appimagetool-x86_64.AppImage"
@@ -50,4 +65,13 @@ for launcher in AppRun AppRun.wrapped; do
   }
 done
 
-echo "AppImage launchers are executable by all users: $appimage_file"
+if find "$appdir" -type d ! -perm -0555 -print -quit | grep -q .; then
+  echo "An AppImage directory is not readable and traversable by all users in $appimage_file" >&2
+  exit 1
+fi
+if find "$appdir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; then
+  echo "An AppImage executable is not readable and executable by all users in $appimage_file" >&2
+  exit 1
+fi
+
+echo "AppImage directories and launchers are accessible by all users: $appimage_file"

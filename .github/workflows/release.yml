@@ -286,7 +286,7 @@ jobs:
 
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$appimage_file"
-          mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-linux-x86_64.AppImage"
+          mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-x86_64.AppImage"
 
       - name: Verify Linux packages
         shell: bash
@@ -294,7 +294,12 @@ jobs:
           set -euo pipefail
           bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
           test -n "$(find "$bundle_root/deb" -name '*.deb' -print -quit)"
-          test -n "$(find "$bundle_root/appimage" -name '*.AppImage' -print -quit)"
+          appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$appimage_file"
+          if [[ "${appimage_file,,}" == *linux* ]]; then
+            echo "AppImageHub rejects Linux-specific text in the AppImage filename: $appimage_file" >&2
+            exit 1
+          fi
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v6
