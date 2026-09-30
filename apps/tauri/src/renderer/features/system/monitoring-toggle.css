@@ -3,8 +3,8 @@
 }
 .monitoring-toggle-icon {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background-color: currentColor;
   mask: url('../../assets/icons/system/power.svg') center / contain no-repeat;
   -webkit-mask: url('../../assets/icons/system/power.svg') center / contain no-repeat;

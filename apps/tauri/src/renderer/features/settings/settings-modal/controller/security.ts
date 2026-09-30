@@ -3,9 +3,10 @@ import { t } from '../../../../i18n'
 import type { SettingsModalState } from './state'
 
 export function useSettingsSecurityController({ state }: { state: SettingsModalState }) {
-  const { setActiveTab, setSecurityNotice, setSecurityFocusRequest } = state
+  const { setActiveTab, setSettingsSearchQuery, setSecurityNotice, setSecurityFocusRequest } = state
 
   const openSecuritySettings = (focusBackupPassword = false) => {
+    setSettingsSearchQuery('')
     setSecurityNotice(focusBackupPassword ? t.securityBackupPasswordRequired : null)
     if (focusBackupPassword) {
       setSecurityFocusRequest((current) => current + 1)

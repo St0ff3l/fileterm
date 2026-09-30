@@ -1,0 +1,17 @@
+.disk-meter-label {
+  gap: 1px;
+}
+
+.disk-meter-label .disk-select.dropdown-select-trigger {
+  padding-inline: 0;
+}
+
+.disk-meter-label .disk-select.ft-select-shell .ft-select-shell__value {
+  padding-inline: 0;
+}
+
+/* The compact, arrowless disk picker does not need form-control insets. */
+.system-sidebar-layout .disk-meter-label .disk-select.ft-select-shell {
+  padding-inline: 0;
+  gap: 0;
+}
