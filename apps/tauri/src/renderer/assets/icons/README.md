@@ -25,14 +25,14 @@ apps/tauri/src/renderer/assets/icons/
 └── system/        # 系统配置与状态（偏好设置、调色板、语言、更新、日志等）
 ```
 
-### 分类清单（共 59 个图标）
+### 分类清单（共 60 个图标）
 
 - **`actions/` (15)**: `add.svg`, `add_comment.svg`, `check.svg`, `delete.svg`, `delete_sweep.svg`, `drag_indicator.svg`, `edit.svg`, `edit_note.svg`, `more_horiz.svg`, `refresh.svg`, `restart_alt.svg`, `save.svg`, `save_as.svg`, `search.svg`, `stop.svg`
 - **`navigation/` (9)**: `apps.svg`, `arrow_back.svg`, `arrow_forward.svg`, `chevron_right.svg`, `close.svg`, `close_fullscreen.svg`, `dashboard.svg`, `open_in_full.svg`, `open_in_new.svg`
 - **`files/` (6)**: `description.svg`, `download.svg`, `folder.svg`, `folder_open.svg`, `folder_shared.svg`, `upload_file.svg`
 - **`network/` (7)**: `account_tree.svg`, `cloud.svg`, `cloud_sync.svg`, `dns.svg`, `lan.svg`, `settings_ethernet.svg`, `terminal.svg`
 - **`security/` (9)**: `admin_panel_settings.svg`, `fingerprint.svg`, `key.svg`, `key_off.svg`, `lock.svg`, `shield.svg`, `visibility.svg`, `visibility_off.svg`, `vpn_key.svg`
-- **`system/` (13)**: `auto_awesome.svg`, `forum.svg`, `history.svg`, `info.svg`, `palette.svg`, `preview.svg`, `progress_activity.svg`, `settings.svg`, `settings_suggest.svg`, `star.svg`, `system_update.svg`, `translate.svg`, `tune.svg`
+- **`system/` (14)**: `auto_awesome.svg`, `forum.svg`, `history.svg`, `info.svg`, `palette.svg`, `power.svg`, `preview.svg`, `progress_activity.svg`, `settings.svg`, `settings_suggest.svg`, `star.svg`, `system_update.svg`, `translate.svg`, `tune.svg`
 
 ---
 

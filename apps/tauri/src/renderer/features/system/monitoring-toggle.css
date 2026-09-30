@@ -1,6 +1,14 @@
 .system-sidebar-layout {
   position: relative;
 }
+.system-sidebar-toggle-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  mask: url('../../assets/icons/system/power.svg') center / contain no-repeat;
+  -webkit-mask: url('../../assets/icons/system/power.svg') center / contain no-repeat;
+}
 .monitoring-toggle[data-stopped='true'] .system-sidebar-toggle-icon {
   opacity: 0.5;
 }

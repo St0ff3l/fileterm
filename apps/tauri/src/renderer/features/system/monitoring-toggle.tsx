@@ -76,22 +76,7 @@ export function MonitoringToggle({
         aria-label={label}
         loading={requested !== null}
         disabled={!window.fileterm}
-        icon={
-          <svg
-            className="system-sidebar-toggle-icon"
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M8 1.5v6M4 3.25a6 6 0 1 0 8 0" />
-          </svg>
-        }
+        icon={<span className="system-sidebar-toggle-icon" aria-hidden="true" />}
         onClick={() => {
           setError('')
           if (stopped) void change(true)
