@@ -1,4 +1,4 @@
-import { useMonitoringDiagnostics } from "./use-monitoring-diagnostics"
+import { useMonitoringDiagnostics } from './use-monitoring-diagnostics'
 import './system-sidebar-controls.css'
 import { MonitoringToggle } from './monitoring-toggle'
 import { MonitoringOverlay, monitoringIsObscured } from './monitoring-overlay'
@@ -145,7 +145,7 @@ export function SystemSidebar({
       aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
       className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
       onClick={() => {
-        logMonitoringAction("toggle-sidebar")
+        logMonitoringAction('toggle-sidebar')
         onToggleCollapsed()
       }}
       title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
@@ -203,7 +203,7 @@ export function SystemSidebar({
                 className="system-title"
                 data-file-panel-snap-target="system-title"
                 onClick={() => {
-                  logMonitoringAction("open-system-info")
+                  logMonitoringAction('open-system-info')
                   onOpenSystemInfo()
                 }}
                 type="button"
