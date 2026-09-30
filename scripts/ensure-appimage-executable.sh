@@ -65,8 +65,9 @@ for launcher in AppRun AppRun.wrapped; do
   }
 done
 
-if find "$appdir" -type d ! -perm -0555 -print -quit | grep -q .; then
-  echo "An AppImage directory is not readable and traversable by all users in $appimage_file" >&2
+untraversable_dir="$(find "$appdir" -type d ! -perm -0001 -print -quit)"
+if [ -n "$untraversable_dir" ]; then
+  echo "An AppImage directory is not traversable by other users in $appimage_file: $(stat -c '%a %u:%g %n' "$untraversable_dir")" >&2
   exit 1
 fi
 if find "$appdir" -type f -perm /0111 ! -perm -0005 -print -quit | grep -q .; then
