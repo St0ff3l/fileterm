@@ -178,6 +178,17 @@ platform probe
         -> localized renderer presentation
 ```
 
+SSH 资源监控由 `sessions/ssh/worker/metrics/` 的独立管理任务拥有持久采集通道。采集能力与
+`SessionSnapshot.monitoring` 运行健康状态分离：暂时无有效样本不撤销能力、不清空数据；
+后端按有效间隔计算暂停/恢复阈值，并提供最多五次恢复及手动跳过退避。状态与样本经
+`workspace:sessionMetrics` 和完整快照同步，generation/revision 拒绝旧任务和乱序事件。
+Renderer 只显示遮罩、倒计时和操作反馈，`app_retry_monitoring` 只重试监控通道。
+父监控管理任务保留重启上下文和控制接收端，采集子任务异常退出后可手动重建；
+监控断开与 `ssh-disconnected` 分别展示监控重试和现有 `reconnectTab` 会话重连入口。
+监控开关的手动关闭状态在同一标签 SSH 重连后保留。
+关闭标签、断开会话或显式禁用监控会取消任务。网络历史以 `breakBefore` 标记中断。
+详细参数、启停交互和自动化验证见 [监控恢复、侧栏遮罩与启停控制](./plans/completed/monitoring-recovery-overlay.md)。
+
 ## 4.2 Renderer 桌面壳与布局边界
 
 系统侧栏进程数据由远端采集器分别选取 CPU、内存和命令排序的前 40 条，去重后最多传输 120 条；renderer 根据当前排序展示 40 条。`SidebarProcessItem.commandOrder` 保留采集端命令排序，`memoryBytes` 用于数值排序，避免用已取整的展示文本排序。进程 CPU 使用整机百分比，Linux 以进程 tick / 全机 tick 的同窗口增量计算，并校验 PID 的启动时间；不能把前 40 条的合计冒充整机仪表，也不能按脚本解释器名称过滤用户进程。
@@ -216,7 +227,7 @@ platform probe
 - SSH 可见终端中，只有在明确检测到 `sudo -i` 或 `su -` 的密码提示后，才允许从对应的 profile 凭据自动填充；未出现密码提示时不得盲写密码，也不得把密码写入 transcript 或日志。文件区工具栏切换 root 访问模式时始终打开方法选择窗口；用户选择 `sudo` 或 `su` 后，空密码提交由后端自动使用对应的已保存凭据，不向 renderer 回显密码，手动填写的密码只用于本次验证并按既有规则缓存。验证失败必须回滚当前权限状态。
 - Rust backend 在 Tauri userData 缺少迁移 marker 时，最多一次导入历史用户目录中的应用自有 JSON/SSH key 数据；Tauri 当前数据按 ID 优先，legacy 只补缺失记录，整批 staging/commit 失败会回滚且不写 marker。迁移成功后不再 live merge，Chromium session 与缓存始终不迁移。Windows 便携版（`*-portable.exe`、带 `FILETERM_PORTABLE_BUILD=1` 编译标识的 portable 可执行文件，或 exe 同目录带 `portable` 标记文件）将应用自有存储根目录切换为 exe 旁的 `config`，普通安装版和开发版继续使用 Tauri app-data 目录；第一次切换时若 `config` 为空，会从原 Tauri app-data 复制应用自有 JSON、凭据密文、密钥和字体数据，使用独立 marker 防止重复覆盖，诊断日志和 MCP 运行时描述文件不复制。首次成功启动后，portable 还会在 exe 同目录持久化 `portable` 标记，因此用户清空 `config` 后不会再次从 `%APPDATA%` 或历史用户目录回填数据；启动、迁移、字体导入和字体文件修复路径均写入同一存储根目录下的 `logs/app.log`。
 - 本地凭据字段（AI API Key、SSH 私钥口令、profile 密码/代理密码、sudo/su 密码、WebDAV 密码及 S3 Access/Secret Key）在 Rust 存储层以 AES-256-GCM 加密后再写入 JSON；密钥由每安装随机 seed 与当前设备稳定标识经 HMAC-SHA256 派生，并以字段用途/记录 ID 作为 AAD 绑定，旧版明文在首次读取后原子迁移。该实现不接入 macOS safeStorage/钥匙串、Windows DPAPI 或 Linux credential store，不触发系统授权弹窗；Unix seed/secret/key 文件在创建、迁移和读取自愈时收紧为 `0600`，Windows 依赖应用数据目录的用户 ACL。它防止静态文件被直接读取或被单独误传，不对获得当前用户运行权限的本机主动攻击者提供保护。WebDAV/S3 的远程备份包和用户显式导出的 JSON 仍是跨设备迁移载体，按既有行为可包含连接凭据；它们仅在 main/Rust 服务层序列化，不进入公开 snapshot、renderer 预览或日志。
-- Tauri backend 的持久化诊断统一进入 `services/logging.rs`：日志按 `app/window/protocol:tab/metrics/tunnel/transfer:id/local/update/webdav/profile` 分 scope，使用 `DEBUG/INFO/WARN/ERROR` 级别，并执行大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入诊断日志。
+- Tauri backend 的持久化诊断统一进入 `services/logging/`：`tracing` subscriber/layer 负责结构化事件、span 上下文与 `FILETERM_LOG_LEVEL` 过滤，现有 `logging::*` 函数作为兼容 facade 发出 tracing event；`tracing-log` 汇入依赖的 `log` facade 事件。文件 writer 执行有界队列、大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入诊断日志。
 - 用户主动开启设备配置中的“自动保存会话日志”后，`services/session_logs.rs` 独立按 tab 写入终端收到的输出；它不采集键盘输入，远端回显内容仍可能出现在日志中。默认目录为当前存储根目录下的 `session-logs`（便携版位于 exe 旁的 `config\session-logs`），也可按设备指定目录；关闭标签、重连或退出应用前会刷新写入队列。手动保存通过 `app_save_session_log` 和系统保存对话框导出当前 transcript，FTP 不提供该能力。
 
 ## 4.3 传输暂停与恢复边界
@@ -698,3 +709,10 @@ tokens -> theme vars -> component skins -> terminal colors
 - 错误处理必须以用户可读提示为目标
 - 优先把 macOS 与 Windows 体验做顺
 - 视觉样式优先遵循主题系统链路
+
+### 本地诊断日志模块
+
+Rust 诊断日志集中在 `services/logging/`，由 `mod.rs` 保留稳定 facade；tracing subscriber/layer 接收结构化事件和 span，级别和分类、脱敏格式化、队列写入与轮转、panic 捕获分别维护。
+Renderer 使用 `lib/diagnostic-log.ts` 经已有 IPC 写入本地日志，不直接访问文件。
+日志增加统一 category，保留原 scope 与标签 ID；常规写入由有界队列和专用线程处理，正常退出进行有界排空。
+完整分类、限流、保留和故障边界见 [本地诊断日志](./quality/logging.md)。

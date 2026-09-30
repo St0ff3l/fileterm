@@ -109,7 +109,7 @@ struct SshSessionContext {
     cancellation: CancellationToken,
     disconnect_reason: SharedSshDisconnectReason,
     connected_at: Instant,
-    metrics_shutdown: Arc<tokio::sync::Notify>,
+    metrics_shutdown: CancellationToken,
     shell_setup_script: Option<&'static str>,
     terminal_write_tx: mpsc::UnboundedSender<Vec<u8>>,
 }

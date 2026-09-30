@@ -71,6 +71,7 @@ include!("session_runtime.rs");
 include!("session_spawn.rs");
 include!("tab_layout.rs");
 include!("tab_lifecycle.rs");
+include!("monitoring.rs");
 include!("terminal_commands.rs");
 include!("remote_file_commands.rs");
 include!("transfer_commands.rs");

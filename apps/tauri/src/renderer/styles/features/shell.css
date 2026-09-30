@@ -358,44 +358,6 @@
   padding-top: 10px;
 }
 
-.system-sidebar-toggle {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--border-light);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--bg-sidebar, transparent) 82%, transparent);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--system-sidebar-toggle-shadow);
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    background 0.18s ease;
-}
-
-.system-sidebar-toggle:hover {
-  transform: translateX(-1px);
-  box-shadow: var(--system-sidebar-toggle-hover-shadow);
-}
-
-.system-sidebar-toggle.is-collapsed {
-  position: static;
-  margin: 0 auto;
-}
-
-.system-sidebar-toggle-icon {
-  display: block;
-  width: 14px;
-  height: 14px;
-}
-
 .sync-row,
 .address-row,
 .metric-line,

@@ -159,7 +159,6 @@
   border-bottom-color: var(--system-sidebar-frame);
 }
 
-:root[data-theme*='light'] .system-sidebar-layout .system-sidebar-toggle,
 :root[data-theme*='light'] .system-sidebar-layout .system-title,
 :root[data-theme*='light'] .system-sidebar-layout .network-select,
 :root[data-theme*='light'] .system-sidebar-layout .grid-chart {

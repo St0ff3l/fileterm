@@ -1,4 +1,10 @@
-import type { ConnectionProfile, ResourceMonitoringMetric, SessionSnapshot, TabStatus } from '@fileterm/core'
+import type {
+  ConnectionProfile,
+  ResourceMonitoringMetric,
+  SessionSnapshot,
+  TabStatus,
+  WorkspaceSnapshot
+} from '@fileterm/core'
 import { t } from '../../i18n'
 import { SystemSidebar } from './system-sidebar'
 
@@ -11,6 +17,7 @@ export function SystemSidebarShell({
   showResourceMeters,
   visibleMetrics,
   isResizing,
+  onMonitoringSnapshot,
   onOpenSystemInfo,
   onResizeStart,
   onRestoreWidth,
@@ -24,6 +31,7 @@ export function SystemSidebarShell({
   showResourceMeters: boolean
   visibleMetrics: ResourceMonitoringMetric[]
   isResizing: boolean
+  onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
   onOpenSystemInfo(): void
   onResizeStart(): void
   onRestoreWidth(): void
@@ -39,6 +47,7 @@ export function SystemSidebarShell({
         connectionStatus={connectionStatus}
         showResourceMeters={showResourceMeters}
         visibleMetrics={visibleMetrics}
+        onMonitoringSnapshot={onMonitoringSnapshot}
         onOpenSystemInfo={onOpenSystemInfo}
         onToggleCollapsed={() => {
           const nextCollapsed = !collapsed

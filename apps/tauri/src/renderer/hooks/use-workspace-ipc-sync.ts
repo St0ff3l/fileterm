@@ -1,21 +1,30 @@
-import { startTransition, useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { DIAGNOSTIC_SCOPES, writeDiagnosticLog } from '../lib/diagnostic-log'
+import type {
+  UseWorkspaceIpcSyncOptions,
+  UseWorkspaceIpcSyncResult,
+  WorkspaceWindowCloseRequest,
+  WorkspaceSplitPaneRequest,
+  WorkspacePaneFocusRequest
+} from './workspace-ipc-sync-types'
+export type {
+  UseWorkspaceIpcSyncOptions,
+  UseWorkspaceIpcSyncResult,
+  WorkspaceWindowCloseRequest,
+  WorkspaceSplitPaneRequest,
+  WorkspacePaneFocusRequest
+} from './workspace-ipc-sync-types'
+import { applyMonitoringUpdate, mergeMonitoringSnapshot } from './workspace-monitoring'
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import {
-  mergeSystemMetricsHistory,
-  type FileTermDesktopApi,
   type LocalFileItem,
-  type OverviewSectionId,
-  type PaneFocusDirection,
-  type ResourceMonitoringMetric,
   type RemoteFilesUpdate,
   type SessionMetricsUpdate,
-  type SavedTheme,
-  type ThemeConfig,
   type TransferTask,
   type WorkspaceSnapshot
 } from '@fileterm/core'
 import { emptyState, localPreviewFiles, previewLocalPath, previewState } from '../app/app-data'
 import { withParentRow } from '../app/app-utils'
-import { t, type AppLocale } from '../i18n'
+import { t } from '../i18n'
 import { resolveRendererPlatform } from '../lib/renderer-platform'
 import type { ThemeMode } from './use-theme-mode'
 
@@ -34,92 +43,10 @@ import {
   syncedUiPreferencesFrom,
   uploadFailureBanner,
   useLatestRef,
-  type SyncedUiPreferences,
-  type SshConnectionDefaults
+  type SyncedUiPreferences
 } from './workspace-ipc-sync-utils'
 
 const SNAPSHOT_LISTENER_READY_TIMEOUT_MS = 5_000
-
-export type WorkspaceWindowCloseRequest = {
-  id: number
-  isQuit: boolean
-}
-
-export type WorkspaceSplitPaneRequest = {
-  id: number
-  direction: 'row' | 'column'
-}
-
-export type WorkspacePaneFocusRequest = {
-  id: number
-  direction: PaneFocusDirection
-}
-
-export type UseWorkspaceIpcSyncOptions = {
-  desktopApi?: FileTermDesktopApi
-  isConnectionFormWindow: boolean
-  isMainWorkspaceWindow: boolean
-  isConnectionManagerWindow: boolean
-  themeMode: ThemeMode
-  themeConfig: ThemeConfig
-  customThemes: SavedTheme[]
-  locale: AppLocale
-  connectionDefaults: SshConnectionDefaults
-  terminalZoomLocked: boolean
-  uiZoomLocked: boolean
-  uiZoomPercent: number
-  rememberWindowSize: boolean
-  filePanelRememberRatio: boolean
-  resourceMonitoringMetrics: ResourceMonitoringMetric[]
-  resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
-  overviewShowStats: boolean
-  overviewShowRecent: boolean
-  overviewShowAllConnections: boolean
-  overviewShowQuickActions: boolean
-  overviewSectionOrder: OverviewSectionId[]
-  initialUiPreferencesLoaded: boolean
-  onThemeModeChange(themeMode: ThemeMode): void
-  onThemeConfigChange(themeConfig: ThemeConfig): void
-  onCustomThemesChange(customThemes: SavedTheme[]): void
-  onLocaleChange(locale: AppLocale): void
-  onConnectionDefaultsChange(value: Partial<SshConnectionDefaults>): void
-  onTerminalZoomLockedChange(value: boolean): void
-  onUiZoomLockedChange(value: boolean): void
-  onUiZoomPercentChange(value: number): void
-  onRememberWindowSizeChange(value: boolean): void
-  onFilePanelRememberRatioChange(value: boolean): void
-  onResourceMonitoringMetricsChange(value: ResourceMonitoringMetric[]): void
-  onResourceMonitoringMetricOrderChange(value: ResourceMonitoringMetric[]): void
-  onOverviewShowStatsChange(value: boolean): void
-  onOverviewShowRecentChange(value: boolean): void
-  onOverviewShowAllConnectionsChange(value: boolean): void
-  onOverviewShowQuickActionsChange(value: boolean): void
-  onOverviewSectionOrderChange(value: OverviewSectionId[]): void
-  onError(scope: string, error: unknown): void
-  onStatusMessage(message: string): void
-}
-
-export type UseWorkspaceIpcSyncResult = {
-  workspace: WorkspaceSnapshot
-  setWorkspace: Dispatch<SetStateAction<WorkspaceSnapshot>>
-  applySnapshot(snapshot: WorkspaceSnapshot): boolean
-  localPath: string
-  setLocalPath: Dispatch<SetStateAction<string>>
-  localItems: LocalFileItem[]
-  setLocalItems: Dispatch<SetStateAction<LocalFileItem[]>>
-  isLocalDirectoryLoading: boolean
-  setIsLocalDirectoryLoading: Dispatch<SetStateAction<boolean>>
-  hasLoadedInitialSnapshot: boolean
-  isMaximized: boolean
-  windowCloseRequest: WorkspaceWindowCloseRequest | null
-  clearWindowCloseRequest(): void
-  closeActiveRequestVersion: number
-  newTabRequestVersion: number
-  splitPaneRequest: WorkspaceSplitPaneRequest | null
-  paneFocusRequest: WorkspacePaneFocusRequest | null
-  closeCurrentWindow(): void
-  requestQuitApp(): void
-}
 
 export function useWorkspaceIpcSync({
   desktopApi,
@@ -217,7 +144,7 @@ export function useWorkspaceIpcSync({
       // Diagnostics must never make a workspace event handler fail. The
       // backend logger is best-effort and also performs secret redaction and
       // size bounding before writing app.log.
-      void desktopApi.writeDiagnosticLog(level, 'renderer:workspace', message).catch(() => undefined)
+      writeDiagnosticLog(level, DIAGNOSTIC_SCOPES.workspace, message, desktopApi)
     },
     [desktopApi]
   )
@@ -236,7 +163,7 @@ export function useWorkspaceIpcSync({
       if (typeof incomingRevision === 'number') {
         latestWorkspaceRevisionRef.current = incomingRevision
       }
-      setWorkspace(snapshot)
+      setWorkspace((current) => mergeMonitoringSnapshot(current, snapshot))
       const disabledResourceMonitoringSessions = Object.values(snapshot.sessions).filter(
         (session) => session.capabilities?.resourceMonitoring === false
       ).length
@@ -250,35 +177,8 @@ export function useWorkspaceIpcSync({
     [logWorkspaceDiagnostic]
   )
 
-  const applySessionMetrics = useCallback(({ tabId, systemMetrics, mode }: SessionMetricsUpdate) => {
-    startTransition(() => {
-      setWorkspace((current) => {
-        const currentSession = current.sessions[tabId]
-        if (!currentSession) {
-          return current
-        }
-
-        const nextSystemMetrics =
-          systemMetrics && mode === 'append'
-            ? mergeSystemMetricsHistory(currentSession.systemMetrics, systemMetrics)
-            : systemMetrics
-
-        if (currentSession.systemMetrics === nextSystemMetrics) {
-          return current
-        }
-
-        return {
-          ...current,
-          sessions: {
-            ...current.sessions,
-            [tabId]: {
-              ...currentSession,
-              systemMetrics: nextSystemMetrics
-            }
-          }
-        }
-      })
-    })
+  const applySessionMetrics = useCallback((update: SessionMetricsUpdate) => {
+    startTransition(() => setWorkspace((current) => applyMonitoringUpdate(current, update)))
   }, [])
 
   const applyRemoteFilesUpdate = useCallback(({ tabId, path, files }: RemoteFilesUpdate) => {

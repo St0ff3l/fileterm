@@ -1,0 +1,43 @@
+.system-sidebar-layout:has(> .monitoring-overlay) {
+  position: relative;
+}
+.monitoring-overlay {
+  position: absolute;
+  inset: 32px 0 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 36px 12px 12px;
+  background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+  color: var(--text-primary);
+  backdrop-filter: blur(2px);
+}
+.monitoring-overlay-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  text-align: center;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.monitoring-overlay-message strong {
+  color: var(--status-warning-text);
+  font-size: 13px;
+}
+.monitoring-overlay-message p {
+  margin: 0;
+}
+.monitoring-overlay[data-phase='failed'] strong {
+  color: var(--status-danger);
+}
+.monitoring-collapsed {
+  position: absolute;
+  top: 34px;
+  left: 8px;
+  z-index: 3;
+  font-weight: 700;
+  color: var(--status-warning-text);
+}

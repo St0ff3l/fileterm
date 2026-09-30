@@ -113,6 +113,9 @@ pub fn app_set_ui_preferences(
     if let Some(resource_monitoring_metric_order) = input.resource_monitoring_metric_order {
         preferences.resource_monitoring_metric_order = resource_monitoring_metric_order;
     }
+    let monitoring_defaults_changed = input.connection_defaults.as_ref().is_some_and(|defaults| {
+        defaults.enable_exec_channel.is_some() || defaults.enable_resource_monitoring.is_some()
+    });
     if let Some(connection_defaults) = input.connection_defaults {
         if let Some(value) = connection_defaults.use_empty_password {
             preferences.connection_defaults.use_empty_password = value;
@@ -200,6 +203,9 @@ pub fn app_set_ui_preferences(
                 );
             }
         }
+    }
+    if monitoring_defaults_changed {
+        schedule_disabled_monitoring_cleanup(&app, &preferences.connection_defaults);
     }
     let _ = app.emit("app:ui-preferences-changed", &preferences);
     // Page zoom changes renderer layout without a native window resize.

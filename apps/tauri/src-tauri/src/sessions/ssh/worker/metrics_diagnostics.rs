@@ -1,7 +1,7 @@
 const METRICS_MAX_BLOCK_BYTES: usize = 256 * 1024;
 const METRICS_MAX_BUFFER_BYTES: usize = 1_000_000;
 const METRICS_BUFFER_TARGET_BYTES: usize = 500_000;
-const METRICS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+const METRICS_CLOSE_TIMEOUT: Duration = Duration::from_secs(3);
 const METRICS_STDERR_EXTENDED_DATA_TYPE: u32 = 1;
 /// Keep enough of the remote stderr tail to identify a missing command,
 /// shell syntax error, or permission failure without allowing a noisy remote

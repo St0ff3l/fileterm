@@ -806,6 +806,9 @@ export interface SidebarProcessItem {
 }
 
 export interface NetworkSamplePoint {
+  /** A real collection discontinuity before this sample. */
+  breakBefore?: boolean
+  sampledAt?: number
   rx: number
   tx: number
 }
@@ -972,6 +975,23 @@ export function mergeSystemMetricsHistory(
   }
 }
 
+/** Runtime-only monitoring health, independent of connection capabilities.
+ * `disconnected` with reason `ssh-disconnected` requires reconnectTab; otherwise
+ * the supervisor retains its control endpoint for retryMonitoring.
+ */
+export interface ResourceMonitoringState {
+  generation: number
+  revision: number
+  phase:
+    'starting' | 'healthy' | 'paused' | 'waiting' | 'recovering' | 'failed' | 'stopped' | 'disconnected' | 'unsupported'
+  attempt: number
+  maxAttempts: number
+  intervalSeconds: ResourceMonitoringIntervalSeconds
+  lastSampleAt?: number
+  nextRetryAt?: number
+  reason?: string
+}
+
 export interface SessionSnapshot {
   profileId: string
   /** Monotonic terminal-target identity; unchanged by ordinary output chunks. */
@@ -1000,6 +1020,7 @@ export interface SessionSnapshot {
   /** 登录用户（首次 OSC 1337 RemoteUser= 观察值或 profile.username） */
   loginUser?: string
   connected?: boolean
+  monitoring?: ResourceMonitoringState
   systemMetrics?: SystemMetrics
   /** Explains a runtime capability downgrade without exposing remote output. */
   resourceMonitoringUnavailableReason?: ResourceMonitoringUnavailableReason
@@ -1025,6 +1046,7 @@ export interface WorkspaceSnapshot {
 
 export interface SessionMetricsUpdate {
   tabId: string
+  monitoring?: ResourceMonitoringState
   systemMetrics?: SystemMetrics
   mode?: 'replace' | 'append'
 }
@@ -2692,6 +2714,8 @@ export interface FileTermDesktopApi {
   activateTab(tabId: string): Promise<WorkspaceSnapshot>
   attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
   detachSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
+  setMonitoringEnabled(tabId: string, generation: number, enabled: boolean): Promise<WorkspaceSnapshot>
+  retryMonitoring(tabId: string, generation: number): Promise<void>
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   closeTab(tabId: string): Promise<WorkspaceSnapshot>
