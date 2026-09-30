@@ -112,8 +112,8 @@ const UI_ZOOM_PERCENT_STEP: i32 = 10;
 const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
     ["stats", "recent", "allConnections", "quickActions"];
 
-fn default_ui_locale() -> &'static str {
-    let is_chinese = sys_locale::get_locale().is_some_and(|locale| {
+fn ui_locale_for_system_tag(locale: Option<&str>) -> &'static str {
+    let is_chinese = locale.is_some_and(|locale| {
         let locale = locale.trim().to_ascii_lowercase();
         locale == "zh" || locale.starts_with("zh-") || locale.starts_with("zh_")
     });
@@ -122,6 +122,10 @@ fn default_ui_locale() -> &'static str {
     } else {
         DEFAULT_UI_LOCALE
     }
+}
+
+fn default_ui_locale() -> &'static str {
+    ui_locale_for_system_tag(sys_locale::get_locale().as_deref())
 }
 
 fn is_light_theme_mode(theme: &str) -> bool {
