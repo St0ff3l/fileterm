@@ -31,7 +31,7 @@
 - **Windows**：提供 x64 NSIS 安装包和免安装 portable `.exe`；已安装的正式版会在应用内下载、验签并在重启后更新。
 - **Linux**：提供 x64 `.deb` 安装包和 `.AppImage` 便携包。
 
-`.AppImage` 是可执行文件；如下载后不能双击启动，可在终端执行 `chmod +x FileTerm-*-linux-x86_64.AppImage`，再运行该文件。
+`.AppImage` 是可执行文件；如下载后不能双击启动，可在终端执行 `chmod +x FileTerm-*-x86_64.AppImage`，再运行该文件。
 
 首次启动时，中文系统语言环境默认显示中文，其他语言环境默认显示英文。可以在设置中手动切换语言；已保存的选择会在之后的启动中优先使用。
 

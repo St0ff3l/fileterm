@@ -31,7 +31,7 @@ Download the latest release from [GitHub Releases](https://github.com/St0ff3l/fi
 - **Windows**: x64 NSIS installer and portable `.exe`; installed production builds download, verify, and install updates after restart.
 - **Linux**: x64 `.deb` packages and `.AppImage` binaries.
 
-An `.AppImage` is executable. If it does not start when double-clicked, run `chmod +x FileTerm-*-linux-x86_64.AppImage` and then execute the file from a terminal.
+An `.AppImage` is executable. If it does not start when double-clicked, run `chmod +x FileTerm-*-x86_64.AppImage` and then execute the file from a terminal.
 
 On first launch, FileTerm uses Chinese for Chinese system locales and English for all other locales. You can change the language in Settings; a saved choice takes precedence on later launches.
 
