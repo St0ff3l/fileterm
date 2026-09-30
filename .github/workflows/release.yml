@@ -278,7 +278,7 @@ jobs:
 
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$appimage_file"
-          mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-x86_64.AppImage"
+          mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-linux-x86_64.AppImage"
 
       - name: Prepare AppImage permissions and delta updates
         shell: bash
@@ -289,8 +289,8 @@ jobs:
           if [[ "$version" == *-* ]]; then
             channel="latest-pre"
           fi
-          appimage_file="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/FileTerm-${version}-x86_64.AppImage"
-          update_information="gh-releases-zsync|${GITHUB_REPOSITORY/\//|}|${channel}|FileTerm-*-x86_64.AppImage.zsync"
+          appimage_file="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/FileTerm-${version}-linux-x86_64.AppImage"
+          update_information="gh-releases-zsync|${GITHUB_REPOSITORY/\//|}|${channel}|FileTerm-*-linux-x86_64.AppImage.zsync"
           bash scripts/ensure-appimage-executable.sh "$appimage_file" "$update_information"
 
       - name: Verify Linux packages
@@ -302,8 +302,9 @@ jobs:
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$appimage_file"
           appimage_name="$(basename "$appimage_file")"
-          if [[ "${appimage_name,,}" == *linux* ]]; then
-            echo "AppImageHub rejects Linux-specific text in the AppImage filename: $appimage_name" >&2
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$appimage_name" != "FileTerm-${version}-linux-x86_64.AppImage" ]]; then
+            echo "Unexpected AppImage asset name: $appimage_name" >&2
             exit 1
           fi
 
