@@ -29,7 +29,14 @@
         const isLight =
           queryTheme === 'default-light' || queryTheme === 'fileterm-light' || queryTheme === 'codex-light'
         const theme = queryTheme || (isLight ? 'fileterm-light' : 'fileterm-dark')
-        const locale = queryLocale === 'enUS' || queryLocale === 'zhCN' ? queryLocale : 'zhCN'
+        const preferredLocale =
+          navigator.languages?.find((value) => typeof value === 'string' && value.length > 0) || navigator.language
+        const locale =
+          queryLocale === 'enUS' || queryLocale === 'zhCN'
+            ? queryLocale
+            : preferredLocale?.toLowerCase().startsWith('zh')
+              ? 'zhCN'
+              : 'enUS'
         const background = isLight ? '#f8fafc' : '#151515'
         const colorScheme = isLight ? 'light' : 'dark'
 

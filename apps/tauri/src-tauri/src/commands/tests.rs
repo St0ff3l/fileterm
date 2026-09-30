@@ -560,11 +560,11 @@ mod ui_preferences_tests {
     use std::collections::BTreeMap;
 
     use super::{
-        default_local_terminal_shells, default_overview_section_order,
+        default_local_terminal_shells, default_overview_section_order, default_ui_locale,
         default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
         default_theme_config, default_update_channel, normalize_local_terminal_shells,
         normalize_mcp_operation_policy, normalize_resource_monitoring_metric_order,
-        normalize_theme_config, normalize_ui_preferences,
+        normalize_theme_config, normalize_ui_preferences, ui_locale_for_system_tag,
         resolve_profile_with_connection_defaults,
         LocalTerminalShellPreferences, McpAgentPreferences, SavedTheme, SshConnectionDefaults,
         UiPreferences, UiPreferencesInput,
@@ -814,7 +814,7 @@ mod ui_preferences_tests {
         });
 
         assert_eq!(preferences.theme, "fileterm-dark");
-        assert_eq!(preferences.locale, "zhCN");
+        assert_eq!(preferences.locale, default_ui_locale());
         assert_eq!(preferences.update_channel, "stable");
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
@@ -822,6 +822,15 @@ mod ui_preferences_tests {
             preferences.overview_section_order,
             default_overview_section_order()
         );
+    }
+
+    #[test]
+    fn initial_locale_uses_chinese_only_for_chinese_system_languages() {
+        assert_eq!(ui_locale_for_system_tag(Some("zh-CN")), "zhCN");
+        assert_eq!(ui_locale_for_system_tag(Some("ZH_HK.UTF-8")), "zhCN");
+        assert_eq!(ui_locale_for_system_tag(Some("en-US")), "enUS");
+        assert_eq!(ui_locale_for_system_tag(Some("C.UTF-8")), "enUS");
+        assert_eq!(ui_locale_for_system_tag(None), "enUS");
     }
 
     #[test]

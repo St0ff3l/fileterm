@@ -265,6 +265,14 @@ jobs:
       - name: Package Linux deb and AppImage
         run: npm run release:linux -w @fileterm/tauri
 
+      - name: Ensure AppImage launchers are executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage_file="$(find apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$appimage_file"
+          bash scripts/ensure-appimage-executable.sh "$appimage_file"
+
       - name: Normalize Linux artifact names
         shell: bash
         run: |
