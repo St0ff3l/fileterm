@@ -292,6 +292,7 @@ jobs:
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$deb_file"
           test -n "$appimage_file"
+          bash scripts/ensure-appimage-executable.sh "$appimage_file"
           dpkg-deb --info "$deb_file"
           binary="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/fileterm"
           test -x "$binary"

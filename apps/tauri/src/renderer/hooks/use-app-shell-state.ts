@@ -23,7 +23,7 @@ import { registerImportedFonts } from '../app/imported-fonts'
 import { applyUiZoomPercent } from '../app/ui-zoom'
 import { formatAppError, reportError, type ErrorDetails } from '../app/app-error-utils'
 import { DEFAULT_SIDEBAR_WIDTH, FILE_PANEL_PREFERENCES_KEY, MAX_FILE_PANEL_RATIO } from '../app/app-shell-utils'
-import { defaultLocale, setLocale, type AppLocale } from '../i18n'
+import { getLocale, setLocale, type AppLocale } from '../i18n'
 import { resolveRendererPlatform } from '../lib/renderer-platform'
 import { useWorkspaceIpcSync } from './use-workspace-ipc-sync'
 import { useSessionSecurity } from './use-session-security'
@@ -95,7 +95,7 @@ function readInitialLocale(searchParams: URLSearchParams, persistedPreferences?:
   if (persistedPreferences?.locale === 'enUS' || persistedPreferences?.locale === 'zhCN') {
     return persistedPreferences.locale
   }
-  return defaultLocale
+  return getLocale()
 }
 
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {

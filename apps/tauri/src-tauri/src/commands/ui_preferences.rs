@@ -104,13 +104,25 @@ pub struct UiPreferencesInput {
 }
 
 const DEFAULT_UI_THEME: &str = "fileterm-dark";
-const DEFAULT_UI_LOCALE: &str = "zhCN";
+const DEFAULT_UI_LOCALE: &str = "enUS";
 const DEFAULT_UI_ZOOM_PERCENT: i32 = 100;
 const MIN_UI_ZOOM_PERCENT: i32 = 80;
 const MAX_UI_ZOOM_PERCENT: i32 = 200;
 const UI_ZOOM_PERCENT_STEP: i32 = 10;
 const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
     ["stats", "recent", "allConnections", "quickActions"];
+
+fn default_ui_locale() -> &'static str {
+    let is_chinese = sys_locale::get_locale().is_some_and(|locale| {
+        let locale = locale.trim().to_ascii_lowercase();
+        locale == "zh" || locale.starts_with("zh-") || locale.starts_with("zh_")
+    });
+    if is_chinese {
+        "zhCN"
+    } else {
+        DEFAULT_UI_LOCALE
+    }
+}
 
 fn is_light_theme_mode(theme: &str) -> bool {
     matches!(theme, "fileterm-light" | "codex-light" | "default-light")
@@ -454,7 +466,7 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
         preferences.theme = DEFAULT_UI_THEME.to_string();
     }
     if !matches!(preferences.locale.as_str(), "zhCN" | "enUS") {
-        preferences.locale = DEFAULT_UI_LOCALE.to_string();
+        preferences.locale = default_ui_locale().to_string();
     }
     if !matches!(preferences.update_channel.as_str(), "stable" | "beta") {
         preferences.update_channel = default_update_channel();

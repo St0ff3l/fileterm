@@ -11,7 +11,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
     } else {
         Ok(UiPreferences {
             theme: DEFAULT_UI_THEME.to_string(),
-            locale: DEFAULT_UI_LOCALE.to_string(),
+            locale: default_ui_locale().to_string(),
             theme_config: default_theme_config(),
             custom_themes: Vec::new(),
             auto_check_updates: default_auto_check_updates(),

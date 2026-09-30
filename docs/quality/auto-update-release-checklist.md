@@ -21,6 +21,7 @@ FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的�
 2. 按仓库 release SOP 从 `main` 创建 `release/x.y.z` 分支并推送。
 3. 在 `release/x.y.z` 分支的最新提交上打 `vx.y.z` tag 并推送，等待 `release.yml` 完成构建与 GitHub Release 创建。
 4. 打开 GitHub Release，确认 Windows（exe / sig / latest.json）、macOS（arm64 + x64 dmg）、Linux（deb / AppImage）均已作为资产附加。
+5. 确认 Linux AppImage 内的 `AppRun` 和 `AppRun.wrapped` 对所有用户可执行；Release 工作流会在上传前校正并检查权限。
 
 ## 升级验收
 

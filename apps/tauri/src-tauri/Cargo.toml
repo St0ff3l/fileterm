@@ -50,6 +50,7 @@ zmodem2 = "0.7.2"
 suppaftp = { version = "10", default-features = false, features = ["tokio-async-native-tls", "deprecated"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 portable-pty = "0.9"
+sys-locale = "0.3.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 raw-window-handle = "0.6"

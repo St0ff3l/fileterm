@@ -5,7 +5,7 @@ import { App } from './app'
 import { ErrorBoundary } from './features/common/error-boundary'
 import { createTauriApi } from '../bridge/tauri-api'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { defaultLocale, setLocale, t } from './i18n'
+import { getLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
 import { applyUiZoomPercent } from './app/ui-zoom'
@@ -104,7 +104,7 @@ void createTauriApi()
             ? queryLocale
             : initialUiPreferences?.locale === 'enUS' || initialUiPreferences?.locale === 'zhCN'
               ? initialUiPreferences.locale
-              : defaultLocale
+              : getLocale()
 
         // Apply the loaded values before the first React render so CSS and the
         // proxy-backed translation table agree with App's initial state.
