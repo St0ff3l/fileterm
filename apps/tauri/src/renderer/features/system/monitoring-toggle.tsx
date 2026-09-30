@@ -76,7 +76,7 @@ export function MonitoringToggle({
         aria-label={label}
         loading={requested !== null}
         disabled={!window.fileterm}
-        icon={<span className="system-sidebar-toggle-icon" aria-hidden="true" />}
+        icon={<span className="monitoring-toggle-icon" aria-hidden="true" />}
         onClick={() => {
           setError('')
           if (stopped) void change(true)

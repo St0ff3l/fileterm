@@ -133,35 +133,25 @@ export function SystemSidebar({
       .slice(0, 40)
   }, [metrics?.topProcesses, sortMode])
 
-  const sidebarToggle = (
-    <button
-      aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
-      className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
-      onClick={onToggleCollapsed}
-      title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
-      type="button"
-    >
-      <svg
-        className="system-sidebar-toggle-icon"
-        width="14"
-        height="14"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" />
-        <path d="M5.25 1.5V14.5" />
-      </svg>
-    </button>
-  )
-
   return (
     <div className={`system-sidebar-layout ${collapsed ? 'is-collapsed' : ''}`}>
-      {collapsed ? sidebarToggle : null}
+      <div className="system-sidebar-controls">
+        <button
+          aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+          className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
+          onClick={onToggleCollapsed}
+          title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+          type="button"
+        >
+          <span className="system-sidebar-toggle-icon" aria-hidden="true" />
+        </button>
+        <MonitoringToggle
+          key={`toggle:${activeTabId}:${activeSession?.monitoring?.generation}`}
+          onSnapshot={onMonitoringSnapshot}
+          session={activeSession}
+          tabId={activeTabId}
+        />
+      </div>
       <MonitoringOverlay
         key={`overlay:${activeTabId}:${activeSession?.monitoring?.generation}`}
         session={activeSession}
@@ -172,44 +162,31 @@ export function SystemSidebar({
       />
       {!collapsed ? (
         <>
-          <section className="sys-card">
+          <section className="sys-card" inert={obscured}>
             <div className="connection-summary">
-              <div className="connection-addresses" inert={obscured}>
-                <AddressLine label={t.privateIp} value={internalIp} />
-                <AddressLine label={t.accessAddress} value={accessAddress} />
-              </div>
-              <div className="system-sidebar-controls">
-                {sidebarToggle}
-                <MonitoringToggle
-                  key={`toggle:${activeTabId}:${activeSession?.monitoring?.generation}`}
-                  onSnapshot={onMonitoringSnapshot}
-                  session={activeSession}
-                  tabId={activeTabId}
-                />
-              </div>
+              <AddressLine label={t.privateIp} value={internalIp} />
+              <AddressLine label={t.accessAddress} value={accessAddress} />
             </div>
-            <div inert={obscured}>
-              <button
-                className="system-title"
-                data-file-panel-snap-target="system-title"
-                onClick={onOpenSystemInfo}
-                type="button"
-              >
-                {t.systemInfo}
-              </button>
-              <ResourceMetricCards
-                availableFileSystems={availableFileSystems}
-                fileSystem={selectedFileSystem}
-                metrics={metrics}
-                onFileSystemChange={setSelectedDiskMountPoint}
-                scrollRef={systemMetricsScrollRef}
-                visibleMetrics={visibleMetrics}
-              />
-              {visibleMetrics.includes('processes') ? (
-                <ProcessMetricPanel onSortModeChange={setSortMode} rows={sortedProcesses} sortMode={sortMode} />
-              ) : null}
-              {visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
-            </div>
+            <button
+              className="system-title"
+              data-file-panel-snap-target="system-title"
+              onClick={onOpenSystemInfo}
+              type="button"
+            >
+              {t.systemInfo}
+            </button>
+            <ResourceMetricCards
+              availableFileSystems={availableFileSystems}
+              fileSystem={selectedFileSystem}
+              metrics={metrics}
+              onFileSystemChange={setSelectedDiskMountPoint}
+              scrollRef={systemMetricsScrollRef}
+              visibleMetrics={visibleMetrics}
+            />
+            {visibleMetrics.includes('processes') ? (
+              <ProcessMetricPanel onSortModeChange={setSortMode} rows={sortedProcesses} sortMode={sortMode} />
+            ) : null}
+            {visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
           </section>
           <section className="disk-table" inert={obscured}>
             <div className="disk-head" data-file-panel-snap-target="disk-header">

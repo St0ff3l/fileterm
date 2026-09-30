@@ -1,42 +1,32 @@
-.system-sidebar-layout .connection-summary {
-  position: relative;
-  padding-right: 40px;
-}
-
-.connection-addresses {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-
-.connection-addresses .address-row {
-  grid-template-columns: 40px minmax(0, 1fr);
-  column-gap: 4px;
-}
-
+/* Keep controls out of the two-row grid: summaries above, disks below. */
 .system-sidebar-controls {
   position: absolute;
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
+  top: 15px;
+  right: 16px;
+  z-index: 4;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  z-index: 4;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.system-sidebar-layout.is-collapsed > .system-sidebar-controls {
+  position: static;
+  margin: 0 auto;
 }
 
 .system-sidebar-layout :is(.system-sidebar-toggle, .monitoring-toggle) {
-  z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  box-sizing: border-box;
+  flex: none;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  color: inherit;
+  color: var(--text-primary);
   border: 1px solid var(--border-subtle);
-  border-radius: 7px;
+  border-radius: 5px;
   background: color-mix(in srgb, var(--surface-sidebar) 82%, transparent);
   backdrop-filter: blur(10px);
   box-shadow: var(--system-sidebar-toggle-shadow);
@@ -48,21 +38,16 @@
 }
 
 .system-sidebar-layout :is(.system-sidebar-toggle, .monitoring-toggle):hover:not(:disabled) {
-  background: color-mix(in srgb, var(--surface-sidebar) 82%, transparent);
-  border-color: var(--border-subtle);
-  transform: translateX(-1px);
   box-shadow: var(--system-sidebar-toggle-hover-shadow);
-}
-
-.system-sidebar-layout > .system-sidebar-toggle.is-collapsed {
-  position: static;
-  margin: 0 auto;
 }
 
 .system-sidebar-toggle-icon {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  mask: url('../../assets/icons/navigation/sidebar-toggle.svg') center / contain no-repeat;
+  -webkit-mask: url('../../assets/icons/navigation/sidebar-toggle.svg') center / contain no-repeat;
 }
 
 .system-sidebar-layout :is(.system-sidebar-toggle, .monitoring-toggle):focus-visible {
@@ -83,4 +68,16 @@
   :is(.system-sidebar-toggle, .monitoring-toggle) {
   background: var(--surface-elevated);
   color: var(--text-primary);
+}
+
+/* Match the address-row centres and reserve space for the controls. */
+.system-sidebar-layout:not(.is-collapsed) .connection-summary {
+  padding-right: 44px;
+  gap: 8px;
+}
+
+.system-sidebar-layout .connection-summary .address-row {
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: 4px;
+  height: 22px;
 }

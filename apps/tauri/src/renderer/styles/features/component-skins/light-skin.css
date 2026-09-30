@@ -192,8 +192,8 @@
 }
 
 :root[data-theme*='light'] .mini-tabs span.active {
-  background: var(--surface-card) !important;
-  color: var(--text-main) !important;
+  background: var(--mini-tab-active-bg) !important;
+  color: var(--mini-tab-active-text) !important;
   box-shadow: var(--shadow-xs) !important;
 }
 

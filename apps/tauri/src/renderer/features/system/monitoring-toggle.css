@@ -1,19 +1,16 @@
 .system-sidebar-layout {
   position: relative;
 }
-.system-sidebar-toggle-icon {
+.monitoring-toggle-icon {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   background-color: currentColor;
   mask: url('../../assets/icons/system/power.svg') center / contain no-repeat;
   -webkit-mask: url('../../assets/icons/system/power.svg') center / contain no-repeat;
 }
-.monitoring-toggle[data-stopped='true'] .system-sidebar-toggle-icon {
+.monitoring-toggle[data-stopped='true'] .monitoring-toggle-icon {
   opacity: 0.5;
-}
-.system-sidebar-layout:has(.monitoring-toggle) .address-row {
-  column-gap: 4px;
 }
 .system-sidebar-layout:not(.is-collapsed) > .monitoring-overlay {
   top: 78px;
