@@ -26,6 +26,7 @@ export type UseSshInteractionsOptions = {
   isMainWorkspaceWindow?: boolean
   isConnectionFormWindow?: boolean
   isConnectionFormOpen?: boolean
+  onHostTrustAccepted?(request: SshHostVerificationRequest): void
   onError(scope: string, error: unknown): void
 }
 
@@ -38,7 +39,7 @@ export type UseSshInteractionsResult = {
   errorMessage: string | null
   isResolving: boolean
   waitForSshInteractionListener(): Promise<void>
-  resolve(requestId: string, response: SshInteractionResponse): Promise<void>
+  resolve(requestId: string, response: SshInteractionResponse): Promise<boolean>
   cancelCredentials(): Promise<void>
   submitCredentials(input: SshCredentialsInput): Promise<void>
   cancelKeyboardInteractive(): Promise<void>
@@ -60,6 +61,7 @@ export function useSshInteractions({
   isMainWorkspaceWindow = false,
   isConnectionFormWindow = false,
   isConnectionFormOpen = false,
+  onHostTrustAccepted,
   onError
 }: UseSshInteractionsOptions): UseSshInteractionsResult {
   const [queue, setQueue] = useState(createSshInteractionQueue)
@@ -135,7 +137,7 @@ export function useSshInteractions({
   const resolve = useCallback(
     async (requestId: string, response: SshInteractionResponse) => {
       if (!desktopApi || resolvingRequestIdsRef.current.has(requestId)) {
-        return
+        return false
       }
 
       resolvingRequestIdsRef.current.add(requestId)
@@ -144,6 +146,7 @@ export function useSshInteractions({
         await desktopApi.resolveSshInteraction(requestId, response)
         setQueue((current) => removeSshInteraction(current, requestId))
         setErrorMessage(null)
+        return true
       } catch (error) {
         onError('响应 SSH 交互', error)
         if (isStaleSshInteractionError(error)) {
@@ -156,6 +159,7 @@ export function useSshInteractions({
         } else {
           setErrorMessage(error instanceof Error ? error.message : String(error))
         }
+        return false
       } finally {
         resolvingRequestIdsRef.current.delete(requestId)
         setResolvingRequestId((current) => (current === requestId ? null : current))
@@ -252,12 +256,15 @@ export function useSshInteractions({
         return
       }
 
-      await resolve(hostVerificationRequest.requestId, {
+      const accepted = await resolve(hostVerificationRequest.requestId, {
         kind: 'host-verification',
         decision
       })
+      if (accepted && decision === 'accept-and-save') {
+        onHostTrustAccepted?.(hostVerificationRequest)
+      }
     },
-    [hostVerificationRequest, resolve]
+    [hostVerificationRequest, onHostTrustAccepted, resolve]
   )
 
   const cancelKeyboardInteractive = useCallback(async () => {

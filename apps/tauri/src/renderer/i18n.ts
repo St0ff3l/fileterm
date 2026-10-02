@@ -4067,7 +4067,7 @@ export const messages = {
 export type AppLocale = keyof typeof messages
 export type LocaleMessages = (typeof messages)[AppLocale]
 
-export const defaultLocale: AppLocale = 'zhCN'
+export const defaultLocale: AppLocale = 'enUS'
 
 function resolveInitialLocale(): AppLocale {
   if (typeof window === 'undefined') {
@@ -4075,12 +4075,9 @@ function resolveInitialLocale(): AppLocale {
   }
 
   try {
-    const documentLang = window.document?.documentElement?.lang?.toLowerCase()
-    if (documentLang === 'zh-cn' || documentLang?.startsWith('zh')) {
-      return 'zhCN'
-    }
-    if (documentLang?.startsWith('en')) {
-      return 'enUS'
+    const queryLocale = new URLSearchParams(window.location.search).get('locale')
+    if (queryLocale === 'zhCN' || queryLocale === 'enUS') {
+      return queryLocale
     }
 
     const preferredLocales = window.navigator.languages?.length
@@ -4090,10 +4087,6 @@ function resolveInitialLocale(): AppLocale {
 
     if (matchedLocale?.toLowerCase().startsWith('zh')) {
       return 'zhCN'
-    }
-
-    if (matchedLocale?.toLowerCase().startsWith('en')) {
-      return 'enUS'
     }
 
     return defaultLocale
@@ -4106,6 +4099,9 @@ let activeLocale: AppLocale = resolveInitialLocale()
 
 export function setLocale(locale: AppLocale) {
   activeLocale = locale
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale === 'zhCN' ? 'zh-CN' : 'en'
+  }
 }
 
 export function getLocale() {

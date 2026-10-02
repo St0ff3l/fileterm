@@ -5,11 +5,11 @@
   <img alt="FileTerm" src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=800&size=34&duration=2600&pause=900&color=38BDF8&center=true&vCenter=true&width=760&lines=FileTerm;SSH+%2B+SFTP+%2B+FTP+Workspace;A+Modern+Remote+Desktop+Workbench" />
   <br />
   <br />
-  <p><strong>一个为开发者和运维场景打造的现代桌面远程工作台，正式版现已发布。</strong></p>
-  <p>SSH 终端、SFTP 与 FTP/FTPS 文件、多标签工作区和传输任务中心，收束到一个顺手的桌面客户端里。</p>
+  <p><strong>A modern desktop remote workspace for developers and operations teams. The official release is now available.</strong></p>
+  <p>SSH terminals, SFTP and FTP files, workspace tabs, and transfer tasks in one focused desktop client.</p>
   <p>
-    <kbd>中文</kbd>
-    <kbd><a href="./README_EN.md">English</a></kbd>
+    <kbd><a href="./README_ZH.md">中文</a></kbd>
+    <kbd>English</kbd>
   </p>
   <p>
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
@@ -23,53 +23,57 @@
 
 ---
 
-## 下载正式版
+## Download the Official Release
 
-前往 [GitHub Releases](https://github.com/St0ff3l/fileterm/releases/latest) 下载最新正式版：
+Download the latest release from [GitHub Releases](https://github.com/St0ff3l/fileterm/releases/latest):
 
-- **macOS**：提供 Apple Silicon（arm64）和 Intel（x64）安装包。
-- **Windows**：提供 x64 NSIS 安装包和免安装 portable `.exe`；已安装的正式版会在应用内下载、验签并在重启后更新。
-- **Linux**：提供 x64 `.deb` 安装包和 `.AppImage` 便携包。
+- **macOS**: packages for Apple Silicon (arm64) and Intel (x64).
+- **Windows**: x64 NSIS installer and portable `.exe`; installed production builds download, verify, and install updates after restart.
+- **Linux**: x64 `.deb` packages and `.AppImage` binaries.
 
-`.AppImage` 是可执行文件；如下载后不能双击启动，可在终端执行 `chmod +x FileTerm-*-linux-x86_64.AppImage`，再运行该文件。
+An `.AppImage` is executable. If it does not start when double-clicked, run `chmod +x FileTerm-*-x86_64.AppImage` and then execute the file from a terminal.
 
-macOS 与 Linux 的“检查更新”会打开对应的 GitHub Release 下载页，由用户自行下载和安装；Windows 正式安装版使用签名的应用内更新。
+On first launch, FileTerm uses Chinese for Chinese system locales and English for all other locales. You can change the language in Settings; a saved choice takes precedence on later launches.
 
-需要从源码运行或参与开发？请继续阅读 [从源码开始](#从源码开始)。
+macOS and Linux update checks open the matching GitHub Release page for a user-selected download. Signed in-app updates are used by installed Windows releases.
 
-## FileTerm 是什么
+Want to run from source or contribute? Continue to [Getting Started from Source](#getting-started-from-source).
 
-FileTerm 面向开发者和运维人员的日常远程工作：将远程终端、文件管理、传输任务和连接配置集中到同一个桌面工作区。
+## What Is FileTerm?
 
-- 使用 SSH 时，终端与 SFTP 文件面板自然联动。
-- 使用 FTP/FTPS 时，界面直接进入专注文件操作的工作流。
-- 多个连接以标签页并行运行，互不打断。
-- 上传、下载、进度与错误统一进入传输任务中心。
-- 连接配置、工作区状态和主题体验均为长期使用设计。
+FileTerm is built for daily remote work by developers and operations teams. It brings remote terminals, file management, transfer tasks, and connection profiles into one desktop workspace.
+
+- SSH sessions pair terminal work naturally with SFTP file panels.
+- FTP/FTPS sessions use a focused file-only workflow.
+- Multiple connections run side by side in tabs without interrupting each other.
+- Uploads, downloads, progress, and errors are managed in one transfer center.
+- Connection profiles, workspace state, and themes are designed for long-term daily use.
 
 <p align="center"><img width="900" alt="FileTerm workspace preview" src="./docs/assets/fileterm-dark-light-35deg.png" /></p>
 
-正式版聚焦最常用的 `SSH / SFTP / FTP / FTPS` 工作流：把远程终端、文件操作和传输任务做稳、做顺、做漂亮。
+The official release focuses on the most frequent `SSH / SFTP / FTP / FTPS` workflows: reliable remote terminals, file operations, and transfers.
 
-## 核心能力
+## Core Capabilities
 
-| 能力              | 说明                                                                              |
-| ----------------- | --------------------------------------------------------------------------------- |
-| SSH 连接管理      | 新增、编辑、删除 SSH 配置；支持文件夹分组和 JSON 持久化。                         |
-| FTP/FTPS 连接管理 | 使用独立于 SSH 的连接模型，支持安全 FTP 传输。                                    |
-| SSH 终端          | 基于 xterm.js，支持输入输出、自适应尺寸、搜索、剪贴板互通和悬浮命令输入条。       |
-| SFTP 文件管理     | 支持远程目录浏览、读写、新建、删除、重命名和权限修改。                            |
-| FTP/FTPS 文件管理 | 提供 FTP/FTPS 会话、远程目录浏览、文件操作与可恢复传输。                          |
-| 文件编辑器        | 基于 Monaco Editor 的双栏文件树与编辑区，支持语法高亮、查找替换、编码和语言切换。 |
-| 终端目录同步      | SSH 终端当前工作目录可与文件管理器双向同步。                                      |
-| Root 权限同步     | 感知终端中的 `sudo` / `su`，让文件管理器同步对应权限上下文。                      |
-| 虚拟文件列表      | 通过虚拟滚动高效展示大型远程目录。                                                |
-| 传输任务中心      | 统一管理上传、下载、断点续传、进度、速度、取消及文件夹递归传输。                  |
-| 工作区标签        | 支持多标签并行连接、断开、重连、状态持久化和标签切换动效。                        |
-| 命令模板          | 支持快捷命令、文件夹分组、参数占位符和一键发送。                                  |
-| 主题与桌面壳      | 支持深色/浅色主题、侧栏、文件抽屉、焦点模式和独立管理窗口。                       |
+| Capability                  | Description                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| SSH profile management      | Create, edit, delete, and group SSH profiles with JSON persistence.                                                          |
+| FTP/FTPS profile management | Uses a connection model kept separate from SSH and supports secure FTP transfers.                                            |
+| SSH terminal                | Powered by xterm.js with input/output, resize, search, clipboard support, and a floating command bar.                        |
+| SFTP file management        | Browse remote directories; read, write, create, delete, rename, and change permissions.                                      |
+| FTP/FTPS file management    | FTP/FTPS sessions with remote browsing, file operations, and resumable transfers.                                            |
+| File editor                 | A Monaco Editor-based two-pane file tree and editor with syntax highlighting, find/replace, encoding, and language controls. |
+| Terminal directory sync     | Keeps the active SSH working directory and file manager in sync.                                                             |
+| Root privilege sync         | Detects `sudo` / `su` in the terminal and synchronizes the file-manager permission context.                                  |
+| Virtualized file list       | Uses virtual scrolling for efficient browsing of large remote directories.                                                   |
+| Transfer center             | Centralized uploads, downloads, resume support, progress, speed, cancellation, and recursive folder transfers.               |
+| Workspace tabs              | Parallel connections, disconnect/reconnect, persisted state, and animated tab transitions.                                   |
+| Command templates           | Grouped quick commands, parameter placeholders, and one-click sending.                                                       |
+| Theme system                | Dark and light themes through tokens, CSS variables, and component skins.                                                    |
+| Remote status monitoring    | Connection status and system-resource summaries.                                                                             |
+| Theme and desktop shell     | Dark and light themes, sidebars, file drawer, focus mode, and dedicated management windows.                                  |
 
-## 技术栈
+## Technology Stack
 
 | Desktop  | Renderer     | Language          | Terminal | Editor        | Protocols                             | Tooling                |
 | -------- | ------------ | ----------------- | -------- | ------------- | ------------------------------------- | ---------------------- |
@@ -83,7 +87,7 @@ protocols      -> russh SSH/SFTP, FTP/FTPS, Telnet and Serial adapters
 theme system   -> tokens -> vars -> skins -> terminal colors
 ```
 
-## 架构原则
+## Architecture Principles
 
 ```txt
 Renderer UI
@@ -95,62 +99,62 @@ Renderer UI
             -> Protocol clients
 ```
 
-- `packages/core` 是领域模型的 single source of truth。
-- Renderer 不直接访问 SSH、SFTP、FTP/FTPS protocol clients。
-- 所有系统能力必须通过 `Rust commands/events -> tauri-api.ts -> renderer` 暴露。
-- SSH/SFTP 与 FTP/FTPS 在 controller/protocol 层保持分离。
-- 传输进度统一进入 transfer system，不在组件中分散维护。
+- `packages/core` is the single source of truth for domain models.
+- The renderer never accesses SSH, SFTP, or FTP/FTPS protocol clients directly.
+- All system capabilities are exposed through `Rust commands/events -> tauri-api.ts -> renderer`.
+- SSH/SFTP and FTP/FTPS remain separate at controller and protocol layers.
+- Transfer progress enters one transfer system instead of being maintained separately by components.
 
-完整架构说明见 [docs/architecture.md](./docs/architecture.md)。
+See [docs/architecture.md](./docs/architecture.md) for the complete architecture map.
 
-## 从源码开始
+## Getting Started from Source
 
-### 环境要求
+### Requirements
 
 - Node.js >= 22.12.0
 - npm
-- Rust stable 与当前平台所需的 Tauri 系统依赖
+- Rust stable, plus the Tauri system dependencies for your platform
 
-Linux（Ubuntu/Debian）还需要安装 GTK 与 WebKit 运行时：
+On Linux (Ubuntu/Debian) you also need the GTK and WebKit runtimes:
 
 ```bash
-# Ubuntu 24.04 及以上
+# Ubuntu 24.04 and newer
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential libssl-dev
 
-# Ubuntu 22.04 请将 4.1 替换为 4.0
+# On Ubuntu 22.04, replace 4.1 with 4.0
 ```
 
-`npm run dev` 需要本地图形会话。纯 SSH、无桌面的服务器或缺少 XWayland 的 Wayland 会话下 GTK 无法初始化；此时启动脚本会打印当前的显示环境变量与排查建议，而不是直接抛出 GTK panic。
+`npm run dev` requires a local graphical session. GTK cannot initialize over plain SSH, on a headless server, or in a Wayland session without XWayland. In those cases the launcher prints the current display environment and troubleshooting hints instead of a bare GTK panic.
 
-### 安装与启动
+### Install and Run
 
 ```bash
 npm install
-npm run dev # 默认启动 Tauri/Rust 运行时
+npm run dev
 ```
 
-`dev`、`build`、`typecheck` 会自动先构建 `@fileterm/core`、`@fileterm/shared`、`@fileterm/storage`（它们的入口指向 `dist/`）。全新克隆后无需手动构建这些包。
+`dev`, `build`, and `typecheck` build `@fileterm/core`, `@fileterm/shared`, and `@fileterm/storage` first, since their entry points resolve to `dist/`. No manual build step is needed after a fresh clone.
 
-### 常用命令
+### Common Commands
 
 ```bash
-npm run dev          # Tauri/Rust
-npm run test         # Tauri/Rust 测试
+npm run dev
+npm run test
 npm run typecheck
-npm run build        # Tauri/Rust 生产二进制
+npm run build
 npm run release:mac
 npm run release:win
 npm run release:linux
 ```
 
-### 发布与更新
+### Releases and Updates
 
-- 推送位于 `release/*` 分支提交上的 `vX.Y.Z` tag，会运行 Tauri 专用 Release Action，发布 macOS arm64/x64 DMG、Windows x64 NSIS 安装包以及 Linux x64 `.deb` / `.AppImage` 包。
-- Windows Action 同时生成带签名的 NSIS 安装器、免安装 `*-windows-x64-portable.exe`、`.sig` 签名文件和 `latest.json`；已安装 Windows 客户端从该清单验签后更新。portable 版本不写入安装器注册信息，配置保存到可执行文件旁的 `config/` 文件夹，首次运行空目录时会迁移已有安装版配置，运行前仍需系统已有 WebView2 Runtime。凭据加密仍绑定当前 Windows 设备，复制到另一台电脑后需重新配置凭据。
-- 仓库需要配置 GitHub Actions Secret `TAURI_SIGNING_PRIVATE_KEY`。它是 Tauri updater 私钥内容，只能保存为 GitHub Secret，绝不能提交到仓库。
-- macOS 发行包使用 ad hoc 签名（不使用 Apple Developer 证书或公证），不使用应用内 updater：检查到新版本后跳转 GitHub Release，由用户选择下载包；首次下载运行仍可能需要在“隐私与安全性”中手动放行。
+- A `vX.Y.Z` tag on a `release/*` commit runs the Tauri-only Release Action and publishes macOS arm64/x64 DMGs, the Windows x64 NSIS installer, and Linux x64 `.deb` / `.AppImage` packages.
+- The Windows job also publishes the signed NSIS installer, its `.sig` signature, and `latest.json`; installed Windows clients verify that manifest before updating.
+- Configure the repository Actions Secret `TAURI_SIGNING_PRIVATE_KEY` with the Tauri updater private-key contents. Never commit that private key.
+- macOS release bundles use ad-hoc signing (without an Apple Developer certificate or notarization) and deliberately keep the GitHub Release download flow rather than using the in-app updater. First-run users may still need to whitelist the app in Privacy & Security.
 
-## 仓库结构
+## Repository Layout
 
 ```txt
 fileterm/
@@ -159,7 +163,7 @@ fileterm/
       src/
         bridge/              # typed Tauri command/event API
         renderer/            # React workspace UI
-      src-tauri/             # Rust commands, services, sessions and bundling
+      src-tauri/             # Rust commands, services, sessions, and bundling
   packages/
     core/                    # domain types
     storage/                 # repository abstractions
@@ -173,39 +177,39 @@ fileterm/
   AGENTS.md                  # map for human and AI collaborators
 ```
 
-## 路线图
+## Roadmap
 
-正式版后的演进重点：
+Post-release priorities:
 
-1. 持续提升 `SSH / SFTP / FTP / FTPS` 主链路的稳定性与可用性。
-2. 继续拆分 Tauri workspace、session service 和 renderer 的职责，进一步明确分层边界。
-3. 将领域类型继续收敛到 `packages/core`。
-4. 持续完善传输任务、错误提示、主题、终端输入、文件抽屉和桌面壳体验。
-5. 维护 macOS、Windows 与 Linux 正式版的分发和发布质量。
+1. Keep improving the stability and usability of the `SSH / SFTP / FTP / FTPS` core workflows.
+2. Keep refining the Tauri workspace, session service, and renderer boundaries.
+3. Continue consolidating domain types in `packages/core`.
+4. Improve transfer tasks, errors, themes, terminal input, file drawers, and the desktop shell.
+5. Maintain release quality and distribution for macOS, Windows, and Linux.
 
-完整计划见 [docs/roadmap.md](./docs/roadmap.md)。
+See [docs/roadmap.md](./docs/roadmap.md) for the full plan.
 
-## 开源组件
+## Open Source Components
 
-- [xterm.js](https://xtermjs.org/)：用于 SSH 终端渲染、输入输出和窗口尺寸适配。
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/)：用于文件编辑、语法高亮和查找替换。
-- 随应用分发的字体和图标字体：许可证与来源见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+- [xterm.js](https://xtermjs.org/) for SSH terminal rendering, input/output, and resize handling.
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) for file editing, syntax highlighting, and search/replace.
+- Bundled fonts and icon fonts: see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for their licenses and sources.
 
-## 参与贡献
+## Contributing
 
-仓库把代码库本身作为记录系统：
+This repository treats the codebase as its record system:
 
-- [AGENTS.md](./AGENTS.md) 是协作入口地图。
-- [docs/architecture.md](./docs/architecture.md) 记录稳定的架构事实。
-- [docs/plans/active](./docs/plans/active) 存放跨层进行中的计划。
-- [docs/decisions](./docs/decisions) 记录已确认的架构选择。
-- [.agents/extensions](./.agents/extensions) 存放功能草案与扩展设计。
+- [AGENTS.md](./AGENTS.md) is the entry map for collaboration.
+- [docs/architecture.md](./docs/architecture.md) records stable architecture facts.
+- [docs/plans/active](./docs/plans/active) contains active cross-layer plans.
+- [docs/decisions](./docs/decisions) records confirmed architecture decisions.
+- [.agents/extensions](./.agents/extensions) contains feature drafts and extension designs.
 
-如果计划贡献较大的功能，建议先补充一份 active plan，再开始编码。
+For a substantial feature, please add or update an active plan before writing code.
 
-## 贡献者
+## Contributors
 
-感谢每一位让 FileTerm 变得更好的贡献者。
+Thank you to everyone who makes FileTerm better.
 
 <table>
   <tr>
@@ -216,7 +220,7 @@ fileterm/
         <sub><b>St0ff3l</b></sub>
       </a>
     </td>
-    <td>构建了 Rust/Tauri 后端核心，打通 command/event、会话控制、文件能力与工作区状态等核心链路。</td>
+    <td>Built the Rust/Tauri backend core, including the command/event boundary, session control, file capabilities, and workspace state.</td>
   </tr>
   <tr>
     <td align="center" width="180">
@@ -226,26 +230,26 @@ fileterm/
         <sub><b>Flashhhhhhzj</b></sub>
       </a>
     </td>
-    <td>重构并设计前端样式，统一设计语言，推动主题 token、组件皮肤和整体视觉体验成形。</td>
+    <td>Redesigned and modernized the frontend styling, unified the design language, and shaped theme tokens, component skins, and the visual experience.</td>
   </tr>
 </table>
 
-## 社区交流
+## Community
 
-扫码加入 **FileTerm** 微信交流群，与开发者和其他用户交流使用体验、问题反馈与后续版本动态。
+Scan the QR code to join the **FileTerm** WeChat community for usage discussions, feedback, and product updates.
 
-也可加入 QQ 群：`534418986`。
+You can also join the QQ group: `534418986`.
 
-![FileTerm 微信交流群二维码](./docs/assets/fileterm-wechat-group-qr.jpg)
+![FileTerm WeChat community QR code](./docs/assets/fileterm-wechat-group-qr.jpg)
 
-## 支持项目
+## Support the Project
 
-如果 FileTerm 对你有帮助，欢迎到 [GitHub](https://github.com/St0ff3l/fileterm) 点亮 Star：
+If FileTerm helps you, please consider starring the project on [GitHub](https://github.com/St0ff3l/fileterm):
 
 <a href="https://github.com/St0ff3l/fileterm/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/fileterm?style=for-the-badge&logo=github&label=Star%20FileTerm"></a>
 
-## 开源协议
+## License
 
-FileTerm 源代码使用 [MIT License](./LICENSE) 开源；随应用分发的字体和图标字体遵循各自许可证，详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+FileTerm source code is open-sourced under the [MIT License](./LICENSE). Bundled fonts and icon fonts remain under their respective licenses; see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
 
-<p align="right"><a href="#readme-top">回到顶部</a></p>
+<p align="right"><a href="#readme-top">Back to top</a></p>

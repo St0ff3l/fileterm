@@ -685,5 +685,8 @@ pub fn run() {
             if matches!(_event, tauri::RunEvent::Exit) {
                 crate::sessions::local_files::cleanup_network_mounts();
             }
+            if matches!(_event, tauri::RunEvent::Exit) {
+                crate::services::logging::flush();
+            }
         });
 }

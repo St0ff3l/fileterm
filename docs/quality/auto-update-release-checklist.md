@@ -4,7 +4,7 @@ FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的�
 
 - **Windows**：Tauri 签名 NSIS 安装器 + 内置应用内更新（`tauri_plugin_updater`）。`services/updates.rs` 从 GitHub Release 的下载路径拉取 `latest.json`，校验 `.sig` 后再下载并替换安装。
 - **macOS**：当前发布配置（`tauri.release.macos.conf.json`）未配置应用内更新签名，更新入口回退为打开 GitHub Release 下载页，由用户手动下载新版 DMG。
-- **Linux**：通过 GitHub Release 提供 `.deb` / `.AppImage`，无应用内更新器。
+- **Linux**：通过 GitHub Release 提供 `.deb` / `.AppImage`，无应用内更新器；AppImage 内嵌 GitHub Release 更新信息，同时提供 `.AppImage.zsync`，供 AppImageUpdate 等外部工具执行差量更新。
 
 ## 首次启用前
 
@@ -13,14 +13,15 @@ FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的�
 3. 确认 release workflow（`.github/workflows/release.yml`）在 tag push 时产出以下产物：
    - Windows：`*-setup.exe`、`*-setup.exe.sig`、`latest.json`
    - macOS：Apple Silicon（arm64）与 Intel（x64）各自的 `.dmg`
-   - Linux：`.deb` 与 `.AppImage`
+   - Linux：`.deb`、`.AppImage` 与 `.AppImage.zsync`
 
 ## 发布步骤
 
 1. 仅修改根目录 `package.json` 的 `version` 字段，随后运行 `npm run sync:version`（严禁手改 workspace 内部版本）。
 2. 按仓库 release SOP 从 `main` 创建 `release/x.y.z` 分支并推送。
 3. 在 `release/x.y.z` 分支的最新提交上打 `vx.y.z` tag 并推送，等待 `release.yml` 完成构建与 GitHub Release 创建。
-4. 打开 GitHub Release，确认 Windows（exe / sig / latest.json）、macOS（arm64 + x64 dmg）、Linux（deb / AppImage）均已作为资产附加。
+4. 打开 GitHub Release，确认 Windows（exe / sig / latest.json）、macOS（arm64 + x64 dmg）、Linux（deb / AppImage / zsync）均已作为资产附加。
+5. 确认 Linux AppImage 的 AppDir 根目录、内部目录对其他用户可读和遍历，所有可执行文件及 `AppRun`、`AppRun.wrapped` 对其他用户可执行。Release 工作流会在上传前校正权限，并直接检查内嵌 SquashFS 的权限元数据。AppImage 资产统一命名为 `FileTerm-<version>-linux-x86_64.AppImage`，与其他平台产物保持一致。AppImageHub 会对 `linux` 字样给出命名建议警告，该警告不影响运行，也不作为本仓库的发布失败条件。
 
 ## 升级验收
 
@@ -40,3 +41,11 @@ FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的�
 2. 在更新入口检查，预期行为为打开 GitHub Release 下载页（应用内更新当前未启用）。
 3. 手动下载匹配架构的新版 DMG，拖入 `/Applications` 覆盖，确认连接配置仍保留。
 4. 若签名/公证缺失导致系统拦截，按 macOS 安全提示在“系统设置 → 隐私与安全性”中允许打开。
+
+### Linux（AppImageUpdate 外部更新）
+
+- `scripts/ensure-appimage-executable.sh` 在修正权限后，通过固定版本的 `appimagetool -u` 重打包并生成 `.zsync`。最终文件名必须在重打包前确定，禁止生成校验文件后再修改 AppImage 内容。
+- 正式版使用 `gh-releases-zsync|St0ff3l|fileterm|latest|FileTerm-*-linux-x86_64.AppImage.zsync`；预发布版使用 `latest-pre`，避免正式版升级到测试版。
+- 上传前验证内嵌更新信息，并检查 `.zsync` 的 Filename、URL、Length、SHA-1 与最终 AppImage 一致；两者必须上传至同一个 Release。
+- 首次发布后，用 `--appimage-updateinformation` 检查发布资产，并使用 AppImageUpdate 检查更新；下一次正式发布后，再从旧的可更新 AppImage 实测差量升级。2.2.18 的已发布资产没有内嵌更新信息，无法自动获得此能力。
+- 规范参考：[AppImage 更新指南](https://docs.appimage.org/packaging-guide/optional/updates.html)。

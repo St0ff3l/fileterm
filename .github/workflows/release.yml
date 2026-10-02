@@ -252,7 +252,7 @@ jobs:
       - name: Install Linux Tauri dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file squashfs-tools zsync
 
       - name: Install dependencies
         run: npm ci
@@ -280,13 +280,33 @@ jobs:
           test -n "$appimage_file"
           mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-linux-x86_64.AppImage"
 
+      - name: Prepare AppImage permissions and delta updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          channel="latest"
+          if [[ "$version" == *-* ]]; then
+            channel="latest-pre"
+          fi
+          appimage_file="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/FileTerm-${version}-linux-x86_64.AppImage"
+          update_information="gh-releases-zsync|${GITHUB_REPOSITORY/\//|}|${channel}|FileTerm-*-linux-x86_64.AppImage.zsync"
+          bash scripts/ensure-appimage-executable.sh "$appimage_file" "$update_information"
+
       - name: Verify Linux packages
         shell: bash
         run: |
           set -euo pipefail
           bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
           test -n "$(find "$bundle_root/deb" -name '*.deb' -print -quit)"
-          test -n "$(find "$bundle_root/appimage" -name '*.AppImage' -print -quit)"
+          appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$appimage_file"
+          appimage_name="$(basename "$appimage_file")"
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$appimage_name" != "FileTerm-${version}-linux-x86_64.AppImage" ]]; then
+            echo "Unexpected AppImage asset name: $appimage_name" >&2
+            exit 1
+          fi
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v6
@@ -295,6 +315,7 @@ jobs:
           path: |
             apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
             apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+            apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.zsync
           if-no-files-found: error
 
   release:
@@ -333,7 +354,7 @@ jobs:
             release_flags+=(--prerelease)
           fi
 
-          mapfile -d '' assets < <(find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.sig' -o -name '*.zip' -o -name 'latest.json' \) -print0)
+          mapfile -d '' assets < <(find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.AppImage.zsync' -o -name '*.sig' -o -name '*.zip' -o -name 'latest.json' \) -print0)
           if [ "${#assets[@]}" -eq 0 ]; then
             echo 'No Tauri release assets were downloaded.'
             exit 1

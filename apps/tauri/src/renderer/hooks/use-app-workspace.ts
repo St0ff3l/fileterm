@@ -1,3 +1,4 @@
+import { DIAGNOSTIC_SCOPES, writeDiagnosticLog } from '../lib/diagnostic-log'
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type {
   FileContentSnapshot,
@@ -15,6 +16,7 @@ import { useWorkspaceModals } from './use-workspace-modals'
 import { useFileEditor } from './use-file-editor'
 import { useFileOperations } from './use-file-operations'
 import { useSshInteractions } from './use-ssh-interactions'
+import { acceptConnectionTestHostTrust } from './connection-host-trust'
 import { useBackupPasswordInteractions } from './use-backup-password-interactions'
 import { useSudoPasswordPrompt } from './use-sudo-password-prompt'
 import type { WorkspacePaneFocusRequest, WorkspaceSplitPaneRequest } from './use-workspace-ipc-sync'
@@ -266,22 +268,27 @@ export function useAppWorkspace({
       return
     }
     const resourceMonitoring = activeSession?.capabilities?.resourceMonitoring
-    const collapseReason = !activeSshResourceMonitoring
-      ? 'profile-disabled'
-      : resourceMonitoring === false
-        ? 'remote-capability-disabled'
-        : isWorkspaceFocusMode
-          ? 'workspace-focus'
-          : isSystemSidebarUserCollapsed
-            ? 'user-collapsed'
-            : 'none'
+    const collapseReason =
+      activeProfile?.type === 'ssh' && activeProfile.deviceMode === 'network-device'
+        ? 'network-device'
+        : !activeSshResourceMonitoring
+          ? 'profile-disabled'
+          : resourceMonitoring === false
+            ? 'remote-capability-disabled'
+            : isWorkspaceFocusMode
+              ? 'workspace-focus'
+              : isSystemSidebarUserCollapsed
+                ? 'user-collapsed'
+                : 'none'
     const diagnostic = `resource monitoring UI state tab_id=${activeTab.id} connected=${activeSession?.connected === true} configured=${activeSshResourceMonitoring} capability=${resourceMonitoring === undefined ? 'unknown' : resourceMonitoring} unavailable_reason=${activeSession?.resourceMonitoringUnavailableReason ?? 'none'} available=${isResourceMonitoringAvailable} sidebar_rendered=${shouldShowSystemSidebar} sidebar_collapsed=${isSystemSidebarCollapsed} collapse_reason=${collapseReason}`
     if (lastResourceMonitoringDiagnosticRef.current === diagnostic) {
       return
     }
     lastResourceMonitoringDiagnosticRef.current = diagnostic
-    void desktopApi.writeDiagnosticLog('DEBUG', 'renderer:workspace', diagnostic).catch(() => undefined)
+    writeDiagnosticLog('INFO', DIAGNOSTIC_SCOPES.workspace, diagnostic, desktopApi)
   }, [
+    activeProfile?.type,
+    activeProfile?.type === 'ssh' ? activeProfile.deviceMode : undefined,
     activeSession?.capabilities?.resourceMonitoring,
     activeSession?.connected,
     activeSession?.resourceMonitoringUnavailableReason,
@@ -560,6 +567,9 @@ export function useAppWorkspace({
     isMainWorkspaceWindow,
     isConnectionFormWindow,
     isConnectionFormOpen: showConnectionForm,
+    onHostTrustAccepted: (request) => {
+      setForm((current) => acceptConnectionTestHostTrust(current, request, editingProfileId))
+    },
     onError
   })
 

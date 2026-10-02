@@ -217,6 +217,7 @@ Renderer 只显示遮罩、倒计时和操作反馈，`app_retry_monitoring` 只
 - 应用更新通过 Rust/Tauri update service 统一管理，renderer 仅经 `Rust commands/events -> tauri-api.ts -> renderer` 查询状态和触发检查；更新通道持久化为 `stable` / `beta`，稳定版只选择非 prerelease Release，测试版选择 prerelease 与正式版中 SemVer 最新的一项，以便测试版自然升级到正式版。Windows 按选中的 Release tag 动态读取签名 `latest.json`、NSIS 安装器及其 `.sig`，继续采用两段式“下载验签 → 重启安装”；macOS 发行构建使用 ad hoc 签名并保持检查后跳转选中的 GitHub Release 下载页（不接入 Apple 证书、公证或应用内 updater）。
 - 原生关闭快捷键由 Rust/Tauri backend 统一收口：macOS 使用 `Cmd+Q` 请求应用退出确认、`Cmd+W` 请求关闭当前工作区项/子窗口；Windows/Linux 分别保持 `Alt+F4` 退出与 `Ctrl+W` 关闭窗口语义。最后一个工作区项只触发普通窗口关闭/隐藏，不得直接销毁主窗口；托盘退出和应用退出快捷键必须走同一确认与 transfer journal 清理链路。真正退出前还必须逐个等待独立 Monaco 编辑器完成保存或确认丢弃，任一编辑器取消都会中止 session/transfer shutdown。
 - 主题和语言属于 Rust backend 持久化的 UI preferences；Tauri 应用菜单、托盘菜单与 Windows/Linux 自绘 menubar 必须从同一份 locale 构建并在语言切换后刷新。Linux 不安装 GTK 全局应用菜单，避免它注入每个独立窗口并破坏 renderer 主题。macOS 应用菜单保留 About/Services/Hide/Bring All to Front 等标准角色，但 Quit 仍走 FileTerm 自己的脏编辑器、活动连接和 transfer cleanup 确认链路。资源监控是 SSH 连接配置，关闭后该连接不采集资源数据，工作区仅保留窄侧栏；开启时支持 1/5/15/30/60 秒采样，默认保持 1 秒，用户可按需切换到低频模式。
+- 首次启动的 UI 语言由系统首选语言决定：中文语言环境使用简体中文，其余语言环境使用英文；用户保存的语言选择优先。Rust 在创建默认 preferences 时判定系统语言，renderer 在偏好读取失败时按 WebView 的首选语言回退，并同步 HTML `lang` 属性。
 - xterm 与 Monaco 会缓存字体尺寸/像素比并生成运行时样式，统一使用随包的 JetBrains Mono；本地字体完成加载、窗口缩放或跨显示器 DPI 变化后必须主动重测。生产 CSP 仅禁止 Tauri 为 `style-src` 注入 nonce，使声明的 `unsafe-inline` 能供这两个受信任的本地组件生成样式；`script-src` 继续保留 Tauri 的 hash/nonce 加固。
 - Renderer 的持久化操作必须返回并应用 Rust command 的最新 snapshot；跨窗口广播只负责同步其他窗口，不能作为发起窗口更新成功状态的唯一来源。弹窗、传输与隧道操作在 React 提交态之外还必须使用同步 guard，避免下一帧禁用按钮前的快速双击重复调用 backend。
 - 本地文件面板访问 SMB/UNC 路径时，首次认证失败由 Rust 返回稳定的 `SMB_CREDENTIALS_REQUIRED` 标记，经 `tauri-api.ts` 进入 renderer 凭据弹窗，再通过 `app_connect_local_network_share` 重试。macOS 主机级路径先查询可访问共享目录并由 renderer 让用户选择，再只挂载所选 `smbfs` 共享；Windows 使用临时 WNet 连接。SMB 系统命令有超时保护，账号和密码只在本次 IPC/系统连接期间驻留内存，不写入 profile、日志或 workspace snapshot；macOS 挂载会在应用退出时卸载。
@@ -226,7 +227,7 @@ Renderer 只显示遮罩、倒计时和操作反馈，`app_retry_monitoring` 只
 - SSH 可见终端中，只有在明确检测到 `sudo -i` 或 `su -` 的密码提示后，才允许从对应的 profile 凭据自动填充；未出现密码提示时不得盲写密码，也不得把密码写入 transcript 或日志。文件区工具栏切换 root 访问模式时始终打开方法选择窗口；用户选择 `sudo` 或 `su` 后，空密码提交由后端自动使用对应的已保存凭据，不向 renderer 回显密码，手动填写的密码只用于本次验证并按既有规则缓存。验证失败必须回滚当前权限状态。
 - Rust backend 在 Tauri userData 缺少迁移 marker 时，最多一次导入历史用户目录中的应用自有 JSON/SSH key 数据；Tauri 当前数据按 ID 优先，legacy 只补缺失记录，整批 staging/commit 失败会回滚且不写 marker。迁移成功后不再 live merge，Chromium session 与缓存始终不迁移。Windows 便携版（`*-portable.exe`、带 `FILETERM_PORTABLE_BUILD=1` 编译标识的 portable 可执行文件，或 exe 同目录带 `portable` 标记文件）将应用自有存储根目录切换为 exe 旁的 `config`，普通安装版和开发版继续使用 Tauri app-data 目录；第一次切换时若 `config` 为空，会从原 Tauri app-data 复制应用自有 JSON、凭据密文、密钥和字体数据，使用独立 marker 防止重复覆盖，诊断日志和 MCP 运行时描述文件不复制。首次成功启动后，portable 还会在 exe 同目录持久化 `portable` 标记，因此用户清空 `config` 后不会再次从 `%APPDATA%` 或历史用户目录回填数据；启动、迁移、字体导入和字体文件修复路径均写入同一存储根目录下的 `logs/app.log`。
 - 本地凭据字段（AI API Key、SSH 私钥口令、profile 密码/代理密码、sudo/su 密码、WebDAV 密码及 S3 Access/Secret Key）在 Rust 存储层以 AES-256-GCM 加密后再写入 JSON；密钥由每安装随机 seed 与当前设备稳定标识经 HMAC-SHA256 派生，并以字段用途/记录 ID 作为 AAD 绑定，旧版明文在首次读取后原子迁移。该实现不接入 macOS safeStorage/钥匙串、Windows DPAPI 或 Linux credential store，不触发系统授权弹窗；Unix seed/secret/key 文件在创建、迁移和读取自愈时收紧为 `0600`，Windows 依赖应用数据目录的用户 ACL。它防止静态文件被直接读取或被单独误传，不对获得当前用户运行权限的本机主动攻击者提供保护。WebDAV/S3 的远程备份包和用户显式导出的 JSON 仍是跨设备迁移载体，按既有行为可包含连接凭据；它们仅在 main/Rust 服务层序列化，不进入公开 snapshot、renderer 预览或日志。
-- Tauri backend 的持久化诊断统一进入 `services/logging.rs`：日志按 `app/window/protocol:tab/metrics/tunnel/transfer:id/local/update/webdav/profile` 分 scope，使用 `DEBUG/INFO/WARN/ERROR` 级别，并执行大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入诊断日志。
+- Tauri backend 的持久化诊断统一进入 `services/logging/`：`tracing` subscriber/layer 负责结构化事件、span 上下文与 `FILETERM_LOG_LEVEL` 过滤，现有 `logging::*` 函数作为兼容 facade 发出 tracing event；`tracing-log` 汇入依赖的 `log` facade 事件。文件 writer 执行有界队列、大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入诊断日志。
 - 用户主动开启设备配置中的“自动保存会话日志”后，`services/session_logs.rs` 独立按 tab 写入终端收到的输出；它不采集键盘输入，远端回显内容仍可能出现在日志中。默认目录为当前存储根目录下的 `session-logs`（便携版位于 exe 旁的 `config\session-logs`），也可按设备指定目录；关闭标签、重连或退出应用前会刷新写入队列。手动保存通过 `app_save_session_log` 和系统保存对话框导出当前 transcript，FTP 不提供该能力。
 
 ## 4.3 传输暂停与恢复边界
@@ -708,3 +709,10 @@ tokens -> theme vars -> component skins -> terminal colors
 - 错误处理必须以用户可读提示为目标
 - 优先把 macOS 与 Windows 体验做顺
 - 视觉样式优先遵循主题系统链路
+
+### 本地诊断日志模块
+
+Rust 诊断日志集中在 `services/logging/`，由 `mod.rs` 保留稳定 facade；tracing subscriber/layer 接收结构化事件和 span，级别和分类、脱敏格式化、队列写入与轮转、panic 捕获分别维护。
+Renderer 使用 `lib/diagnostic-log.ts` 经已有 IPC 写入本地日志，不直接访问文件。
+日志增加统一 category，保留原 scope 与标签 ID；常规写入由有界队列和专用线程处理，正常退出进行有界排空。
+完整分类、限流、保留和故障边界见 [本地诊断日志](./quality/logging.md)。
