@@ -3,18 +3,19 @@
  */
 
 :root[data-theme='fileterm-light'][data-theme-preset='iterm2-dracula'] {
+  /* Solid tinted canvas and sections, brighter panels, and clear input surfaces. */
   --ref-surface-canvas: #f4f4f6;
-  --ref-surface-sidebar: #ffffff;
+  --ref-surface-sidebar: #f2f1f5;
   --ref-surface-panel: #ffffff;
   --ref-surface-card: #ffffff;
-  --ref-surface-section: #ffffff;
+  --ref-surface-section: #f4f2f7;
   --ref-surface-elevated: #ffffff;
   --ref-surface-modal: #ffffff;
   --ref-surface-context-menu: #ffffff;
   --ref-surface-overlay: rgba(0, 0, 0, 0.32);
   --ref-surface-hover: #f0edf5;
   --ref-surface-active: #eee8f6;
-  --ref-surface-input: #ffffff;
+  --ref-surface-input: color-mix(in srgb, var(--ref-surface-elevated) 45%, #ffffff);
   --ref-surface-input-focus: #f8f5fd;
   --ref-surface-toolbar: #f4f4f6;
   --ref-surface-titlebar: #f4f4f6;

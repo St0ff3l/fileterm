@@ -1,0 +1,5 @@
+/* Keep a solid interior behind every child window. The outer document stays
+   transparent so macOS/Linux can clip the native rounded corners. */
+.standalone-window-frame {
+  background: var(--surface-canvas);
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { t } from '../../i18n'
+import './standalone-window-frame.css'
 import { AppIcon } from '../common/app-icon'
 import { CloseButton } from '../common/close-button'
 

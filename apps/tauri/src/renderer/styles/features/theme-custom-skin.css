@@ -6,7 +6,8 @@
  * inheriting those built-in hard-coded backgrounds:
  *   surface          -> primary canvas
  *   surfaceSecondary -> sidebars and file panes
- *   surfaceElevated  -> title bars, tabs, controls, and overlays
+ *   surfaceTitlebar -> window chrome and tab strips
+ *   surfaceElevated -> controls and overlays
  */
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .fs-shell,
@@ -28,7 +29,7 @@
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .titlebar-tabarea,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .window-menubar,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .standalone-window-titlebar {
-  background: var(--surface-elevated) !important;
+  background: var(--surface-titlebar) !important;
 }
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .fs-tab,

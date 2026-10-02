@@ -3,18 +3,19 @@
  */
 
 :root[data-theme='fileterm-light'][data-theme-preset='iterm2-gruvbox'] {
+  /* Solid tinted canvas and sections, brighter panels, and clear input surfaces. */
   --ref-surface-canvas: #fbf1c7;
-  --ref-surface-sidebar: #f1e7bf;
-  --ref-surface-panel: #f1e7bf;
-  --ref-surface-card: #f1e7bf;
-  --ref-surface-section: #f1e7bf;
-  --ref-surface-elevated: #fdf6dc;
-  --ref-surface-modal: #f1e7bf;
+  --ref-surface-sidebar: #f4edcf;
+  --ref-surface-panel: #fefaee;
+  --ref-surface-card: #fefaee;
+  --ref-surface-section: #fdf6dc;
+  --ref-surface-elevated: #fefaee;
+  --ref-surface-modal: #fefaee;
   --ref-surface-context-menu: #fdf6dc;
   --ref-surface-overlay: rgba(0, 0, 0, 0.32);
   --ref-surface-hover: #efe8d0;
   --ref-surface-active: #e6e7d0;
-  --ref-surface-input: #fdf6dc;
+  --ref-surface-input: color-mix(in srgb, var(--ref-surface-elevated) 45%, #ffffff);
   --ref-surface-input-focus: #eeecd4;
   --ref-surface-toolbar: #fbf1c7;
   --ref-surface-titlebar: #fbf1c7;

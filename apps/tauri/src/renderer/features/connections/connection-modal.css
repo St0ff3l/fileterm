@@ -1,0 +1,28 @@
+/* Light forms use persistent surfaces; hover overlays cannot serve as a
+   window background when the native WebView supports transparency. */
+:root[data-theme*='light'] .modal-card.ssh-modal .ssh-modal-nav {
+  background: var(--surface-section);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+:root[data-theme*='light'] .modal-card.ssh-modal .ssh-form-shell {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+}
+
+:root[data-theme*='light'] .modal-card.ssh-modal .ssh-fieldset {
+  background: var(--surface-section);
+  border-color: var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+}
+
+:root[data-theme*='light'] .modal-card.ssh-modal .ssh-field-hint {
+  color: var(--text-secondary);
+}
+
+:root[data-theme*='light'] .modal-card.ssh-modal .ssh-actions {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}

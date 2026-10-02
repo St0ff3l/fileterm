@@ -416,9 +416,6 @@
   background: var(--modal-backdrop-bg);
 }
 
-:root[data-theme*='light'] .ssh-modal-nav,
-:root[data-theme*='light'] .ssh-form-shell,
-:root[data-theme*='light'] .ssh-fieldset,
 :root[data-theme*='light'] .terminal-key-box,
 :root[data-theme*='light'] .ssh-placeholder,
 :root[data-theme*='light'] .file-split,
@@ -784,12 +781,12 @@
 :root[data-theme*='light'] .connection-form-window,
 :root[data-theme*='light'] .command-editor-window,
 :root[data-theme*='light'] .standalone-shell {
-  background: linear-gradient(180deg, var(--surface-canvas) 0%, var(--surface-hover) 100%);
+  background: var(--surface-canvas);
 }
 
 :root[data-theme*='light'] .file-editor-window,
 :root[data-theme*='light'] .file-editor-modal {
-  background: linear-gradient(180deg, var(--surface-canvas) 0%, var(--surface-hover) 100%);
+  background: var(--surface-canvas);
 }
 
 :root[data-theme*='light'] .file-editor-modal {
