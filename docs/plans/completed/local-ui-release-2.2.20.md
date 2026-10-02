@@ -16,6 +16,7 @@
 ## 验证
 
 - Tauri typecheck、lint、Prettier、CSS contract、renderer 生产构建通过。
+- Rust Clippy（locked、all-targets、all-features、warnings denied）通过。
 - Rust unit/integration/contract 测试 707 项通过；renderer 逻辑测试 28 项通过。
 - CSS contract 仍有既有的 11 处 !important 和 1 处直接颜色债务，没有新增。
 - 本次 PR 准备不等同于发版；尚未创建 release 分支、tag 或发布产物。
