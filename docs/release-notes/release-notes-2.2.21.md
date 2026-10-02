@@ -10,7 +10,7 @@
 
 ### 本版本包含的主要 PR 和问题修复
 
-- 本次浅色主题和窗口表面优化 PR：待合入。
+- [PR #277](https://github.com/St0ff3l/fileterm/pull/277)：浅色主题表面、独立窗口底板和主题顶部栏优化，并准备 2.2.21。
 
 完整变更记录请查看 [v2.2.20 与 v2.2.21 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.20...v2.2.21)。
 
@@ -33,7 +33,7 @@ Improve light theme surfaces and window backgrounds for consistent, readable lay
 
 ### Main PRs and issues
 
-- Pull request for the light theme and window surface improvements: pending merge.
+- [PR #277](https://github.com/St0ff3l/fileterm/pull/277): Light theme surfaces, standalone window backgrounds, title bar colors, and the 2.2.21 preparation.
 
 See the [comparison between v2.2.20 and v2.2.21](https://github.com/St0ff3l/fileterm/compare/v2.2.20...v2.2.21) for the complete change set.
 

@@ -1,6 +1,6 @@
 # 浅色主题窗口与表面层次
 
-完成日期：2026-10-02。基于 main `08dd1624`，分支 `fix/light-theme-window-surfaces`。
+完成日期：2026-10-02。基于 main `08dd1624`，分支 `fix/light-theme-window-surfaces`，PR [#277](https://github.com/St0ff3l/fileterm/pull/277)。
 
 ## 问题与修改
 
