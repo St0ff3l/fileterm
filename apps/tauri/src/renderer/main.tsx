@@ -10,6 +10,10 @@ import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
 import { applyUiZoomPercent } from './app/ui-zoom'
 import './styles/index.css'
+import { installRendererErrorLogging, reportRendererError } from './lib/renderer-error-log'
+
+const removeErrorLogging = installRendererErrorLogging()
+if (import.meta.hot) import.meta.hot.dispose(removeErrorLogging)
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
 // Keep renderer-only chrome adjustments scoped to the Tauri window model.
@@ -118,6 +122,15 @@ void createTauriApi()
               <App initialUiPreferences={initialUiPreferences} />
             </ErrorBoundary>
           </React.StrictMode>
+        )
+      })
+      .catch((error: unknown) => {
+        reportRendererError('bootstrap', error)
+        console.error('Failed to initialize the renderer:', error)
+        root.render(
+          <div role="alert" className="app-bootstrap-error">
+            {t.runtimeInitFailed}
+          </div>
         )
       })
   })

@@ -14,7 +14,7 @@ import type {
   ThemeConfig,
   WorkspaceTab
 } from '@fileterm/core'
-import type { Dispatch, DragEvent, SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type DragEvent, type SetStateAction } from 'react'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import type { TabBarProps } from '../layout/tab-bar'
 import { SystemInfoWorkspace } from '../system/system-info-workspace'
@@ -469,7 +469,8 @@ type KeepAliveWorkspaceStageProps = WorkspaceStageProps & {
 }
 
 /**
- * Keep every top-level terminal workspace mounted while another tab is shown.
+ * Keep terminal workspaces and visited home tabs mounted while another tab is shown.
+ * Home tabs retain their page, settings section, drafts and scroll position until closed.
  *
  * A terminal TUI owns state that is not reconstructible from the session
  * transcript: alternate-screen contents, cursor position, selection, scrollback
@@ -556,14 +557,53 @@ export function KeepAliveWorkspaceStage({
   })
 
   const showBaseWorkspace = stageProps.activeLocalTab !== null || !stageProps.activeTab || !stageProps.activeSession
+  const homeTabIds = stageProps.tabBarProps.orderedTabs.flatMap((entry) =>
+    entry.kind === 'local' && entry.tabKind === 'home' ? [entry.id] : []
+  )
+  const activeHomeId =
+    showBaseWorkspace && stageProps.activeLocalTab?.kind !== 'system' ? stageProps.activeHomeTabId : null
+  const [visitedHomeIds, setVisitedHomeIds] = useState<string[]>([])
+  useEffect(() => {
+    const openHomeIds = stageProps.tabBarProps.orderedTabs.flatMap((entry) =>
+      entry.kind === 'local' && entry.tabKind === 'home' ? [entry.id] : []
+    )
+    setVisitedHomeIds((previous) => {
+      const next = previous.filter((id) => openHomeIds.includes(id))
+      if (activeHomeId && !next.includes(activeHomeId)) next.push(activeHomeId)
+      return next.length === previous.length && next.every((id, index) => id === previous[index]) ? previous : next
+    })
+  }, [activeHomeId, stageProps.tabBarProps.orderedTabs])
+  const homeWorkspaceItems = homeTabIds
+    .filter((id) => id === activeHomeId || visitedHomeIds.includes(id))
+    .map((id) => {
+      const isActive = id === activeHomeId
+      return (
+        <div
+          key={`home:${id}`}
+          className={'workspace-content-stack__item ' + (isActive ? 'is-active' : '')}
+          data-workspace-tab-id={id}
+          aria-hidden={!isActive}
+          inert={!isActive}
+        >
+          <WorkspaceStage
+            {...stageProps}
+            activeLocalTab={{ kind: 'home' }}
+            activeHomeTabId={id}
+            isWorkspaceActive={isActive}
+          />
+        </div>
+      )
+    })
+  const showUncachedBaseWorkspace = showBaseWorkspace && !homeTabIds.includes(activeHomeId ?? '')
 
   return (
     <div className="workspace-content-stack">
-      {showBaseWorkspace ? (
-        <div className="workspace-content-stack__item is-active" aria-hidden="false">
+      {showUncachedBaseWorkspace ? (
+        <div key="base-workspace" className="workspace-content-stack__item is-active" aria-hidden="false">
           <WorkspaceStage {...stageProps} />
         </div>
       ) : null}
+      {homeWorkspaceItems}
       {sessionWorkspaceItems}
     </div>
   )

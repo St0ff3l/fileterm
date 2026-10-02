@@ -4,7 +4,8 @@ export type DiagnosticLogLevel = Parameters<FileTermDesktopApi['writeDiagnosticL
 
 export const DIAGNOSTIC_SCOPES = {
   workspace: 'renderer:workspace',
-  monitoring: 'renderer:monitoring'
+  monitoring: 'renderer:monitoring',
+  error: 'renderer:error'
 } as const
 
 export type DiagnosticScope = (typeof DIAGNOSTIC_SCOPES)[keyof typeof DIAGNOSTIC_SCOPES]

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, EventTarget, Manager};
@@ -36,11 +37,47 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+fn deserialize_optional_modified_at<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let Value::Number(number) = value else {
+        return Err(D::Error::custom(
+            "modifiedAt must be a non-negative number",
+        ));
+    };
+    if let Some(timestamp) = number.as_u64() {
+        return Ok(Some(timestamp));
+    }
+
+    // Some older journals contain filesystem mtime values in fractional
+    // milliseconds (for example Node's `mtimeMs`). Sub-millisecond precision
+    // is not used by transfer identity checks, so truncate to whole ms to
+    // match `SystemTime::duration_since(...).as_millis()`.
+    let timestamp = number
+        .as_f64()
+        .filter(|timestamp| timestamp.is_finite() && *timestamp >= 0.0)
+        .ok_or_else(|| D::Error::custom("modifiedAt must be a non-negative number"))?;
+    let timestamp = timestamp.floor();
+    if timestamp >= u64::MAX as f64 {
+        return Err(D::Error::custom("modifiedAt is out of range"));
+    }
+    Ok(Some(timestamp as u64))
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferFileIdentity {
     pub size: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_modified_at",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub modified_at: Option<u64>,
 }
 

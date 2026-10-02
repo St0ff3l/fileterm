@@ -3,12 +3,12 @@
 }
 .monitoring-overlay {
   position: absolute;
-  inset: 32px 0 0;
+  inset: 78px 0 0;
   z-index: 3;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 36px 12px 12px;
+  padding: 20px 16px 12px;
   background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
   color: var(--text-primary);
   backdrop-filter: blur(2px);
@@ -17,10 +17,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  max-width: 100%;
+  gap: 8px;
+  width: 100%;
+  max-width: 240px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .monitoring-overlay-message strong {
@@ -35,9 +37,53 @@
 }
 .monitoring-collapsed {
   position: absolute;
-  top: 34px;
+  top: 64px;
   left: 8px;
   z-index: 3;
   font-weight: 700;
   color: var(--status-warning-text);
+}
+
+.monitoring-overlay[data-phase='stopped'] strong {
+  color: var(--text-primary);
+}
+.monitoring-overlay-message p {
+  color: var(--text-secondary);
+}
+.monitoring-overlay-message .monitoring-overlay-last-update {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.monitoring-overlay-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.monitoring-overlay[data-phase='starting'] strong,
+.monitoring-overlay[data-phase='recovering'] strong,
+.monitoring-overlay[data-phase='reconnecting'] strong {
+  color: var(--text-primary);
+}
+.monitoring-overlay-spinner {
+  box-sizing: border-box;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--text-secondary);
+  border-radius: 50%;
+  animation: monitoring-overlay-spin 0.8s linear infinite;
+}
+@keyframes monitoring-overlay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .monitoring-overlay-spinner {
+    animation: none;
+  }
 }

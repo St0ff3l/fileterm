@@ -305,8 +305,9 @@
   --system-sidebar-divider: var(--border-subtle);
   --system-sidebar-toggle-shadow: var(--shadow-sm);
   --system-sidebar-toggle-hover-shadow: var(--shadow-md);
-  --mini-tab-active-bg: var(--surface-active);
-  --mini-tab-active-text: var(--text-primary);
+  --network-panel-bg: var(--ref-surface-network);
+  --mini-tab-active-bg: var(--ref-accent-focus);
+  --mini-tab-active-text: var(--ref-accent-secondary);
 
   /* Theme Bridge */
   --theme-surface: var(--surface-canvas);

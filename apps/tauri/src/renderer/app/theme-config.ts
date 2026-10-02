@@ -170,7 +170,6 @@ function resolveCompactUiVariables(
   const networkTx =
     theme.semanticColors.networkTx ?? (isCodex ? (isLight ? '#ba2623' : '#f43f5e') : isLight ? '#ef4444' : '#ff7474')
 
-  const secondarySurface = alpha(secondaryAccent, isLight ? 10 : 14)
   const totalSurface = alpha(total, isLight ? 10 : 14)
   const infoSurface = alpha(info, isLight ? 10 : 14)
   const successSurface = alpha(success, isLight ? 10 : 14)
@@ -372,8 +371,6 @@ function resolveCompactUiVariables(
     '--kernel-accent': kernelAccent,
     '--copy-link': copyLink,
     '--copy-link-hover': copyLinkHover,
-    '--mini-tab-active-bg': secondarySurface,
-    '--mini-tab-active-text': secondaryHover,
     '--memory-warn': warning,
     '--network-tx': networkTx,
     '--network-rx': networkRx,

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FileTerm Dev",
+  "identifier": "com.fileterm.desktop.dev"
+}

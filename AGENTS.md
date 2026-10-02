@@ -119,6 +119,13 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - `apps/tauri/src-tauri/src/`：Rust commands、services、sessions、transfers 与 storage。
 - `apps/tauri/src/bridge/tauri-api.ts` 与 `apps/tauri/src/renderer/`：Tauri 专用 bridge 与 UI。
 
+### 本地 UI 预览
+
+- `npm run dev -w @fileterm/tauri` 必须加载 `tauri.dev.conf.json`：开发版显示为 `FileTerm Dev`，bundle ID 为 `com.fileterm.desktop.dev`；安装版继续使用 `FileTerm` / `com.fileterm.desktop`。两者数据目录隔离。
+- 验证桌面 UI 时，从目标工作树启动开发版，并核对启动日志、Vite 监听端口和进程路径。Computer Use 通过 `com.fileterm.desktop.dev` 选择开发版，不得按 `FileTerm` 名称或生产 bundle ID 操作窗口。
+- 如果默认 dev 端口 `5188` 已被目标工作树的 Vite 服务占用，可复用该服务运行 `npm run dev -w @fileterm/tauri -- --config '{"build":{"beforeDevCommand":null}}'`；这仍会加载开发版身份配置。否则不要猜窗口版本、改用安装版或结束可能保有远程会话的进程。
+- 只有确认窗口由当前工作树的开发进程启动后，才用 Computer Use 操作或截图验证；无法区分开发版与安装版时，先报告具体阻碍。
+
 ## 7. 质量门禁（已落地）
 
 所有代码改动必须通过以下门禁，pre-push 自动阻断不通过项：

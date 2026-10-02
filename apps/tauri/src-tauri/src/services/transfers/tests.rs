@@ -840,3 +840,28 @@ mod large_directory_regressions {
         assert_eq!(task.manifest.unwrap().files.len(), 100_000);
     }
 }
+
+#[test]
+fn transfer_identity_accepts_legacy_fractional_milliseconds() {
+    for (json, expected) in [
+        (r#"{"size":12,"modifiedAt":1720000000123.75}"#, Some(1720000000123)),
+        (r#"{"size":12,"modifiedAt":1720000000123}"#, Some(1720000000123)),
+        (r#"{"size":12}"#, None),
+        (r#"{"size":12,"modifiedAt":null}"#, None),
+    ] {
+        let identity: TransferFileIdentity = serde_json::from_str(json).unwrap();
+        assert_eq!(identity.modified_at, expected);
+        let round_trip: TransferFileIdentity =
+            serde_json::from_value(serde_json::to_value(&identity).unwrap()).unwrap();
+        assert_eq!(round_trip.modified_at, expected);
+    }
+}
+
+#[test]
+fn transfer_identity_rejects_invalid_modification_times() {
+    for value in [serde_json::json!(-1), serde_json::json!("123"), serde_json::json!(1e30)] {
+        assert!(serde_json::from_value::<TransferFileIdentity>(
+            serde_json::json!({"size": 12, "modifiedAt": value})
+        ).is_err());
+    }
+}

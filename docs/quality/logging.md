@@ -4,15 +4,15 @@
 
 Rust 统一入口为 `apps/tauri/src-tauri/src/services/logging/mod.rs`。持久化管线使用 `tracing` subscriber 和自定义 layer，旧的 `logging::debug/info/warn/error/session/write_global` 等 API 作为兼容 facade，把原有调用转成 tracing event。
 
-| 模块        | 职责                                                 |
-| ----------- | ---------------------------------------------------- |
-| mod.rs      | 稳定 facade、日志目录、subscriber 注册与旧调用适配   |
+| 模块        | 职责                                                |
+| ----------- | --------------------------------------------------- |
+| mod.rs      | 稳定 facade、日志目录、subscriber 注册与旧调用适配  |
 | layer.rs    | tracing 字段和 span 提取、级别转换、写入统一 writer |
-| level.rs    | TRACE / DEBUG / INFO / WARN / ERROR 类型与解析       |
-| category.rs | scope 到统一功能分类的映射                           |
-| format.rs   | 秘密脱敏、控制字符转义、单行和长度限制、行格式化     |
-| writer.rs   | 有界队列、后台线程、文件写入、轮转、退出排空         |
-| panic.rs    | panic 位置和消息捕获，同时保留原 stderr 行为         |
+| level.rs    | TRACE / DEBUG / INFO / WARN / ERROR 类型与解析      |
+| category.rs | scope 到统一功能分类的映射                          |
+| format.rs   | 秘密脱敏、控制字符转义、单行和长度限制、行格式化    |
+| writer.rs   | 有界队列、后台线程、文件写入、轮转、退出排空        |
+| panic.rs    | panic 位置和消息捕获，同时保留原 stderr 行为        |
 
 前端入口为 `apps/tauri/src/renderer/lib/diagnostic-log.ts`，统一 scope 常量和写入失败处理。
 调用链为 renderer → writeDiagnosticLog IPC → Rust tracing event → subscriber layer → writer，组件不直接写文件。`tracing-log` 把依赖通过 `log` facade 发出的记录接入同一订阅器。
@@ -66,6 +66,14 @@ app.log 在下一条日志导致超过 2 MiB 前轮转为 app.log.1，仅保留�
 - 正常桌面退出最多等待 500ms 排空已排队的日志；磁盘错误、后台任务异常、线程启动失败、强制终止或超时仍可能导致日志缺失。
 
 业务采样日志应单独限频，不依赖队列满后的保护。监控样本摘要最多每分钟一条，侧栏状态变化去重，详见 monitoring-sidebar-diagnostics.md。
+
+## 前端异常
+
+`renderer-error-log.ts` 通过同一 IPC 将异常写入 `app.log`，级别为 ERROR、scope 为 `renderer:error`（category 为 workspace）。覆盖 React ErrorBoundary、window error、未处理的 Promise 拒绝和 bridge 就绪后的初始化失败。
+
+记录 source、应用版本、平台、窗口类型、错误名称/消息、JavaScript stack 和 React componentStack。只提取窗口类型，不记录完整 URL 或任意拒绝对象；不自动收集连接配置、终端内容或业务状态。堆栈在生产构建中可能包含压缩符号，但仍保留定位信息。三个错误正文/堆栈字段分别按转义后 UTF-8 3000 字节限制，同来源同内容在 5 秒内去重，React 组件堆栈不会被全局错误去重覆盖。
+
+日志提交是 best-effort：bridge 尚未就绪、写入失败、进程强制退出时可能无法落盘。处理器不更新 React state，不阻止浏览器默认错误处理，也不把所有 console 输出转存为文件日志。
 
 ## 范围
 

@@ -1,3 +1,4 @@
+import './system-network-panel.css'
 import { buildLinePath, buildScrollingWindow, areSampleWindowsEqual } from './network-history'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SystemMetrics } from '@fileterm/core'

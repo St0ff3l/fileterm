@@ -64,7 +64,8 @@ export function useSettingsModalController(options: SettingsModalControllerOptio
     ...overview,
     ...ai,
     ...agent,
-    ...sync
+    ...sync,
+    openSecuritySettings: security.openSecuritySettings
   }
 
   return {

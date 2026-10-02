@@ -45,6 +45,24 @@ export function MonitoringOverlay({
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [visible, collapsed])
+  useEffect(() => {
+    if (!visible || collapsed || !tabId || !['starting', 'recovering'].includes(state?.phase ?? '')) return
+    let canceled = false
+    const timer = window.setTimeout(() => {
+      const api = window.fileterm
+      if (!api) return
+      void api
+        .getSnapshot()
+        .then((snapshot) => {
+          if (!canceled) onSnapshot(snapshot)
+        })
+        .catch(() => undefined)
+    }, 3000)
+    return () => {
+      canceled = true
+      window.clearTimeout(timer)
+    }
+  }, [collapsed, onSnapshot, state?.generation, state?.phase, tabId, visible])
   if (!visible || !state) return null
   const sshDisconnected = session?.connected === false || state.reason === 'ssh-disconnected'
   const reconnecting = connectionStatus === 'connecting'
@@ -63,6 +81,7 @@ export function MonitoringOverlay({
     unsupported: t.monitoringUnsupported
   }
   const title = titles[phase]
+  if (collapsed && phase === 'stopped') return null
   if (collapsed)
     return (
       <span className="monitoring-collapsed" role="status" title={title} aria-label={title}>
@@ -70,7 +89,6 @@ export function MonitoringOverlay({
       </span>
     )
   const canRetry = ['paused', 'waiting', 'failed', 'disconnected', 'ssh-disconnected'].includes(phase)
-  const busy = phase === 'starting' || phase === 'recovering' || reconnecting || submitting
   async function retry() {
     const api = window.fileterm
     if (!api || !tabId || !state || !canRetry || pending.current) return
@@ -104,20 +122,28 @@ export function MonitoringOverlay({
   return (
     <div className="monitoring-overlay" data-phase={phase}>
       <div className="monitoring-overlay-message">
-        <strong role="status" aria-live="polite">
+        <strong className="monitoring-overlay-title" role="status" aria-live="polite">
+          {phase === 'starting' || phase === 'recovering' || phase === 'reconnecting' ? (
+            <span className="monitoring-overlay-spinner" aria-hidden="true" />
+          ) : null}
           {title}
         </strong>
         {phase === 'stopped' ? <p>{t.monitoringStoppedDescription}</p> : null}
         {phase === 'paused' ? <p>{t.monitoringWaitingChannel}</p> : null}
         {phase === 'ssh-disconnected' ? <p>{t.monitoringReconnectDescription}</p> : null}
-        {state.lastSampleAt !== undefined ? (
+        {phase === 'starting' ? <p>{t.monitoringWaitingSample}</p> : null}
+        {state.lastSampleAt !== undefined && phase !== 'starting' ? (
           <>
-            <p>
-              {formatMessage(t.monitoringSampleAge, {
-                seconds: Math.max(0, Math.floor((now - state.lastSampleAt) / 1000))
-              })}
+            {phase !== 'stopped' ? (
+              <p>
+                {formatMessage(t.monitoringSampleAge, {
+                  seconds: Math.max(0, Math.floor((now - state.lastSampleAt) / 1000))
+                })}
+              </p>
+            ) : null}
+            <p className="monitoring-overlay-last-update">
+              {formatMessage(t.monitoringLastUpdate, { time: new Date(state.lastSampleAt).toLocaleTimeString() })}
             </p>
-            <p>{formatMessage(t.monitoringLastUpdate, { time: new Date(state.lastSampleAt).toLocaleTimeString() })}</p>
           </>
         ) : null}
         {state.nextRetryAt !== undefined && !sshDisconnected && canRetry ? (
@@ -132,20 +158,17 @@ export function MonitoringOverlay({
         {phase === 'recovering' && state.attempt > 0 ? (
           <p>{formatMessage(t.monitoringAttempt, { attempt: state.attempt, max: state.maxAttempts })}</p>
         ) : null}
-        {phase === 'starting' ? <p>{t.monitoringWaitingSample}</p> : null}
         {phase === 'recovering' ? <p>{t.monitoringRecoveryDescription}</p> : null}
         {phase === 'failed' ? <p>{formatMessage(t.monitoringExhausted, { max: state.maxAttempts })}</p> : null}
-        {phase !== 'unsupported' && phase !== 'stopped' ? (
-          <Button size="sm" disabled={!canRetry || !window.fileterm} loading={busy} onClick={() => void retry()}>
+        {canRetry ? (
+          <Button size="sm" disabled={!window.fileterm} loading={submitting} onClick={() => void retry()}>
             {sshDisconnected || reconnecting
-              ? busy
+              ? submitting
                 ? t.monitoringSshReconnecting
                 : t.monitoringReconnect
-              : phase === 'starting'
-                ? t.monitoringStarting
-                : busy
-                  ? t.monitoringRetryBusy
-                  : t.monitoringRetry}
+              : submitting
+                ? t.monitoringRetryBusy
+                : t.monitoringRetry}
           </Button>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
