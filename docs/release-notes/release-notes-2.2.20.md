@@ -12,7 +12,7 @@
 
 ### 本版本包含的主要 PR 和问题修复
 
-- 本次版本准备包含监控侧栏、主题、首页状态、安全设置导航和旧传输记录兼容修复。
+- [PR #276](https://github.com/St0ff3l/fileterm/pull/276)：监控侧栏、主题、首页状态、安全设置导航、旧传输记录兼容修复及 2.2.20 版本准备。
 
 完整变更记录请查看 [v2.2.19 与 v2.2.20 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.19...v2.2.20)。
 
@@ -37,7 +37,7 @@ Bring the local workspace and monitoring fixes into the release, improving tab s
 
 ### Main PRs and issues
 
-- This version preparation includes monitoring, theme, home state, security navigation, and legacy transfer record fixes.
+- [PR #276](https://github.com/St0ff3l/fileterm/pull/276): Monitoring, theme, home state, security navigation, legacy transfer record fixes, and 2.2.20 preparation.
 
 See the [comparison between v2.2.19 and v2.2.20](https://github.com/St0ff3l/fileterm/compare/v2.2.19...v2.2.20) for the complete change set.
 
