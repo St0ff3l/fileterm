@@ -67,6 +67,14 @@ app.log 在下一条日志导致超过 2 MiB 前轮转为 app.log.1，仅保留�
 
 业务采样日志应单独限频，不依赖队列满后的保护。监控样本摘要最多每分钟一条，侧栏状态变化去重，详见 monitoring-sidebar-diagnostics.md。
 
+## 前端异常
+
+`renderer-error-log.ts` 通过同一 IPC 将异常写入 `app.log`，级别为 ERROR、scope 为 `renderer:error`（category 为 workspace）。覆盖 React ErrorBoundary、window error、未处理的 Promise 拒绝和 bridge 就绪后的初始化失败。
+
+记录 source、应用版本、平台、窗口类型、错误名称/消息、JavaScript stack 和 React componentStack。只提取窗口类型，不记录完整 URL 或任意拒绝对象；不自动收集连接配置、终端内容或业务状态。堆栈在生产构建中可能包含压缩符号，但仍保留定位信息。三个错误正文/堆栈字段分别按转义后 UTF-8 3000 字节限制，同来源同内容在 5 秒内去重，React 组件堆栈不会被全局错误去重覆盖。
+
+日志提交是 best-effort：bridge 尚未就绪、写入失败、进程强制退出时可能无法落盘。处理器不更新 React state，不阻止浏览器默认错误处理，也不把所有 console 输出转存为文件日志。
+
 ## 范围
 
 诊断 app.log、终端会话 transcript 和 WebView console 是三个不同入口。诊断日志不自动保存终端输出，console 也不会自动归入文件日志。

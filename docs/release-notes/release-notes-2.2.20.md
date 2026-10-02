@@ -8,6 +8,7 @@
 - **主题显示**：隔离监控组件样式，修复亮色与自定义主题下的显示和控件对齐。
 - **首页与设置**：已访问的首页标签切换后保留页面、设置区、草稿与滚动状态；跳转安全设置时清空搜索，确保目标页面可见。
 - **传输兼容性**：兼容旧传输记录中的小数毫秒修改时间，避免读取记录失败。
+- **崩溃诊断**：将前端异常和 React 组件堆栈写入本地日志，附带版本、平台和窗口类型，便于定位使用中的界面崩溃。此项补充诊断能力，尚未确认修复 React #185 的根因。
 - **开发版隔离**：本地开发启动为 FileTerm Dev，使用独立应用标识和数据目录，便于与安装版同时验证。
 
 ### 本版本包含的主要 PR 和问题修复
@@ -33,6 +34,7 @@ Bring the local workspace and monitoring fixes into the release, improving tab s
 - **Themes**: Isolate monitoring styles and fix rendering and control alignment in light and custom themes.
 - **Home and settings**: Keep visited home tabs mounted to retain their page, settings section, drafts, and scroll position. Clear settings search when navigating to security settings so the destination stays visible.
 - **Transfer compatibility**: Accept fractional millisecond modification times in older transfer records to prevent loading failures.
+- **Crash diagnostics**: Persist frontend exceptions and React component stacks in local logs with version, platform, and window type. This adds diagnostic coverage; the root cause of React #185 has not yet been confirmed or fixed.
 - **Development isolation**: Start local development as FileTerm Dev with a separate application identity and data directory for side-by-side verification.
 
 ### Main PRs and issues

@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { t } from '../../i18n'
+import { reportRendererError } from '../../lib/renderer-error-log'
 
 interface Props {
   children: ReactNode
@@ -18,6 +19,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[FileTerm] Uncaught error:', error, errorInfo)
+    reportRendererError('react-boundary', error, errorInfo.componentStack)
   }
 
   handleReload = () => {
