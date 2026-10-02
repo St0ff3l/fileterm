@@ -7,6 +7,7 @@ import type {
   SshConnectionDefaults
 } from '@fileterm/core'
 import { t } from '../../i18n'
+import './connection-modal.css'
 import { CloseButton } from '../common/close-button'
 import { FeedbackText } from '../common/feedback-text'
 import { StableButtonContent } from '../common/stable-button-content'

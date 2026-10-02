@@ -109,6 +109,10 @@ FileTerm 的层级主要靠边界，不靠重装饰。
 - 表格：表头使用 `--surface-table-head`，行分割使用 `--border-light`。
 - 浮层：使用 `--popover-bg`、`--popover-shadow`、`--modal-backdrop-bg`。
 - 命令 Dock：使用玻璃感半透明表面，但只作为工具条，不做大面积毛玻璃背景。
+- 浅色独立窗口必须有实色底板，外层透明只用于原生圆角裁切；禁止用半透明 hover 色作为窗口渐变端点。
+- 浅色连接表单按面板、分组、输入框建立层次：内容区使用 `--surface-panel`，导航与分组使用 `--surface-section`，输入框使用 `--surface-input`，边界使用语义 border。
+- iTerm2 浅色预设保留主题色温，以带色画布、较亮面板和更亮输入框区分层级；应用表面调整不改变终端 ANSI 配色。
+- 标题栏与标签条使用 `--surface-titlebar`，不得绑定输入框/浮层的 `--surface-elevated`；iTerm2 浅色预设标题栏沿用各自画布色，避免控件提亮后顶部出现突兀白带。
 
 圆角规则：
 
