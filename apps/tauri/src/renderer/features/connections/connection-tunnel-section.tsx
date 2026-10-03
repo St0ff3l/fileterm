@@ -20,6 +20,25 @@ function createConnectionForwardRule(): SshForwardRule {
   }
 }
 
+function forwardRulesMatch(current: SshForwardRule[] = [], saved: SshForwardRule[] = []): boolean {
+  return (
+    current.length === saved.length &&
+    current.every((rule, index) => {
+      const other = saved[index]
+      return (
+        rule.id === other.id &&
+        rule.name === other.name &&
+        rule.kind === other.kind &&
+        rule.bindHost === other.bindHost &&
+        rule.bindPort === other.bindPort &&
+        rule.targetHost === other.targetHost &&
+        rule.targetPort === other.targetPort &&
+        rule.autoStart === other.autoStart
+      )
+    })
+  )
+}
+
 export function ConnectionTunnelSection({
   form,
   setForm
@@ -100,13 +119,17 @@ export function ConnectionTunnelSection({
   }, [sshTunnels])
 
   useEffect(() => {
-    if (selectedTunnel && form.tunnelProfileId === selectedTunnel.id) {
+    if (
+      selectedTunnel &&
+      form.tunnelProfileId === selectedTunnel.id &&
+      !forwardRulesMatch(form.forwards, selectedTunnel.forwards)
+    ) {
       setForm((prev) => ({
         ...prev,
         forwards: selectedTunnel.forwards?.map((rule) => ({ ...rule })) ?? []
       }))
     }
-  }, [selectedTunnel, form.tunnelProfileId, setForm])
+  }, [selectedTunnel, form.tunnelProfileId, form.forwards, setForm])
 
   const applySavedTunnel = (tunnel: TunnelProfile) => {
     setForm((previous) => ({

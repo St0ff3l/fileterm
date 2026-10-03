@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ConnectionFolder,
   ConnectionFormMode,
@@ -134,12 +134,16 @@ export function useWorkspaceModals({
     initializedConnectionFormKeyRef.current = formKey
   }, [formWindowMode, formWindowProfileId, hasLoadedInitialSnapshot, isConnectionFormWindow, profiles])
 
-  const updateForm = (updater: CreateProfileInput | ((current: CreateProfileInput) => CreateProfileInput)) => {
-    setForm((current) =>
-      invalidateChangedConnectionHostTrust(current, typeof updater === 'function' ? updater(current) : updater)
-    )
-    setFormError(null)
-  }
+  // Saved proxy/tunnel synchronization depends on this callback's identity.
+  const updateForm = useCallback(
+    (updater: CreateProfileInput | ((current: CreateProfileInput) => CreateProfileInput)) => {
+      setForm((current) =>
+        invalidateChangedConnectionHostTrust(current, typeof updater === 'function' ? updater(current) : updater)
+      )
+      setFormError(null)
+    },
+    []
+  )
 
   const openCreateModal = () => {
     setEditingProfileId(null)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from '../../i18n'
 
@@ -32,7 +32,11 @@ export function ContextMenu({
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
-  const [resolvedPosition, setResolvedPosition] = useState(position)
+  const onCloseRef = useRef(onClose)
+
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   const focusMenuItem = useCallback((direction: 'first' | 'last' | 'next' | 'previous') => {
     const menu = menuRef.current
@@ -57,22 +61,22 @@ export function ContextMenu({
       const menu = menuRef.current
       const target = event.target
       if (!(target instanceof Node) || !menu) {
-        onClose()
+        onCloseRef.current()
         return
       }
       if (!menu.contains(target)) {
-        onClose()
+        onCloseRef.current()
       }
     }
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
       }
     }
 
-    const handleBlur = () => onClose()
-    const handleViewportChange = () => onClose()
+    const handleBlur = () => onCloseRef.current()
+    const handleViewportChange = () => onCloseRef.current()
 
     window.addEventListener('pointerdown', handlePointerDown, true)
     window.addEventListener('keydown', handleEscape)
@@ -93,7 +97,7 @@ export function ContextMenu({
         previousFocus.focus()
       }
     }
-  }, [onClose])
+  }, [])
 
   useEffect(() => {
     if (!autoFocus) {
@@ -114,11 +118,14 @@ export function ContextMenu({
     const maxLeft = Math.max(viewportMargin, window.innerWidth - rect.width - viewportMargin)
     const maxTop = Math.max(viewportMargin, window.innerHeight - rect.height - viewportMargin)
 
-    setResolvedPosition({
-      x: Math.min(maxLeft, Math.max(viewportMargin, left)),
-      y: Math.min(maxTop, Math.max(viewportMargin, position.y))
-    })
-  }, [align, items, position, viewportMargin])
+    // Position is derived from this DOM node's measured dimensions. Updating
+    // React state here would enqueue another synchronous layout update. Keep
+    // measurement out of the React update chain, even when coordinates change.
+    const nextLeft = `${Math.min(maxLeft, Math.max(viewportMargin, left))}px`
+    const nextTop = `${Math.min(maxTop, Math.max(viewportMargin, position.y))}px`
+    if (menu.style.left !== nextLeft) menu.style.left = nextLeft
+    if (menu.style.top !== nextTop) menu.style.top = nextTop
+  }, [align, items, position.x, position.y, viewportMargin])
 
   const menuElement = (
     <div
@@ -141,7 +148,7 @@ export function ContextMenu({
         }
       }}
       role="menu"
-      style={{ left: resolvedPosition.x, top: resolvedPosition.y } as CSSProperties}
+      style={{ left: position.x, top: position.y } as CSSProperties}
     >
       {items.map((item, index) =>
         item.separator ? (

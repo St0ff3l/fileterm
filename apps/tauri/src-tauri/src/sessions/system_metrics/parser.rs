@@ -593,6 +593,8 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
         "loadUnit": load_unit,
         "identity": {
             "osName": if read_line("__OS__").is_empty() { "-".to_string() } else { read_line("__OS__") },
+            "osId": read_line("__OS_ID__"),
+            "osIdLike": read_line("__OS_ID_LIKE__"),
             "kernelName": if read_line("__KERNEL_NAME__").is_empty() { "-".to_string() } else { read_line("__KERNEL_NAME__") },
             "kernelVersion": if read_line("__KERNEL_VERSION__").is_empty() { "-".to_string() } else { read_line("__KERNEL_VERSION__") },
             "architecture": if read_line("__ARCH__").is_empty() { "-".to_string() } else { read_line("__ARCH__") },

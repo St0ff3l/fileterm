@@ -4,7 +4,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode
 } from 'react'
@@ -68,7 +67,6 @@ export function DropdownSelect({
   const selectRef = useRef<HTMLSelectElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
-  const [resolvedStyle, setResolvedStyle] = useState<CSSProperties>({})
   const [arrowSize, setArrowSize] = useState(14)
 
   const selectedOption = options.find((option) => option.value === value)
@@ -156,6 +154,9 @@ export function DropdownSelect({
     if (!trigger || !menu) return
 
     const rect = trigger.getBoundingClientRect()
+    // Resolve trigger width before measuring wrapping and viewport placement.
+    // There is no follow-up React commit to correct dimensions afterwards.
+    menu.style.minWidth = menuWidth === 'trigger' ? `${rect.width}px` : ''
     const menuRect = menu.getBoundingClientRect()
     const viewportMargin = 8
     const belowTop = rect.bottom + 4
@@ -169,22 +170,16 @@ export function DropdownSelect({
       align === 'right' || (align === 'auto' && rect.left + menuRect.width > window.innerWidth - viewportMargin)
     const maxTop = Math.max(viewportMargin, window.innerHeight - menuRect.height - viewportMargin)
 
-    if (shouldAlignRight) {
-      setResolvedStyle({
-        right: Math.max(viewportMargin, window.innerWidth - rect.right),
-        left: 'auto',
-        top: Math.min(maxTop, Math.max(viewportMargin, top)),
-        minWidth
-      })
-    } else {
-      const maxLeft = Math.max(viewportMargin, window.innerWidth - menuRect.width - viewportMargin)
-      setResolvedStyle({
-        left: Math.min(maxLeft, Math.max(viewportMargin, rect.left)),
-        right: 'auto',
-        top: Math.min(maxTop, Math.max(viewportMargin, top)),
-        minWidth
-      })
-    }
+    // DOM-derived geometry must not schedule another React layout commit.
+    menu.style.left = shouldAlignRight
+      ? 'auto'
+      : `${Math.min(
+          Math.max(viewportMargin, window.innerWidth - menuRect.width - viewportMargin),
+          Math.max(viewportMargin, rect.left)
+        )}px`
+    menu.style.right = shouldAlignRight ? `${Math.max(viewportMargin, window.innerWidth - rect.right)}px` : 'auto'
+    menu.style.top = `${Math.min(maxTop, Math.max(viewportMargin, top))}px`
+    menu.style.minWidth = `${minWidth}px`
   }, [open, options, menuWidth, menuPlacement, align])
 
   const handleSelect = (optionValue: string) => {
@@ -240,12 +235,7 @@ export function DropdownSelect({
         }
       }}
       role="menu"
-      style={
-        {
-          position: 'fixed',
-          ...resolvedStyle
-        } as CSSProperties
-      }
+      style={{ position: 'fixed' }}
     >
       {options.map((option) => (
         <button

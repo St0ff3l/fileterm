@@ -26,8 +26,8 @@ FileTerm 当前已经有 SSH 会话的系统信息页，但实现明显偏向 `L
 
 ### 2. 跨平台采集器实现
 
-- [x] **Linux 采集器** (`sessions/system_metrics/posix.rs`)：覆盖标准 Linux 发行版（Debian、Ubuntu、CentOS、Arch 等）。
-- [x] **BusyBox / OpenWrt 兼容采集器** (`sessions/system_metrics/posix.rs`)：为软路由和 BusyBox 的 `df`、`uptime`、`ps` 等简化版指令提供兼容解析，允许缺项时不崩溃。
+- [x] **Linux 采集器** (`sessions/system_metrics/posix/mod.rs`)：覆盖标准 Linux 发行版（Debian、Ubuntu、CentOS、Arch 等）。
+- [x] **BusyBox / OpenWrt 兼容采集器** (`sessions/system_metrics/posix/mod.rs`)：为软路由和 BusyBox 的 `df`、`uptime`、`ps` 等简化版指令提供兼容解析，允许缺项时不崩溃。
 - [x] **Windows 采集器** (`sessions/system_metrics/windows.rs`)：基于 PowerShell 脚本实现对 Windows SSH 目标主机的 CPU、内存、磁盘及网卡信息探测。
 
 ### 3. 主进程调度与路由

@@ -837,6 +837,9 @@ export interface RawNetworkInterfaceMetrics {
 
 export interface SystemIdentity {
   osName: string
+  /** Machine-readable os-release distro ID and space-separated parent IDs. */
+  osId?: string
+  osIdLike?: string
   kernelName: string
   kernelVersion: string
   architecture: string

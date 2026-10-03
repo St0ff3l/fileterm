@@ -91,7 +91,14 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
   }, [proxies])
 
   useEffect(() => {
-    if (selectedProxy && form.proxyProfileId === selectedProxy.id) {
+    if (
+      selectedProxy &&
+      form.proxyProfileId === selectedProxy.id &&
+      (form.proxy?.type !== selectedProxy.type ||
+        form.proxy.host !== selectedProxy.host ||
+        form.proxy.port !== selectedProxy.port ||
+        form.proxy.username !== selectedProxy.username)
+    ) {
       setForm((prev) => ({
         ...prev,
         proxy: {
@@ -102,7 +109,7 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
         }
       }))
     }
-  }, [selectedProxy, form.proxyProfileId, setForm])
+  }, [selectedProxy, form.proxyProfileId, form.proxy, setForm])
 
   const handleCreateProxy = () => {
     isWaitingForNewProxyRef.current = true
