@@ -180,7 +180,7 @@ export function useAppWorkspace({
     startTabDrag,
     enterDraggedTab,
     endTabDrag,
-    setIsSystemSidebarCollapsed,
+    setIsSystemSidebarCollapsed: setIsSystemSidebarUserCollapsed,
     dismissShortcutCloseConfirm,
     activateHomeTab,
     closeHomeTab,
@@ -255,8 +255,8 @@ export function useAppWorkspace({
       ? activeProfile.resourceMonitoringMetricOrder
       : resourceMonitoringMetricOrder
   const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
-  const isSystemSidebarCollapsed =
-    isSystemSidebarUserCollapsed || isWorkspaceFocusMode || Boolean(activeTab && !isResourceMonitoringAvailable)
+  // Monitoring availability controls the meters, not whether the user can open the sidebar.
+  const isSystemSidebarCollapsed = isSystemSidebarUserCollapsed || isWorkspaceFocusMode
   const activeTabId = activeTab?.id ?? null
   const aiCopilotTargetTab = activePaneTab ?? activeTab
   const aiCopilotTargetSession = activePaneSession ?? activeSession
@@ -268,18 +268,11 @@ export function useAppWorkspace({
       return
     }
     const resourceMonitoring = activeSession?.capabilities?.resourceMonitoring
-    const collapseReason =
-      activeProfile?.type === 'ssh' && activeProfile.deviceMode === 'network-device'
-        ? 'network-device'
-        : !activeSshResourceMonitoring
-          ? 'profile-disabled'
-          : resourceMonitoring === false
-            ? 'remote-capability-disabled'
-            : isWorkspaceFocusMode
-              ? 'workspace-focus'
-              : isSystemSidebarUserCollapsed
-                ? 'user-collapsed'
-                : 'none'
+    const collapseReason = isWorkspaceFocusMode
+      ? 'workspace-focus'
+      : isSystemSidebarUserCollapsed
+        ? 'user-collapsed'
+        : 'none'
     const diagnostic = `resource monitoring UI state tab_id=${activeTab.id} connected=${activeSession?.connected === true} configured=${activeSshResourceMonitoring} capability=${resourceMonitoring === undefined ? 'unknown' : resourceMonitoring} unavailable_reason=${activeSession?.resourceMonitoringUnavailableReason ?? 'none'} available=${isResourceMonitoringAvailable} sidebar_rendered=${shouldShowSystemSidebar} sidebar_collapsed=${isSystemSidebarCollapsed} collapse_reason=${collapseReason}`
     if (lastResourceMonitoringDiagnosticRef.current === diagnostic) {
       return
@@ -706,7 +699,12 @@ export function useAppWorkspace({
     startTabDrag,
     enterDraggedTab,
     endTabDrag,
-    setIsSystemSidebarCollapsed,
+    setIsSystemSidebarCollapsed: (collapsed: boolean) => {
+      if (!collapsed && activeWorkspaceFocusKey && isWorkspaceFocusMode) {
+        setWorkspaceFocusModes((current) => ({ ...current, [activeWorkspaceFocusKey]: false }))
+      }
+      setIsSystemSidebarUserCollapsed(collapsed)
+    },
     dismissShortcutCloseConfirm,
     activateHomeTab,
     closeHomeTab,

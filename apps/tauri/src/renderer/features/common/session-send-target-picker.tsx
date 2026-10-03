@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from '../../i18n'
 import { AppIcon } from './app-icon'
@@ -34,51 +34,33 @@ export function SessionSendTargetPicker({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({ display: 'none' })
+  useLayoutEffect(() => {
+    if (!isOpen) return
+    const wrapper = wrapperRef.current
+    const dropdown = dropdownRef.current
+    if (!wrapper || !dropdown) return
 
-  const updatePosition = () => {
-    if (wrapperRef.current) {
-      const rect = wrapperRef.current.getBoundingClientRect()
-      const dropdownWidth = 250
-      const style: React.CSSProperties = {
-        position: 'fixed',
-        zIndex: 9999,
-        width: `${dropdownWidth}px`,
-        right: 'auto'
-      }
-
-      style.left = `${rect.right - dropdownWidth}px`
-
+    const updatePosition = () => {
+      const rect = wrapper.getBoundingClientRect()
       const spaceBelow = window.innerHeight - rect.bottom
       const spaceAbove = rect.top
       const shouldOpenUpwards = !popover || (spaceBelow < 280 && spaceAbove > spaceBelow)
 
-      if (shouldOpenUpwards) {
-        style.bottom = `${window.innerHeight - rect.top + 6}px`
-        style.top = 'auto'
-      } else {
-        style.top = `${rect.bottom + 6}px`
-        style.bottom = 'auto'
-      }
-
-      setDropdownStyle(style)
-    }
-  }
-
-  useEffect(() => {
-    if (isOpen) {
-      updatePosition()
-      window.addEventListener('resize', updatePosition)
-      window.addEventListener('scroll', updatePosition, true)
-    } else {
-      setDropdownStyle({ display: 'none' })
+      // Keep measurement out of React state, including resize/scroll callbacks.
+      dropdown.style.left = `${rect.right - 250}px`
+      dropdown.style.right = 'auto'
+      dropdown.style.bottom = shouldOpenUpwards ? `${window.innerHeight - rect.top + 6}px` : 'auto'
+      dropdown.style.top = shouldOpenUpwards ? 'auto' : `${rect.bottom + 6}px`
     }
 
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
     return () => {
       window.removeEventListener('resize', updatePosition)
       window.removeEventListener('scroll', updatePosition, true)
     }
-  }, [isOpen, scope, targets, selectedTabIds])
+  }, [isOpen, scope, targets, selectedTabIds, popover])
 
   useEffect(() => {
     if (!isOpen) return
@@ -125,7 +107,11 @@ export function SessionSendTargetPicker({
 
           {isOpen &&
             createPortal(
-              <div className="custom-select-dropdown" style={dropdownStyle} ref={dropdownRef}>
+              <div
+                className="custom-select-dropdown"
+                style={{ position: 'fixed', width: 250, zIndex: 9999 }}
+                ref={dropdownRef}
+              >
                 <div
                   className={`custom-select-option ${scope === 'current' ? 'is-active' : ''}`}
                   onClick={() => handleScopeSelect('current')}

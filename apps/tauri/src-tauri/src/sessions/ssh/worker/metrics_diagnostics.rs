@@ -104,6 +104,14 @@ fn metrics_identity_field(value: &serde_json::Value, key: &str) -> String {
     };
     let compact = raw
         .chars()
+        // ID_LIKE is a list: dropping a tab would join adjacent distro IDs.
+        .map(|character| {
+            if key == "osIdLike" && character.is_ascii_whitespace() {
+                ' '
+            } else {
+                character
+            }
+        })
         .filter(|character| !character.is_control())
         .take(128)
         .collect::<String>();
@@ -140,6 +148,27 @@ fn target_identity_is_valid(value: &serde_json::Value, platform: &str) -> bool {
 
     let os_lower = os_name.to_ascii_lowercase();
     let kernel_lower = kernel_name.to_ascii_lowercase();
+    // A known gateway banner must not become a target just because it claims
+    // a Linux kernel or includes a distro family in its payload.
+    if os_lower.contains("jumpserver") || matches!(os_lower.trim(), "go" | "koko") {
+        return false;
+    }
+    let os_id = metrics_identity_field(value, "osId").to_ascii_lowercase();
+    let os_id_like = metrics_identity_field(value, "osIdLike").to_ascii_lowercase();
+    let linux_family_id = std::iter::once(os_id.as_str())
+        .chain(os_id_like.split_ascii_whitespace())
+        .any(|id| {
+            matches!(
+                id,
+                "linux" | "debian" | "ubuntu" | "rhel" | "fedora" | "centos"
+                    | "rocky" | "almalinux" | "amzn" | "suse" | "sles" | "sled"
+                    | "opensuse" | "opensuse-leap" | "opensuse-tumbleweed" | "alpine"
+                    | "arch" | "gentoo" | "nixos" | "void" | "slackware" | "solus"
+                    | "mageia" | "mandriva" | "openmandriva" | "clear-linux-os"
+                    | "openwrt" | "buildroot" | "busybox" | "armbian" | "photon"
+                    | "mariner" | "azurelinux" | "openeuler"
+            )
+        });
     let linux_family_os = [
         "linux",
         "centos",
@@ -148,6 +177,7 @@ fn target_identity_is_valid(value: &serde_json::Value, platform: &str) -> bool {
         "fedora",
         "debian",
         "ubuntu",
+        "armbian",
         "rocky",
         "alma linux",
         "amazon linux",
@@ -175,12 +205,12 @@ fn target_identity_is_valid(value: &serde_json::Value, platform: &str) -> bool {
                 || os_lower.contains("mac os")
                 || kernel_lower.contains("darwin")
         }
-        "busybox" => linux_family_os,
-        // CentOS 7 normally reports `CentOS Linux ...`. A kernel name alone is
-        // deliberately not enough: a gateway can also run on Linux. The OS
-        // identity itself must name a Linux-family system so a
-        // `JumpServer`/`Go` banner cannot open the sidebar as a target.
-        _ => linux_family_os,
+        "linux" | "busybox" => {
+            // Older collectors lack distro IDs. Keep the name fallback, but
+            // neither a kernel alone nor an unknown platform proves a target.
+            kernel_lower == "linux" && (linux_family_id || linux_family_os)
+        }
+        _ => false,
     }
 }
 
@@ -355,10 +385,63 @@ mod metrics_tests {
                 "kernelName": "Linux"
             }
         });
+        let armbian = serde_json::json!({
+            "identity": {
+                "hostname": "arm-target",
+                "osName": "Armbian 26.8.1 trixie",
+                "kernelName": "Linux"
+            }
+        });
 
         assert!(target_identity_is_valid(&target, "linux"));
         assert!(target_identity_is_valid(&ubuntu, "linux"));
+        assert!(target_identity_is_valid(&armbian, "linux"));
         assert!(!target_identity_is_valid(&gateway, "linux"));
+    }
+
+    #[test]
+    fn target_identity_accepts_linux_distro_ids_and_parent_families() {
+        for (name, id, parents) in [
+            ("Pop!_OS 24.04", "pop", "ubuntu debian"),
+            ("KDE neon 24.04", "neon", "ubuntu"),
+            ("elementary OS 8", "elementary", "ubuntu"),
+            ("NixOS 25.11", "nixos", ""),
+            ("Solus 4.8", "solus", ""),
+            ("Deepin 25", "deepin", "debian"),
+            ("Anolis OS 8", "anolis", "rhel fedora"),
+            ("AlmaLinux 9", "almalinux", "rhel centos fedora"),
+            ("Azure Linux 3", "azurelinux", ""),
+            ("Custom derivative", "custom", "other\tdebian"),
+        ] {
+            let block = format!(
+                "__OS__{name}\r\n__OS_ID__{id}\r\n__OS_ID_LIKE__{parents}\r\n__KERNEL_NAME__Linux\r\n__HOSTNAME__target\r\n"
+            );
+            let parsed = crate::sessions::system_metrics::parse_system_metrics(&block, "linux");
+            assert!(target_identity_is_valid(&parsed, "linux"), "{name}");
+            assert_eq!(parsed["identity"]["osId"], id);
+            assert_eq!(parsed["identity"]["osIdLike"], parents);
+        }
+    }
+
+    #[test]
+    fn target_identity_keeps_gateway_and_incompatible_platform_boundaries() {
+        for (name, id, parents, kernel, platform) in [
+            ("JumpServer", "ubuntu", "debian", "Linux", "linux"),
+            ("JumpServer Linux", "ubuntu", "debian", "Linux", "linux"),
+            ("Go", "ubuntu", "debian", "Linux", "linux"),
+            ("Koko", "ubuntu", "debian", "Linux", "linux"),
+            ("Unknown appliance", "unknown", "debian-ish", "Linux", "linux"),
+            ("NixOS", "nixos", "", "-", "linux"),
+            ("NixOS", "nixos", "", "Darwin", "linux"),
+            ("Ubuntu", "ubuntu", "debian", "Linux", "unknown"),
+            ("Ubuntu", "ubuntu", "debian", "Linux", "freebsd"),
+        ] {
+            let value = serde_json::json!({ "identity": {
+                "hostname": "target", "osName": name, "osId": id,
+                "osIdLike": parents, "kernelName": kernel
+            }});
+            assert!(!target_identity_is_valid(&value, platform), "{name}/{platform}/{kernel}");
+        }
     }
 
     #[test]

@@ -63,7 +63,7 @@ include!("gateway.rs");
 include!("exec.rs");
 include!("parser.rs");
 include!("process_selection.rs");
-include!("posix.rs");
+include!("posix/mod.rs");
 include!("freebsd.rs");
 include!("windows.rs");
 include!("tests.rs");

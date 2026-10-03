@@ -956,7 +956,7 @@ impl TransferJournal {
 - `exec.rs`：探测 `linux`/`busybox`/`windows`/`unknown`，并负责 bounded exec。
 - `exec.rs` 与 SSH shell CWD 模块共同执行 `supportsPosixShellSetup()` 门控：仅 linux/busybox 注入 POSIX 脚本，**Windows 严禁注入**（C5）。
 - `parser.rs`：CRLF 归一化 `replace(/\r\n?/g, '\n')`（C6）。
-- `posix.rs`、`freebsd.rs`、`windows.rs`：各平台指标脚本与解析。
+- `posix/mod.rs`、`freebsd.rs`、`windows.rs`：各平台指标脚本与解析。
 
 Rust 侧的职责拆分如下：
 

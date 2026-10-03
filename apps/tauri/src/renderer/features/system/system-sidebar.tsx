@@ -188,43 +188,47 @@ export function SystemSidebar({
             >
               {t.systemInfo}
             </button>
-            <ResourceMetricCards
-              availableFileSystems={availableFileSystems}
-              fileSystem={selectedFileSystem}
-              metrics={metrics}
-              onFileSystemChange={setSelectedDiskMountPoint}
-              scrollRef={systemMetricsScrollRef}
-              visibleMetrics={visibleMetrics}
-            />
-            {visibleMetrics.includes('processes') ? (
+            {showResourceMeters ? (
+              <ResourceMetricCards
+                availableFileSystems={availableFileSystems}
+                fileSystem={selectedFileSystem}
+                metrics={metrics}
+                onFileSystemChange={setSelectedDiskMountPoint}
+                scrollRef={systemMetricsScrollRef}
+                visibleMetrics={visibleMetrics}
+              />
+            ) : null}
+            {showResourceMeters && visibleMetrics.includes('processes') ? (
               <ProcessMetricPanel onSortModeChange={setSortMode} rows={sortedProcesses} sortMode={sortMode} />
             ) : null}
-            {visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
+            {showResourceMeters && visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
           </section>
-          <section className="disk-table" inert={obscured}>
-            <div className="disk-head" data-file-panel-snap-target="disk-header">
-              <span>{t.path}</span>
-              <span>{t.availableSize}</span>
-            </div>
-            <div className="disk-scroll-region">
-              <div className="disk-body" ref={diskScrollRef}>
-                {rows.length
-                  ? rows.map((row) => (
-                      <div className="disk-row" key={row.path}>
-                        <span>{row.path}</span>
-                        <span>{row.usage}</span>
-                      </div>
-                    ))
-                  : Array.from({ length: 8 }).map((_, i) => (
-                      <div className="disk-row" key={`empty-${i}`}>
-                        <span></span>
-                        <span></span>
-                      </div>
-                    ))}
+          {showResourceMeters ? (
+            <section className="disk-table" inert={obscured}>
+              <div className="disk-head" data-file-panel-snap-target="disk-header">
+                <span>{t.path}</span>
+                <span>{t.availableSize}</span>
               </div>
-              <VerticalScrollbar ariaLabel={t.scrollDiskList} scrollRef={diskScrollRef} />
-            </div>
-          </section>
+              <div className="disk-scroll-region">
+                <div className="disk-body" ref={diskScrollRef}>
+                  {rows.length
+                    ? rows.map((row) => (
+                        <div className="disk-row" key={row.path}>
+                          <span>{row.path}</span>
+                          <span>{row.usage}</span>
+                        </div>
+                      ))
+                    : Array.from({ length: 8 }).map((_, i) => (
+                        <div className="disk-row" key={`empty-${i}`}>
+                          <span></span>
+                          <span></span>
+                        </div>
+                      ))}
+                </div>
+                <VerticalScrollbar ariaLabel={t.scrollDiskList} scrollRef={diskScrollRef} />
+              </div>
+            </section>
+          ) : null}
         </>
       ) : showResourceMeters ? (
         <CollapsedResourceMeters fileSystem={selectedFileSystem} metrics={metrics} visibleMetrics={visibleMetrics} />
