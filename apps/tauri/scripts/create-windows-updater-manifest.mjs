@@ -22,6 +22,20 @@ if (!signature) {
   throw new Error(`Updater signature is empty: ${signaturePath}`)
 }
 
+const portableExecutables = artifacts.filter((artifact) => artifact.endsWith('-portable.exe'))
+if (portableExecutables.length !== 1) {
+  throw new Error(`Expected exactly one portable executable, found ${portableExecutables.length}.`)
+}
+const portable = portableExecutables[0]
+const portableSignature = (await fs.readFile(path.join(bundleDirectory, `${portable}.sig`), 'utf8')).trim()
+if (!portableSignature) {
+  throw new Error('Portable updater signature is empty.')
+}
+const portableUrl = new URL(
+  `/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(portable)}`,
+  'https://github.com'
+)
+
 const version = tag.replace(/^v/, '')
 const downloadUrl = new URL(
   `/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(installer)}`,
@@ -36,6 +50,10 @@ const manifest = {
     'windows-x86_64': {
       signature,
       url: downloadUrl.toString()
+    },
+    'windows-x86_64-portable': {
+      signature: portableSignature,
+      url: portableUrl.toString()
     }
   }
 }

@@ -1,14 +1,18 @@
 //! Platform-specific application updates.
 //!
 //! Windows installers use Tauri's signed updater and keep a verified package
-//! in memory until the user confirms the restart. Windows portable builds and
-//! macOS intentionally use the GitHub Release-page path instead.
+//! in memory until the user confirms the restart. Portable Windows builds
+//! download a separately signed EXE and replace it after exit; macOS/Linux
+//! keep the GitHub Release-page path.
 
 use semver::Version;
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::AppError;
+
+#[cfg(any(test, target_os = "windows"))]
+pub mod portable;
 
 const RELEASES_API: &str = "https://api.github.com/repos/St0ff3l/fileterm/releases?per_page=100";
 const LATEST_RELEASE_PAGE: &str = "https://github.com/St0ff3l/fileterm/releases/latest";
@@ -17,7 +21,7 @@ const ALL_RELEASES_PAGE: &str = "https://github.com/St0ff3l/fileterm/releases";
 const RELEASE_DOWNLOAD_BASE: &str = "https://github.com/St0ff3l/fileterm/releases/download";
 const DEFAULT_UPDATE_CHANNEL: &str = "stable";
 const RELEASE_PAGE_UPDATE_MODE: &str = "release-page";
-#[cfg(any(test, target_os = "windows"))]
+#[cfg(target_os = "windows")]
 const IN_APP_UPDATE_MODE: &str = "in-app";
 
 #[derive(Clone, Debug, Deserialize)]
@@ -69,11 +73,11 @@ fn update_channel(app: &AppHandle) -> String {
 }
 
 #[cfg(any(test, target_os = "windows"))]
-const fn windows_update_mode_for_portable(is_portable: bool) -> &'static str {
+const fn windows_update_target_for_portable(is_portable: bool) -> Option<&'static str> {
     if is_portable {
-        RELEASE_PAGE_UPDATE_MODE
+        Some("windows-x86_64-portable")
     } else {
-        IN_APP_UPDATE_MODE
+        None
     }
 }
 
@@ -88,8 +92,8 @@ const fn is_portable_build() -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn primary_update_mode() -> &'static str {
-    windows_update_mode_for_portable(is_portable_build())
+const fn primary_update_mode() -> &'static str {
+    IN_APP_UPDATE_MODE
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -115,6 +119,13 @@ fn initial_status(app: &AppHandle) -> serde_json::Value {
     let channel = update_channel(app);
     let update_mode = primary_update_mode();
 
+    #[cfg(target_os = "windows")]
+    if is_portable_build() {
+        if let Some(error) = portable::previous_error() {
+            return status_error(app, update_mode, &channel, error);
+        }
+    }
+
     serde_json::json!({
         "state": "idle",
         "currentVersion": current_version(app),
@@ -136,10 +147,10 @@ async fn set_status(app: &AppHandle, status: serde_json::Value) {
 pub async fn get_status(app: &AppHandle) -> serde_json::Value {
     app.state::<crate::services::workspace::WorkspaceState>()
         .update_status
-        .read()
+        .write()
         .await
+        .get_or_insert_with(|| initial_status(app))
         .clone()
-        .unwrap_or_else(|| initial_status(app))
 }
 
 fn parse_version(value: &str) -> Option<Version> {
@@ -286,8 +297,12 @@ fn updater_for_release(
     use tauri_plugin_updater::UpdaterExt;
 
     let endpoint = updater_manifest_url(tag)?;
-    let updater = app
-        .updater_builder()
+    let builder = app.updater_builder();
+    let builder = match windows_update_target_for_portable(is_portable_build()) {
+        Some(target) => builder.target(target),
+        None => builder,
+    };
+    let updater = builder
         .endpoints(vec![endpoint])
         .map_err(|error| format!("更新地址配置失败: {error}"))?
         .build()
@@ -395,11 +410,7 @@ pub async fn check(app: &AppHandle) -> Result<serde_json::Value, AppError> {
     .await;
 
     #[cfg(target_os = "windows")]
-    let status = if is_portable_build() {
-        check_release_page_update(app).await
-    } else {
-        check_windows_update(app).await
-    };
+    let status = check_windows_update(app).await;
     #[cfg(not(target_os = "windows"))]
     let status = check_release_page_update(app).await;
 
@@ -606,6 +617,9 @@ async fn install_windows_update(app: &AppHandle) -> Result<(), AppError> {
         .update_operation
         .clone();
     let _operation_guard = update_operation.lock().await;
+    if is_portable_build() && !crate::request_file_editors_for_quit(app).await? {
+        return Ok(());
+    }
     let pending = app
         .state::<crate::services::workspace::WorkspaceState>()
         .windows_downloaded_update
@@ -621,13 +635,34 @@ async fn install_windows_update(app: &AppHandle) -> Result<(), AppError> {
         return Ok(());
     };
 
-    crate::services::logging::info(app, "update", "launching verified Windows installer");
-    if let Err(error) = pending.update.install(pending.bytes) {
+    let result = if is_portable_build() {
+        async {
+            let prepared = portable::install(&pending.bytes).await?;
+            // Match normal quit: persist resumable transfer checkpoints and
+            // stop session workers before the helper replaces the executable.
+            crate::services::transfers::shutdown(app)
+                .await
+                .map_err(|error| error.to_string())?;
+            crate::commands::shutdown_session_workers(app).await;
+            prepared.commit();
+            Ok(())
+        }
+        .await
+    } else {
+        pending
+            .update
+            .install(pending.bytes)
+            .map_err(|error| error.to_string())
+    };
+    if let Err(error) = result {
         let status = serde_json::json!({
             "state": "error", "currentVersion": current_version(app), "updateMode": "in-app",
-            "message": format!("启动更新安装器失败: {error}"),
+            "message": format!("启动更新失败: {error}"),
         });
         set_status(app, status).await;
+    } else if is_portable_build() {
+        crate::services::logging::info(app, "update", "portable helper ready; exiting for update");
+        app.exit(0);
     }
     Ok(())
 }
@@ -656,12 +691,15 @@ pub async fn install(app: &AppHandle) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_newer, select_release, windows_update_mode_for_portable, GithubRelease};
+    use super::{is_newer, select_release, windows_update_target_for_portable, GithubRelease};
 
     #[test]
-    fn portable_windows_builds_use_the_release_page_instead_of_the_nsis_updater() {
-        assert_eq!(windows_update_mode_for_portable(true), "release-page");
-        assert_eq!(windows_update_mode_for_portable(false), "in-app");
+    fn portable_updates_cannot_select_the_installer_payload() {
+        assert_eq!(
+            windows_update_target_for_portable(true),
+            Some("windows-x86_64-portable")
+        );
+        assert_eq!(windows_update_target_for_portable(false), None);
     }
 
     #[test]
