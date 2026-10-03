@@ -11,7 +11,7 @@
 
 ### 本版本包含的主要 PR 和问题修复
 
-- 修复监控侧栏兼容性、终端右键菜单 React 更新循环，以及连接表单和浮层的重复更新。
+- [PR #278](https://github.com/St0ff3l/fileterm/pull/278)：修复监控侧栏兼容性、终端右键菜单 React 更新循环，以及连接表单和浮层的重复更新。
 
 完整变更记录请查看 [v2.2.21 与 v2.2.22 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.21...v2.2.22)。
 
@@ -35,7 +35,7 @@ Fixes the monitoring sidebar failing to expand and a React crash when opening th
 
 ### Main PRs and issues
 
-- Fix monitoring sidebar compatibility, the terminal context menu React update loop, and repeated updates in connection forms and popups.
+- [PR #278](https://github.com/St0ff3l/fileterm/pull/278): Fix monitoring sidebar compatibility, the terminal context menu React update loop, and repeated updates in connection forms and popups.
 
 See the [comparison between v2.2.21 and v2.2.22](https://github.com/St0ff3l/fileterm/compare/v2.2.21...v2.2.22) for the complete change set.
 
