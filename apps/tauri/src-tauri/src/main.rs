@@ -8,6 +8,18 @@ fn set_macos_process_name() {
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "--fileterm-portable-update")
+    {
+        if fileterm_lib::services::updates::portable::run_helper().is_err() {
+            std::process::exit(1);
+        }
+        return;
+    }
+    #[cfg(target_os = "windows")]
+    fileterm_lib::services::updates::portable::cleanup_completed();
     let arguments = std::env::args().collect::<Vec<_>>();
     if arguments.get(1).is_some_and(|argument| argument == "mcp") {
         if let Err(error) = fileterm_lib::run_mcp_stdio(&arguments[2..]) {

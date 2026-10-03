@@ -206,6 +206,15 @@ jobs:
             throw "Portable Windows executable was not generated: $portableTarget"
           }
 
+      - name: Sign portable Windows updater payload
+        shell: pwsh
+        run: |
+          $bundleDir = 'apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $portable = Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.exe' -File | Select-Object -First 1
+          if (-not $portable) { throw 'Portable Windows executable was not generated.' }
+          npx tauri signer sign $portable.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Portable updater signing failed.' }
+
       - name: Create GitHub Release updater manifest
         if: startsWith(github.ref, 'refs/tags/')
         run: node ./scripts/create-windows-updater-manifest.mjs ./src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
@@ -218,6 +227,7 @@ jobs:
           if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*.exe' -File)) { throw 'NSIS installer was not generated.' }
           if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-setup.exe.sig' -File)) { throw 'NSIS updater signature was not generated.' }
           if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.exe' -File)) { throw 'Portable Windows executable was not generated.' }
+          if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.exe.sig' -File)) { throw 'Portable updater signature was not generated.' }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v6

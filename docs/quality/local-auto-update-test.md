@@ -35,3 +35,16 @@ node ./apps/tauri/scripts/create-windows-updater-manifest.mjs \
 - 必须测试已安装的 NSIS 版本，不能用 `npm run dev` 或 portable 包验证覆盖安装。
 - 本地产物中的 `latest.json` 与安装器必须位于更新器期望的 `<tag>/` 路径下，且签名文件与安装器同名成对出现。
 - 未配置 `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 时不会生成 `.sig`，更新器会因签名校验失败拒绝更新。
+
+## Windows 便携版更新验收
+
+便携版使用同一 `latest.json` 中独立的 `windows-x86_64-portable` 条目，下载原始便携 EXE 并用 updater 公钥验签。不得把 NSIS 安装器填入便携条目。
+
+1. 构建两个支持便携更新的版本，使用 `FILETERM_PORTABLE_BUILD=1 npm run release:win:portable -w @fileterm/tauri`（PowerShell 先设置 `$env:FILETERM_PORTABLE_BUILD='1'`）。把新版 EXE 复制为 `FileTerm-<version>-windows-x64-portable.exe`，执行 `npx tauri signer sign <完整路径>`；与 NSIS 签名产物一起生成清单。首次从旧版升级仍需手动覆盖。
+2. 在含中文、空格的可写目录启动旧版，把 EXE 重命名为 `我的 FileTerm.exe`，保存连接配置。在更新页下载并重启更新，确认新版仍从原目录、原文件名启动，`config` 内容和 `portable` 标记保留，成功事务子目录被清理。
+3. 分别测试稳定/测试通道、下载断网、错误签名、旧 Release 缺少便携条目；验签失败必须拒绝安装，缺少条目回退下载页。
+4. 测试目录不可写、helper 启动被拦截；应用不得先退出。测试原 EXE 被另一进程占用、新 EXE 启动失败：保持或恢复旧程序，保留错误记录；回滚失败时从 `.fileterm-update-<uuid>/previous.exe` 手动恢复。
+5. 更新会退出应用并中断当前远程会话；确认现有“重启更新”交互仍由用户主动触发。
+6. 同时回归 NSIS 安装版，确认清单中的安装版仍下载安装器，未误用便携 EXE。
+
+签名指 updater 内容签名，不等同于 Windows Authenticode，也不保证消除 SmartScreen 提示。Windows 专用等待/文件占用测试由三平台 Rust CI 的 Windows job 执行；本机 macOS 测试不能替代实际 Windows 更新验收。
