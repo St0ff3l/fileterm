@@ -42,7 +42,9 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
   const terminal = new Terminal({
     fontFamily: getConfiguredMonoFontFamily(),
     fontSize: scaleTerminalFontSizeForUiZoom(getTerminalFontSize(options.profileIdRef.current)),
-    letterSpacing: 0.5,
+    // Keep terminal cells flush: TUIs use adjacent block glyphs for pixel art
+    // (for example, Claude Code's mascot), and extra spacing breaks the image.
+    letterSpacing: 0,
     lineHeight: 1.05,
     cursorBlink: true,
     cursorStyle: 'bar',

@@ -64,6 +64,7 @@ try {
     const terminal = runtime.terminal
     terminal.resize(80, 14)
     const configuredMinimum = terminal.options.minimumContrastRatio
+    const configuredLetterSpacing = terminal.options.letterSpacing
     const write = (text) => new Promise((resolve) => terminal.write(text, resolve))
     const paint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     const canvas = document.createElement('canvas')
@@ -214,9 +215,21 @@ try {
     const hidden = Boolean(terminal.buffer.active.getLine(0).getCell(1).isInvisible())
     const blockColor = getComputedStyle(spanAt(0, 2)).color
     runtime.disposeCore()
-    return { configuredMinimum, controlRatio, checks, failures, before, after, dim, hidden, blockColor }
+    return {
+      configuredMinimum,
+      configuredLetterSpacing,
+      controlRatio,
+      checks,
+      failures,
+      before,
+      after,
+      dim,
+      hidden,
+      blockColor
+    }
   })
   assert.equal(report.configuredMinimum, 4.5, 'the production terminal runtime must enable contrast protection')
+  assert.equal(report.configuredLetterSpacing, 0, 'terminal block art must render with flush character cells')
   assert.equal(report.controlRatio, 1, 'control must reproduce same foreground/background')
   assert.deepEqual(report.failures, [], 'all normal text, selections and search matches must remain readable')
   assert.equal(report.before, 0)
