@@ -88,11 +88,11 @@
   --ref-terminal-cursor: #657b83;
   --ref-terminal-cursor-accent: #eee8d5;
   --ref-terminal-selection-background: #eee8d5;
-  --ref-terminal-selection-foreground: #657b83;
+  --ref-terminal-selection-foreground: #073642;
   --ref-terminal-search-match-background: #b58900;
   --ref-terminal-search-match-ruler: #657b83;
   --ref-terminal-search-active-background: #657b83;
-  --ref-terminal-search-active-text: #657b83;
+  --ref-terminal-search-active-text: #000000;
   --ref-terminal-search-active-border: #b58900;
   --ref-terminal-search-active-ruler: #657b83;
   --ref-terminal-black: #073642;

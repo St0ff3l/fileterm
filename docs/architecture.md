@@ -76,8 +76,13 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
   - 通过 `document.documentElement.dataset.theme` 切换主题。
 - `apps/tauri/src/renderer/components/terminal-view.tsx`
   - 从 CSS 变量读取终端主题色，确保终端外观和全局主题联动。
+  - `terminal-lifecycle-core.ts` 使用 xterm 的最低文字对比度保护，在显示层处理 ANSI/256 色/RGB 与选区/搜索背景，不改写协议流。
 - `apps/tauri/src/renderer/app/terminal-log-colorizer.ts`
   - 在 xterm 完成解析后对普通缓冲区的时间戳、服务名和常见日志级别着色；不向远端输出注入 ANSI，不处理 `top`、`vim`、`less` 等备用屏幕程序，并随终端主题重新套用颜色。
+- `apps/tauri/src/renderer/app/terminal-foreground-adapter.ts`
+  - 让正常/备用屏幕默认背景上的 RGB 纯白文字使用主题默认前景，保留样式与显式背景/反色配对；只适配可见 xterm cell，不改写协议数据或原始 transcript。
+- `apps/tauri/src/renderer/app/action-text-color.ts`
+  - 主题 runtime 根据主按钮/危险按钮背景（透明色先合成 panel surface）选择更易读的白色或深色文字，经参考值和语义变量传入组件。
 - `apps/tauri/src/renderer/features/files/file-editor-modal.tsx`
   - Monaco 主题从 CSS 变量读取，跟随深色/浅色主题切换。
 - `packages/core` 的 `ThemeConfig.baseThemeId` 记录自定义主题继承的内置基准，`UiPreferences.customThemes` 保存用户命名的主题；renderer 只将相对基准真正变化的变量覆盖到主题根节点，避免微调一个颜色时整套组件皮肤被重算。

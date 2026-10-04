@@ -54,6 +54,18 @@ Armbian 身份校验遗漏导致监控能力被禁用，继而触发旧的强制
 
 原生 Tauri WKWebView 与真实 Armbian 会话仍需发布后持续验证。若再次出现 #185，应查看同一次故障的 renderer error componentStack 与 JS stack，不应仅凭错误编号归因于某个组件。开发日志另有 xterm renderer dimensions 的历史异常，尚未确认与本次 #185 的因果关系，不作为本次已修复结论。
 
+## 2026-10-04 Windows 2.2.21 日志核对
+
+用户提供的一条 `renderer:error` 记录为 `version=2.2.21`、`platform=win32`、`window=main`、React #185。仅一条记录无法判断该版本的整体崩溃频率。
+
+从官方 v2.2.21 Windows portable 发布产物读取嵌入的 Brotli 资源 `/assets/index-m-KugXOc.js`，与日志资源文件名一致；解压后 SHA-256 为 `05b6ff7132b259517b7756f2c47ab0dd105ffd0f233f287edf3f384b7f1d8005`。直接按日志中的行列核对，而非用当前版本的 minified 名称推断：
+
+- `13:78639` 的 `uo` 是 `DropdownSelect`，参数包含 `options`、`menuWidth`、`menuPlacement`。
+- `13:80868` 位于该组件布局 effect 的 `D({ left, right, top, minWidth })` 调用，`D` 对应定位 state 的 setter。
+- `42:134779` 的 `cy` 是设置页外观面板，栈中的 `Fv` 是 `SettingsModalProvider`。
+
+因此这条记录定位到设置页下拉框的布局定位更新，不能归因于 Claude Code 终端输出或 Rust worker。提交 `451a8bd7` 已删除这处定位 state，改为直接更新当前菜单 DOM；该修复随 2.2.22 发布，当前 2.2.23 源码也包含它。现有 `popup-update-stability.mjs` 覆盖新数组 props、重复父更新、打开/重定位和边缘夹紧；仍需用户在 Windows 发布包中复测才能确认其实际场景恢复。
+
 ## 文件规模
 
 本次 Renderer 业务文件均为非豁免类别且低于 800 行，无需拆分：ContextMenu 185 → 192、DropdownSelect 297 → 287、SessionSendTargetPicker 251 → 237、useWorkspaceModals 247 → 251、ConnectionProxySection 315 → 322、ConnectionTunnelSection 278 → 301。浏览器测试与本文属于测试/文档豁免类别。

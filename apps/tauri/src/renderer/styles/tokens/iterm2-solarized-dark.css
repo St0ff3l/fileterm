@@ -100,11 +100,11 @@
   --ref-terminal-cursor: #839496;
   --ref-terminal-cursor-accent: #073642;
   --ref-terminal-selection-background: #073642;
-  --ref-terminal-selection-foreground: #839496;
+  --ref-terminal-selection-foreground: #93a1a1;
   --ref-terminal-search-match-background: #b58900;
   --ref-terminal-search-match-ruler: #657b83;
   --ref-terminal-search-active-background: #657b83;
-  --ref-terminal-search-active-text: #002b36;
+  --ref-terminal-search-active-text: #000000;
   --ref-terminal-search-active-border: #b58900;
   --ref-terminal-search-active-ruler: #657b83;
   --ref-terminal-black: #073642;

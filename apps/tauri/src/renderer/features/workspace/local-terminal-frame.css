@@ -1,0 +1,74 @@
+.local-terminal-frame {
+  --local-terminal-frame-size: 15px;
+
+  box-sizing: border-box;
+  display: grid;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: var(--local-terminal-frame-size) minmax(0, 1fr) var(--local-terminal-frame-size);
+  grid-template-rows: minmax(0, 1fr) var(--local-terminal-frame-size);
+  grid-template-areas:
+    'left surface right'
+    'bottom bottom bottom';
+  overflow: hidden;
+  background: var(--surface-toolbar);
+}
+
+.local-terminal-frame-left,
+.local-terminal-frame-right,
+.local-terminal-frame-bottom {
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-toolbar);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.local-terminal-frame-left {
+  grid-area: left;
+  border-right: 1px solid var(--terminal-right-frame-accent);
+}
+
+.local-terminal-frame-right {
+  grid-area: right;
+  border-left: 1px solid var(--terminal-right-frame-accent);
+}
+
+.local-terminal-frame-bottom {
+  grid-area: bottom;
+  border-top: 1px solid var(--terminal-right-frame-accent);
+}
+
+.local-terminal-surface {
+  display: grid;
+  position: relative;
+  grid-area: surface;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--terminal-bg);
+}
+
+.local-terminal-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--terminal-frame-gradient, none);
+  box-shadow: var(--terminal-frame-shadow);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.local-terminal-surface > .terminal-view,
+.local-terminal-surface > .split-pane-root {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--terminal-bg);
+}
+
+.local-terminal-surface > .split-pane-root {
+  height: 100%;
+}

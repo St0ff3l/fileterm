@@ -8,6 +8,7 @@ import { isClinkAutosuggestHelpUrl } from '../app/terminal-transcript'
 import { t } from '../i18n'
 import { getConfiguredMonoFontFamily } from '../app/font-metrics'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
+import { registerTerminalForegroundAdapter } from '../app/terminal-foreground-adapter'
 import { scaleTerminalFontSizeForUiZoom } from '../app/ui-zoom'
 import {
   getTerminalFontSize,
@@ -48,6 +49,10 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
     cursorWidth: 2,
     allowProposedApi: true,
     allowTransparency: true,
+    // Protect ANSI, 256-color and RGB text against the resolved cell background,
+    // including inverse, selection and search decorations. xterm preserves dim
+    // styling and deliberately exempts glyphs used as graphical backgrounds.
+    minimumContrastRatio: 4.5,
     // Vim enables mouse reporting, which disables xterm's normal selection
     // service. On macOS, Option+drag is the standard xterm escape hatch for
     // making a local selection without sending that drag to Vim.
@@ -89,6 +94,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
   terminal.open(host)
   options.terminalRef.current = terminal
   options.searchAddonRef.current = searchAddon
+  const foregroundAdapter = registerTerminalForegroundAdapter(terminal)
   const terminalLogColorizer = new TerminalLogColorizer(terminal, getTerminalLogColorPalette(terminal.options.theme))
   options.terminalLogColorizerRef.current = terminalLogColorizer
   const xtermScrollableElement = host.querySelector('.xterm-scrollable-element') as HTMLElement | null
@@ -295,6 +301,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
       terminalTextarea?.removeEventListener('compositionupdate', onCompositionUpdate)
       terminalTextarea?.removeEventListener('compositionend', onCompositionEnd)
       terminalLogColorizer.dispose()
+      foregroundAdapter.dispose()
       options.terminalLogColorizerRef.current = null
       options.fitAddonRef.current = null
       options.searchAddonRef.current = null

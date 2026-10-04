@@ -1,4 +1,4 @@
-/* global window */
+/* global window, document */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
@@ -73,9 +73,22 @@ try {
     ['dropdown', '.dropdown-select-trigger', '.dropdown-select-menu'],
     ['targets', '.custom-select-trigger', '.custom-select-dropdown']
   ]) {
-    await page.evaluate(
-      () => new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)))
-    )
+    await page.locator(trigger).waitFor()
+    await page.evaluate(async () => {
+      // Initial effects and ResizeObserver can update the adaptive arrow.
+      // Require startup commits to settle before measuring popup commits.
+      await document.fonts.ready
+      let previous = -1
+      let quietFrames = 0
+      for (let frame = 0; frame < 12; frame++) {
+        await new Promise(window.requestAnimationFrame)
+        const current = window.commits.dropdown + window.commits.targets
+        quietFrames = current === previous ? quietFrames + 1 : 0
+        if (quietFrames === 3) return
+        previous = current
+      }
+      throw new Error('Popup fixture did not finish its startup updates')
+    })
     await page.evaluate((kind) => (window.commits[kind] = 0), kind)
     await page.locator(trigger).click()
     const menu = page.locator(popup)

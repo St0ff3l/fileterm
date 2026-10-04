@@ -8,6 +8,7 @@ import {
   type ThemeVariant,
   type SavedTheme
 } from '@fileterm/core'
+import { actionTextColor } from './action-text-color'
 
 export type ThemeMode =
   'fileterm-dark' | 'fileterm-light' | 'codex-dark' | 'codex-light' | 'default-dark' | 'default-light'
@@ -150,8 +151,10 @@ function resolveCompactUiVariables(
   const accentText = isLight ? blend(accent, ink, 35) : blend(accent, '#FFFFFF', 70)
 
   const primaryAction = theme.semanticColors.primaryAction ?? accent
+  const primaryActionText = actionTextColor(primaryAction, surfaceSecondary)
   const primaryActionHover = isLight ? blend(primaryAction, '#000000', 12) : blend(primaryAction, '#FFFFFF', 15)
   const dangerAction = theme.semanticColors.dangerAction ?? (isLight ? '#d32f2f' : '#c93b3b')
+  const dangerActionText = actionTextColor(dangerAction, surfaceSecondary)
   const dangerActionHover = blend(dangerAction, '#000000', 12)
 
   const danger = theme.semanticColors.error
@@ -255,11 +258,11 @@ function resolveCompactUiVariables(
     '--ref-action-primary-bg': primaryAction,
     '--ref-action-primary-hover': primaryActionHover,
     '--ref-action-primary-active': isLight ? blend(primaryAction, '#000000', 22) : blend(primaryAction, '#000000', 28),
-    '--ref-action-primary-text': '#ffffff',
+    '--ref-action-primary-text': primaryActionText,
     '--ref-action-danger-bg': dangerAction,
     '--ref-action-danger-hover': dangerActionHover,
     '--ref-action-danger-active': blend(dangerAction, '#000000', 20),
-    '--ref-action-danger-text': '#ffffff',
+    '--ref-action-danger-text': dangerActionText,
     '--ref-monaco-editor-bg': theme.terminal.background,
     '--ref-monaco-editor-foreground': theme.terminal.foreground,
     '--ref-monaco-line-number': softText,
@@ -377,10 +380,10 @@ function resolveCompactUiVariables(
     '--button-primary-bg': primaryAction,
     '--button-primary-hover': primaryActionHover,
     '--button-primary-border': border,
-    '--button-primary-text': '#FFFFFF',
+    '--button-primary-text': primaryActionText,
     '--action-primary-bg': primaryAction,
     '--action-primary-hover': primaryActionHover,
-    '--action-primary-text': '#FFFFFF',
+    '--action-primary-text': primaryActionText,
     '--floating-drawer-expanded-bg': isLight ? alpha('#FFFFFF', 94) : alpha(surface, 92),
     '--floating-drawer-expanded-border': border,
     '--floating-drawer-shadow': isLight
@@ -429,13 +432,13 @@ function resolveCompactUiVariables(
     '--dialog-button-primary-hover-border': strongBorder,
     '--dialog-button-danger-bg': dangerAction,
     '--dialog-button-danger-border': 'transparent',
-    '--dialog-button-danger-text': '#ffffff',
+    '--dialog-button-danger-text': dangerActionText,
     '--dialog-button-danger-hover-bg': dangerActionHover,
     '--dialog-button-danger-hover-border': 'transparent',
-    '--dialog-button-danger-hover-text': '#ffffff',
+    '--dialog-button-danger-hover-text': dangerActionText,
     '--action-danger-bg': dangerAction,
     '--action-danger-hover': dangerActionHover,
-    '--action-danger-text': '#ffffff',
+    '--action-danger-text': dangerActionText,
     '--theme-action-primary': primaryAction,
     '--theme-action-primary-hover': primaryActionHover,
     '--theme-action-danger': dangerAction,
