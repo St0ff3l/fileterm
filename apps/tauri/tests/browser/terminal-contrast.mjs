@@ -213,7 +213,36 @@ try {
     await paint()
     const dim = Boolean(terminal.buffer.active.getLine(0).getCell(0).isDim())
     const hidden = Boolean(terminal.buffer.active.getLine(0).getCell(1).isInvisible())
-    const blockColor = getComputedStyle(spanAt(0, 2)).color
+    const blockGlyph = host.querySelector('.xterm-block-glyph')
+    const blockGlyphRect = blockGlyph?.getBoundingClientRect()
+    const screenRect = host.querySelector('.xterm-screen').getBoundingClientRect()
+    const blockColor = blockGlyph ? getComputedStyle(blockGlyph).color : null
+    const blockSize = blockGlyphRect ? { width: blockGlyphRect.width, height: blockGlyphRect.height } : null
+    const cellSize = { width: screenRect.width / terminal.cols, height: screenRect.height / terminal.rows }
+    terminal.reset()
+    const blockElements = String.fromCodePoint(...Array.from({ length: 0x20 }, (_, index) => 0x2580 + index))
+    await write('\x1b[38;2;16;16;16;48;2;16;16;16m' + blockElements)
+    await paint()
+    const renderedBlockGlyphRuns = [...host.querySelectorAll('.xterm-block-glyph')]
+    const renderedBlockGlyphCount = renderedBlockGlyphRuns.reduce(
+      (count, glyph) => count + Number(glyph.dataset.blockCount ?? 0),
+      0
+    )
+    terminal.reset()
+    await write('\x1b[38;2;215;119;87;48;2;0;0;0m' + '\u2588'.repeat(12))
+    await paint()
+    const solidBlockRuns = [...host.querySelectorAll('.xterm-block-glyph')]
+    const solidBlockCanvas = solidBlockRuns[0]?.querySelector('canvas')
+    const solidBlockCanvasPixels = solidBlockCanvas
+      ?.getContext('2d')
+      ?.getImageData(0, 0, solidBlockCanvas.width, solidBlockCanvas.height)
+    let solidBlockTransparentPixelCount = 0
+    if (solidBlockCanvasPixels) {
+      for (let index = 3; index < solidBlockCanvasPixels.data.length; index += 4) {
+        if (solidBlockCanvasPixels.data[index] !== 255) solidBlockTransparentPixelCount++
+      }
+    }
+    const solidBlockCharacterCount = Number(solidBlockRuns[0]?.dataset.blockCount ?? 0)
     runtime.disposeCore()
     return {
       configuredMinimum,
@@ -225,7 +254,16 @@ try {
       after,
       dim,
       hidden,
-      blockColor
+      blockColor,
+      blockSize,
+      cellSize,
+      devicePixelRatio: window.devicePixelRatio,
+      renderedBlockGlyphCount,
+      renderedBlockGlyphRunCount: renderedBlockGlyphRuns.length,
+      solidBlockRunCount: solidBlockRuns.length,
+      solidBlockCanvasCount: solidBlockCanvas ? 1 : 0,
+      solidBlockTransparentPixelCount,
+      solidBlockCharacterCount
     }
   })
   assert.equal(report.configuredMinimum, 4.5, 'the production terminal runtime must enable contrast protection')
@@ -239,8 +277,18 @@ try {
   assert.equal(
     report.blockColor,
     'rgb(16, 16, 16)',
-    'graphical block colors must retain their intended background tone'
+    'graphical block glyphs must inherit their terminal foreground color'
   )
+  assert.ok(report.blockSize, 'full block glyph must use the custom cell renderer')
+  const pixelTolerance = 1 / report.devicePixelRatio
+  assert.ok(Math.abs(report.blockSize.width - report.cellSize.width) <= pixelTolerance)
+  assert.ok(Math.abs(report.blockSize.height - report.cellSize.height) <= pixelTolerance)
+  assert.equal(report.renderedBlockGlyphCount, 0x20, 'all Unicode block elements must render as exact cell sprites')
+  assert.equal(report.renderedBlockGlyphRunCount, 1)
+  assert.equal(report.solidBlockRunCount, 1, 'adjacent solid blocks must be grouped as one continuous run')
+  assert.equal(report.solidBlockCharacterCount, 12)
+  assert.equal(report.solidBlockCanvasCount, 1, 'adjacent full-cell glyphs must share a single sprite canvas')
+  assert.equal(report.solidBlockTransparentPixelCount, 0, 'solid block rows cannot expose their ANSI background')
   assert.deepEqual(errors, [])
   console.log(
     `PASS: ${report.checks} contrast checks, 16 theme variants, all ANSI/256 colors, RGB gray/black/white, explicit and inverse backgrounds, selection/search, live custom themes; dim/hidden/block styles preserved`

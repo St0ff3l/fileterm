@@ -18,6 +18,7 @@ import {
   TERMINAL_MAX_FONT_SIZE
 } from '../app/terminal-font-size-store'
 import { logTerminalZoom } from './terminal-view-utils'
+import { registerTerminalBlockGlyphRenderer } from './terminal-block-glyph-renderer'
 import type { TerminalLifecycleOptions, TerminalLifecycleRuntime } from './terminal-lifecycle-types'
 
 let lastFocusedTerminal: Terminal | null = null
@@ -94,6 +95,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
   terminal.loadAddon(webLinksAddon)
   terminal.unicode.activeVersion = '11'
   terminal.open(host)
+  const blockGlyphRenderer = registerTerminalBlockGlyphRenderer(terminal)
   options.terminalRef.current = terminal
   options.searchAddonRef.current = searchAddon
   const foregroundAdapter = registerTerminalForegroundAdapter(terminal)
@@ -304,6 +306,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
       terminalTextarea?.removeEventListener('compositionend', onCompositionEnd)
       terminalLogColorizer.dispose()
       foregroundAdapter.dispose()
+      blockGlyphRenderer.dispose()
       options.terminalLogColorizerRef.current = null
       options.fitAddonRef.current = null
       options.searchAddonRef.current = null
