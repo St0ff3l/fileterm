@@ -63,6 +63,7 @@ tokens -> theme vars -> component skins -> terminal colors
 - Info / action blue：使用 `--primary`、`--copy-link`、`--folder-accent`，不能随手写新的蓝色。
 - `--focus-outline` 只用于焦点、选中态和拖拽目标的描边或光环；不要把它当作实心按钮背景。
 - 文件图标和发送等文件相关操作使用 `--folder-accent`；实心主按钮使用 `--button-primary-*`。
+- 主按钮和危险按钮的文字通过 action 语义 token 根据背景选择白色或深色，透明背景先合成 panel surface；不要固定白字。原生控件的兜底继承规则必须保持低优先级，不能覆盖公用组件自身的文字颜色。
 - `--accent-highlight` 用于非按钮的图标、辅助文字和状态强调，不替代焦点描边。
 - 侧栏当前项在暗色模式使用白色强调，浅色模式使用主文本色，避免蓝色过度出现。
 
@@ -174,8 +175,11 @@ macOS 主窗口使用 AppKit 原生红黄绿按钮，以下参数是 Beta 9 已�
 
 - 终端占主面积，背景为 `--terminal-bg`。
 - xterm selection 使用 `--terminal-selection-bg`。
+- 内置亮色终端的 ANSI white/brightWhite 使用可读的深色文字槽位。TUI 在默认背景上显式输出的 RGB 纯白前景由 xterm 缓冲区适配为主题默认文字色；保留粗体等样式、显式背景配色与反色文本，不改写协议输出或会话日志。不根据自然语言内容猜测“提问标题”等类别。
+- xterm 开启 `minimumContrastRatio: 4.5`，按每个 cell 的实际背景保护 ANSI、256 色、RGB、反色、选区和搜索文字的可读性。仅改变显示颜色，保留原始属性、dim/hidden 样式；图形背景用的块字符按 xterm 规则保留原色。主题选区/搜索 token 也必须成对校验，避免相同或过近的前景与背景。
 - 终端搜索浮层出现在右上角，不能遮挡大量内容。
 - 终端内部不使用卡片边框，边界由外层 frame shadow 和区域分隔承担。
+- 本地终端 frame 的左右留边均在靠近终端的一侧绘制主题分隔线；浅色主题不能依赖留边与终端的底色差异来表达边界。左右留边保持 15px，不改变 xterm 的可用尺寸。
 
 ### Command Dock
 

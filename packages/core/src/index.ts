@@ -1729,7 +1729,9 @@ const DEFAULT_LIGHT_ANSI: TerminalAnsiPalette = {
   blue: '#2563eb',
   magenta: '#9333ea',
   cyan: '#0891b2',
-  white: '#f1f5f9',
+  // TUI headings often explicitly select white/brightWhite instead of SGR 39.
+  // In a light palette these text slots must remain readable on the canvas.
+  white: '#374151',
   brightBlack: '#64748b',
   brightRed: '#ef4444',
   brightGreen: '#22c55e',
@@ -1737,7 +1739,7 @@ const DEFAULT_LIGHT_ANSI: TerminalAnsiPalette = {
   brightBlue: '#3b82f6',
   brightMagenta: '#a855f7',
   brightCyan: '#06b6d4',
-  brightWhite: '#ffffff'
+  brightWhite: '#111827'
 }
 
 function defaultTerminalThemeConfig(variant: ThemeVariant): TerminalThemeConfig {

@@ -88,11 +88,11 @@
   --ref-terminal-cursor: #dc8a78;
   --ref-terminal-cursor-accent: #eff1f5;
   --ref-terminal-selection-background: #dc8a78;
-  --ref-terminal-selection-foreground: #4c4f69;
+  --ref-terminal-selection-foreground: #1e1e2e;
   --ref-terminal-search-match-background: #df8e1d;
   --ref-terminal-search-match-ruler: #e49931;
   --ref-terminal-search-active-background: #e49931;
-  --ref-terminal-search-active-text: #4c4f69;
+  --ref-terminal-search-active-text: #1e1e2e;
   --ref-terminal-search-active-border: #df8e1d;
   --ref-terminal-search-active-ruler: #e49931;
   --ref-terminal-black: #bcc0cc;

@@ -11,18 +11,9 @@
   background: var(--bg-main);
 }
 
-:root:not([data-theme]) button,
-:root:not([data-theme*='light']) button,
-:root[data-theme='default'] button,
-:root:not([data-theme]) input,
-:root:not([data-theme*='light']) input,
-:root[data-theme='default'] input,
-:root:not([data-theme]) select,
-:root:not([data-theme*='light']) select,
-:root[data-theme='default'] select,
-:root:not([data-theme]) textarea,
-:root:not([data-theme*='light']) textarea,
-:root[data-theme='default'] textarea {
+/* Native control fallback must not override shared components' semantic colors. */
+:where(:root:not([data-theme]), :root:not([data-theme*='light']), :root[data-theme='default'])
+  :where(button, input, select, textarea) {
   color: inherit;
 }
 

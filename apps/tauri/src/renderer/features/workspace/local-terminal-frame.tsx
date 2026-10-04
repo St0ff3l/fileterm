@@ -1,4 +1,5 @@
 import type { PropsWithChildren } from 'react'
+import './local-terminal-frame.css'
 
 export function LocalTerminalFrame({ children }: PropsWithChildren) {
   return (
