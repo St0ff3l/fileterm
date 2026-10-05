@@ -173,7 +173,7 @@ jobs:
       matrix:
         include:
           - platform: macos
-            os: macos-14
+            os: macos-26
             rust_target: aarch64-apple-darwin
           - platform: windows
             os: windows-2022
