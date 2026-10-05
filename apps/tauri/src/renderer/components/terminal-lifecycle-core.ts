@@ -20,6 +20,7 @@ import {
 import { logTerminalZoom } from './terminal-view-utils'
 import { registerTerminalBlockGlyphRenderer } from './terminal-block-glyph-renderer'
 import { registerTerminalSelectionRenderer } from './terminal-selection-renderer'
+import { createTerminalInputWriteQueue } from './terminal-input-write-queue'
 import type { TerminalLifecycleOptions, TerminalLifecycleRuntime } from './terminal-lifecycle-types'
 
 let lastFocusedTerminal: Terminal | null = null
@@ -225,8 +226,13 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
     terminal.write(`\r\n${options.closedMessageRef.current}\r\n`)
     writeReconnectHint()
   }
-  const writeTerminalInput = (data: string) => {
-    window.fileterm?.writeTerminal(options.tabIdRef.current, data)?.catch(handleTerminalWriteFailure)
+  const terminalInputWriteQueue = createTerminalInputWriteQueue({
+    getTabId: () => options.tabIdRef.current,
+    write: (tabId, data) => window.fileterm?.writeTerminal(tabId, data),
+    shouldStop: () => options.inputSendFailedRef.current
+  })
+  const writeTerminalInput = (data: string, onFailure = handleTerminalWriteFailure) => {
+    void terminalInputWriteQueue.write(data, onFailure)
   }
   const requestReconnect = () => {
     if (options.wasConnectedRef.current || options.connectingRef.current || options.isReconnectingRef.current) {
@@ -302,6 +308,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
     isTerminalUnderPointer: () => terminalUnderPointer === terminal,
     clearGlobalTerminalState: () => clearTerminalGlobalState(terminal),
     disposeCore: () => {
+      terminalInputWriteQueue.dispose()
       terminalTextarea?.removeEventListener('focus', markTerminalFocused)
       terminalTextarea?.removeEventListener('compositionstart', onCompositionStart)
       terminalTextarea?.removeEventListener('compositionupdate', onCompositionUpdate)
