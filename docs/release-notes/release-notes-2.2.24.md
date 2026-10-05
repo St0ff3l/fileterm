@@ -12,6 +12,7 @@ FileTerm 2.2.24 改善终端文字和常用操作按钮的主题对比度，并�
 ### 本版本包含的主要 PR 和问题修复
 
 - [PR #282](https://github.com/St0ff3l/fileterm/pull/282)：改善终端文字对比度、亮色主题选区/搜索配色、操作按钮文字颜色和本地终端边界。
+- [PR #284](https://github.com/St0ff3l/fileterm/pull/284)：兼容 SSH 账号家目录缺失、NAS 提权路径和不同 Linux 工具集的文件列表。
 
 完整变更记录请查看 [v2.2.23 与 v2.2.24 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.23...v2.2.24)。
 
@@ -36,6 +37,7 @@ FileTerm 2.2.24 improves terminal and action-button contrast, restores the termi
 ### Main PRs and issues
 
 - [PR #282](https://github.com/St0ff3l/fileterm/pull/282): Improve terminal text contrast, light-theme selection/search colors, action button labels, and the local terminal frame.
+- [PR #284](https://github.com/St0ff3l/fileterm/pull/284): Handle missing SSH home directories, privileged NAS paths, and file listings across Linux toolsets.
 
 See the [comparison between v2.2.23 and v2.2.24](https://github.com/St0ff3l/fileterm/compare/v2.2.23...v2.2.24) for the complete change set.
 
