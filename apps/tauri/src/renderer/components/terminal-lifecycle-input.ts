@@ -362,8 +362,7 @@ export function registerTerminalInputHandlers(runtime: TerminalLifecycleRuntime)
       data = stripHydratedTerminalResponses(data)
     }
     if (isStartupTerminalResponse) {
-      const responseWrite = window.fileterm?.writeTerminal(tabIdRef.current, rawTerminalData)
-      responseWrite?.catch((error: unknown) => {
+      writeTerminalInput(rawTerminalData, (error: unknown) => {
         console.debug('[TerminalView] startup terminal response was not accepted', error)
       })
       return

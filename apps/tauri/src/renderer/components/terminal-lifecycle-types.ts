@@ -112,7 +112,7 @@ export type TerminalLifecycleRuntime = TerminalLifecycleOptions & {
   markTerminalUnderPointer(): void
   clearTerminalUnderPointer(): void
   writeReconnectHint(): void
-  writeTerminalInput(data: string): void
+  writeTerminalInput(data: string, onFailure?: (error: unknown) => void): void
   requestReconnect(): boolean
   getTerminalZoomOperation(event: KeyboardEvent): TerminalZoomOperation | null
   isLastFocusedTerminal(): boolean
