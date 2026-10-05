@@ -249,6 +249,9 @@ function replaceBlockGlyphs(
     padding: '0',
     border: '0',
     pointerEvents: 'none',
+    // Selected DOM text is at level 2; graphical cells must also stay above
+    // xterm's opaque selection layer (level 1).
+    zIndex: '2',
     cursor: 'inherit'
   })
   existingCanvas?.remove()

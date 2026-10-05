@@ -175,6 +175,7 @@ macOS 主窗口使用 AppKit 原生红黄绿按钮，以下参数是 Beta 9 已�
 
 - 终端占主面积，背景为 `--terminal-bg`。
 - xterm selection 使用 `--terminal-selection-bg`。
+- DOM 选区背景由 xterm 的独立 selection layer 绘制；选中文字 span 不重复绘制同色背景，以免遮住特殊符号的字形外延。块字符画布与选中文字同处选区上层，保留选区前景色和逐单元格几何形状。
 - 内置亮色终端的 ANSI white/brightWhite 使用可读的深色文字槽位。TUI 在默认背景上显式输出的 RGB 纯白前景由 xterm 缓冲区适配为主题默认文字色；保留粗体等样式、显式背景配色与反色文本，不改写协议输出或会话日志。不根据自然语言内容猜测“提问标题”等类别。
 - xterm 开启 `minimumContrastRatio: 4.5`，按每个 cell 的实际背景保护 ANSI、256 色、RGB、反色、选区和搜索文字的可读性。仅改变显示颜色，保留原始属性、dim/hidden 样式；图形背景用的块字符按 xterm 规则保留原色。主题选区/搜索 token 也必须成对校验，避免相同或过近的前景与背景。
 - 终端搜索浮层出现在右上角，不能遮挡大量内容。
