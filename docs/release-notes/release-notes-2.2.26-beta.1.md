@@ -10,6 +10,7 @@
 
 ### 本版本包含的主要 PR 和问题修复
 
+- [PR #286](https://github.com/St0ff3l/fileterm/pull/286)：改善侧边栏未选中文字对比度。
 - [PR #287](https://github.com/St0ff3l/fileterm/pull/287)：改进 macOS DMG 安装界面并修复终端特殊符号选区渲染。
 
 完整变更记录请查看 [v2.2.25 与 v2.2.26-beta.1 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.25...v2.2.26-beta.1)。
@@ -33,6 +34,7 @@ This beta improves the macOS DMG installer and fixes special symbols being clipp
 
 ### Main PRs and issues
 
+- [PR #286](https://github.com/St0ff3l/fileterm/pull/286): Improves contrast for inactive sidebar labels.
 - [PR #287](https://github.com/St0ff3l/fileterm/pull/287): Improves the macOS DMG installer and fixes terminal special-symbol selection rendering.
 
 See the [comparison between v2.2.25 and v2.2.26-beta.1](https://github.com/St0ff3l/fileterm/compare/v2.2.25...v2.2.26-beta.1) for the complete change set.
