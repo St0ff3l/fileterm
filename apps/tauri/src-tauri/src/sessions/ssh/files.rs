@@ -5,3 +5,4 @@ include!("sftp_files.rs");
 include!("transfer_io.rs");
 include!("root_transfer.rs");
 include!("shell_exec.rs");
+include!("files/root_listing.rs");

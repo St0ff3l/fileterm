@@ -66,8 +66,7 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
     nativeRemoteDropTargetAtRef,
     nativeDropConsumedAtRef,
     openLocalDirectory,
-    openRemoteDirectory,
-    refreshCurrentPane
+    openRemoteDirectory
   } = { ...context, ...navigation }
 
   const uploadLocalPaths = async (paths: string[]) => {
@@ -326,7 +325,6 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
         onBusyChange(true)
         const snapshot = await desktopApi.setRemoteFileAccessMode(activeTab.id, nextMode)
         onApplySnapshot(snapshot)
-        await refreshCurrentPane('remote')
       } catch (error) {
         reportStatusError('切换到普通视角', error)
       } finally {
@@ -378,7 +376,6 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
           useSavedPassword: sudoPassword.length === 0
         })
         onApplySnapshot(snapshot)
-        await refreshCurrentPane('remote')
         setRootAccessDialog(null)
         setRootAccessDialogError(null)
       } catch (error) {

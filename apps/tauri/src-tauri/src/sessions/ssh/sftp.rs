@@ -74,6 +74,59 @@ async fn resolve_initial_sftp_home_path(
     Ok(canonical_path.to_string())
 }
 
+struct InitialSftpDirectory {
+    path: String,
+    files: Vec<Value>,
+    fallback_warning: Option<String>,
+}
+
+/// Missing account homes or deleted profile starting directories must not
+/// leave a usable SFTP connection without a file pane. Keep the original
+/// failure visible and confirm each fallback by actually reading it.
+async fn load_initial_sftp_directory(
+    sftp: &SftpSession,
+    initial_path: &str,
+) -> Result<InitialSftpDirectory, String> {
+    let mut candidates = vec![initial_path.to_string()];
+    for fallback in [".", "/"] {
+        if !candidates.iter().any(|path| path == fallback) {
+            candidates.push(fallback.to_string());
+        }
+    }
+    let mut original_error = None;
+    for candidate in candidates {
+        match list_dir(sftp, &candidate).await {
+            Ok(files) => {
+                let fallback_warning = original_error.map(|error| {
+                    format!("初始目录 {initial_path} 不存在: {error}；文件区已回退到 {candidate}")
+                });
+                return Ok(InitialSftpDirectory {
+                    path: candidate,
+                    files,
+                    fallback_warning,
+                });
+            }
+            Err(error) => {
+                // Never turn a permission, authentication, or transport
+                // failure into successful navigation to a different path.
+                if !is_sftp_path_not_found_message(&error) {
+                    return Err(match original_error {
+                        Some(original) => format!(
+                            "初始目录 {initial_path}: {original}；回退目录 {candidate}: {error}"
+                        ),
+                        None => error,
+                    });
+                }
+                original_error.get_or_insert(error);
+            }
+        }
+    }
+    Err(format!(
+        "初始目录 {initial_path}: {}；服务器当前目录和 SFTP 根目录均不存在",
+        original_error.unwrap_or_else(|| "目录不存在".to_string()),
+    ))
+}
+
 fn is_sftp_not_found(error: &SftpError) -> bool {
     matches!(
         error,

@@ -282,7 +282,7 @@
             if let Some(setup) = shell_setup_script {
                 let (banner, prompt_tail) = split_prompt_tail_for_setup_wait(&visible);
                 last_shell_setup_injection = Instant::now();
-                match write_shell_data(&shell_writer, format!(" {setup}\r").into_bytes()).await {
+                match write_shell_data(&shell_writer, interactive_shell_setup_command(setup)).await {
                     Ok(()) => {
                         visible = banner;
                         pending_shell_setup_echo =
@@ -341,8 +341,8 @@
         shell_prompt_buffer.clear();
         if let Some(setup) = shell_setup_script {
             last_shell_setup_injection = Instant::now();
-            let setup_command = format!(" {setup}\r");
-            match write_shell_data(&shell_writer, setup_command.into_bytes()).await {
+            let setup_command = interactive_shell_setup_command(setup);
+            match write_shell_data(&shell_writer, setup_command).await {
                 Ok(()) => {
                     // setup 注入成功，suppress 接管后续 echo 和新 prompt。
                     pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new(false));

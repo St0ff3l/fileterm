@@ -3,5 +3,6 @@
 
 include!("shell/cwd.rs");
 include!("shell/root_access.rs");
+include!("shell/access_directory.rs");
 include!("shell/shell_setup.rs");
 include!("shell/encoding.rs");

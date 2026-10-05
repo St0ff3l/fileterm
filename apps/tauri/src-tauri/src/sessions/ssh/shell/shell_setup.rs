@@ -26,10 +26,7 @@ impl ShellSetupEchoSuppression {
         Self::with_prompt_policy(false, false)
     }
 
-    fn with_prompt_policy(
-        preserve_visible_prefix: bool,
-        release_replacement_prompt: bool,
-    ) -> Self {
+    fn with_prompt_policy(preserve_visible_prefix: bool, release_replacement_prompt: bool) -> Self {
         Self {
             buffer: String::new(),
             started_at: Instant::now(),
@@ -231,6 +228,18 @@ fn shell_cwd_setup_for_platform(platform: &str) -> Option<&'static str> {
         "linux" | "darwin" => Some(SHELL_CWD_SETUP),
         _ => None,
     }
+}
+
+/// Recover the interactive shell itself before installing CWD reporting.
+/// Keep sshd's missing-home warning visible and leave HOME unchanged. A valid
+/// current directory (including sshd's fallback to /) is already suitable;
+/// only a broken/inaccessible CWD needs a cd to a confirmed fallback.
+/// Send this as a separate short line so BusyBox line editors cannot truncate
+/// it together with their compact CWD hook. Fish skips the POSIX eval body.
+const SHELL_HOME_DIRECTORY_RECOVERY: &str = "test -z \"${FISH_VERSION-}\" && eval '[ -d \"${HOME-}\" ] || { { [ -r . ] && [ -x . ] && pwd -P >/dev/null 2>&1; } || { cd / 2>/dev/null || cd /tmp 2>/dev/null; }; }'";
+
+fn interactive_shell_setup_command(setup: &str) -> Vec<u8> {
+    format!(" {SHELL_HOME_DIRECTORY_RECOVERY}\r {setup}\r").into_bytes()
 }
 
 /// Linux shell CWD hook (bash / zsh / posix). Mirrors Electron's

@@ -227,8 +227,8 @@ async fn dispatch_file_cmd(
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
-                let dest_dir = parent_remote_path(&destination_path)
-                    .unwrap_or_else(|| "/".to_string());
+                let dest_dir =
+                    parent_remote_path(&destination_path).unwrap_or_else(|| "/".to_string());
                 let cp_cmd = if target_type == "folder" {
                     "cp -R"
                 } else {
@@ -328,8 +328,7 @@ async fn dispatch_file_cmd(
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
-                let parent = parent_remote_path(&target_path)
-                    .unwrap_or_else(|| "/".to_string());
+                let parent = parent_remote_path(&target_path).unwrap_or_else(|| "/".to_string());
                 let dest = format!("{}/{}", parent.trim_end_matches('/'), new_name);
                 let res = if fam == "root" {
                     match timeout(
@@ -477,6 +476,10 @@ async fn dispatch_file_cmd(
             use_saved_password,
             respond_to,
         } => {
+            if !matches!(mode.as_str(), "user" | "root") {
+                let _ = respond_to.send(Err(format!("不支持的文件访问模式：{mode}")));
+                return Ok(false);
+            }
             if mode == "root" && !exec_channel_enabled {
                 let _ = respond_to.send(Err(
                     "SSH Exec 通道已关闭，无法启用 root 文件视图。".to_string()
@@ -491,7 +494,7 @@ async fn dispatch_file_cmd(
                         return Ok(false);
                     }
                 };
-            // 对照 Electron verifyRootFileAccess：切到 root 前先验证 sudo 凭据
+            // 切到 root 前先验证所选 sudo/su 凭据
             // 可用，失败则回滚状态并返回错误，让用户在弹窗里立即看到反馈，
             // 而不是等到第一次文件操作才失败（用户会以为"root 切换没接入"）。
             let prev_sudo_user = sudo_user.clone();
@@ -500,6 +503,7 @@ async fn dispatch_file_cmd(
             let prev_saved_su_password = saved_su_password.clone();
             let prev_mode = file_access_mode.clone();
             let prev_access_method = *root_file_access_method;
+            let mut resolved_directory = None;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
@@ -527,6 +531,17 @@ async fn dispatch_file_cmd(
             }
 
             if mode == "root" {
+                let directory_command = {
+                    let sessions = state.sessions.read().await;
+                    let Some(session) = sessions.get(tab_id) else {
+                        let _ = respond_to.send(Err("SSH 会话已不存在".to_string()));
+                        return Ok(false);
+                    };
+                    root_access_directory_command(
+                        &session.remote_path,
+                        session.shell_cwd.as_deref(),
+                    )
+                };
                 // 手动弹窗流程验证选择的 sudo/su 凭据，失败则回滚。`exec_shell_file_command`
                 // 内部最长会等 SUDO_VERIFY_TIMEOUT（10s）才放弃，对 worker
                 // 主循环来说太长——一旦 sudo 提示卡住或网络抖动，整个
@@ -538,7 +553,7 @@ async fn dispatch_file_cmd(
                     ROOT_ACCESS_VERIFY_TIMEOUT,
                     exec_shell_file_command(
                         handle,
-                        "true",
+                        &directory_command,
                         requested_access_method,
                         sudo_user,
                         sudo_password,
@@ -546,13 +561,13 @@ async fn dispatch_file_cmd(
                 )
                 .await
                 {
-                    Ok(inner) => inner,
+                    Ok(inner) => inner.and_then(|output| parse_root_access_directory(&output)),
                     Err(_) => Err(format!(
                         "{} 验证超时：服务器未在 1.5 秒内响应",
                         root_file_access_method_label(requested_access_method)
                     )),
                 };
-                if let Err(err) = verify {
+                if let Err(err) = &verify {
                     // 回滚到切换前的状态
                     *file_access_mode = prev_mode;
                     *root_file_access_method = prev_access_method;
@@ -560,9 +575,10 @@ async fn dispatch_file_cmd(
                     *sudo_password = prev_sudo_password;
                     *saved_sudo_password = prev_saved_sudo_password;
                     *saved_su_password = prev_saved_su_password;
-                    let _ = respond_to.send(Err(err));
+                    let _ = respond_to.send(Err(err.clone()));
                     return Ok(false);
                 }
+                resolved_directory = verify.ok();
                 *root_file_access_method = requested_access_method;
             }
 
@@ -573,6 +589,10 @@ async fn dispatch_file_cmd(
             let mut sessions = state.sessions.write().await;
             if let Some(s) = sessions.get_mut(tab_id) {
                 s.file_access_mode = mode;
+                if let Some(path) = resolved_directory {
+                    s.remote_path = path;
+                    s.remote_files.clear();
+                }
                 s.sudo_user = su_user;
                 s.has_reusable_sudo_auth = has_reusable;
             }
@@ -583,8 +603,11 @@ async fn dispatch_file_cmd(
             let cleanup_app = app.clone();
             let cleanup_tab_id = tab_id.to_string();
             tokio::spawn(async move {
-                if let Err(error) =
-                    crate::services::transfers::retry_pending_cleanup_for_tab(&cleanup_app, &cleanup_tab_id).await
+                if let Err(error) = crate::services::transfers::retry_pending_cleanup_for_tab(
+                    &cleanup_app,
+                    &cleanup_tab_id,
+                )
+                .await
                 {
                     crate::services::logging::warn(
                         &cleanup_app,
@@ -596,6 +619,6 @@ async fn dispatch_file_cmd(
             Ok(false)
         }
         WorkerCmd::Disconnect => Ok(true),
-            _ => unreachable!("all SSH worker commands are covered by dispatch groups"),
+        _ => unreachable!("all SSH worker commands are covered by dispatch groups"),
     }
 }
