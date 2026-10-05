@@ -182,6 +182,8 @@ jobs:
             os: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
+    env:
+      TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
 
     steps:
       - name: Checkout
@@ -266,6 +268,23 @@ jobs:
           test -n "$(find "$bundle_root/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm" mcp --help
           node ./scripts/mcp-stdio-smoke.mjs "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm"
+
+      - name: Verify macOS DMG Finder layout
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/bundle"
+          dmg_file="$(find "$bundle_root/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          mountpoint="$(mktemp -d)"
+          cleanup() {
+            hdiutil detach "$mountpoint" -quiet >/dev/null 2>&1 || true
+            rmdir "$mountpoint" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg_file"
+          test -f "$mountpoint/.DS_Store"
+          test -f "$mountpoint/.background/dmg-background.png"
 
       - name: Verify Windows package
         if: matrix.platform == 'windows'
