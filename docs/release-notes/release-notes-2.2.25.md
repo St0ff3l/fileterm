@@ -8,7 +8,7 @@ FileTerm 2.2.25 updates the macOS build environment for current macOS system sty
 
 ### 本版本包含的主要 PR 和问题修复
 
-<!-- PR link will be added after the build environment change is merged. -->
+- [PR #285](https://github.com/St0ff3l/fileterm/pull/285)：使用 macOS 26 构建 Apple Silicon 与 Intel 安装包，并保留旧系统最低版本配置；邀请 macOS 15.7.9 用户回报 #243 相关兼容情况。
 
 完整变更记录请查看 [v2.2.24 与 v2.2.25 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.24...v2.2.25)。
 
@@ -29,7 +29,7 @@ FileTerm 2.2.25 updates the macOS build environment for current macOS system sty
 
 ### Main PRs and issues
 
-<!-- PR link will be added after the build environment change is merged. -->
+- [PR #285](https://github.com/St0ff3l/fileterm/pull/285): Build Apple Silicon and Intel installers on macOS 26 while preserving the existing minimum system version configuration; request compatibility feedback from macOS 15.7.9 users related to #243.
 
 See the [comparison between v2.2.24 and v2.2.25](https://github.com/St0ff3l/fileterm/compare/v2.2.24...v2.2.25) for the complete change set.
 
