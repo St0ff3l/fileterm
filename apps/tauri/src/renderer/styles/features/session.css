@@ -2870,7 +2870,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 400;
   text-align: left;
