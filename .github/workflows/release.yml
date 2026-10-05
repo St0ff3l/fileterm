@@ -42,6 +42,8 @@ jobs:
   build-macos-arm64:
     needs: validate-release-tag
     runs-on: macos-26
+    env:
+      TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -91,6 +93,8 @@ jobs:
   build-macos-x64:
     needs: validate-release-tag
     runs-on: macos-26-intel
+    env:
+      TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
