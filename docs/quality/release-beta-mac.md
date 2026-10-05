@@ -37,7 +37,7 @@ git push origin v<version>
 
 Release workflow（`.github/workflows/release.yml`）在 tag push 时触发，并且：
 
-- macOS arm64 / x64 分别在 `macos-14` runner 上打包。
+- macOS arm64 在 `macos-26` runner 上打包，Intel x64 在 `macos-26-intel` runner 上打包；新 SDK 用于现代 macOS 样式，bundle 最低系统版本保持 `10.13`（Apple Silicon 二进制仍要求 macOS 11 或更高版本）。
 - 产物自动附加到 Release。
 - Windows（NSIS + 更新器签名）与 Linux（deb / AppImage）在同一流水线中一并产出。
 
