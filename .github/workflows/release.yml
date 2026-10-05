@@ -83,6 +83,10 @@ jobs:
         shell: bash
         run: test -n "$(find apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name '*.dmg' -print -quit)"
 
+      - name: Verify Apple Silicon DMG Finder layout
+        shell: bash
+        run: bash scripts/verify-macos-dmg-finder-layout.sh "apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/FileTerm-${GITHUB_REF_NAME#v}-macos-arm64.dmg"
+
       - name: Upload macOS Apple Silicon artifact
         uses: actions/upload-artifact@v6
         with:
@@ -133,6 +137,10 @@ jobs:
       - name: Verify macOS package
         shell: bash
         run: test -n "$(find apps/tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg -name '*.dmg' -print -quit)"
+
+      - name: Verify Intel DMG Finder layout
+        shell: bash
+        run: bash scripts/verify-macos-dmg-finder-layout.sh "apps/tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/FileTerm-${GITHUB_REF_NAME#v}-macos-x64.dmg"
 
       - name: Upload macOS Intel artifact
         uses: actions/upload-artifact@v6

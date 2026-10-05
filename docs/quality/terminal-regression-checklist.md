@@ -294,3 +294,21 @@ WebGL 原本是为了高频输出性能引入的，但这次验证中它会放�
 - `vim` 退出后 shell 被污染
 - `apt` 进度条残影
 - bash/readline 上下键历史记录“吃上去”
+
+## 鼠标选区与特殊字形
+
+修改选区适配器时，运行 `apps/tauri/tests/browser/terminal-selection-glyphs.mjs`。
+该测试加载实际字体，覆盖 14/24px 字号、1×/2×缩放，以及星号、线框、空心方框、复选框和块状字符。
+必须通过真实鼠标拖选检查按住鼠标和松开鼠标两种状态，不能仅调用 `terminal.select()`：
+xterm DOM renderer 在拖选过程中直接替换行节点，直到松开鼠标才发出 `onSelectionChange`，也不保证发出 `onRender`。
+
+- 选区背景由 selection layer 绘制，选中的文字 span 不得重新覆盖不透明背景，以免遮住相邻字形伸出单元格的部分。
+- 选区前景色、局部选择和清除选择后的块状字符颜色必须正确。
+- DOM 监听不得产生持续刷新循环；适配器销毁后必须断开监听。
+- 默认使用仓库中的 JetBrains Mono；通过 `TERMINAL_TEST_FONT_PATH=/absolute/path/font.ttf` 检查其他本地字体。
+- 使用 `PLAYWRIGHT_ENGINE=webkit` 检查 macOS WebKit，并以 Chromium 作对照。
+  如果工具包未在仓库安装，可分别通过 `PLAYWRIGHT_MODULE_PATH` 和 `SHARP_MODULE_PATH` 指定其本地包路径。
+
+2026-10-06 本地检查：JetBrains Mono、Cascadia Code 2407.24 均通过 WebKit 和 Chromium 的字号/缩放矩阵；
+macOS `SFNSMono.ttf` 通过 WebKit 对照检查。修复版本在采样区域没有丢失选中前可见的深色字形像素。
+这项检查不替代 Windows 实机 WebView2 或用户截图中原始程序的验证。

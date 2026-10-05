@@ -63,12 +63,31 @@ export function registerTerminalSelectionRenderer(terminal: Terminal) {
     })
   }
   const selectionSubscription = terminal.onSelectionChange(refresh)
+  // While the mouse button is held, xterm replaces row spans directly and
+  // defers onSelectionChange until mouseup. Observe those replacements so a
+  // later drag frame cannot restore the opaque backgrounds over glyphs.
+  // Only a new selection schedules a public refresh (for graphical cells);
+  // refreshing itself also replaces spans and must not create a render loop.
+  let observedSelection = JSON.stringify(terminal.getSelectionPosition())
+  const observer =
+    view &&
+    new view.MutationObserver(() => {
+      render()
+      const selection = JSON.stringify(terminal.getSelectionPosition())
+      if (selection !== observedSelection) {
+        observedSelection = selection
+        refresh()
+      }
+    })
+  const rows = terminal.element?.querySelector('.xterm-rows')
+  if (rows) observer?.observe(rows, { childList: true, subtree: true })
   terminal.textarea?.addEventListener('focus', refresh)
   terminal.textarea?.addEventListener('blur', refresh)
   return {
     dispose() {
       subscription.dispose()
       selectionSubscription.dispose()
+      observer?.disconnect()
       if (refreshFrame !== undefined) view?.cancelAnimationFrame(refreshFrame)
       terminal.textarea?.removeEventListener('focus', refresh)
       terminal.textarea?.removeEventListener('blur', refresh)
