@@ -276,15 +276,7 @@ jobs:
           set -euo pipefail
           bundle_root="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/bundle"
           dmg_file="$(find "$bundle_root/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-          mountpoint="$(mktemp -d)"
-          cleanup() {
-            hdiutil detach "$mountpoint" -quiet >/dev/null 2>&1 || true
-            rmdir "$mountpoint" 2>/dev/null || true
-          }
-          trap cleanup EXIT
-          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg_file"
-          test -f "$mountpoint/.DS_Store"
-          test -f "$mountpoint/.background/dmg-background.png"
+          bash scripts/verify-macos-dmg-finder-layout.sh "$dmg_file"
 
       - name: Verify Windows package
         if: matrix.platform == 'windows'
