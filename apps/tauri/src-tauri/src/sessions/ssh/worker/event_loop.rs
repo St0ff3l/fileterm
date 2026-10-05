@@ -138,7 +138,7 @@ async fn run_worker_event_loop(
                     if !terminal_input_started {
                         if let Some(setup) = shell_setup_script {
                             if looks_like_shell_prompt(&startup_prompt) {
-                                if write_shell_data(&shell_writer, format!(" {setup}\r").into_bytes()).await.is_ok() {
+                                if write_shell_data(&shell_writer, interactive_shell_setup_command(setup)).await.is_ok() {
                                     // The first prompt was already forwarded while
                                     // auxiliary channels were negotiating. The
                                     // setup command redraws it, so suppress that

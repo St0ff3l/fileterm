@@ -60,7 +60,7 @@ CWD follow failed for /volume1/homes/Stoffel: No such file
 ### 1. 状态字段分工
 
 - `shellCwd`：保留 Shell 上报的物理路径，用于终端状态和诊断。
-- `remotePath`：只保存 SFTP 命名空间中的路径，用于 SFTP 浏览、编辑、上传、下载和删除。
+- `remotePath`：保存当前文件通道的目录。user 模式为 SFTP 命名空间；root 模式为特权 Shell 命名空间，浏览及文件操作必须使用对应通道的路径。
 - renderer 不解析终端输出，也不直接访问 SSH/SFTP；路径判断在 Rust session/runtime 层完成。
 
 ### 2. Shell CWD 跟随策略
@@ -87,8 +87,8 @@ CWD follow failed for /volume1/homes/Stoffel: No such file
 
 - `Permission denied`、超时和协议错误不会触发下一种路径猜测，避免把权限问题误显示成另一个目录。
 - 所有候选都失败时，文件面板保留最近一次有效的 SFTP 目录，并结束 loading；不会因为 Shell CWD 无法映射而清空文件区或阻塞终端。
-- root 文件模式使用 Shell/exec 直接列出物理路径，不把 SFTP 虚拟根映射逻辑套到 root 视图。
-- 用户在文件面板中手动输入或进入的路径始终按 SFTP 命名空间处理，不进行反向猜测。
+- root 文件模式使用 Shell/exec 直接列出物理路径。手动进入 root 时，先验证当前路径；路径不存在时，根据已观察到的 shell CWD 反向生成有限 NAS 候选，再尝试 shell CWD 和系统 `/`。成功目录经 `pwd -P` 确认；权限错误或现有非目录路径直接返回错误。返回 user 时重新使用 SFTP 候选验证。
+- 用户在文件面板中手动输入或进入的路径按当前文件通道的命名空间处理，不进行反向猜测；反向候选仅用于模式切换。
 - 终端中用户输入的 `cd` 不会被 FileTerm 改写；Shell 仍由服务端决定命令是否成功。
 
 当前实现位置：

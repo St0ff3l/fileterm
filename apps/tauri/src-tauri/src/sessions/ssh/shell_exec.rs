@@ -103,13 +103,13 @@ fn root_file_command(
         RootFileAccessMethod::Sudo => {
             let full_command = if sudo_password.is_some() {
                 format!(
-                    "sudo -S -p '' -u {} sh -lc {}",
+                    "sudo -S -p '' -u {} sh -c {}",
                     shell_quote(user),
                     shell_quote(command)
                 )
             } else {
                 format!(
-                    "sudo -n -u {} sh -lc {}",
+                    "sudo -n -u {} sh -c {}",
                     shell_quote(user),
                     shell_quote(command)
                 )
@@ -488,102 +488,6 @@ async fn exec_shell_file_command(
     } else {
         Ok(output)
     }
-}
-
-/// List a directory via `find -printf` under the active root strategy.
-async fn exec_list_dir_via_shell(
-    handle: &Handle<ClientHandler>,
-    path: &str,
-    access_method: RootFileAccessMethod,
-    sudo_user: &Option<String>,
-    sudo_password: &Option<String>,
-) -> Result<Vec<Value>, String> {
-    let cmd = root_list_shell_command(path);
-    let output =
-        exec_shell_file_command(handle, &cmd, access_method, sudo_user, sudo_password).await?;
-    Ok(parse_root_file_list(&output, path))
-}
-
-fn root_list_shell_command(path: &str) -> String {
-    // `%y` is the entry type and `%Y` is the type after following a
-    // symbolic link. Keep both so the renderer can retain link information
-    // without mistaking a link to a regular file for a directory.
-    format!(
-        "find {} -maxdepth 1 -mindepth 1 -printf '%y|%Y|%s|%T@|%u:%g|%m|%f\\n' 2>/dev/null",
-        shell_quote(path)
-    )
-}
-
-fn parse_root_file_list(output: &str, path: &str) -> Vec<Value> {
-    let path_norm = path.trim_end_matches('/');
-    let mut items = Vec::new();
-    if let Some(parent_item) = parent_remote_item(path) {
-        items.push(parent_item);
-    }
-    for line in output.lines() {
-        let line = line.trim_end_matches('\n');
-        if line.is_empty() {
-            continue;
-        }
-        let parts: Vec<&str> = line.splitn(7, '|').collect();
-        if parts.len() < 7 {
-            continue;
-        }
-        let type_char = parts[0].chars().next().unwrap_or('f');
-        let is_dir = type_char == 'd';
-        let is_link = type_char == 'l';
-        let link_target_is_dir = is_link && parts[1].starts_with('d');
-        let effective_is_dir = is_dir || link_target_is_dir;
-        let size_value = parts[2].parse::<u64>().unwrap_or(0);
-        let size_str = if effective_is_dir {
-            "-".to_string()
-        } else {
-            format_bytes(size_value)
-        };
-        let mtime: i64 = parts[3]
-            .split('.')
-            .next()
-            .unwrap_or("0")
-            .parse()
-            .unwrap_or(0);
-        let owner_group = parts[4].to_string();
-        let perm_octal = u32::from_str_radix(parts[5], 8).unwrap_or(0o644);
-        let name = parts[6].to_string();
-        if name == "." || name == ".." {
-            continue;
-        }
-
-        let file_type = effective_remote_file_type(is_dir, is_link, link_target_is_dir);
-        let permission = format_perm(perm_octal, is_dir, is_link);
-        let full_path = if path_norm.is_empty() || path_norm == "/" {
-            format!("/{}", name)
-        } else {
-            format!("{}/{}", path_norm, name)
-        };
-        let modified = format_unix_ts(mtime);
-
-        items.push(serde_json::json!({
-            "name": name,
-            "path": full_path,
-            "type": file_type,
-            "isSymlink": is_link,
-            "size": size_str,
-            "modified": modified,
-            "permission": permission,
-            "ownerGroup": owner_group,
-        }));
-    }
-    items.sort_by(|a, b| {
-        let af = a["type"].as_str() == Some("folder");
-        let bf = b["type"].as_str() == Some("folder");
-        bf.cmp(&af).then_with(|| {
-            a["name"]
-                .as_str()
-                .unwrap_or("")
-                .cmp(b["name"].as_str().unwrap_or(""))
-        })
-    });
-    items
 }
 
 pub(crate) fn effective_remote_file_type(

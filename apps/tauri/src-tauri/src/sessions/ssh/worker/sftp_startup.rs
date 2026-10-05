@@ -19,7 +19,7 @@ let route_hint = startup.route_hint;
 // ── SFTP subsystem ─────────────────────────────────────────────────────
 // russh-sftp 2.3 needs an explicit subsystem request before converting
 // the channel into its protocol stream. A failed SFTP negotiation must
-// not tear down an otherwise healthy SSH shell: Electron keeps terminal
+// not tear down an otherwise healthy SSH shell: keep terminal
 // and tunnel features available while exposing the file-channel error.
 let sftp_enabled = effective_sftp_enabled(profile);
 let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
@@ -155,7 +155,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                         initial_listing_timeout.as_secs()
                     ),
                 );
-                let initial_files = tokio::select! {
+                let initial_directory = tokio::select! {
                     _ = initial_cancellation.cancelled() => {
                         let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
                         if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
@@ -177,19 +177,23 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                     },
                     result = timeout(initial_listing_timeout, async {
                         let sftp = initial_sftp.write().await;
-                        list_dir(&sftp, &initial_remote_path).await
+                        load_initial_sftp_directory(&sftp, &initial_remote_path).await
                     }) => match result {
                         Ok(result) => result,
                         Err(_) => Err(format!("列出远程目录 {initial_remote_path} 超时")),
                     },
                 };
 
+                let (initial_listing_path, initial_files, fallback_warning) = match initial_directory {
+                    Ok(directory) => (directory.path, Ok(directory.files), directory.fallback_warning),
+                    Err(error) => (initial_remote_path.clone(), Err(error), None),
+                };
                 let initial_listing_error = initial_files.as_ref().err().cloned();
                 let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
                 let mut initial_listing_is_current = false;
                 let mut initial_listing_fallback_used = false;
                 if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
-                    initial_listing_is_current = initial_remote_listing_matches_current_session(
+                    initial_listing_is_current = session.file_access_mode == "user" && initial_remote_listing_matches_current_session(
                         &initial_remote_path,
                         &session.remote_path,
                         session.shell_cwd.as_deref(),
@@ -199,9 +203,10 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                         session.remote_files_loading = false;
                         if let Ok(files) = &initial_files {
                             session.remote_files = files.clone();
+                            session.remote_path = initial_listing_path.clone();
                         }
                     } else {
-                        if initial_remote_listing_can_be_fallback(
+                        if session.file_access_mode == "user" && initial_remote_listing_can_be_fallback(
                             initial_listing_is_current,
                             &initial_remote_path,
                             &session.remote_path,
@@ -214,6 +219,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                             // leaving the pane empty after CWD follow fails.
                             if let Ok(files) = &initial_files {
                                 session.remote_files = files.clone();
+                                session.remote_path = initial_listing_path.clone();
                                 initial_listing_fallback_used = true;
                             }
                         }
@@ -259,6 +265,18 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
                         .await;
                     }
                 }
+
+                if initial_listing_is_current || initial_listing_fallback_used {
+                    if let Some(warning) = fallback_warning {
+                        crate::services::logging::session(
+                            &initial_app, "WARN", "sftp", &initial_tab_id, &warning,
+                        );
+                        emit_terminal_data(
+                            &initial_app, &initial_tab_id, &format!("\r\n[files] {warning}\r\n"),
+                        ).await;
+                    }
+                }
+                let initial_remote_path = initial_listing_path;
 
                 // Publish the directory result before running optional
                 // capability probes. fs_info/readlink/hardlink and the

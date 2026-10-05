@@ -422,7 +422,7 @@ pub async fn app_set_remote_file_access_mode(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::SetRemoteFileAccessMode {
-        mode,
+        mode: mode.clone(),
         root_access_method,
         sudo_user,
         sudo_password,
@@ -430,6 +430,38 @@ pub async fn app_set_remote_file_access_mode(
         respond_to: tx,
     })
     .await?;
+
+    // The worker resolves root paths in the shell namespace. On return to
+    // user mode map that physical path back through the SFTP service. Refresh
+    // here so a renderer closure cannot reopen its pre-switch SFTP alias.
+    let path = {
+        let state = app.state::<crate::services::workspace::WorkspaceState>();
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&tab_id)
+            .map(|session| session.remote_path.clone())
+    };
+    if let Some(path) = path {
+        let resolved =
+            match refresh_remote_files_for_shell_cwd(&app, &tab_id, &path, mode == "user").await {
+                Ok(path) => path,
+                Err(error)
+                    if mode == "user"
+                        && crate::sessions::ssh::is_sftp_path_not_found_message(
+                            &error.to_string(),
+                        ) =>
+                {
+                    // Privileged CWDs such as /root need not be exported by SFTP.
+                    refresh_remote_files(&app, &tab_id, "/").await?;
+                    "/".to_string()
+                }
+                Err(error) => return Err(error),
+            };
+        let state = app.state::<crate::services::workspace::WorkspaceState>();
+        if let Some(session) = state.sessions.write().await.get_mut(&tab_id) {
+            session.remote_path = resolved;
+        };
+    }
 
     get_workspace_snapshot(app).await
 }
@@ -440,7 +472,15 @@ mod remote_name_tests {
 
     #[test]
     fn remote_name_operations_cannot_escape_the_parent_directory() {
-        for name in ["", ".", "..", "../outside", "nested/file", "bad\0name", "line\nfeed"] {
+        for name in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "nested/file",
+            "bad\0name",
+            "line\nfeed",
+        ] {
             assert!(validate_remote_name(name).is_err(), "{name:?}");
         }
         assert!(validate_remote_name("safe name.txt").is_ok());
