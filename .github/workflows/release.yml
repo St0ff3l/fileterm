@@ -367,53 +367,8 @@ jobs:
         run: |
           set -euo pipefail
           bundle_root="apps/tauri/src-tauri/target/${LINUX_TARGET}/release/bundle"
-          deb_file="$bundle_root/deb/FileTerm-${GITHUB_REF_NAME#v}-linux-${LINUX_ASSET_ARCH}.deb"
-          rpm_file="$bundle_root/rpm/FileTerm-${GITHUB_REF_NAME#v}-linux-${LINUX_ASSET_ARCH}.rpm"
-          test -f "$deb_file"
-          test -f "$rpm_file"
-
-          deb_arch="$(dpkg-deb -f "$deb_file" Architecture)"
-          if [[ "$deb_arch" != "$DEB_ARCH" ]]; then
-            echo "Unexpected DEB architecture: $deb_arch" >&2
-            exit 1
-          fi
-          rpm_arch="$(rpm -qp --queryformat '%{ARCH}' "$rpm_file")"
-          if [[ "$rpm_arch" != "$RPM_ARCH" ]]; then
-            echo "Unexpected RPM architecture: $rpm_arch" >&2
-            exit 1
-          fi
-
-          deb_files="$(dpkg-deb --contents "$deb_file")"
-          rpm_files="$(rpm -qpl "$rpm_file")"
-          for package_path in \
-            usr/share/applications/FileTerm.desktop \
-            usr/share/applications/com.fileterm.desktop.desktop \
-            usr/share/metainfo/com.fileterm.desktop.metainfo.xml \
-            usr/share/pixmaps/com.fileterm.desktop.png \
-            usr/share/pixmaps/fileterm.png \
-            usr/share/licenses/file-term/LICENSE; do
-            if ! grep -Fq "./$package_path" <<< "$deb_files"; then
-              echo "DEB package is missing metadata file: $package_path" >&2
-              exit 1
-            fi
-            if ! grep -Fq "/$package_path" <<< "$rpm_files"; then
-              echo "RPM package is missing metadata file: $package_path" >&2
-              exit 1
-            fi
-          done
-
-          rpm_requires="$(rpm -qpR "$rpm_file")"
-          for dependency in \
-            'libwebkit2gtk-4.1.so.0()(64bit)' \
-            'libgtk-3.so.0()(64bit)' \
-            'libayatana-appindicator3.so.1()(64bit)' \
-            'libssl.so.3()(64bit)' \
-            'libcrypto.so.3()(64bit)'; do
-            if ! grep -Fxq "$dependency" <<< "$rpm_requires"; then
-              echo "RPM package is missing runtime dependency: $dependency" >&2
-              exit 1
-            fi
-          done
+          bash apps/tauri/scripts/verify-linux-package-metadata.sh \
+            "$bundle_root" "$DEB_ARCH" "$RPM_ARCH" "$RUNNER_TEMP"
 
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$appimage_file"
@@ -424,26 +379,6 @@ jobs:
             exit 1
           fi
           test -f "$appimage_file.zsync"
-
-          appimage_file="$(cd "$(dirname "$appimage_file")" && pwd)/$(basename "$appimage_file")"
-          appimage_verify_root="$(mktemp -d "${RUNNER_TEMP}/fileterm-appimage-check.XXXXXX")"
-          (
-            cd "$appimage_verify_root"
-            "$appimage_file" --appimage-extract >/dev/null
-          )
-          for package_path in \
-            usr/share/applications/FileTerm.desktop \
-            usr/share/applications/com.fileterm.desktop.desktop \
-            usr/share/metainfo/com.fileterm.desktop.metainfo.xml \
-            usr/share/pixmaps/com.fileterm.desktop.png \
-            usr/share/pixmaps/fileterm.png \
-            usr/share/licenses/file-term/LICENSE; do
-            if [[ ! -f "$appimage_verify_root/squashfs-root/$package_path" ]]; then
-              echo "AppImage is missing metadata file: $package_path" >&2
-              exit 1
-            fi
-          done
-          rm -rf "$appimage_verify_root"
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v6

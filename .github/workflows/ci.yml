@@ -181,6 +181,9 @@ jobs:
           - platform: linux
             os: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
+          - platform: linux-arm64
+            os: ubuntu-22.04-arm
+            rust_target: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
     env:
       TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
@@ -252,6 +255,9 @@ jobs:
             linux)
               npm run release:linux -w @fileterm/tauri -- --no-sign --ci
               ;;
+            linux-arm64)
+              npm run release:linux:arm64 -w @fileterm/tauri -- --no-sign --ci
+              ;;
             *)
               echo "Unknown package platform: ${{ matrix.platform }}" >&2
               exit 1
@@ -294,17 +300,28 @@ jobs:
           node ./scripts/mcp-stdio-smoke.mjs $binary
 
       - name: Verify Linux package
-        if: matrix.platform == 'linux'
+        if: startsWith(matrix.platform, 'linux')
         shell: bash
         run: |
           set -euo pipefail
           bundle_root="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/bundle"
           deb_file="$(find "$bundle_root/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          rpm_file="$(find "$bundle_root/rpm" -maxdepth 1 -type f -name '*.rpm' -print -quit)"
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$deb_file"
+          test -n "$rpm_file"
           test -n "$appimage_file"
           bash scripts/ensure-appimage-executable.sh "$appimage_file"
           dpkg-deb --info "$deb_file"
+          if [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+            expected_deb_arch=arm64
+            expected_rpm_arch=aarch64
+          else
+            expected_deb_arch=amd64
+            expected_rpm_arch=x86_64
+          fi
+          bash apps/tauri/scripts/verify-linux-package-metadata.sh \
+            "$bundle_root" "$expected_deb_arch" "$expected_rpm_arch" "$RUNNER_TEMP"
           binary="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/fileterm"
           test -x "$binary"
           "$binary" mcp --help
