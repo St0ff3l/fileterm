@@ -18,7 +18,7 @@
     ]
   },
   "bundle": {
-    "targets": ["deb", "appimage"],
+    "targets": ["deb", "rpm", "appimage"],
     "category": "Utility",
     "shortDescription": "Remote terminal and file management workspace",
     "longDescription": "Connect to SSH, SFTP and FTP hosts from one multi-tab desktop workspace.",
@@ -27,15 +27,44 @@
     "publisher": "St0ff3l",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png"],
     "linux": {
-      "deb": {
-        "section": "utils",
-        "priority": "optional",
+      "appimage": {
         "files": {
           "/usr/share/applications/FileTerm.desktop": "linux/FileTerm.desktop",
           "/usr/share/applications/com.fileterm.desktop.desktop": "linux/com.fileterm.desktop.desktop",
           "/usr/share/metainfo/com.fileterm.desktop.metainfo.xml": "linux/com.fileterm.desktop.metainfo.xml",
           "/usr/share/pixmaps/com.fileterm.desktop.png": "icons/128x128.png",
-          "/usr/share/pixmaps/fileterm.png": "icons/128x128.png"
+          "/usr/share/pixmaps/fileterm.png": "icons/128x128.png",
+          "/usr/share/licenses/file-term/LICENSE": "../../../LICENSE"
+        }
+      },
+      "deb": {
+        "section": "utils",
+        "priority": "optional",
+        "depends": ["libssl3 | libssl3t64"],
+        "files": {
+          "/usr/share/applications/FileTerm.desktop": "linux/FileTerm.desktop",
+          "/usr/share/applications/com.fileterm.desktop.desktop": "linux/com.fileterm.desktop.desktop",
+          "/usr/share/metainfo/com.fileterm.desktop.metainfo.xml": "linux/com.fileterm.desktop.metainfo.xml",
+          "/usr/share/pixmaps/com.fileterm.desktop.png": "icons/128x128.png",
+          "/usr/share/pixmaps/fileterm.png": "icons/128x128.png",
+          "/usr/share/licenses/file-term/LICENSE": "../../../LICENSE"
+        }
+      },
+      "rpm": {
+        "depends": [
+          "libwebkit2gtk-4.1.so.0()(64bit)",
+          "libgtk-3.so.0()(64bit)",
+          "libayatana-appindicator3.so.1()(64bit)",
+          "libssl.so.3()(64bit)",
+          "libcrypto.so.3()(64bit)"
+        ],
+        "files": {
+          "/usr/share/applications/FileTerm.desktop": "linux/FileTerm.desktop",
+          "/usr/share/applications/com.fileterm.desktop.desktop": "linux/com.fileterm.desktop.desktop",
+          "/usr/share/metainfo/com.fileterm.desktop.metainfo.xml": "linux/com.fileterm.desktop.metainfo.xml",
+          "/usr/share/pixmaps/com.fileterm.desktop.png": "icons/128x128.png",
+          "/usr/share/pixmaps/fileterm.png": "icons/128x128.png",
+          "/usr/share/licenses/file-term/LICENSE": "../../../LICENSE"
         }
       }
     }

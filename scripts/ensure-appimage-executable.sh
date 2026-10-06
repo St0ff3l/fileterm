@@ -10,6 +10,21 @@ command -v zsyncmake >/dev/null
 command -v python3 >/dev/null
 appimage_file="$(realpath "$1")"
 update_information="${2:-gh-releases-zsync|St0ff3l|fileterm|latest|FileTerm-*-linux-x86_64.AppImage.zsync}"
+host_arch="$(uname -m)"
+case "$host_arch" in
+  x86_64)
+    appimage_arch="x86_64"
+    appimagetool_sha256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+    ;;
+  aarch64)
+    appimage_arch="aarch64"
+    appimagetool_sha256="f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158"
+    ;;
+  *)
+    echo "Unsupported AppImage build host architecture: $host_arch" >&2
+    exit 1
+    ;;
+esac
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
@@ -30,17 +45,17 @@ find "$appdir" -type d -exec chmod 755 {} +
 find "$appdir" -type f -perm /0111 -exec chmod a+rx {} +
 chmod 755 "$appdir/AppRun" "$appdir/AppRun.wrapped"
 
-tool="$work_dir/appimagetool-x86_64.AppImage"
+tool="$work_dir/appimagetool-${appimage_arch}.AppImage"
 curl --fail --location --silent --show-error \
-  'https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage' \
+  "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${appimage_arch}.AppImage" \
   --output "$tool"
-printf 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  %s\n' "$tool" | sha256sum --check --status
+printf '%s  %s\n' "$appimagetool_sha256" "$tool" | sha256sum --check --status
 chmod a+x "$tool"
 
 rebuilt="$work_dir/$(basename "$appimage_file")"
 (
   cd "$work_dir"
-  ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" -u "$update_information" "$appdir" "$(basename "$rebuilt")"
+  ARCH="$appimage_arch" APPIMAGE_EXTRACT_AND_RUN=1 "$tool" -u "$update_information" "$appdir" "$(basename "$rebuilt")"
 )
 chmod a+x "$rebuilt"
 

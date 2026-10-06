@@ -8,7 +8,7 @@ Accepted（2026-09-19）
 
 FileTerm 的 tray 在 macOS、Windows 和 Linux 上由不同的原生后端渲染。macOS 需要独立的单色 Template 图标，Windows 使用多尺寸 ICO；Linux 的 GTK tray 后端要求每个像素恰好为 4 个 8-bit RGBA 字节。
 
-Tauri 会把 Linux bundle 配置中第一张 PNG 嵌入为原始像素缓冲。若 PNG 是 16-bit RGBA，32×32 图会携带 8192 字节，而 tray 后端只接受 4096 字节的 32bpp 数据。将 `default_window_icon()` 直接交给 Linux tray 会使应用在 setup hook 中失败，影响 `.AppImage` 和 `.deb` 两种包。
+Tauri 会把 Linux bundle 配置中第一张 PNG 嵌入为原始像素缓冲。若 PNG 是 16-bit RGBA，32×32 图会携带 8192 字节，而 tray 后端只接受 4096 字节的 32bpp 数据。将 `default_window_icon()` 直接交给 Linux tray 会使应用在 setup hook 中失败，影响所有 Linux 安装包，包括 `.AppImage`、`.deb`、`.rpm` 和 Pacman 包。
 
 ## 决策
 
@@ -21,7 +21,7 @@ Tauri 会把 Linux bundle 配置中第一张 PNG 嵌入为原始像素缓冲。�
 
 ### 正面影响
 
-- Linux tray 初始化拥有确定的 32bpp 输入，AppImage 与 deb 不再因位图字节数不匹配而在启动阶段崩溃。
+- Linux tray 初始化拥有确定的 32bpp 输入，各 Linux 安装包不再因位图字节数不匹配而在启动阶段崩溃。
 - 平台图标职责清晰：macOS template、Windows ICO、Linux 8-bit RGBA 位图不会相互复用。
 - 资产编码错误能够在常规 Rust 测试中被发现，不依赖桌面环境复现。
 

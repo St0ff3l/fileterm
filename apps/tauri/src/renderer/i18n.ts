@@ -1690,7 +1690,7 @@ const zhCN = {
   openReleasePage: '打开下载页面',
   portableUpdateTitle: '更新 Windows 便携版',
   portableUpdateDescription:
-    '请下载 *-windows-x64-portable.exe。退出 FileTerm 后，将新文件替换到当前便携版目录；请保留 config/ 文件夹。',
+    '请下载与当前设备架构匹配的 Windows portable `.exe`。退出 FileTerm 后，将新文件替换到当前便携版目录；请保留 config/ 文件夹。',
   updateDownloading: '正在下载更新（{progress}%）…',
   updateDownloadingShort: '下载 {progress}%',
   updateDownloaded: 'v{version} 已下载完成，重启后即可完成更新。',
@@ -3746,7 +3746,7 @@ const enUS: typeof zhCN = {
   openReleasePage: 'Open download page',
   portableUpdateTitle: 'Update the Windows portable build',
   portableUpdateDescription:
-    'Download *-windows-x64-portable.exe. After quitting FileTerm, replace the executable in the current portable folder and keep the config/ folder.',
+    'Download the Windows portable `.exe` matching this device architecture. After quitting FileTerm, replace the executable in the current portable folder and keep the config/ folder.',
   updateDownloading: 'Downloading update ({progress}%)…',
   updateDownloadingShort: 'Downloading {progress}%',
   updateDownloaded: 'Version {version} is ready. Restart to finish updating.',

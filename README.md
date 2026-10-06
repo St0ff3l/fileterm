@@ -15,8 +15,10 @@
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
     <a href="https://github.com/St0ff3l/fileterm/releases/latest"><img alt="Status" src="https://img.shields.io/badge/status-Official%20Release-22C55E?style=for-the-badge"></a>
     <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-000000?style=for-the-badge&logo=apple&logoColor=white">
-    <img alt="Windows" src="https://img.shields.io/badge/Windows-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white">
+    <img alt="Windows" src="https://img.shields.io/badge/Windows-x64%20%7C%20ARM64-0078D4?style=for-the-badge&logo=windows&logoColor=white">
     <img alt="Debian" src="https://img.shields.io/badge/Debian-deb-A80030?style=for-the-badge&logo=debian&logoColor=white">
+    <img alt="Fedora RPM" src="https://img.shields.io/badge/Fedora-rpm-51A2DA?style=for-the-badge&logo=fedora&logoColor=white">
+    <img alt="Arch Linux Pacman" src="https://img.shields.io/badge/Arch_Linux-pacman-1793D1?style=for-the-badge&logo=archlinux&logoColor=white">
     <a href="https://github.com/St0ff3l/fileterm/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/fileterm?style=for-the-badge&logo=github&label=stars"></a>
   </p>
 </div>
@@ -28,10 +30,21 @@
 Download the latest release from [GitHub Releases](https://github.com/St0ff3l/fileterm/releases/latest):
 
 - **macOS**: packages for Apple Silicon (arm64) and Intel (x64).
-- **Windows**: x64 NSIS installer and portable `.exe`; installed production builds download, verify, and install updates after restart.
-- **Linux**: x64 `.deb` packages and `.AppImage` binaries.
+- **Windows**: x64 and ARM64 NSIS installers and portable `.exe` files; installed builds download, verify, and install architecture-matched updates after restart.
+- **Linux**: x86_64 and arm64 `.deb`, `.rpm`, and `.AppImage` packages, plus Pacman `.pkg.tar.zst` packages for Arch x86_64 and Arch Linux ARM aarch64.
 
-An `.AppImage` is executable. If it does not start when double-clicked, run `chmod +x FileTerm-*-x86_64.AppImage` and then execute the file from a terminal.
+### Linux packages
+
+Every Linux package includes the FileTerm launcher, application icons, AppStream metadata, and the MIT license. The `.deb`, `.rpm`, and Pacman packages declare runtime dependencies for the system package manager to install; the RPM package requires a distribution that provides WebKitGTK 4.1 and OpenSSL 3. AppImage runs without installation, bundles its runtime libraries, and includes a `.zsync` sidecar for differential updates with AppImageUpdate. It still requires a host glibc compatible with the Ubuntu 22.04 build baseline.
+
+| Format         | Architectures and supported systems                                                     | Install or run                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `.AppImage`    | x86_64, arm64; major Linux desktop distributions with AppImage support                  | `chmod +x FileTerm-*-linux-<arch>.AppImage && ./FileTerm-*-linux-<arch>.AppImage`                                                       |
+| `.deb`         | x86_64, arm64; Debian, Ubuntu, and derivatives                                          | `sudo apt install ./FileTerm-<version>-linux-<arch>.deb`                                                                                |
+| `.rpm`         | x86_64, arm64; Fedora, openSUSE, and RPM distributions with WebKitGTK 4.1 and OpenSSL 3 | Fedora: `sudo dnf install ./FileTerm-<version>-linux-<arch>.rpm`; openSUSE: `sudo zypper install ./FileTerm-<version>-linux-<arch>.rpm` |
+| `.pkg.tar.zst` | x86_64; Arch Linux, Manjaro, EndeavourOS, and Arch derivatives; aarch64; Arch Linux ARM | `sudo pacman -U ./FileTerm-<version>-linux-<arch>.pkg.tar.zst`                                                                          |
+
+The official Arch Linux distribution supports x86_64. The ARM64 package targets the separate Arch Linux ARM distribution and cannot be installed on x86_64. Select the matching `linux-x86_64` or `linux-arm64` release asset. If an AppImage does not start when double-clicked, run `chmod +x` on the downloaded architecture-matched file and launch it from a terminal.
 
 On first launch, FileTerm uses Chinese for Chinese system locales and English for all other locales. You can change the language in Settings; a saved choice takes precedence on later launches.
 
@@ -149,8 +162,8 @@ npm run release:linux
 
 ### Releases and Updates
 
-- A `vX.Y.Z` tag on a `release/*` commit runs the Tauri-only Release Action and publishes macOS arm64/x64 DMGs, the Windows x64 NSIS installer, and Linux x64 `.deb` / `.AppImage` packages.
-- The Windows job also publishes the signed NSIS installer, its `.sig` signature, and `latest.json`; installed Windows clients verify that manifest before updating.
+- A `vX.Y.Z` tag on a `release/*` commit runs the Tauri-only Release Action and publishes macOS arm64/x64 DMGs, Windows x64/arm64 NSIS installers and portable executables, and Linux x86_64/arm64 `.deb`, `.rpm`, and `.AppImage` packages plus Arch x86_64/Arch Linux ARM aarch64 `.pkg.tar.zst` packages.
+- The Windows jobs publish signed installers and portable executables with `.sig` files. A combined `latest.json` contains separate x64 and ARM64 update entries; installed clients verify the matching package before updating.
 - Configure the repository Actions Secret `TAURI_SIGNING_PRIVATE_KEY` with the Tauri updater private-key contents. Never commit that private key.
 - macOS release bundles use ad-hoc signing (without an Apple Developer certificate or notarization) and deliberately keep the GitHub Release download flow rather than using the in-app updater. First-run users may still need to whitelist the app in Privacy & Security.
 
