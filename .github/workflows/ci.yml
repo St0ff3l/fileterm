@@ -181,9 +181,11 @@ jobs:
           - platform: linux
             os: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
+            arch: x86_64
           - platform: linux-arm64
             os: ubuntu-22.04-arm
             rust_target: aarch64-unknown-linux-gnu
+            arch: arm64
     runs-on: ${{ matrix.os }}
     env:
       TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
@@ -327,6 +329,65 @@ jobs:
           "$binary" mcp --help
           node ./scripts/mcp-stdio-smoke.mjs "$binary"
 
+      - name: Stage DEB input for Arch package smoke
+        if: startsWith(matrix.platform, 'linux')
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          bundle_root="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/bundle"
+          deb_file="$(find "$bundle_root/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb_file"
+          input_dir="${RUNNER_TEMP}/fileterm-arch-inputs/deb"
+          mkdir -p "$input_dir"
+          cp "$deb_file" "$input_dir/FileTerm-${version}-linux-${{ matrix.arch }}.deb"
+
+      - name: Upload DEB input for Arch package smoke
+        if: startsWith(matrix.platform, 'linux')
+        uses: actions/upload-artifact@v6
+        with:
+          name: FileTerm-Linux-${{ matrix.arch }}
+          path: ${{ runner.temp }}/fileterm-arch-inputs/
+          if-no-files-found: error
+          retention-days: 1
+
+  tauri-arch-package-smoke:
+    name: Tauri Arch package smoke
+    needs: tauri-package-smoke
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download Linux DEB inputs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: FileTerm-Linux-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/fileterm-linux-inputs
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Build and verify Arch packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          output_dir="${RUNNER_TEMP}/fileterm-arch-output"
+          bash apps/tauri/scripts/build-arch-packages.sh \
+            "$version" \
+            "${RUNNER_TEMP}/fileterm-linux-inputs" \
+            "$output_dir"
+          for asset_arch in x86_64 arm64; do
+            package_file="$output_dir/FileTerm-${version}-linux-${asset_arch}.pkg.tar.zst"
+            test -s "$package_file"
+            echo "Built $package_file"
+          done
+
   tauri-serial-virtual:
     name: Tauri virtual serial (ubuntu-latest)
     runs-on: ubuntu-latest
@@ -423,6 +484,7 @@ jobs:
       - tauri-renderer-and-shared-quality
       - tauri-socket-lifecycle
       - tauri-package-smoke
+      - tauri-arch-package-smoke
       - tauri-serial-virtual
       - tauri-real-protocols
       - rust-security-audit
@@ -433,6 +495,7 @@ jobs:
           RENDERER_RESULT: "${{ needs['tauri-renderer-and-shared-quality'].result }}"
           SOCKET_RESULT: "${{ needs['tauri-socket-lifecycle'].result }}"
           PACKAGE_RESULT: "${{ needs['tauri-package-smoke'].result }}"
+          ARCH_PACKAGE_RESULT: "${{ needs['tauri-arch-package-smoke'].result }}"
           SERIAL_RESULT: "${{ needs['tauri-serial-virtual'].result }}"
           PROTOCOL_RESULT: "${{ needs['tauri-real-protocols'].result }}"
           SECURITY_RESULT: "${{ needs['rust-security-audit'].result }}"
@@ -441,6 +504,7 @@ jobs:
           printf 'tauri-renderer-and-shared-quality: %s\n' "$RENDERER_RESULT"
           printf 'tauri-socket-lifecycle: %s\n' "$SOCKET_RESULT"
           printf 'tauri-package-smoke: %s\n' "$PACKAGE_RESULT"
+          printf 'tauri-arch-package-smoke: %s\n' "$ARCH_PACKAGE_RESULT"
           printf 'tauri-serial-virtual: %s\n' "$SERIAL_RESULT"
           printf 'tauri-real-protocols: %s\n' "$PROTOCOL_RESULT"
           printf 'rust-security-audit: %s\n' "$SECURITY_RESULT"
@@ -448,6 +512,7 @@ jobs:
           if [ "$RENDERER_RESULT" != success ] ||
             [ "$SOCKET_RESULT" != success ] ||
             [ "$PACKAGE_RESULT" != success ] ||
+            [ "$ARCH_PACKAGE_RESULT" != success ] ||
             [ "$SERIAL_RESULT" != success ] ||
             [ "$PROTOCOL_RESULT" != success ] ||
             [ "$SECURITY_RESULT" != success ]; then

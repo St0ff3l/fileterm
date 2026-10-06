@@ -23,11 +23,14 @@ mkdir -p "$output_dir"
 for entry in "x86_64:x86_64" "arm64:aarch64"; do
   asset_arch="${entry%%:*}"
   package_arch="${entry##*:}"
-  deb_file="$linux_artifacts_dir/FileTerm-${version}-linux-${asset_arch}.deb"
+  deb_name="FileTerm-${version}-linux-${asset_arch}.deb"
+  deb_file="$(find "$linux_artifacts_dir" -type f -name "$deb_name" -print -quit)"
   build_dir="$work_dir/$package_arch"
 
-  if [[ ! -f "$deb_file" ]]; then
-    echo "Missing Linux DEB input: $deb_file" >&2
+  if [[ -z "$deb_file" ]]; then
+    echo "Missing Linux DEB input: $deb_name" >&2
+    echo "Available Linux package inputs:" >&2
+    find "$linux_artifacts_dir" -maxdepth 5 -type f -print >&2
     exit 1
   fi
 
