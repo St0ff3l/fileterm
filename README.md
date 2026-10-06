@@ -29,6 +29,8 @@
 
 Download the latest release from [GitHub Releases](https://github.com/St0ff3l/fileterm/releases/latest):
 
+For step-by-step instructions, see the [English Installation Guide](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md) or [简体中文安装指南](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md).
+
 - **macOS**: packages for Apple Silicon (arm64) and Intel (x64).
 - **Windows**: x64 and ARM64 NSIS installers and portable `.exe` files; installed builds download, verify, and install architecture-matched updates after restart.
 - **Linux**: x86_64 and arm64 `.deb`, `.rpm`, and `.AppImage` packages, plus Pacman `.pkg.tar.zst` packages for Arch x86_64 and Arch Linux ARM aarch64.

@@ -29,6 +29,8 @@
 
 前往 [GitHub Releases](https://github.com/St0ff3l/fileterm/releases/latest) 下载最新正式版：
 
+分平台安装步骤与依赖说明请阅读[简体中文安装指南](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md)，也可查看 [English Installation Guide](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)。
+
 - **macOS**：提供 Apple Silicon（arm64）和 Intel（x64）安装包。
 - **Windows**：提供 x64 与 ARM64 NSIS 安装包和免安装 portable `.exe`；已安装版本会下载对应架构的更新包、验签并在重启后更新。
 - **Linux**：x86_64 与 arm64 提供 `.deb`、`.rpm` 和 `.AppImage`；另提供 Pacman `.pkg.tar.zst`：x86_64 适用于 Arch 系，aarch64 适用于 Arch Linux ARM。
