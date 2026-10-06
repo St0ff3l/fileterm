@@ -950,7 +950,11 @@
 
 .fs-shell.has-window-menubar.is-home-active {
   grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) 0 !important;
-  grid-template-rows: 32px 0px minmax(0, 1fr) 0px !important;
+  grid-template-rows: var(--window-menubar-height, 28px) 0px minmax(0, 1fr) 0px !important;
+}
+
+.fs-shell.has-window-menubar .home-workspace {
+  grid-template-rows: var(--window-tabbar-height, 48px) minmax(0, 1fr);
 }
 
 /* Home reuses the same titlebar structure as session workspaces. */

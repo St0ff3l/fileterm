@@ -2,6 +2,31 @@
   padding-left: 7px;
 }
 
+.window-menubar .window-menu-items,
+.window-menubar .window-control-buttons {
+  align-items: center;
+}
+
+.window-menubar .window-menu-items button,
+.window-menubar .window-control-buttons button {
+  height: 28px;
+}
+
+.window-menubar .window-menu-items button {
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.window-menubar .window-control-buttons button {
+  width: 40px;
+  font-size: 14px;
+}
+
+.window-menubar .window-control-buttons .app-close-button--window {
+  width: 40px;
+  height: 28px;
+}
+
 .window-menubar .window-menu-items > button:first-child {
   margin-left: -7px;
   padding-left: 14px;
