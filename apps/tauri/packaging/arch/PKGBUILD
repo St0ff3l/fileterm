@@ -1,0 +1,20 @@
+pkgname=file-term
+pkgver="${FILETERM_VERSION//-/_}"
+pkgrel=1
+pkgdesc="Remote terminal and file management workspace"
+arch=('x86_64' 'aarch64')
+url="https://github.com/St0ff3l/fileterm"
+license=('MIT')
+depends=(
+  'gtk3'
+  'webkit2gtk-4.1'
+  'libayatana-appindicator'
+  'openssl'
+)
+options=('!strip' '!debug')
+source=()
+sha256sums=()
+
+package() {
+  cp -a "${startdir}/stage/." "${pkgdir}/"
+}

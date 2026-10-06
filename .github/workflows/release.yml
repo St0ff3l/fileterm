@@ -151,7 +151,20 @@ jobs:
 
   build-windows:
     needs: validate-release-tag
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            installer-script: release:win
+            portable-script: release:win:portable
+          - arch: arm64
+            runner: windows-11-vs2026-arm
+            target: aarch64-pc-windows-msvc
+            installer-script: release:win:arm64
+            portable-script: release:win:portable:arm64
+    runs-on: ${{ matrix.runner }}
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -163,7 +176,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.target }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -187,24 +200,27 @@ jobs:
           }
 
       - name: Package signed Windows installer and updater signature
-        run: npm run release:win -w @fileterm/tauri
+        run: npm run ${{ matrix.installer-script }} -w @fileterm/tauri
 
       - name: Package self-identifying portable Windows executable
         shell: pwsh
         env:
           FILETERM_PORTABLE_BUILD: '1'
-        run: npm run release:win:portable -w @fileterm/tauri
+        run: npm run ${{ matrix.portable-script }} -w @fileterm/tauri
 
       - name: Normalize Windows installer artifact names
         shell: pwsh
+        env:
+          WINDOWS_TARGET: ${{ matrix.target }}
+          WINDOWS_ASSET_ARCH: ${{ matrix.arch }}
         run: |
-          $bundleDir = 'apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
-          $releaseDir = 'apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release'
+          $bundleDir = "apps/tauri/src-tauri/target/$env:WINDOWS_TARGET/release/bundle/nsis"
+          $releaseDir = "apps/tauri/src-tauri/target/$env:WINDOWS_TARGET/release"
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
           $installer = Get-ChildItem -LiteralPath $bundleDir -Filter '*-setup.exe' -File | Select-Object -First 1
           if (-not $installer) { throw 'NSIS installer was not generated.' }
           $signature = Get-Item -LiteralPath ($installer.FullName + '.sig')
-          $targetName = "FileTerm-$version-windows-x64-setup.exe"
+          $targetName = "FileTerm-$version-windows-$($env:WINDOWS_ASSET_ARCH)-setup.exe"
           Move-Item -LiteralPath $installer.FullName -Destination (Join-Path $bundleDir $targetName)
           Move-Item -LiteralPath $signature.FullName -Destination (Join-Path $bundleDir "$targetName.sig")
 
@@ -212,7 +228,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $portableBinary -PathType Leaf)) {
             throw "Portable Windows binary was not generated: $portableBinary"
           }
-          $portableTarget = Join-Path $bundleDir "FileTerm-$version-windows-x64-portable.exe"
+          $portableTarget = Join-Path $bundleDir "FileTerm-$version-windows-$($env:WINDOWS_ASSET_ARCH)-portable.exe"
           Copy-Item -LiteralPath $portableBinary -Destination $portableTarget -Force
           if (-not (Test-Path -LiteralPath $portableTarget -PathType Leaf)) {
             throw "Portable Windows executable was not generated: $portableTarget"
@@ -220,42 +236,58 @@ jobs:
 
       - name: Sign portable Windows updater payload
         shell: pwsh
+        env:
+          WINDOWS_TARGET: ${{ matrix.target }}
         run: |
-          $bundleDir = 'apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $bundleDir = "apps/tauri/src-tauri/target/$env:WINDOWS_TARGET/release/bundle/nsis"
           $portable = Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.exe' -File | Select-Object -First 1
           if (-not $portable) { throw 'Portable Windows executable was not generated.' }
           npx tauri signer sign $portable.FullName
           if ($LASTEXITCODE -ne 0) { throw 'Portable updater signing failed.' }
 
-      - name: Create GitHub Release updater manifest
-        if: startsWith(github.ref, 'refs/tags/')
-        run: node ./scripts/create-windows-updater-manifest.mjs ./src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
-        working-directory: apps/tauri
-
       - name: Verify Windows updater artifacts
         shell: pwsh
+        env:
+          WINDOWS_TARGET: ${{ matrix.target }}
+          WINDOWS_ASSET_ARCH: ${{ matrix.arch }}
         run: |
-          $bundleDir = 'apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
-          if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*.exe' -File)) { throw 'NSIS installer was not generated.' }
-          if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-setup.exe.sig' -File)) { throw 'NSIS updater signature was not generated.' }
-          if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.exe' -File)) { throw 'Portable Windows executable was not generated.' }
-          if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.exe.sig' -File)) { throw 'Portable updater signature was not generated.' }
+          $bundleDir = "apps/tauri/src-tauri/target/$env:WINDOWS_TARGET/release/bundle/nsis"
+          $installer = Get-ChildItem -LiteralPath $bundleDir -Filter "*-windows-$($env:WINDOWS_ASSET_ARCH)-setup.exe" -File
+          $portable = Get-ChildItem -LiteralPath $bundleDir -Filter "*-windows-$($env:WINDOWS_ASSET_ARCH)-portable.exe" -File
+          if (-not $installer) { throw 'NSIS installer was not generated.' }
+          if (-not (Test-Path -LiteralPath ($installer.FullName + '.sig') -PathType Leaf)) { throw 'NSIS updater signature was not generated.' }
+          if (-not $portable) { throw 'Portable Windows executable was not generated.' }
+          if (-not (Test-Path -LiteralPath ($portable.FullName + '.sig') -PathType Leaf)) { throw 'Portable updater signature was not generated.' }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v6
         with:
-          name: FileTerm-Windows-x64
+          name: FileTerm-Windows-${{ matrix.arch }}
           path: |
-            apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig
-            apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/latest.json
+            apps/tauri/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            apps/tauri/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.sig
           if-no-files-found: error
 
   build-linux:
     needs: validate-release-tag
-    # 22.04 links against an older glibc, so the bundles run on a wider range of
-    # distributions than an ubuntu-latest build would.
-    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            script: release:linux
+            deb-arch: amd64
+            rpm-arch: x86_64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            script: release:linux:arm64
+            deb-arch: arm64
+            rpm-arch: aarch64
+    # Build natively on Ubuntu 22.04 for a compatible glibc baseline. AppImage
+    # tooling does not support ARM cross-compilation, so ARM uses an ARM runner.
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -263,7 +295,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-gnu
+          targets: ${{ matrix.target }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -274,7 +306,7 @@ jobs:
       - name: Install Linux Tauri dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file squashfs-tools zsync
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file squashfs-tools zsync rpm
 
       - name: Install dependencies
         run: npm ci
@@ -284,26 +316,36 @@ jobs:
           npm run build:packages
           npm run typecheck -w @fileterm/tauri
 
-      - name: Package Linux deb and AppImage
-        run: npm run release:linux -w @fileterm/tauri
+      - name: Package Linux DEB, RPM and AppImage
+        run: npm run ${{ matrix.script }} -w @fileterm/tauri
 
       - name: Normalize Linux artifact names
         shell: bash
+        env:
+          LINUX_TARGET: ${{ matrix.target }}
+          LINUX_ASSET_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
-          bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          bundle_root="apps/tauri/src-tauri/target/${LINUX_TARGET}/release/bundle"
           version="${GITHUB_REF_NAME#v}"
 
           deb_file="$(find "$bundle_root/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
           test -n "$deb_file"
-          mv "$deb_file" "$bundle_root/deb/FileTerm-${version}-linux-x86_64.deb"
+          mv "$deb_file" "$bundle_root/deb/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.deb"
+
+          rpm_file="$(find "$bundle_root/rpm" -maxdepth 1 -type f -name '*.rpm' -print -quit)"
+          test -n "$rpm_file"
+          mv "$rpm_file" "$bundle_root/rpm/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.rpm"
 
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$appimage_file"
-          mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-linux-x86_64.AppImage"
+          mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.AppImage"
 
       - name: Prepare AppImage permissions and delta updates
         shell: bash
+        env:
+          LINUX_TARGET: ${{ matrix.target }}
+          LINUX_ASSET_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
@@ -311,37 +353,142 @@ jobs:
           if [[ "$version" == *-* ]]; then
             channel="latest-pre"
           fi
-          appimage_file="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/FileTerm-${version}-linux-x86_64.AppImage"
-          update_information="gh-releases-zsync|${GITHUB_REPOSITORY/\//|}|${channel}|FileTerm-*-linux-x86_64.AppImage.zsync"
+          appimage_file="apps/tauri/src-tauri/target/${LINUX_TARGET}/release/bundle/appimage/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.AppImage"
+          update_information="gh-releases-zsync|${GITHUB_REPOSITORY/\//|}|${channel}|FileTerm-*-linux-${LINUX_ASSET_ARCH}.AppImage.zsync"
           bash scripts/ensure-appimage-executable.sh "$appimage_file" "$update_information"
 
       - name: Verify Linux packages
         shell: bash
+        env:
+          LINUX_TARGET: ${{ matrix.target }}
+          LINUX_ASSET_ARCH: ${{ matrix.arch }}
+          DEB_ARCH: ${{ matrix.deb-arch }}
+          RPM_ARCH: ${{ matrix.rpm-arch }}
         run: |
           set -euo pipefail
-          bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
-          test -n "$(find "$bundle_root/deb" -name '*.deb' -print -quit)"
+          bundle_root="apps/tauri/src-tauri/target/${LINUX_TARGET}/release/bundle"
+          deb_file="$bundle_root/deb/FileTerm-${GITHUB_REF_NAME#v}-linux-${LINUX_ASSET_ARCH}.deb"
+          rpm_file="$bundle_root/rpm/FileTerm-${GITHUB_REF_NAME#v}-linux-${LINUX_ASSET_ARCH}.rpm"
+          test -f "$deb_file"
+          test -f "$rpm_file"
+
+          deb_arch="$(dpkg-deb -f "$deb_file" Architecture)"
+          if [[ "$deb_arch" != "$DEB_ARCH" ]]; then
+            echo "Unexpected DEB architecture: $deb_arch" >&2
+            exit 1
+          fi
+          rpm_arch="$(rpm -qp --queryformat '%{ARCH}' "$rpm_file")"
+          if [[ "$rpm_arch" != "$RPM_ARCH" ]]; then
+            echo "Unexpected RPM architecture: $rpm_arch" >&2
+            exit 1
+          fi
+
+          deb_files="$(dpkg-deb --contents "$deb_file")"
+          rpm_files="$(rpm -qpl "$rpm_file")"
+          for package_path in \
+            usr/share/applications/FileTerm.desktop \
+            usr/share/applications/com.fileterm.desktop.desktop \
+            usr/share/metainfo/com.fileterm.desktop.metainfo.xml \
+            usr/share/pixmaps/com.fileterm.desktop.png \
+            usr/share/pixmaps/fileterm.png \
+            usr/share/licenses/file-term/LICENSE; do
+            if ! grep -Fq "./$package_path" <<< "$deb_files"; then
+              echo "DEB package is missing metadata file: $package_path" >&2
+              exit 1
+            fi
+            if ! grep -Fq "/$package_path" <<< "$rpm_files"; then
+              echo "RPM package is missing metadata file: $package_path" >&2
+              exit 1
+            fi
+          done
+
+          rpm_requires="$(rpm -qpR "$rpm_file")"
+          for dependency in \
+            'libwebkit2gtk-4.1.so.0()(64bit)' \
+            'libgtk-3.so.0()(64bit)' \
+            'libayatana-appindicator3.so.1()(64bit)' \
+            'libssl.so.3()(64bit)' \
+            'libcrypto.so.3()(64bit)'; do
+            if ! grep -Fxq "$dependency" <<< "$rpm_requires"; then
+              echo "RPM package is missing runtime dependency: $dependency" >&2
+              exit 1
+            fi
+          done
+
           appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$appimage_file"
           appimage_name="$(basename "$appimage_file")"
           version="${GITHUB_REF_NAME#v}"
-          if [[ "$appimage_name" != "FileTerm-${version}-linux-x86_64.AppImage" ]]; then
+          if [[ "$appimage_name" != "FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.AppImage" ]]; then
             echo "Unexpected AppImage asset name: $appimage_name" >&2
             exit 1
           fi
+          test -f "$appimage_file.zsync"
+
+          appimage_file="$(cd "$(dirname "$appimage_file")" && pwd)/$(basename "$appimage_file")"
+          appimage_verify_root="$(mktemp -d "${RUNNER_TEMP}/fileterm-appimage-check.XXXXXX")"
+          (
+            cd "$appimage_verify_root"
+            "$appimage_file" --appimage-extract >/dev/null
+          )
+          for package_path in \
+            usr/share/applications/FileTerm.desktop \
+            usr/share/applications/com.fileterm.desktop.desktop \
+            usr/share/metainfo/com.fileterm.desktop.metainfo.xml \
+            usr/share/pixmaps/com.fileterm.desktop.png \
+            usr/share/pixmaps/fileterm.png \
+            usr/share/licenses/file-term/LICENSE; do
+            if [[ ! -f "$appimage_verify_root/squashfs-root/$package_path" ]]; then
+              echo "AppImage is missing metadata file: $package_path" >&2
+              exit 1
+            fi
+          done
+          rm -rf "$appimage_verify_root"
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v6
         with:
-          name: FileTerm-Linux-x64
+          name: FileTerm-Linux-${{ matrix.arch }}
           path: |
-            apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
-            apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
-            apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.zsync
+            apps/tauri/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+            apps/tauri/src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+            apps/tauri/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            apps/tauri/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.zsync
+          if-no-files-found: error
+
+  build-arch-packages:
+    needs: [validate-release-tag, build-linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download Linux package inputs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: FileTerm-Linux-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/fileterm-linux-inputs
+
+      - name: Build Arch and Arch Linux ARM packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          bash apps/tauri/scripts/build-arch-packages.sh \
+            "$version" \
+            "${RUNNER_TEMP}/fileterm-linux-inputs" \
+            "${RUNNER_TEMP}/fileterm-arch-output"
+
+      - name: Upload Arch packages
+        uses: actions/upload-artifact@v6
+        with:
+          name: FileTerm-Linux-Arch
+          path: ${{ runner.temp }}/fileterm-arch-output/*.pkg.tar.zst
           if-no-files-found: error
 
   release:
-    needs: [validate-release-tag, build-macos-arm64, build-macos-x64, build-windows, build-linux]
+    needs: [validate-release-tag, build-macos-arm64, build-macos-x64, build-windows, build-linux, build-arch-packages]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -350,6 +497,9 @@ jobs:
 
       - name: Download release artifacts
         uses: actions/download-artifact@v7
+
+      - name: Create combined Windows updater manifest
+        run: node ./apps/tauri/scripts/create-windows-updater-manifest.mjs --merge ./FileTerm-Windows-x64 ./FileTerm-Windows-arm64
 
       - name: Publish GitHub Release
         shell: bash
@@ -376,7 +526,7 @@ jobs:
             release_flags+=(--prerelease)
           fi
 
-          mapfile -d '' assets < <(find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.AppImage.zsync' -o -name '*.sig' -o -name '*.zip' -o -name 'latest.json' \) -print0)
+          mapfile -d '' assets < <(find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*.AppImage' -o -name '*.AppImage.zsync' -o -name '*.sig' -o -name '*.zip' -o -name 'latest.json' \) -print0)
           if [ "${#assets[@]}" -eq 0 ]; then
             echo 'No Tauri release assets were downloaded.'
             exit 1

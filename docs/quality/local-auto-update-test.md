@@ -15,13 +15,20 @@ npm run release:win -w @fileterm/tauri
 npm run release:win -w @fileterm/tauri
 ```
 
-`release:win` 基于 `tauri.release.windows.conf.json`（`targets: ["nsis"]`，`createUpdaterArtifacts: true`），在 `apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/` 下生成 `-setup.exe`、`-setup.exe.sig`，并由 `scripts/create-windows-updater-manifest.mjs` 生成 `latest.json`：
+`release:win` 与 `release:win:arm64` 基于 `tauri.release.windows.conf.json`（`targets: ["nsis"]`，`createUpdaterArtifacts: true`），分别在 x64 与 ARM64 target 目录下生成 `-setup.exe`、`-setup.exe.sig`。发布流水线将两种架构的签名资产合并到同一个 `latest.json`：
 
 ```bash
 export GITHUB_REPOSITORY=St0ff3l/fileterm
 export GITHUB_REF_NAME=v1.0.1
 node ./apps/tauri/scripts/create-windows-updater-manifest.mjs \
   apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+```
+
+ARM64 本机构建使用 `npm run release:win:arm64 -w @fileterm/tauri`；需要 ARM64 Windows 编译工具链。合并两个架构产物时，向脚本传入 `--merge` 和各自的 bundle 目录，它会在当前目录生成包含四个平台键的清单：
+
+```bash
+node ./apps/tauri/scripts/create-windows-updater-manifest.mjs --merge \
+  FileTerm-Windows-x64 FileTerm-Windows-arm64
 ```
 
 将该 `nsis` 目录按 `<tag>/` 路径前缀布局后，用任意静态服务器在本地暴露（例如 `python3 -m http.server 8765`），并把 `updates.rs` 的 `RELEASE_DOWNLOAD_BASE` 临时改为 `http://127.0.0.1:8765`。
@@ -38,13 +45,13 @@ node ./apps/tauri/scripts/create-windows-updater-manifest.mjs \
 
 ## Windows 便携版更新验收
 
-便携版使用同一 `latest.json` 中独立的 `windows-x86_64-portable` 条目，下载原始便携 EXE 并用 updater 公钥验签。不得把 NSIS 安装器填入便携条目。
+便携版使用同一 `latest.json` 中独立的 `windows-x86_64-portable` 或 `windows-aarch64-portable` 条目，下载对应架构的便携 EXE 并用 updater 公钥验签。不得把 NSIS 安装器填入便携条目。
 
-1. 构建两个支持便携更新的版本，使用 `FILETERM_PORTABLE_BUILD=1 npm run release:win:portable -w @fileterm/tauri`（PowerShell 先设置 `$env:FILETERM_PORTABLE_BUILD='1'`）。把新版 EXE 复制为 `FileTerm-<version>-windows-x64-portable.exe`，执行 `npx tauri signer sign <完整路径>`；与 NSIS 签名产物一起生成清单。首次从旧版升级仍需手动覆盖。
+1. 构建两个支持便携更新的版本，分别使用 `FILETERM_PORTABLE_BUILD=1 npm run release:win:portable -w @fileterm/tauri` 和 `FILETERM_PORTABLE_BUILD=1 npm run release:win:portable:arm64 -w @fileterm/tauri`（PowerShell 先设置 `$env:FILETERM_PORTABLE_BUILD='1'`）。将便携 EXE 按 `*-windows-x64-portable.exe` / `*-windows-arm64-portable.exe` 命名并执行 `npx tauri signer sign <完整路径>`；与两种架构的 NSIS 签名产物一起合并清单。首次从旧版升级仍需手动覆盖。
 2. 在含中文、空格的可写目录启动旧版，把 EXE 重命名为 `我的 FileTerm.exe`，保存连接配置。在更新页下载并重启更新，确认新版仍从原目录、原文件名启动，`config` 内容和 `portable` 标记保留，成功事务子目录被清理。
 3. 分别测试稳定/测试通道、下载断网、错误签名、旧 Release 缺少便携条目；验签失败必须拒绝安装，缺少条目回退下载页。
 4. 测试目录不可写、helper 启动被拦截；应用不得先退出。测试原 EXE 被另一进程占用、新 EXE 启动失败：保持或恢复旧程序，保留错误记录；回滚失败时从 `.fileterm-update-<uuid>/previous.exe` 手动恢复。
 5. 更新会退出应用并中断当前远程会话；确认现有“重启更新”交互仍由用户主动触发。
-6. 同时回归 NSIS 安装版，确认清单中的安装版仍下载安装器，未误用便携 EXE。
+6. 在 x64 和 ARM64 Windows 上分别回归 NSIS 安装版与便携版，确认各自读取相同架构的清单条目，未误用另一架构或便携 EXE。
 
 签名指 updater 内容签名，不等同于 Windows Authenticode，也不保证消除 SmartScreen 提示。Windows 专用等待/文件占用测试由三平台 Rust CI 的 Windows job 执行；本机 macOS 测试不能替代实际 Windows 更新验收。

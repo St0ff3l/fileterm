@@ -15,8 +15,10 @@
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
     <a href="https://github.com/St0ff3l/fileterm/releases/latest"><img alt="Status" src="https://img.shields.io/badge/status-Official%20Release-22C55E?style=for-the-badge"></a>
     <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-000000?style=for-the-badge&logo=apple&logoColor=white">
-    <img alt="Windows" src="https://img.shields.io/badge/Windows-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white">
+    <img alt="Windows" src="https://img.shields.io/badge/Windows-x64%20%7C%20ARM64-0078D4?style=for-the-badge&logo=windows&logoColor=white">
     <img alt="Debian" src="https://img.shields.io/badge/Debian-deb-A80030?style=for-the-badge&logo=debian&logoColor=white">
+    <img alt="Fedora RPM" src="https://img.shields.io/badge/Fedora-rpm-51A2DA?style=for-the-badge&logo=fedora&logoColor=white">
+    <img alt="Arch Linux Pacman" src="https://img.shields.io/badge/Arch_Linux-pacman-1793D1?style=for-the-badge&logo=archlinux&logoColor=white">
     <a href="https://github.com/St0ff3l/fileterm/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/fileterm?style=for-the-badge&logo=github&label=stars"></a>
   </p>
 </div>
@@ -28,10 +30,21 @@
 前往 [GitHub Releases](https://github.com/St0ff3l/fileterm/releases/latest) 下载最新正式版：
 
 - **macOS**：提供 Apple Silicon（arm64）和 Intel（x64）安装包。
-- **Windows**：提供 x64 NSIS 安装包和免安装 portable `.exe`；已安装的正式版会在应用内下载、验签并在重启后更新。
-- **Linux**：提供 x64 `.deb` 安装包和 `.AppImage` 便携包。
+- **Windows**：提供 x64 与 ARM64 NSIS 安装包和免安装 portable `.exe`；已安装版本会下载对应架构的更新包、验签并在重启后更新。
+- **Linux**：x86_64 与 arm64 提供 `.deb`、`.rpm` 和 `.AppImage`；另提供 Pacman `.pkg.tar.zst`：x86_64 适用于 Arch 系，aarch64 适用于 Arch Linux ARM。
 
-`.AppImage` 是可执行文件；如下载后不能双击启动，可在终端执行 `chmod +x FileTerm-*-x86_64.AppImage`，再运行该文件。
+### Linux 安装包
+
+所有 Linux 包都带有 FileTerm 启动器、应用图标、AppStream 元数据和 MIT 许可证。`.deb`、`.rpm`、Pacman 包会声明运行时依赖，由系统包管理器安装；RPM 包需要发行版提供 WebKitGTK 4.1 与 OpenSSL 3。AppImage 无需安装，可直接运行，并提供 `.zsync` 文件供 AppImageUpdate 差量更新；它使用随包依赖，但仍要求系统 glibc 与 Ubuntu 22.04 构建基线兼容。
+
+| 格式           | 架构与适用系统                                                                  | 安装或运行                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `.AppImage`    | x86_64、arm64；适用于支持 AppImage 的主流 Linux 桌面发行版                      | `chmod +x FileTerm-*-linux-<架构>.AppImage && ./FileTerm-*-linux-<架构>.AppImage`                                                         |
+| `.deb`         | x86_64、arm64；Debian、Ubuntu 及其衍生版                                        | `sudo apt install ./FileTerm-<版本>-linux-<架构>.deb`                                                                                     |
+| `.rpm`         | x86_64、arm64；Fedora、openSUSE 等提供 WebKitGTK 4.1 与 OpenSSL 3 的 RPM 发行版 | Fedora 使用 `sudo dnf install ./FileTerm-<版本>-linux-<架构>.rpm`；openSUSE 使用 `sudo zypper install ./FileTerm-<版本>-linux-<架构>.rpm` |
+| `.pkg.tar.zst` | x86_64；Arch Linux、Manjaro、EndeavourOS 等 Arch 系；aarch64；Arch Linux ARM    | `sudo pacman -U ./FileTerm-<版本>-linux-<架构>.pkg.tar.zst`                                                                               |
+
+Arch Linux 官方发行版目前仅支持 x86_64；ARM64 包面向独立的 Arch Linux ARM 发行版，不能在 x86_64 系统上安装。下载时选择对应的 `linux-x86_64` 或 `linux-arm64` 资产。AppImage 若不能双击启动，可在终端为对应架构的文件执行 `chmod +x` 后运行。
 
 首次启动时，中文系统语言环境默认显示中文，其他语言环境默认显示英文。可以在设置中手动切换语言；已保存的选择会在之后的启动中优先使用。
 
@@ -147,8 +160,8 @@ npm run release:linux
 
 ### 发布与更新
 
-- 推送位于 `release/*` 分支提交上的 `vX.Y.Z` tag，会运行 Tauri 专用 Release Action，发布 macOS arm64/x64 DMG、Windows x64 NSIS 安装包以及 Linux x64 `.deb` / `.AppImage` 包。
-- Windows Action 同时生成带签名的 NSIS 安装器、免安装 `*-windows-x64-portable.exe`、`.sig` 签名文件和 `latest.json`；已安装 Windows 客户端从该清单验签后更新。portable 版本不写入安装器注册信息，配置保存到可执行文件旁的 `config/` 文件夹，首次运行空目录时会迁移已有安装版配置，运行前仍需系统已有 WebView2 Runtime。凭据加密仍绑定当前 Windows 设备，复制到另一台电脑后需重新配置凭据。
+- 推送位于 `release/*` 分支提交上的 `vX.Y.Z` tag，会运行 Tauri 专用 Release Action，发布 macOS arm64/x64 DMG、Windows x64/arm64 NSIS 安装包和便携版，以及 Linux x86_64/arm64 `.deb`、`.rpm`、`.AppImage` 和 Arch x86_64/Arch Linux ARM aarch64 `.pkg.tar.zst` 包。
+- Windows Action 为两种架构分别生成带签名的 NSIS 安装器、免安装 `*-windows-x64-portable.exe` / `*-windows-arm64-portable.exe` 和 `.sig` 文件，再合并到含架构专属更新条目的 `latest.json`；客户端按自身架构验签更新。portable 版本不写入安装器注册信息，配置保存到可执行文件旁的 `config/` 文件夹，首次运行空目录时会迁移已有安装版配置，运行前仍需系统已有 WebView2 Runtime。凭据加密仍绑定当前 Windows 设备，复制到另一台电脑后需重新配置凭据。
 - 仓库需要配置 GitHub Actions Secret `TAURI_SIGNING_PRIVATE_KEY`。它是 Tauri updater 私钥内容，只能保存为 GitHub Secret，绝不能提交到仓库。
 - macOS 发行包使用 ad hoc 签名（不使用 Apple Developer 证书或公证），不使用应用内 updater：检查到新版本后跳转 GitHub Release，由用户选择下载包；首次下载运行仍可能需要在“隐私与安全性”中手动放行。
 

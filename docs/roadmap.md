@@ -13,7 +13,7 @@
 - Phase 3 的 russh SSH 主链路已实现：受管 SSH 私钥库与口令交互、shell、SFTP、MFA、host verification、系统指标、CWD/远端用户跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 出站代理及运行时 SSH `-L/-R/-D` 隧道均已接入 `apps/tauri/src-tauri`。
 - Phase 3 已有本地 OpenSSH 的认证、exec、SFTP、HTTP/SOCKS5 代理、local 与 dynamic direct-tcpip 回归；MFA 使用真实 SSH 协议夹具验证。真实 sshd 的跳板、远程转发、sudo/root、CWD 事件和完整指标流仍是发行候选手测门禁。
 - Phase 4 的 Transfer journal/断点、FTP/FTPS、Telnet、Serial、WebDAV、连接导入导出、偏好/窗口事件、CSP 和本地日志均已接入 Rust backend。显式/隐式 FTPS、WebDAV HEAD/PUT/GET + ETag/hash、Telnet HTTP CONNECT/SOCKS5 已有本地真实协议夹具；实体/虚拟串口、真实 Telnet 设备、真实 WebDAV 服务和三平台结果仍未全部取得。
-- Phase 5 的三平台发布主链路已可用：Release Action 会构建 macOS arm64/x64 DMG、Windows 签名 NSIS/portable 包及 Linux x64 `.deb` / `.AppImage`，并在发布前执行质量与打包 smoke。Windows 使用签名的应用内更新；macOS 和 Linux 保持 GitHub Release 下载流。Linux tray 图标固定使用 8-bit RGBA 输入，避免 AppImage 在 GTK 环境初始化时因 16-bit 原始像素缓冲崩溃。
+- Phase 5 的三平台发布主链路已可用：Release Action 会构建 macOS arm64/x64 DMG、Windows x64/ARM64 签名 NSIS/portable 包及 Linux x86_64/ARM64 `.deb` / `.rpm` / `.AppImage`，并提供 Arch x86_64 与 Arch Linux ARM aarch64 `.pkg.tar.zst`；Linux 包含运行依赖与桌面/AppStream 元数据。Windows 使用签名的应用内更新；macOS 和 Linux 保持 GitHub Release 下载流。Linux tray 图标固定使用 8-bit RGBA 输入，避免 AppImage 在 GTK 环境初始化时因 16-bit 原始像素缓冲崩溃。
 - 自动 legacy 数据迁移与回滚代码已落地；真实 SSH/代理、实体/虚拟串口、数据迁移演练，以及 macOS 签名/公证策略仍需持续作为发行候选验收项推进。
 
 更细的差距和里程碑以已归档的 [`docs/plans/completed/tauri-migration-progress.md`](plans/completed/tauri-migration-progress.md) 为准；Rust 后端的模块级拆分以已归档的 [`rust-backend-migration-plan.md`](plans/completed/rust-backend-migration-plan.md) 为准。

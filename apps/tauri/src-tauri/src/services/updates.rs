@@ -73,11 +73,17 @@ fn update_channel(app: &AppHandle) -> String {
 }
 
 #[cfg(any(test, target_os = "windows"))]
-const fn windows_update_target_for_portable(is_portable: bool) -> Option<&'static str> {
-    if is_portable {
-        Some("windows-x86_64-portable")
-    } else {
-        None
+fn windows_update_target_for_portable(
+    is_portable: bool,
+    architecture: &str,
+) -> Option<&'static str> {
+    if !is_portable {
+        return None;
+    }
+
+    match architecture {
+        "aarch64" => Some("windows-aarch64-portable"),
+        _ => Some("windows-x86_64-portable"),
     }
 }
 
@@ -298,10 +304,11 @@ fn updater_for_release(
 
     let endpoint = updater_manifest_url(tag)?;
     let builder = app.updater_builder();
-    let builder = match windows_update_target_for_portable(is_portable_build()) {
-        Some(target) => builder.target(target),
-        None => builder,
-    };
+    let builder =
+        match windows_update_target_for_portable(is_portable_build(), std::env::consts::ARCH) {
+            Some(target) => builder.target(target),
+            None => builder,
+        };
     let updater = builder
         .endpoints(vec![endpoint])
         .map_err(|error| format!("更新地址配置失败: {error}"))?
@@ -696,10 +703,14 @@ mod tests {
     #[test]
     fn portable_updates_cannot_select_the_installer_payload() {
         assert_eq!(
-            windows_update_target_for_portable(true),
+            windows_update_target_for_portable(true, "x86_64"),
             Some("windows-x86_64-portable")
         );
-        assert_eq!(windows_update_target_for_portable(false), None);
+        assert_eq!(
+            windows_update_target_for_portable(true, "aarch64"),
+            Some("windows-aarch64-portable")
+        );
+        assert_eq!(windows_update_target_for_portable(false, "x86_64"), None);
     }
 
     #[test]
