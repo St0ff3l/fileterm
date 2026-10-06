@@ -6,16 +6,13 @@
 }
 
 .fs-shell.has-ai-copilot .fs-tabbar,
-.fs-shell.has-ai-copilot .window-menubar {
-  margin-right: var(--ai-copilot-panel-width);
-}
-
-.fs-shell.has-ai-copilot .fs-main {
-  margin-right: var(--ai-copilot-panel-width);
-}
-
+.fs-shell.has-ai-copilot .fs-main,
 .fs-shell.has-ai-copilot .transfer-strip {
   margin-right: var(--ai-copilot-panel-width);
+}
+
+.fs-shell.has-ai-copilot .window-menubar {
+  padding-right: var(--ai-copilot-panel-width);
 }
 
 .fs-shell.has-ai-copilot .terminal-right-frame {
@@ -98,12 +95,13 @@
 }
 
 .fs-shell.has-window-menubar.has-ai-copilot .ai-copilot-panel {
-  top: 32px;
+  top: var(--window-menubar-height, 28px);
   bottom: 0;
+  border-top-right-radius: 0;
 }
 
 .fs-shell.has-window-menubar.has-ai-copilot::after {
-  top: 32px;
+  top: var(--window-menubar-height, 28px);
 }
 
 .fs-shell.is-local-terminal.has-ai-copilot .ai-copilot-panel {
@@ -4021,6 +4019,10 @@
   .fs-shell.has-ai-copilot .window-menubar,
   .fs-shell.has-ai-copilot .fs-main {
     margin-right: 0;
+  }
+
+  .fs-shell.has-ai-copilot .window-menubar {
+    padding-right: 0;
   }
 
   .fs-shell.has-ai-copilot .ai-copilot-panel {

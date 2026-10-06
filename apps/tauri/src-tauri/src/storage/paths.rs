@@ -85,6 +85,27 @@ pub fn ensure_portable_marker() -> Result<Option<PathBuf>, AppError> {
     Ok(None)
 }
 
+/// Development builds keep a distinct application identity while sharing the
+/// installed app's data directory. Do not read the historical `.dev` store.
+pub fn app_data_directory(app: &AppHandle) -> Result<PathBuf, AppError> {
+    const INSTALLED_APP_IDENTIFIER: &str = "com.fileterm.desktop";
+    const DEV_APP_IDENTIFIER: &str = "com.fileterm.desktop.dev";
+
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| AppError::Storage(error.to_string()))?;
+
+    if app.config().identifier == DEV_APP_IDENTIFIER {
+        let parent = app_data_dir.parent().ok_or_else(|| {
+            AppError::Storage("无法解析 FileTerm 开发版共享数据目录".to_string())
+        })?;
+        return Ok(parent.join(INSTALLED_APP_IDENTIFIER));
+    }
+
+    Ok(app_data_dir)
+}
+
 pub fn storage_root(app: &AppHandle) -> Result<PathBuf, AppError> {
     let dir = if let Some(portable_directory) = portable_config_directory() {
         // Portable mode must not silently fall back to a user directory. A
@@ -92,9 +113,7 @@ pub fn storage_root(app: &AppHandle) -> Result<PathBuf, AppError> {
         // the user can move it to a writable directory.
         portable_directory
     } else {
-        app.path()
-            .app_data_dir()
-            .map_err(|error| AppError::Storage(error.to_string()))?
+        app_data_directory(app)?
     };
     fs::create_dir_all(&dir).map_err(|error| AppError::Storage(error.to_string()))?;
     Ok(dir)

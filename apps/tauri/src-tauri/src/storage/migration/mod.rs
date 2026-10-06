@@ -59,7 +59,7 @@ pub fn migrate_legacy_data_once(app: &AppHandle) -> Result<(), AppError> {
         result?;
     }
     let config_dir = app.path().app_config_dir().ok();
-    let data_dir = app.path().app_data_dir().ok();
+    let data_dir = app_data_directory(app).ok();
     let legacy_dir =
         select_legacy_directory(&current_dir, config_dir.as_deref(), data_dir.as_deref())?;
     crate::services::logging::info(
