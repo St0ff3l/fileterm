@@ -2870,7 +2870,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: color-mix(in srgb, var(--text-secondary) 60%, var(--text-primary));
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 400;
   text-align: left;
@@ -2881,13 +2881,13 @@
 
 .connection-manager-sidebar-item:hover {
   background: var(--bg-hover) !important;
-  color: var(--text-main) !important;
+  color: var(--text-primary) !important;
   padding-left: 12px;
 }
 
 .connection-manager-sidebar-item.active {
   background: var(--bg-hover) !important;
-  color: var(--text-main) !important;
+  color: var(--text-primary) !important;
   font-weight: 500;
 }
 
@@ -2898,7 +2898,7 @@
 
 .connection-manager-sidebar-item:focus-visible {
   outline: none;
-  color: var(--text-main) !important;
+  color: var(--text-primary) !important;
   box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 

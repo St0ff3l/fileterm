@@ -125,7 +125,7 @@
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: color-mix(in srgb, var(--text-secondary) 60%, var(--text-primary));
+  color: var(--text-primary);
   font-size: 13.5px;
   font-weight: 500;
   text-align: left;
@@ -153,7 +153,7 @@
 
 .sidebar-nav-link:hover {
   background-color: var(--bg-hover);
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .sidebar-nav-link:focus-visible {
@@ -164,16 +164,16 @@
 .sidebar-nav-link.active {
   background: var(--surface-active);
   border-radius: 8px;
-  color: var(--text-main);
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .sidebar-nav-link.active span.material-symbols-outlined {
-  color: var(--sidebar-active-accent, var(--text-main));
+  color: var(--text-primary);
 }
 
 .sidebar-nav-link.active > .app-icon {
-  color: var(--sidebar-active-accent, var(--text-main));
+  color: var(--text-primary);
 }
 
 /* Sidebar Footer Links */
@@ -950,7 +950,11 @@
 
 .fs-shell.has-window-menubar.is-home-active {
   grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) 0 !important;
-  grid-template-rows: 32px 0px minmax(0, 1fr) 0px !important;
+  grid-template-rows: var(--window-menubar-height, 28px) 0px minmax(0, 1fr) 0px !important;
+}
+
+.fs-shell.has-window-menubar .home-workspace {
+  grid-template-rows: var(--window-tabbar-height, 48px) minmax(0, 1fr);
 }
 
 /* Home reuses the same titlebar structure as session workspaces. */

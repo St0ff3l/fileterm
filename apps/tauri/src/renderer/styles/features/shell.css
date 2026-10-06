@@ -16,7 +16,9 @@
 }
 
 .fs-shell.has-window-menubar {
-  grid-template-rows: 32px 48px minmax(0, 1fr) 24px;
+  --window-menubar-height: 28px;
+  --window-tabbar-height: 48px;
+  grid-template-rows: var(--window-menubar-height) var(--window-tabbar-height) minmax(0, 1fr) 24px;
 }
 
 .fs-shell.is-local-terminal {
@@ -26,7 +28,7 @@
 
 .fs-shell.has-window-menubar.is-local-terminal {
   grid-template-columns: var(--sidebar-width, 256px) minmax(0, 1fr) 0;
-  grid-template-rows: 32px 48px minmax(0, 1fr);
+  grid-template-rows: var(--window-menubar-height) var(--window-tabbar-height) minmax(0, 1fr);
 }
 
 .window-menubar {
@@ -38,7 +40,7 @@
   align-items: stretch;
   justify-content: space-between;
   min-width: 0;
-  height: 32px;
+  height: var(--window-menubar-height, 28px);
   border-bottom: 1px solid var(--border-light);
   -webkit-app-region: drag;
 }
@@ -158,8 +160,8 @@
 }
 
 :root[data-platform='linux'] .window-control-buttons button {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border-radius: 50%;
   background: var(--window-control-surface);
@@ -994,6 +996,7 @@
 
 .fs-shell.has-window-menubar .fs-tabbar {
   grid-row: 2;
+  height: var(--window-tabbar-height, 48px);
 }
 
 /* Overview sorting owns the pointer stream. Keep the renderer/native window

@@ -4,6 +4,7 @@ import { CloseButton } from '../common/close-button'
 import { ContextMenu, type ContextMenuEntry } from '../common/context-menu'
 import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
+import './window-menubar.css'
 
 type WindowMenuKind = 'file' | 'view' | 'window'
 
