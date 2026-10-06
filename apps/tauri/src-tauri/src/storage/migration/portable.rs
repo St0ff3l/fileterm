@@ -11,10 +11,7 @@ struct PortableMigrationReport {
 
 #[cfg(target_os = "windows")]
 fn migrate_portable_data_once(app: &AppHandle, current_dir: &Path) -> Result<(), AppError> {
-    let source_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| AppError::Storage(error.to_string()))?;
+    let source_dir = app_data_directory(app)?;
     crate::services::logging::debug(
         app,
         "storage",

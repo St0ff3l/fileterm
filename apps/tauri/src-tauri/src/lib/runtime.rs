@@ -70,9 +70,7 @@ pub fn run() {
             let portable_directory = portable_directory
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "<none>".to_string());
-            let app_data_directory = app
-                .path()
-                .app_data_dir()
+            let app_data_directory = crate::storage::app_data_directory(app.handle())
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|error| format!("<unavailable:{error}>"));
             match crate::storage::storage_root(app.handle()) {

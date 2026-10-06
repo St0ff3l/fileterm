@@ -111,6 +111,7 @@ kernel_name=$(uname -s 2>/dev/null)
 kernel_version=$(uname -r 2>/dev/null)
 architecture=$(uname -m 2>/dev/null)
 hostname_value=$(hostname 2>/dev/null)
+[ -n "$hostname_value" ] || hostname_value=$(uname -n 2>/dev/null)
 best_ip=""
 best_ip_rank=99
 rank_ip() {{
