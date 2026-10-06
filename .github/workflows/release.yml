@@ -467,7 +467,7 @@ jobs:
             exit 1
           fi
 
-          gh release create "${tag}" -R "${repo}" \
+          gh release create "${tag}" -R "${repo}" --title "${tag}" \
             "${release_flags[@]}" \
             "${notes_flags[@]}" \
             "${assets[@]}"

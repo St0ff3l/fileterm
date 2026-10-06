@@ -40,6 +40,17 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 推荐结构：中文正文、英文正文、GitHub 官方生成区。中文和英文都属于自定义正文，英文版本紧跟在中文版本后面；官方生成区必须由 GitHub 在最后追加。
 
+每份 Release 正文都要在中文版本简介之后、更新重点之前放置中英文安装指南的醒目链接徽章。GitHub Release 正文支持 Markdown，不支持自定义 HTML 按钮，因此使用可点击的 Shields 徽章实现按钮式入口；链接固定指向 `main` 上维护的安装指南：
+
+```md
+**安装指南 / Installation guides**
+
+[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md)
+[![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
+```
+
+撰写每个版本正文时，保留这两个徽章及目标链接。不要将它们替换为本地文件路径、短链接或特定版本的分支链接。README 也应保留中英文安装指南入口。
+
 以下标题属于固定格式，必须原样保留，不得改写成“相关 Pull Request”“本版本包含的主要 PR”或其他近义标题：中文使用 `### 本版本包含的主要 PR 和问题修复`、`### 反馈与支持`，英文使用 `### Main PRs and issues`、`### Feedback & Support`。
 
 `### 反馈与支持` 以及其下的两段中文正文、空行和链接组成一个逐字固定块，必须整体复制，不得改写、拆分、改成列表或替换链接：
@@ -55,6 +66,11 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 ## FileTerm <version>
 
 一句话版本简介。
+
+**安装指南 / Installation guides**
+
+[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md)
+[![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
 
 ### <version> 更新重点
 
@@ -142,11 +158,17 @@ git push origin "v$VERSION"
 
 ### 5. 保留 GitHub 官方生成内容
 
+#### Release title（硬性规则）
+
+GitHub Release 的 **Title 必须与 tag 完全一致，只写版本号**，例如 tag 为 `v2.2.26-beta.3` 时，Title 必须是 `v2.2.26-beta.3`。禁止在前面添加 `FileTerm`，也不要附加 `Release`、`Beta` 或其他说明。此规则只针对 GitHub Release 的 Title 输入框；正文标题仍按上面的双语模板书写。
+
+使用 `gh release create` 时显式传入 `--title "$TAG"`。自动发布 workflow 也应把 title 设为当前 tag；发布验收时确认 Release 页面显示的 title 与 tag 完全相同。
+
 发布 workflow 创建 Release 时必须同时传入自定义正文和 `--generate-notes`，使用仓库现有 workflow 的方式：
 
 ```bash
 gh release create "$TAG" \
-  --title "FileTerm ${VERSION}" \
+  --title "$TAG" \
   --notes "$(cat "docs/release-notes/release-notes-${VERSION}.md")" \
   --generate-notes \
   --prerelease
@@ -169,7 +191,7 @@ gh release view "v$VERSION"
 
 - `validate-release-tag` 通过。
 - macOS arm64、macOS x64、Windows、Linux 构建和上传均通过。
-- GitHub Release 存在，Beta/RC 标记为 prerelease。
+- GitHub Release 存在，Beta/RC 标记为 prerelease；Release title 与 tag 完全相同，只包含 `v<版本号>`。
 - 自定义正文存在，且其中的 Issues、PR、README、compare 链接可点击。
 - 自定义正文之后出现 GitHub 自动生成的 `What's Changed`、`New Contributors`、`Full Changelog`。
 - `Contributors` 区域由 GitHub 自动生成，能看到官方头像和贡献者内容。
