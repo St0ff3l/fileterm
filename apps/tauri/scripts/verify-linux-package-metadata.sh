@@ -46,7 +46,9 @@ package_paths=(
 )
 
 for package_path in "${package_paths[@]}"; do
-  if ! grep -Fq "./$package_path" <<< "$deb_files"; then
+  if ! awk -v package_path="$package_path" \
+    '$NF == package_path || $NF == ("./" package_path) { found = 1 } END { exit !found }' \
+    <<< "$deb_files"; then
     echo "DEB package is missing metadata file: $package_path" >&2
     echo "DEB package contents:" >&2
     printf '%s\n' "$deb_files" >&2
