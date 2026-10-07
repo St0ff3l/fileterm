@@ -117,6 +117,8 @@ FileTerm 的层级主要靠边界，不靠重装饰。
 
 圆角规则：
 
+- Linux 窗口外框不按发行版或 `.deb` / AppImage 包格式决定。Rust 通过 `XDG_CURRENT_DESKTOP`（空值时回退 `XDG_SESSION_DESKTOP`）与 `XDG_SESSION_TYPE` 给出保守策略，经 Tauri bridge 在 React 挂载前传入 renderer；主窗口和独立窗口共用 `--window-corner-radius`。
+- 仅明确的 GNOME Wayland 会话沿用 `15px` 外框圆角（桌面标识只接受 GNOME 及 Ubuntu/Pop 前缀）；LXQt、KDE、Xfce、X11/远程桌面和未知环境使用直角。最大化窗口始终直角。此策略不是对系统主题实际圆角或合成器能力的探测，环境变量缺失或 IPC 失败时回退直角；内部按钮、卡片圆角不受影响。
 - 工具按钮：4-6px。
 - 输入框、选择器、小弹层：6-8px。
 - Overview、最近连接和统计入口可以使用 8-12px 圆角卡片，用来提供欢迎页的停靠感和点击热区。

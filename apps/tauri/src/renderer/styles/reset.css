@@ -46,15 +46,12 @@ html[data-platform='linux'].tauri-standalone-window #root {
   border-radius: var(--window-corner-radius);
 }
 
-/* Linux native window rounding support */
+/* Linux roots expose the native surface; the desktop policy in foundations.css
+ * determines whether the renderer clips rounded or square window edges. */
 html[data-platform='linux'],
 html[data-platform='linux'] body,
 html[data-platform='linux'] #root {
   background: transparent !important;
-}
-
-html[data-platform='linux'] {
-  --window-corner-radius: 15px;
 }
 
 html[data-platform='linux'] #root {

@@ -76,6 +76,9 @@ void createTauriApi()
     // placeholder version, architecture, or platform fields.
     window.fileterm = api
     document.documentElement.dataset.platform = resolveRendererPlatform(api.platform)
+    if (api.platform === 'linux') {
+      document.documentElement.dataset.linuxWindowCorners = api.linuxWindowCornerStyle ?? 'square'
+    }
 
     // Read durable UI preferences before mounting React. App state is then
     // initialized from the saved values instead of briefly using defaults and

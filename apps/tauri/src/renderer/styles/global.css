@@ -33,20 +33,15 @@ html[data-platform='linux'].tauri-standalone-window #root {
   border-radius: var(--window-corner-radius);
 }
 
-/* GNOME/libadwaita uses a 15px window radius. The Linux main window owns its
- * chrome, so the native surface must stay transparent for the compositor to
- * see the rounded renderer edge. Maximized windows intentionally return to a
- * square edge because they touch the monitor bounds. */
+/* Window radius is selected by the native desktop/session policy through
+ * foundations.css. Transparent roots allow rounded-capable sessions to expose
+ * the native surface; square sessions paint the entire renderer frame. */
 html[data-platform='linux'],
 html[data-platform='linux'] body,
 html[data-platform='linux'] #root {
   /* Theme skins also color these three roots. They sit behind the clipped
    * fs-shell, so any opaque color becomes visible as square corner wedges. */
   background: transparent !important;
-}
-
-html[data-platform='linux'] {
-  --window-corner-radius: 15px;
 }
 
 html[data-platform='linux'] #root {
