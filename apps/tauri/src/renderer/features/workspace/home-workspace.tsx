@@ -16,6 +16,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { ThemeMode } from '../../app/theme-config'
 import { t } from '../../i18n'
 import { resolveRendererPlatform } from '../../lib/renderer-platform'
+import { useExternalUrl } from '../../hooks/use-external-url'
+import { FeedbackText } from '../common/feedback-text'
 import { AppIcon } from '../common/app-icon'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { PortableUpdateDialog } from '../common/portable-update-dialog'
@@ -175,6 +177,7 @@ export function HomeWorkspace({
   }
 
   const desktopApi = window.fileterm
+  const { openExternalUrl, externalUrlError } = useExternalUrl(desktopApi, t.openExternalUrlFailed)
   // Keep Linux on the same compact home-shell layout as Windows. macOS keeps
   // its sidebar wordmark because it has native traffic lights above it.
   const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
@@ -218,7 +221,7 @@ export function HomeWorkspace({
 
   const handleOpenDocs = () => {
     if (desktopApi) {
-      void desktopApi.openExternalUrl('https://github.com/St0ff3l/fileterm')
+      void openExternalUrl('https://github.com/St0ff3l/fileterm')
     }
   }
 
@@ -228,7 +231,7 @@ export function HomeWorkspace({
         if (updateStatus.isPortable) {
           setPortableUpdateDialogOpen(true)
         } else {
-          void desktopApi?.openExternalUrl(updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
+          void openExternalUrl(updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
         }
       } else {
         void desktopApi?.downloadUpdate()
@@ -377,6 +380,7 @@ export function HomeWorkspace({
               <span>{updateHint.label}</span>
             </button>
           ) : null}
+          <FeedbackText message={externalUrlError} tone="error" />
         </div>
         <div
           aria-label={t.resizeSidebar}
@@ -597,7 +601,7 @@ export function HomeWorkspace({
           onClose={() => setPortableUpdateDialogOpen(false)}
           onOpenReleasePage={() => {
             if (import.meta.env.DEV && !updateStatus?.isPortable) return
-            void desktopApi?.openExternalUrl(updateStatus?.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
+            void openExternalUrl(updateStatus?.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
           }}
         />
       ) : null}

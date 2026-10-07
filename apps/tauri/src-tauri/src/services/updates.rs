@@ -441,7 +441,7 @@ pub async fn open_release_page(app: &AppHandle) -> Result<(), AppError> {
         .get("releaseUrl")
         .and_then(serde_json::Value::as_str)
         .unwrap_or(LATEST_RELEASE_PAGE);
-    let result = open::that(url).map_err(|error| AppError::Command(error.to_string()));
+    let result = super::external_links::open_url(app, url).await;
     match &result {
         Ok(()) => crate::services::logging::info(app, "update", "release page opened"),
         Err(error) => crate::services::logging::error(

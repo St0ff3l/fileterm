@@ -23,7 +23,33 @@ if [[ "$actual_deb_arch" != "$expected_deb_arch" ]]; then
   exit 1
 fi
 deb_requires="$(dpkg-deb -f "$deb_file" Depends)"
-if [[ "$deb_requires" != *libssl3* ]]; then
+deb_files="$(dpkg-deb --contents "$deb_file")"
+if [[ "$deb_requires" != *xdg-utils* ]]; then
+  echo "DEB package is missing the external URL launcher dependency: $deb_requires" >&2
+  exit 1
+fi
+
+if [[ "$expected_deb_arch" == amd64 ]] && awk \
+  -v package_path='usr/lib/fileterm/runtime/fileterm' \
+  '$NF == package_path || $NF == ("./" package_path) { found = 1 } END { exit !found }' \
+  <<< "$deb_files"; then
+  if [[ "$deb_requires" != *"libc6 (>= 2.31)"* ]]; then
+    echo "Universal amd64 DEB must support Debian 11's glibc baseline: $deb_requires" >&2
+    exit 1
+  fi
+  for required_path in \
+    usr/lib/fileterm/fileterm \
+    usr/lib/fileterm/runtime/fileterm \
+    usr/lib/fileterm/runtime/ld-linux-x86-64.so.2 \
+    usr/share/doc/file-term/private-runtime/runtime-packages.tsv; do
+    if ! awk -v package_path="$required_path" \
+      '$NF == package_path || $NF == ("./" package_path) { found = 1 } END { exit !found }' \
+      <<< "$deb_files"; then
+      echo "Universal amd64 DEB is missing runtime content: $required_path" >&2
+      exit 1
+    fi
+  done
+elif [[ "$deb_requires" != *libssl3* ]]; then
   echo "DEB package is missing the OpenSSL runtime dependency: $deb_requires" >&2
   exit 1
 fi
@@ -34,7 +60,6 @@ if [[ "$actual_rpm_arch" != "$expected_rpm_arch" ]]; then
   exit 1
 fi
 
-deb_files="$(dpkg-deb --contents "$deb_file")"
 rpm_files="$(rpm -qpl "$rpm_file")"
 package_paths=(
   usr/share/applications/FileTerm.desktop
@@ -64,6 +89,7 @@ done
 
 rpm_requires="$(rpm -qpR "$rpm_file")"
 for dependency in \
+  'xdg-utils' \
   'libwebkit2gtk-4.1.so.0()(64bit)' \
   'libgtk-3.so.0()(64bit)' \
   'libayatana-appindicator3.so.1()(64bit)' \

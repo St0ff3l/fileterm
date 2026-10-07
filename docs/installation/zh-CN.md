@@ -55,7 +55,7 @@ FileTerm 的 macOS 更新检查会打开 GitHub Releases 页面。下载对应�
 | `.rpm`         | Fedora、openSUSE 等能提供所需运行库的 RPM 发行版   | Fedora：`sudo dnf install ./FileTerm-<版本>-linux-<架构>.rpm`；openSUSE：`sudo zypper install ./FileTerm-<版本>-linux-<架构>.rpm` |
 | `.pkg.tar.zst` | x86_64 的 Arch Linux 系；aarch64 的 Arch Linux ARM | `sudo pacman -U ./FileTerm-<版本>-linux-<架构>.pkg.tar.zst`                                                                       |
 
-`.deb`、`.rpm` 和 Pacman 包会在包信息中声明运行时依赖，由系统包管理器从已启用的软件源安装。RPM 包要求发行版提供 WebKitGTK 4.1 和 OpenSSL 3；若软件源没有这些依赖，包管理器无法完成安装。AppImage 随包提供所需的运行库，但仍依赖与 Ubuntu 22.04 构建基线兼容的系统 glibc。
+x86_64 `.deb` 内含 Debian 11 兼容运行库，并会在系统运行库可用时自动使用系统版本。通过 APT 升级 `.deb` 时，私有运行库会随 FileTerm 一起更新。arm64 `.deb` 使用系统运行库，要求 Debian 12 或更新版本。RPM 和 Pacman 包使用系统运行库；RPM 要求发行版提供 WebKitGTK 4.1 和 OpenSSL 3。AppImage 随包提供所需的运行库，但仍依赖与 Ubuntu 22.04 构建基线兼容的系统 glibc。
 
 Arch Linux 官方发行版目前使用 x86_64 包；aarch64 包面向独立的 Arch Linux ARM 发行版。请勿把 ARM 包安装到 x86_64 系统，或反过来。
 
@@ -69,6 +69,8 @@ chmod +x FileTerm-<版本>-linux-x86_64.AppImage
 将文件名中的 `x86_64` 换成 `arm64`，即可运行 ARM64 版本。Release 中的 `.zsync` 文件可供 AppImageUpdate 等工具执行差量更新。Linux 应用内“检查更新”会打开 GitHub Releases 页面；DEB、RPM 和 Pacman 用户下载匹配的新版本后，使用相同包管理器命令升级。
 
 ## 更新与帮助
+
+若 Arch + LXQt 中“打开下载页面”或更新提示无法启动浏览器，先运行 `sudo pacman -S --needed xdg-utils qtxdg-tools`，然后用 `xdg-open https://github.com/St0ff3l/fileterm/releases` 检查系统链接打开能力。若仍然失败，请在 LXQt 的默认应用设置中关联 HTTP/HTTPS 浏览器，并保留终端错误信息。FileTerm 的链接打开失败也会写入应用日志。
 
 - Windows 安装版使用签名的应用内更新；按提示重启即可完成更新。
 - macOS 与 Linux 可在应用内打开 GitHub Releases 页面，下载匹配架构的新版本。

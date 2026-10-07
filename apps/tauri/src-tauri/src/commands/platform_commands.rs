@@ -511,21 +511,13 @@ pub fn app_write_clipboard_text(text: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn app_open_external_url(url: String) -> Result<(), AppError> {
+pub async fn app_open_external_url(app: AppHandle, url: String) -> Result<(), AppError> {
     let parsed = validate_external_url(&url)?;
-    open::that(parsed.as_str()).map_err(|error| AppError::Command(error.to_string()))
+    crate::services::external_links::open_url(&app, parsed.as_str()).await
 }
 
 fn validate_external_url(url: &str) -> Result<url::Url, AppError> {
-    let parsed = url::Url::parse(url)
-        .map_err(|error| AppError::Command(format!("外部链接无效: {error}")))?;
-    if matches!(parsed.scheme(), "http" | "https") {
-        Ok(parsed)
-    } else {
-        Err(AppError::Command(
-            "仅允许打开 http 或 https 外部链接".to_string(),
-        ))
-    }
+    crate::services::external_links::validate_url(url)
 }
 
 #[tauri::command]

@@ -46,6 +46,17 @@ for entry in "x86_64:x86_64" "arm64:aarch64"; do
 
   mkdir -p "$build_dir/stage"
   dpkg-deb --extract "$deb_file" "$build_dir/stage"
+  if [[ "$asset_arch" == "x86_64" ]]; then
+    # The universal amd64 DEB includes a private Debian 11 compatibility
+    # runtime. Arch already declares the native WebKitGTK/OpenSSL dependencies.
+    rm -rf -- "$build_dir/stage/usr/lib/fileterm/runtime"
+    rm -rf -- "$build_dir/stage/usr/share/doc/file-term/private-runtime"
+    cat > "$build_dir/stage/usr/bin/fileterm" <<'EOF'
+#!/bin/sh
+exec /usr/lib/fileterm/fileterm "$@"
+EOF
+    chmod 755 "$build_dir/stage/usr/bin/fileterm"
+  fi
   for required_file in \
     usr/bin/fileterm \
     usr/share/applications/FileTerm.desktop \
@@ -57,6 +68,10 @@ for entry in "x86_64:x86_64" "arm64:aarch64"; do
       exit 1
     fi
   done
+  if [[ "$asset_arch" == "x86_64" && -e "$build_dir/stage/usr/lib/fileterm/runtime" ]]; then
+    echo "Arch package must not contain the private Debian compatibility runtime." >&2
+    exit 1
+  fi
   cp "$repo_root/apps/tauri/packaging/arch/PKGBUILD" "$build_dir/PKGBUILD"
 done
 
@@ -94,9 +109,14 @@ docker run --rm \
       grep -Fqx "depend = webkit2gtk-4.1" <<< "$pkginfo"
       grep -Fqx "depend = libayatana-appindicator" <<< "$pkginfo"
       grep -Fqx "depend = openssl" <<< "$pkginfo"
+      grep -Fqx "depend = xdg-utils" <<< "$pkginfo"
       tar --zstd -tf "$package_file" | grep -Fxq "usr/bin/fileterm"
       tar --zstd -tf "$package_file" | grep -Fxq "usr/share/metainfo/com.fileterm.desktop.metainfo.xml"
       tar --zstd -tf "$package_file" | grep -Fxq "usr/share/licenses/file-term/LICENSE"
+      if [[ "$asset_arch" == "x86_64" ]] && tar --zstd -tf "$package_file" | grep -q '^usr/lib/fileterm/runtime/'; then
+        echo "Arch package unexpectedly contains the Debian private runtime." >&2
+        exit 1
+      fi
     done
   '
 

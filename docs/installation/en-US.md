@@ -55,7 +55,7 @@ FileTerm's macOS update check opens GitHub Releases. Download the DMG for your a
 | `.rpm`         | Fedora, openSUSE, and other RPM distributions that provide the required runtime libraries | Fedora: `sudo dnf install ./FileTerm-<version>-linux-<arch>.rpm`; openSUSE: `sudo zypper install ./FileTerm-<version>-linux-<arch>.rpm` |
 | `.pkg.tar.zst` | Arch Linux derivatives on x86_64; Arch Linux ARM on aarch64                               | `sudo pacman -U ./FileTerm-<version>-linux-<arch>.pkg.tar.zst`                                                                          |
 
-The `.deb`, `.rpm`, and Pacman packages declare runtime dependencies in their package metadata. The system package manager installs those dependencies from enabled repositories. The RPM requires a distribution that provides WebKitGTK 4.1 and OpenSSL 3; installation cannot complete if those dependencies are unavailable in your repositories. The AppImage includes its runtime libraries but still requires host glibc compatible with the Ubuntu 22.04 build baseline.
+The x86_64 `.deb` includes a compatibility runtime for Debian 11 and selects the system runtime automatically when available. Its private runtime is updated together with FileTerm when you upgrade the `.deb` through APT. The arm64 `.deb` uses system libraries and requires Debian 12 or newer. RPM and Pacman packages use system libraries; the RPM requires a distribution that provides WebKitGTK 4.1 and OpenSSL 3. The AppImage includes its runtime libraries but still requires host glibc compatible with the Ubuntu 22.04 build baseline.
 
 The official Arch Linux distribution currently uses the x86_64 package. The aarch64 package is for the separate Arch Linux ARM distribution. Do not install the ARM package on an x86_64 system or vice versa.
 
@@ -69,6 +69,8 @@ chmod +x FileTerm-<version>-linux-x86_64.AppImage
 Replace `x86_64` in the filename with `arm64` to run the ARM64 build. The `.zsync` sidecar in Releases can be used by AppImageUpdate and similar tools for differential updates. The Linux in-app update check opens GitHub Releases. To update a DEB, RPM, or Pacman installation, download the matching package and use the same package-manager command.
 
 ## Updates and Support
+
+If the download-page button or update hint cannot launch a browser on Arch + LXQt, run `sudo pacman -S --needed xdg-utils qtxdg-tools`, then test the system launcher with `xdg-open https://github.com/St0ff3l/fileterm/releases`. If it still fails, configure the HTTP/HTTPS browser association in LXQt's default application settings and retain the terminal error. FileTerm also records link-launch failures in its application log.
 
 - Windows installer builds use signed in-app updates. Restart when prompted to finish updating.
 - On macOS and Linux, the in-app update check opens GitHub Releases so you can download the package for your architecture.

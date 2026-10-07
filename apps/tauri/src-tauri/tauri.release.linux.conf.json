@@ -40,7 +40,7 @@
       "deb": {
         "section": "utils",
         "priority": "optional",
-        "depends": ["libssl3 | libssl3t64"],
+        "depends": ["libssl3 | libssl3t64", "xdg-utils"],
         "files": {
           "/usr/share/applications/FileTerm.desktop": "linux/FileTerm.desktop",
           "/usr/share/applications/com.fileterm.desktop.desktop": "linux/com.fileterm.desktop.desktop",
@@ -52,6 +52,7 @@
       },
       "rpm": {
         "depends": [
+          "xdg-utils",
           "libwebkit2gtk-4.1.so.0()(64bit)",
           "libgtk-3.so.0()(64bit)",
           "libayatana-appindicator3.so.1()(64bit)",
