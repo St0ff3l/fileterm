@@ -14,7 +14,7 @@
 
 ### 本版本包含的主要 PR 和问题修复
 
-- 待合并 PR 链接将在 beta8 发布前补入。
+- [PR #299](https://github.com/St0ff3l/fileterm/pull/299)：修复 Linux 外部链接启动，并为同一个 x86_64 `.deb` 增加 Debian 11 兼容运行库回退。
 
 完整变更记录请查看 [v2.2.26-beta.7 与 v2.2.26-beta.8 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.26-beta.7...v2.2.26-beta.8)。
 
@@ -41,7 +41,7 @@ This beta fixes Linux external links and makes the x86_64 Debian installer autom
 
 ### Main PRs and issues
 
-- The merged pull request link will be added before the beta8 release.
+- [PR #299](https://github.com/St0ff3l/fileterm/pull/299): Fixes Linux external-link launching and adds a Debian 11 compatibility-runtime fallback to the same x86_64 `.deb`.
 
 See the [comparison between v2.2.26-beta.7 and v2.2.26-beta.8](https://github.com/St0ff3l/fileterm/compare/v2.2.26-beta.7...v2.2.26-beta.8) for the complete change set.
 
