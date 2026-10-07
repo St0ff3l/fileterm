@@ -485,6 +485,31 @@ mod reconnect_tests {
 }
 
 #[cfg(test)]
+mod linux_window_corner_tests {
+    use super::resolve_linux_window_corner_style;
+
+    #[test]
+    fn square_desktops_and_remote_sessions_do_not_require_alpha_compositing() {
+        for desktop in ["LXQt", "LXQt:labwc", "LXQt:GNOME", "KDE", "XFCE", "", "gnome-classic"] {
+            for session in ["wayland", "x11", ""] {
+                assert_eq!(resolve_linux_window_corner_style(desktop, session), "square");
+            }
+        }
+        for session in ["x11", "", "unknown"] {
+            assert_eq!(resolve_linux_window_corner_style("GNOME", session), "square");
+        }
+    }
+
+    #[test]
+    fn only_explicit_gnome_wayland_sessions_keep_the_rounded_policy() {
+        for desktop in ["GNOME", "ubuntu:GNOME", "pop:GNOME", " gNoMe "] {
+            assert_eq!(resolve_linux_window_corner_style(desktop, " Wayland "), "rounded");
+        }
+        assert_eq!(resolve_linux_window_corner_style("my-gnome", "wayland"), "square");
+    }
+}
+
+#[cfg(test)]
 mod architecture_tests {
     use super::resolve_native_arch;
 

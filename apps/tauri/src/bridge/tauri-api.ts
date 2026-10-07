@@ -1,6 +1,6 @@
 import { subscribe, subscribeReady } from './events/subscriptions'
 import { Channel, invoke } from '@tauri-apps/api/core'
-import { getName, getVersion } from '@tauri-apps/api/app'
+import { getRuntimeMetadata } from './runtime-metadata'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
   AppUpdateStatus,
@@ -275,12 +275,6 @@ function takeNativeDropPaths(files: File[]) {
   return []
 }
 
-function normalizePlatform(value: string) {
-  if (value === 'macos' || value === 'darwin') return 'darwin'
-  if (value === 'windows' || value === 'win32') return 'win32'
-  return 'linux'
-}
-
 function notifyLocalSecuritySettingsListeners(settings: SecuritySettings) {
   for (const listener of [...securitySettingsListeners]) {
     try {
@@ -306,20 +300,10 @@ function subscribeSecuritySettings(listener: (settings: SecuritySettings) => voi
 }
 
 export async function createTauriApi(): Promise<FileTermDesktopApi> {
-  const [nativePlatform, arch, runtimeVersion, appVersion, appName] = await Promise.all([
-    invoke<string>('app_get_platform'),
-    invoke<string>('app_get_arch'),
-    invoke<string>('app_get_runtime_version'),
-    getVersion(),
-    getName()
-  ])
+  const metadata = await getRuntimeMetadata()
   const api = {
-    platform: normalizePlatform(nativePlatform),
-    arch,
-    appVersion,
-    appName,
+    ...metadata,
     runtimeName: 'Tauri',
-    runtimeVersion,
     isDesktop: true,
     getUpdateStatus: () => invoke<AppUpdateStatus>('app_get_update_status'),
     checkForUpdates: () => invoke<AppUpdateStatus>('app_check_for_updates'),

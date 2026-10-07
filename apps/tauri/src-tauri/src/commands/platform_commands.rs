@@ -4,6 +4,42 @@ pub fn app_get_platform() -> String {
     std::env::consts::OS.to_string()
 }
 
+// This is a conservative visual policy, not a probe of the compositor's
+// actual corner radius. X11 (including remote desktops) may lack alpha
+// compositing, and non-GNOME desktops use their own window themes.
+fn resolve_linux_window_corner_style(desktop: &str, session_type: &str) -> &'static str {
+    let desktops: Vec<_> = desktop
+        .split(':')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect();
+    if session_type.trim().eq_ignore_ascii_case("wayland")
+        && desktops.iter().any(|value| value == "gnome")
+        && desktops
+            .iter()
+            .all(|value| matches!(value.as_str(), "gnome" | "ubuntu" | "pop"))
+    {
+        "rounded"
+    } else {
+        "square"
+    }
+}
+
+#[tauri::command]
+pub fn app_get_linux_window_corner_style() -> &'static str {
+    if !cfg!(target_os = "linux") {
+        return "square";
+    }
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| std::env::var("XDG_SESSION_DESKTOP").ok())
+        .unwrap_or_default();
+    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
+    resolve_linux_window_corner_style(&desktop, &session_type)
+}
+
 fn shell_quote_path(path: &std::path::Path) -> String {
     quote_executable_argument(&path.to_string_lossy(), cfg!(target_os = "windows"))
 }

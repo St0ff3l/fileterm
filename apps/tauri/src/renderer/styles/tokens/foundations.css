@@ -67,3 +67,17 @@
   --transition-normal: 0.15s ease;
   --transition-slow: 0.25s ease;
 }
+
+/* Linux window themes are desktop-specific. Unknown/X11 sessions stay square
+ * so a missing alpha compositor cannot expose black corner wedges. */
+:root[data-platform='linux'] {
+  --window-corner-radius: 0px;
+}
+
+:root[data-platform='linux'][data-linux-window-corners='rounded'] {
+  --window-corner-radius: 15px;
+}
+
+:root[data-platform='linux'][data-window-maximized='true'] {
+  --window-corner-radius: 0px;
+}

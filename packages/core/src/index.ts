@@ -2526,8 +2526,12 @@ export interface SerialPortInfo {
   productId?: number
 }
 
+export type LinuxWindowCornerStyle = 'square' | 'rounded'
+
 export interface FileTermDesktopApi {
   platform: string
+  /** Conservative native desktop/session policy; absent metadata means square on Linux. */
+  linuxWindowCornerStyle?: LinuxWindowCornerStyle
   arch: string
   appVersion: string
   appName: string
