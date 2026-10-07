@@ -40,16 +40,15 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 推荐结构：中文正文、英文正文、GitHub 官方生成区。中文和英文都属于自定义正文，英文版本紧跟在中文版本后面；官方生成区必须由 GitHub 在最后追加。
 
-每份 Release 正文都要在中文版本简介之后、更新重点之前放置中英文安装指南的醒目链接徽章。GitHub Release 正文支持 Markdown，不支持自定义 HTML 按钮，因此使用可点击的 Shields 徽章实现按钮式入口；链接固定指向 `main` 上维护的安装指南：
+每份 Release 正文都要在中文版本简介之后、更新重点之前放置中英文安装指南的醒目链接徽章；英文版本也要在英文简介之后、Highlights 之前重复这组入口。GitHub Release 正文支持 Markdown，不支持自定义 HTML 按钮，因此使用可点击的 Shields 徽章实现按钮式入口；两枚徽章必须写在同一行、同一段落，中间留一个空格，让它们并排显示。两枚徽章统一使用中性深灰标签和标准 GitHub 蓝 `#0969DA`，避免高饱和亮蓝，链接固定指向 `main` 上维护的安装指南：
 
 ```md
 **安装指南 / Installation guides**
 
-[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md)
-[![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
+[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md) [![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
 ```
 
-撰写每个版本正文时，保留这两个徽章及目标链接。不要将它们替换为本地文件路径、短链接或特定版本的分支链接。README 也应保留中英文安装指南入口。
+撰写每个版本正文时，保留这两个并排徽章及目标链接。不要将它们拆到两行、替换为本地文件路径、短链接或特定版本的分支链接。README 也应保留中英文安装指南入口。
 
 以下标题属于固定格式，必须原样保留，不得改写成“相关 Pull Request”“本版本包含的主要 PR”或其他近义标题：中文使用 `### 本版本包含的主要 PR 和问题修复`、`### 反馈与支持`，英文使用 `### Main PRs and issues`、`### Feedback & Support`。
 
@@ -69,8 +68,7 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 **安装指南 / Installation guides**
 
-[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md)
-[![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-1677FF?style=for-the-badge)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
+[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md) [![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
 
 ### <version> 更新重点
 
@@ -95,6 +93,10 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 ## FileTerm <version>
 
 One-sentence release summary in English.
+
+**Installation guides / 安装指南**
+
+[![Simplified Chinese Installation Guide](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md) [![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
 
 ### Highlights
 
