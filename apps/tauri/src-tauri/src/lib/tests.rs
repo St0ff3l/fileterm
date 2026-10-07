@@ -3,8 +3,8 @@ mod tests {
     use super::{
         application_quit_accelerator, center_child_window_position,
         child_window_should_be_transparent, tray_icon_should_be_template, tray_menu_action,
-        tray_menu_labels, FileEditorCloseRegistry, QuitPreparationRegistry, TrayMenuAction,
-        WindowMenuKind,
+        tray_menu_labels, should_restore_main_window_before_close_request,
+        FileEditorCloseRegistry, QuitPreparationRegistry, TrayMenuAction, WindowMenuKind,
     };
     use tauri::{PhysicalPosition, PhysicalSize};
 
@@ -55,6 +55,22 @@ mod tests {
         assert_eq!(application_quit_accelerator("macos"), "Cmd+Q");
         assert_eq!(application_quit_accelerator("windows"), "Alt+F4");
         assert_eq!(application_quit_accelerator("linux"), "Alt+F4");
+    }
+
+    #[test]
+    fn restores_hidden_or_minimized_window_before_close_confirmation() {
+        assert!(should_restore_main_window_before_close_request(
+            false, true, true
+        ));
+        assert!(should_restore_main_window_before_close_request(
+            false, false, false
+        ));
+        assert!(should_restore_main_window_before_close_request(
+            true, true, false
+        ));
+        assert!(!should_restore_main_window_before_close_request(
+            false, true, false
+        ));
     }
 
     #[test]
