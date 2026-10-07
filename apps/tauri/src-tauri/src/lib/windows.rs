@@ -277,15 +277,30 @@ fn toggle_main_window_visibility(app: &AppHandle<Wry>) {
     }
 }
 
+fn should_restore_main_window_before_close_request(
+    is_quit: bool,
+    is_visible: bool,
+    is_minimized: bool,
+) -> bool {
+    is_quit || !is_visible || is_minimized
+}
+
 pub(crate) fn request_main_window_close(app: &AppHandle<Wry>, is_quit: bool) {
-    if is_quit {
-        // A tray action can arrive while every FileTerm window is hidden. The
-        // renderer owns the quit confirmation and dirty-editor prompts, so
-        // make those surfaces visible before emitting the request instead of
-        // leaving a modal active in an invisible WebView.
-        show_main_window(app);
-    }
     if let Some(window) = app.get_webview_window("main") {
+        // Desktop shells can send CloseRequested to an iconified window. We
+        // cancel native close so the renderer can ask whether to hide or quit;
+        // restore first so that confirmation is visible without another click.
+        if should_restore_main_window_before_close_request(
+            is_quit,
+            window.is_visible().unwrap_or(true),
+            window.is_minimized().unwrap_or(false),
+        ) {
+            // A tray action can arrive while every FileTerm window is hidden.
+            // Restoring the app also brings back any child surfaces hidden
+            // with the main window before their renderer-owned prompts run.
+            show_main_window(app);
+        }
+
         if let Err(error) = window.emit(
             "app:window-close-request",
             serde_json::json!({ "isQuit": is_quit }),
