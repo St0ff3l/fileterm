@@ -84,8 +84,8 @@ jobs:
             debian:bullseye-slim bash -euc '
               export DEBIAN_FRONTEND=noninteractive
               printf "%s\n" \
-                "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260903T220410Z bullseye main" \
-                "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260903T220410Z bullseye-security main" \
+                "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260903T220410Z bullseye main" \
+                "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260903T220410Z bullseye-security main" \
                 > /etc/apt/sources.list
               rm -f /etc/apt/sources.list.d/*
               apt-get update
