@@ -2,6 +2,9 @@ name: Linux package test
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - 'beta/**'
@@ -51,6 +54,54 @@ jobs:
       - name: Package Linux deb
         run: npm run release:linux -w @fileterm/tauri
 
+      - name: Build and smoke-test the universal Debian 11 installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          deb_file="$(find "$bundle_root/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb_file"
+          version="$(dpkg-deb -f "$deb_file" Version)"
+          output_dir="$bundle_root/deb/universal-output"
+          mkdir -p "$output_dir"
+          docker run --rm --platform linux/amd64 \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            ubuntu:22.04 bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
+                libssl3 libgl1-mesa-dri patchelf python3
+              python3 apps/tauri/scripts/build-universal-deb.py "$1" "$2"
+            ' _ "$GITHUB_WORKSPACE/$deb_file" "$GITHUB_WORKSPACE/$output_dir"
+          universal_deb="$output_dir/FileTerm-${version}-linux-x86_64.deb"
+          test -f "$universal_deb"
+          mv "$universal_deb" "$deb_file"
+
+          docker run --rm --platform linux/amd64 \
+            --volume "$GITHUB_WORKSPACE/$deb_file:/tmp/fileterm.deb:ro" \
+            debian:bullseye-slim bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends /tmp/fileterm.deb
+              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
+              grep -Fq "+ exec /usr/lib/fileterm/runtime/fileterm --help" <<< "$trace"
+              ! dpkg-query --show libwebkit2gtk-4.1-0 >/dev/null 2>&1
+              dpkg -V file-term
+            '
+
+          docker run --rm --platform linux/amd64 \
+            --volume "$GITHUB_WORKSPACE/$deb_file:/tmp/fileterm.deb:ro" \
+            ubuntu:22.04 bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends /tmp/fileterm.deb
+              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
+              grep -Fq "+ exec /usr/lib/fileterm/fileterm --help" <<< "$trace"
+              dpkg -V file-term
+            '
+
       - name: Verify and collect Debian installer
         shell: bash
         run: |
@@ -61,7 +112,7 @@ jobs:
           dpkg-deb --info "$deb_file"
           mkdir -p artifacts
           dpkg-deb --contents "$deb_file" > artifacts/FileTerm-linux-x86_64.contents.txt
-          cp "$deb_file" artifacts/FileTerm-linux-x86_64.deb
+          cp "$deb_file" "artifacts/FileTerm-$(dpkg-deb -f "$deb_file" Version)-linux-x86_64.deb"
           dpkg-deb --fsys-tarfile "$deb_file" | tar -xOf - usr/share/applications/FileTerm.desktop > artifacts/FileTerm.desktop
           dpkg-deb --fsys-tarfile "$deb_file" | tar -xOf - usr/share/applications/com.fileterm.desktop.desktop > artifacts/com.fileterm.desktop.desktop
           grep -qx 'Icon=fileterm' artifacts/FileTerm.desktop artifacts/com.fileterm.desktop.desktop

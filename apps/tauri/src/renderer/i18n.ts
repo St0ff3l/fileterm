@@ -1688,6 +1688,7 @@ const zhCN = {
   updateAvailableShort: '更新 v{version}',
   downloadUpdate: '下载更新',
   openReleasePage: '打开下载页面',
+  openExternalUrlFailed: '无法打开浏览器',
   portableUpdateTitle: '更新 Windows 便携版',
   portableUpdateDescription:
     '请下载与当前设备架构匹配的 Windows portable `.exe`。退出 FileTerm 后，将新文件替换到当前便携版目录；请保留 config/ 文件夹。',
@@ -3744,6 +3745,7 @@ const enUS: typeof zhCN = {
   updateAvailableShort: 'Update v{version}',
   downloadUpdate: 'Download update',
   openReleasePage: 'Open download page',
+  openExternalUrlFailed: 'Could not open browser',
   portableUpdateTitle: 'Update the Windows portable build',
   portableUpdateDescription:
     'Download the Windows portable `.exe` matching this device architecture. After quitting FileTerm, replace the executable in the current portable folder and keep the config/ folder.',

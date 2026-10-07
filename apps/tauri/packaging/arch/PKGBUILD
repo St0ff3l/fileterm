@@ -10,6 +10,7 @@ depends=(
   'webkit2gtk-4.1'
   'libayatana-appindicator'
   'openssl'
+  'xdg-utils'
 )
 options=('!strip' '!debug')
 source=()

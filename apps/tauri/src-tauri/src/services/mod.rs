@@ -5,6 +5,7 @@ pub mod backup_crypto;
 pub mod backup_prompt;
 pub mod connection_operations;
 pub mod connections;
+pub mod external_links;
 pub mod fonts;
 pub mod logging;
 pub mod mcp;

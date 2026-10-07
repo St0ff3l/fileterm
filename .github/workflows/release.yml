@@ -341,6 +341,69 @@ jobs:
           test -n "$appimage_file"
           mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.AppImage"
 
+      - name: Build Debian 11 compatible universal amd64 DEB
+        if: matrix.arch == 'x86_64'
+        shell: bash
+        env:
+          LINUX_TARGET: ${{ matrix.target }}
+          LINUX_ASSET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          bundle_root="apps/tauri/src-tauri/target/${LINUX_TARGET}/release/bundle"
+          version="${GITHUB_REF_NAME#v}"
+          deb_file="$bundle_root/deb/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.deb"
+          output_dir="$bundle_root/deb/universal-output"
+          mkdir -p "$output_dir"
+
+          docker run --rm --platform linux/amd64 \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            ubuntu:22.04 bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
+                libssl3 libgl1-mesa-dri patchelf python3
+              python3 apps/tauri/scripts/build-universal-deb.py \
+                "$1" "$2"
+            ' _ "$GITHUB_WORKSPACE/$deb_file" "$GITHUB_WORKSPACE/$output_dir"
+
+          cp "$output_dir/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.deb" "$deb_file"
+
+      - name: Install and smoke-test the universal DEB on Debian 11
+        if: matrix.arch == 'x86_64'
+        shell: bash
+        env:
+          LINUX_TARGET: ${{ matrix.target }}
+          LINUX_ASSET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          deb_file="${GITHUB_WORKSPACE}/apps/tauri/src-tauri/target/${LINUX_TARGET}/release/bundle/deb/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.deb"
+
+          docker run --rm --platform linux/amd64 \
+            --volume "$deb_file:/tmp/fileterm.deb:ro" \
+            debian:bullseye-slim bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends /tmp/fileterm.deb
+              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
+              grep -Fq "+ exec /usr/lib/fileterm/runtime/fileterm --help" <<< "$trace"
+              ! dpkg-query --show libwebkit2gtk-4.1-0 >/dev/null 2>&1
+              dpkg -V file-term
+            '
+
+          docker run --rm --platform linux/amd64 \
+            --volume "$deb_file:/tmp/fileterm.deb:ro" \
+            ubuntu:22.04 bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends /tmp/fileterm.deb
+              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
+              grep -Fq "+ exec /usr/lib/fileterm/fileterm --help" <<< "$trace"
+              dpkg -V file-term
+            '
+
       - name: Prepare AppImage permissions and delta updates
         shell: bash
         env:

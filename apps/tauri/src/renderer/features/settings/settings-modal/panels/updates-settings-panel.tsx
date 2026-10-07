@@ -1,5 +1,7 @@
 import type { AppUpdateStatus, FileTermDesktopApi, UiPreferences } from '@fileterm/core'
 import { useState } from 'react'
+import { useExternalUrl } from '../../../../hooks/use-external-url'
+import { FeedbackText } from '../../../common/feedback-text'
 import { AppIcon } from '../../../common/app-icon'
 import { DropdownSelect } from '../../../common/dropdown-select'
 import { PortableUpdateDialog } from '../../../common/portable-update-dialog'
@@ -32,6 +34,7 @@ export function UpdatesSettingsPanel() {
     setUpdateChannelPreference
   } = useSettingsModalContext<UpdatesSettingsPanelContext>()
   const [isPortableUpdateDialogOpen, setPortableUpdateDialogOpen] = useState(false)
+  const { openExternalUrl, externalUrlError } = useExternalUrl(desktopApi, t.openExternalUrlFailed)
 
   return (
     <div className="settings-panel">
@@ -91,9 +94,7 @@ export function UpdatesSettingsPanel() {
                   if (updateStatus.isPortable) {
                     setPortableUpdateDialogOpen(true)
                   } else {
-                    void desktopApi?.openExternalUrl(
-                      updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases'
-                    )
+                    void openExternalUrl(updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
                   }
                 } else {
                   void desktopApi?.downloadUpdate()
@@ -129,12 +130,13 @@ export function UpdatesSettingsPanel() {
             </button>
           ) : null}
         </div>
+        <FeedbackText message={externalUrlError} tone="error" />
       </section>
       {isPortableUpdateDialogOpen ? (
         <PortableUpdateDialog
           onClose={() => setPortableUpdateDialogOpen(false)}
           onOpenReleasePage={() =>
-            void desktopApi?.openExternalUrl(updateStatus?.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
+            void openExternalUrl(updateStatus?.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
           }
         />
       ) : null}
