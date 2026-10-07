@@ -385,10 +385,21 @@ jobs:
             --volume "$deb_file:/tmp/fileterm.deb:ro" \
             debian:bullseye-slim bash -euc '
               export DEBIAN_FRONTEND=noninteractive
+              printf "%s\n" \
+                "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260903T220410Z bullseye main" \
+                "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260903T220410Z bullseye-security main" \
+                > /etc/apt/sources.list
+              rm -f /etc/apt/sources.list.d/*
               apt-get update
               apt-get install -y --no-install-recommends /tmp/fileterm.deb
-              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
-              grep -Fq "+ exec /usr/lib/fileterm/runtime/fileterm --help" <<< "$trace"
+              if ! trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1)"; then
+                printf "Debian 11 FileTerm CLI smoke failed:\n%s\n" "$trace" >&2
+                exit 1
+              fi
+              if ! grep -Fq "+ exec /usr/lib/fileterm/runtime/fileterm --help" <<< "$trace"; then
+                printf "Debian 11 launcher did not select the private runtime:\n%s\n" "$trace" >&2
+                exit 1
+              fi
               ! dpkg-query --show libwebkit2gtk-4.1-0 >/dev/null 2>&1
               dpkg -V file-term
             '
@@ -398,9 +409,17 @@ jobs:
             ubuntu:22.04 bash -euc '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
-              apt-get install -y --no-install-recommends /tmp/fileterm.deb
-              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
-              grep -Fq "+ exec /usr/lib/fileterm/fileterm --help" <<< "$trace"
+              apt-get install -y --no-install-recommends \
+                libwebkit2gtk-4.1-0 libayatana-appindicator3-1 libssl3 libgl1-mesa-dri \
+                /tmp/fileterm.deb
+              if ! trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1)"; then
+                printf "Ubuntu FileTerm CLI smoke failed:\n%s\n" "$trace" >&2
+                exit 1
+              fi
+              if ! grep -Fq "+ exec /usr/lib/fileterm/fileterm --help" <<< "$trace"; then
+                printf "Ubuntu launcher did not select the system runtime:\n%s\n" "$trace" >&2
+                exit 1
+              fi
               dpkg -V file-term
             '
 

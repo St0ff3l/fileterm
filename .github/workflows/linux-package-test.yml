@@ -132,8 +132,11 @@ jobs:
           mkdir -p artifacts
           dpkg-deb --contents "$deb_file" > artifacts/FileTerm-linux-x86_64.contents.txt
           cp "$deb_file" "artifacts/FileTerm-$(dpkg-deb -f "$deb_file" Version)-linux-x86_64.deb"
-          dpkg-deb --fsys-tarfile "$deb_file" | tar -xOf - usr/share/applications/FileTerm.desktop > artifacts/FileTerm.desktop
-          dpkg-deb --fsys-tarfile "$deb_file" | tar -xOf - usr/share/applications/com.fileterm.desktop.desktop > artifacts/com.fileterm.desktop.desktop
+          extracted_dir="$(mktemp -d)"
+          trap 'rm -rf "$extracted_dir"' EXIT
+          dpkg-deb --extract "$deb_file" "$extracted_dir"
+          cp "$extracted_dir/usr/share/applications/FileTerm.desktop" artifacts/FileTerm.desktop
+          cp "$extracted_dir/usr/share/applications/com.fileterm.desktop.desktop" artifacts/com.fileterm.desktop.desktop
           grep -qx 'Icon=fileterm' artifacts/FileTerm.desktop artifacts/com.fileterm.desktop.desktop
           grep -qx 'NoDisplay=true' artifacts/com.fileterm.desktop.desktop
 
