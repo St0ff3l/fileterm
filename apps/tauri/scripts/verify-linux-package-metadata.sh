@@ -23,17 +23,20 @@ if [[ "$actual_deb_arch" != "$expected_deb_arch" ]]; then
   exit 1
 fi
 deb_requires="$(dpkg-deb -f "$deb_file" Depends)"
+deb_files="$(dpkg-deb --contents "$deb_file")"
 if [[ "$deb_requires" != *xdg-utils* ]]; then
   echo "DEB package is missing the external URL launcher dependency: $deb_requires" >&2
   exit 1
 fi
 
-if [[ "$expected_deb_arch" == amd64 ]]; then
+if [[ "$expected_deb_arch" == amd64 ]] && awk \
+  -v package_path='usr/lib/fileterm/runtime/fileterm' \
+  '$NF == package_path || $NF == ("./" package_path) { found = 1 } END { exit !found }' \
+  <<< "$deb_files"; then
   if [[ "$deb_requires" != *"libc6 (>= 2.31)"* ]]; then
     echo "Universal amd64 DEB must support Debian 11's glibc baseline: $deb_requires" >&2
     exit 1
   fi
-  deb_files="$(dpkg-deb --contents "$deb_file")"
   for required_path in \
     usr/lib/fileterm/fileterm \
     usr/lib/fileterm/runtime/fileterm \
@@ -47,7 +50,7 @@ if [[ "$expected_deb_arch" == amd64 ]]; then
     fi
   done
 elif [[ "$deb_requires" != *libssl3* ]]; then
-  echo "ARM64 DEB is missing the OpenSSL runtime dependency: $deb_requires" >&2
+  echo "DEB package is missing the OpenSSL runtime dependency: $deb_requires" >&2
   exit 1
 fi
 
@@ -57,7 +60,6 @@ if [[ "$actual_rpm_arch" != "$expected_rpm_arch" ]]; then
   exit 1
 fi
 
-deb_files="$(dpkg-deb --contents "$deb_file")"
 rpm_files="$(rpm -qpl "$rpm_file")"
 package_paths=(
   usr/share/applications/FileTerm.desktop

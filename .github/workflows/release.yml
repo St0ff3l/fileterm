@@ -366,7 +366,7 @@ jobs:
                 libssl3 libgl1-mesa-dri patchelf python3
               python3 apps/tauri/scripts/build-universal-deb.py \
                 "$1" "$2"
-            ' _ "$GITHUB_WORKSPACE/$deb_file" "$GITHUB_WORKSPACE/$output_dir"
+            ' _ "/workspace/$deb_file" "/workspace/$output_dir"
 
           cp "$output_dir/FileTerm-${version}-linux-${LINUX_ASSET_ARCH}.deb" "$deb_file"
 

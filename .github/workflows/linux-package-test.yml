@@ -74,7 +74,7 @@ jobs:
                 libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 \
                 libssl3 libgl1-mesa-dri patchelf python3
               python3 apps/tauri/scripts/build-universal-deb.py "$1" "$2"
-            ' _ "$GITHUB_WORKSPACE/$deb_file" "$GITHUB_WORKSPACE/$output_dir"
+            ' _ "/workspace/$deb_file" "/workspace/$output_dir"
           universal_deb="$output_dir/FileTerm-${version}-linux-x86_64.deb"
           test -f "$universal_deb"
           mv "$universal_deb" "$deb_file"
