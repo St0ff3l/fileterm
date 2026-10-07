@@ -90,8 +90,14 @@ jobs:
               rm -f /etc/apt/sources.list.d/*
               apt-get update
               apt-get install -y --no-install-recommends /tmp/fileterm.deb
-              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
-              grep -Fq "+ exec /usr/lib/fileterm/runtime/fileterm --help" <<< "$trace"
+              if ! trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1)"; then
+                printf "Debian 11 FileTerm CLI smoke failed:\n%s\n" "$trace" >&2
+                exit 1
+              fi
+              if ! grep -Fq "+ exec /usr/lib/fileterm/runtime/fileterm --help" <<< "$trace"; then
+                printf "Debian 11 launcher did not select the private runtime:\n%s\n" "$trace" >&2
+                exit 1
+              fi
               ! dpkg-query --show libwebkit2gtk-4.1-0 >/dev/null 2>&1
               dpkg -V file-term
             '
@@ -102,8 +108,14 @@ jobs:
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
               apt-get install -y --no-install-recommends /tmp/fileterm.deb
-              trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1 >/dev/null)"
-              grep -Fq "+ exec /usr/lib/fileterm/fileterm --help" <<< "$trace"
+              if ! trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1)"; then
+                printf "Ubuntu FileTerm CLI smoke failed:\n%s\n" "$trace" >&2
+                exit 1
+              fi
+              if ! grep -Fq "+ exec /usr/lib/fileterm/fileterm --help" <<< "$trace"; then
+                printf "Ubuntu launcher did not select the system runtime:\n%s\n" "$trace" >&2
+                exit 1
+              fi
               dpkg -V file-term
             '
 
