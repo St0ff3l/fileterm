@@ -107,7 +107,9 @@ jobs:
             ubuntu:22.04 bash -euc '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
-              apt-get install -y --no-install-recommends /tmp/fileterm.deb
+              apt-get install -y --no-install-recommends \
+                libwebkit2gtk-4.1-0 libayatana-appindicator3-1 libssl3 libgl1-mesa-dri \
+                /tmp/fileterm.deb
               if ! trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1)"; then
                 printf "Ubuntu FileTerm CLI smoke failed:\n%s\n" "$trace" >&2
                 exit 1
