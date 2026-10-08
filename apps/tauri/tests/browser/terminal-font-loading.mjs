@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
+const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
 const root = new URL('../../../../', import.meta.url)
 const source = new URL('../../src/renderer/', import.meta.url)
 const metrics = ts.transpileModule(readFileSync(new URL('app/font-metrics.ts', source), 'utf8'), {
@@ -16,7 +16,14 @@ const metrics = ts.transpileModule(readFileSync(new URL('app/font-metrics.ts', s
 const events = ts.transpileModule(readFileSync(new URL('lib/app-events.ts', source), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText
-const browser = await chromium.launch({ channel: 'chrome', headless: true })
+const stacks = ts.transpileModule(readFileSync(new URL('app/font-stacks.ts', source), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText
+const engine = process.env.PLAYWRIGHT_ENGINE === 'webkit' ? webkit : chromium
+const browser = await engine.launch({
+  channel: process.env.PLAYWRIGHT_ENGINE === 'webkit' ? undefined : 'chrome',
+  headless: true
+})
 try {
   const page = await browser.newPage()
   await page.setContent('<div class="terminal-host" style="width:800px;height:400px"></div>')
@@ -28,19 +35,19 @@ try {
   await page.addScriptTag({
     content: `window.fontMetrics = (() => {
       const events = (() => { const exports = {}; ${events}; return exports })();
+      const stacks = (() => { const exports = {}; ${stacks}; return exports })();
       const exports = {};
-      const require = () => events;
+      const require = (name) => name === './font-stacks' ? stacks : events;
       ${metrics}
-      return exports;
+      return { ...exports, ...stacks };
     })();`
   })
-  const font = readFileSync(new URL('assets/fonts/text/jetbrains-mono/JetBrainsMono-400.ttf', source)).toString(
-    'base64'
-  )
+  const font = readFileSync(new URL('assets/fonts/text/outfit/Outfit-400.ttf', source)).toString('base64')
   const result = await page.evaluate(async (font) => {
     const family = '"Late, Selected Font"'
     document.documentElement.style.setProperty('--font-mono', family)
-    const terminal = new window.Terminal({ fontFamily: family, fontSize: 16, allowProposedApi: true })
+    const configuredFamily = window.fontMetrics.getConfiguredMonoFontFamily()
+    const terminal = new window.Terminal({ fontFamily: configuredFamily, fontSize: 16, allowProposedApi: true })
     const fit = new window.FitAddon.FitAddon()
     terminal.loadAddon(fit)
     terminal.open(document.querySelector('.terminal-host'))
@@ -65,7 +72,8 @@ try {
     // as when a user selects/imports a font after opening the terminal.
     const face = new FontFace('Late, Selected Font', `url(data:font/ttf;base64,${font})`)
     document.fonts.add(face)
-    await face.load()
+    window.dispatchEvent(new Event('fileterm:imported-fonts-changed'))
+    await document.fonts.load(`16px ${family}`)
     await document.fonts.ready
     await settle()
     const after = terminal.cols
@@ -74,12 +82,21 @@ try {
     const referenceHost = document.createElement('div')
     referenceHost.style.cssText = 'width:800px;height:400px'
     document.body.append(referenceHost)
-    const reference = new window.Terminal({ fontFamily: family, fontSize: 16, allowProposedApi: true })
+    const reference = new window.Terminal({ fontFamily: configuredFamily, fontSize: 16, allowProposedApi: true })
     const referenceFit = new window.FitAddon.FitAddon()
     reference.loadAddon(referenceFit)
     reference.open(referenceHost)
     referenceFit.fit()
     const expected = reference.cols
+    document.documentElement.style.setProperty('--font-mono', 'monospace')
+    await settle()
+    const switchedColumns = terminal.cols
+    reference.options.fontFamily = window.fontMetrics.getConfiguredMonoFontFamily()
+    referenceFit.fit()
+    const expectedSwitchedColumns = reference.cols
+    document.documentElement.style.setProperty('--font-mono', family)
+    await settle()
+    const restoredColumns = terminal.cols
     // Repeated import events must still refresh, without leaving an altered
     // family or delivering queued callbacks after the terminal is disposed.
     window.dispatchEvent(new Event('fileterm:imported-fonts-changed'))
@@ -98,8 +115,11 @@ try {
       before,
       after,
       expected,
+      switchedColumns,
+      expectedSwitchedColumns,
+      restoredColumns,
       restoredFamily,
-      family,
+      family: configuredFamily,
       initialRefreshCount,
       loadedRefreshCount,
       repeatedRefreshCount,
@@ -109,6 +129,8 @@ try {
   assert.ok(result.initialRefreshCount > 0, 'initial metrics must be observed')
   assert.notEqual(result.before, result.expected, 'fixture must have different fallback and loaded metrics')
   assert.equal(result.after, result.expected, 'late font must match a fresh terminal grid')
+  assert.equal(result.switchedColumns, result.expectedSwitchedColumns, 'font selection must resize an existing grid')
+  assert.equal(result.restoredColumns, result.expected, 'switching back must restore the loaded grid')
   assert.equal(result.restoredFamily, result.family, 'quoted family containing a comma must remain intact')
   assert.ok(result.loadedRefreshCount > result.initialRefreshCount, 'later font loading must notify')
   assert.ok(result.repeatedRefreshCount > result.loadedRefreshCount, 'repeated imports must notify')

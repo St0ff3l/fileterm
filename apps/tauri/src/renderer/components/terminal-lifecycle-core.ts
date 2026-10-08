@@ -20,6 +20,7 @@ import {
 import { logTerminalZoom } from './terminal-view-utils'
 import { registerTerminalBlockGlyphRenderer } from './terminal-block-glyph-renderer'
 import { registerTerminalSelectionRenderer } from './terminal-selection-renderer'
+import { registerTerminalSymbolGlyphRenderer } from './terminal-symbol-glyph-renderer'
 import { createTerminalInputWriteQueue } from './terminal-input-write-queue'
 import type { TerminalLifecycleOptions, TerminalLifecycleRuntime } from './terminal-lifecycle-types'
 
@@ -98,6 +99,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
   terminal.unicode.activeVersion = '11'
   terminal.open(host)
   const selectionRenderer = registerTerminalSelectionRenderer(terminal)
+  const symbolGlyphRenderer = registerTerminalSymbolGlyphRenderer(terminal)
   const blockGlyphRenderer = registerTerminalBlockGlyphRenderer(terminal)
   options.terminalRef.current = terminal
   options.searchAddonRef.current = searchAddon
@@ -317,6 +319,7 @@ export function createTerminalLifecycleRuntime(options: TerminalLifecycleOptions
       foregroundAdapter.dispose()
       blockGlyphRenderer.dispose()
       selectionRenderer.dispose()
+      symbolGlyphRenderer.dispose()
       options.terminalLogColorizerRef.current = null
       options.fitAddonRef.current = null
       options.searchAddonRef.current = null

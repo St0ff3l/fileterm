@@ -312,3 +312,20 @@ xterm DOM renderer 在拖选过程中直接替换行节点，直到松开鼠标�
 2026-10-06 本地检查：JetBrains Mono、Cascadia Code 2407.24 均通过 WebKit 和 Chromium 的字号/缩放矩阵；
 macOS `SFNSMono.ttf` 通过 WebKit 对照检查。修复版本在采样区域没有丢失选中前可见的深色字形像素。
 这项检查不替代 Windows 实机 WebView2 或用户截图中原始程序的验证。
+
+2026-10-08 beta.8 补充：鼠标选区与程序自身的 ANSI 蓝底/反显必须分开验证。
+实际字体栈包含 `Noto Sans SC`，它回退的部分符号宽于一格；xterm DOM 的负字距只缩小 advance，
+不会缩小字形本身，后一个背景 span 仍会遮住方框右边。此前仅用 SF Mono/Menlo 回退并比较鼠标
+选中前后的像素，漏掉了这条路径。
+
+运行 `apps/tauri/tests/browser/terminal-symbol-glyphs.mjs`，加载真实 JetBrains Mono 和 Noto Sans SC，
+启用与应用一致的 Unicode 11。无修复对照必须在 ANSI 背景下复现丢失字形像素；修复后同时覆盖
+程序蓝底、反显和真实鼠标拖选，检查过宽符号完整适配 buffer 单元格，且文字内容、清除选区、
+适配器销毁和 DOM 监听稳定性不回退。通过 `TERMINAL_TEST_FONT_PATH` 复查 Cascadia Code 等字体。
+
+字体矩阵使用同一字体的常规和粗体，不能把 Cascadia 常规体与 JetBrains 粗体混用。
+比较选中前后笔画时，排除背景颜色导致的抗锯齿变化，允许一 CSS 像素内的邻近笔画，
+但无修复对照仍必须复现真正被背景覆盖的符号边缘，不能仅检查字体加载成功。
+
+运行 `bundled-fonts.mjs` 检查生产 CSS 中所有字体可离线解码、缺失字体回退和系统字体检测。
+运行 `terminal-font-loading.mjs` 检查晚加载、导入事件、切换已有终端字体后的网格，以及销毁时取消回调。

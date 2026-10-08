@@ -7,13 +7,14 @@
  * observer that asks consumers to remeasure at both boundaries.
  */
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
+import { MONO_FONT_FALLBACK } from './font-stacks'
 
-export const FILETERM_MONO_FONT_FAMILY = '"JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
+export const FILETERM_MONO_FONT_FAMILY = MONO_FONT_FALLBACK
 
 export function getConfiguredMonoFontFamily() {
   if (typeof document === 'undefined') return FILETERM_MONO_FONT_FAMILY
   const configured = getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim()
-  return configured || FILETERM_MONO_FONT_FAMILY
+  return configured ? `${configured}, ${FILETERM_MONO_FONT_FAMILY}` : FILETERM_MONO_FONT_FAMILY
 }
 
 function nextPaint(callback: () => void) {
@@ -77,23 +78,37 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
   pixelRatioQuery.addEventListener('change', onPixelRatioChanged)
   window.addEventListener('resize', onViewportResize)
   window.visualViewport?.addEventListener('resize', onViewportResize)
-  const disposeImportedFontsListener = onAppEvent(APP_EVENT.importedFontsChanged, notify)
+  const loadConfiguredFonts = () => {
+    const family = getConfiguredMonoFontFamily()
+    void Promise.all([document.fonts.load(`400 12px ${family}`), document.fonts.load(`600 13px ${family}`)])
+      .catch(() => {
+        // Keep bundled fallbacks usable when an imported face fails decoding.
+      })
+      .finally(() => {
+        void document.fonts.ready.then(notify).catch(notify)
+      })
+  }
+  const disposeImportedFontsListener = onAppEvent(APP_EVENT.importedFontsChanged, loadConfiguredFonts)
   // Theme changes and imported faces can start loading after the initial
   // fonts.ready promise has already resolved. Remeasure their final glyphs too.
   document.fonts.addEventListener('loadingdone', notify)
   document.fonts.addEventListener('loadingerror', notify)
 
-  const configuredFontFamily = getConfiguredMonoFontFamily()
-  void Promise.all([
-    document.fonts.load(`400 12px ${configuredFontFamily}`),
-    document.fonts.load(`600 13px ${configuredFontFamily}`)
-  ])
-    .catch(() => {
-      // A system fallback remains usable if a local font cannot be decoded.
-    })
-    .finally(() => {
-      void document.fonts.ready.then(notify).catch(notify)
-    })
+  let observedFamily = getConfiguredMonoFontFamily()
+  const fontObserver = new MutationObserver(() => {
+    const nextFamily = getConfiguredMonoFontFamily()
+    if (nextFamily !== observedFamily) {
+      observedFamily = nextFamily
+      notify()
+      loadConfiguredFonts()
+    }
+  })
+  fontObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['style', 'class', 'data-theme']
+  })
+
+  loadConfiguredFonts()
 
   return () => {
     disposed = true
@@ -104,5 +119,6 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
     document.fonts.removeEventListener('loadingdone', notify)
     document.fonts.removeEventListener('loadingerror', notify)
     disposeImportedFontsListener()
+    fontObserver.disconnect()
   }
 }
