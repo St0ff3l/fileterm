@@ -615,7 +615,7 @@ fn tauri_renderer_mounts_only_after_native_metadata_is_ready() {
         .find("window.fileterm = api")
         .expect("bootstrap must expose the resolved API");
     let render = bootstrap
-        .find("root.render(")
+        .find("renderRoot(")
         .expect("bootstrap must mount React");
     assert!(
         assign < render,
@@ -635,4 +635,39 @@ fn native_drop_fallback_is_cleared_only_after_renderer_consumption() {
         renderer.contains("detail.consume()"),
         "the accepted remote-pane drop must acknowledge native path consumption"
     );
+}
+
+#[test]
+fn macos_main_window_is_hidden_until_native_layout_is_ready() {
+    let config: Value = serde_json::from_str(include_str!("../tauri.macos.conf.json")).unwrap();
+    let main = &config["app"]["windows"][0];
+    assert_eq!(main["visible"], false);
+    assert_eq!(main["decorations"], true);
+    assert_eq!(main["titleBarStyle"], "Overlay");
+}
+
+#[test]
+fn desktop_main_windows_wait_for_renderer_first_paint_before_showing() {
+    for config_source in [
+        include_str!("../tauri.macos.conf.json"),
+        include_str!("../tauri.windows.conf.json"),
+        include_str!("../tauri.linux.conf.json"),
+        include_str!("../tauri.release.linux.conf.json"),
+    ] {
+        let config: Value = serde_json::from_str(config_source).unwrap();
+        assert_eq!(
+            config["app"]["windows"][0]["visible"], false,
+            "main window must start hidden on every desktop platform"
+        );
+    }
+
+    let renderer = include_str!("../../src/renderer/lib/main-window-reveal.tsx");
+    assert!(renderer.contains("requestAnimationFrame"));
+    assert!(renderer.contains("showCurrentWindow()"));
+
+    let startup = include_str!("../../src/renderer/main.tsx");
+    assert!(startup.contains("<MainWindowReveal />"));
+
+    let native_setup = include_str!("../src/lib/runtime.rs");
+    assert!(!native_setup.contains("main_window.show()"));
 }

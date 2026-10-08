@@ -155,7 +155,7 @@ macOS 主窗口使用 AppKit 原生红黄绿按钮，以下参数是 Beta 9 已�
 | 三个按钮中心的 `x`      | 27 / 50 / 73pt | 横向位置及原生按钮尺寸不随 WebView 界面缩放              |
 | `FileTerm` 字标         |           16px | Tauri/macOS 专用基线不额外下移（相对 renderer 基线 0px） |
 
-这些值是设计规格，不是 Debug/Release 补偿值。按钮位置必须由 Rust 在页面加载后读取 `NSWindow` 真实 frame 与保存的界面缩放，并经 `NSView` 坐标转换写入 AppKit 原生按钮。原生标题栏容器与按钮垂直中心跟随缩放后的 renderer 顶栏；改变界面缩放时主动校准，窗口 resize、DPI 变化及全屏恢复也沿用相同校准。`tauri*.conf.json` 不得再保存 traffic-light 坐标，Rust 也不得根据 `debug_assertions` 添加垂直偏移。renderer 仅负责 48px 基准顶栏和字标，不绘制或伪造红黄绿按钮。
+这些值是设计规格，不是 Debug/Release 补偿值。主窗口在 macOS 上隐藏创建，Rust 在首次显示前读取 `NSWindow` 真实 frame 与保存的界面缩放，并经 `NSView` 坐标转换写入 AppKit 原生按钮；renderer 应用 UI 偏好并提交首屏后才通过 Tauri bridge 显示窗口，避免透明材质先于主页露出。原生标题栏容器与按钮垂直中心跟随缩放后的 renderer 顶栏；改变界面缩放时主动校准；原生窗口与标题栏布局通知同步维护几何，全屏恢复不再依赖延迟定时器。窗口捕获时系统共享指示器也须与顶栏垂直居中，使用系统原生布局，不绘制替代控件。`tauri*.conf.json` 不得再保存 traffic-light 坐标，Rust 也不得根据 `debug_assertions` 添加垂直偏移。renderer 仅负责 48px 基准顶栏和字标，不绘制或伪造红黄绿按钮。
 
 ### Overview
 

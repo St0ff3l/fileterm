@@ -9,6 +9,7 @@ import { getLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
 import { applyUiZoomPercent } from './app/ui-zoom'
+import { MainWindowReveal } from './lib/main-window-reveal'
 import './styles/index.css'
 import { installRendererErrorLogging, reportRendererError } from './lib/renderer-error-log'
 
@@ -68,6 +69,14 @@ const handleWindowMouseDown = (e: MouseEvent) => {
 window.addEventListener('mousedown', handleWindowMouseDown, true)
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)
+const renderRoot = (content: React.ReactNode) => {
+  root.render(
+    <React.StrictMode>
+      {initialWindowMode === 'main' && <MainWindowReveal />}
+      {content}
+    </React.StrictMode>
+  )
+}
 
 void createTauriApi()
   .then((api) => {
@@ -119,18 +128,16 @@ void createTauriApi()
         await applyUiZoomPercent(initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT)
         setLocale(initialLocale)
 
-        root.render(
-          <React.StrictMode>
-            <ErrorBoundary>
-              <App initialUiPreferences={initialUiPreferences} />
-            </ErrorBoundary>
-          </React.StrictMode>
+        renderRoot(
+          <ErrorBoundary>
+            <App initialUiPreferences={initialUiPreferences} />
+          </ErrorBoundary>
         )
       })
       .catch((error: unknown) => {
         reportRendererError('bootstrap', error)
         console.error('Failed to initialize the renderer:', error)
-        root.render(
+        renderRoot(
           <div role="alert" className="app-bootstrap-error">
             {t.runtimeInitFailed}
           </div>
@@ -139,7 +146,7 @@ void createTauriApi()
   })
   .catch((error: unknown) => {
     console.error('Failed to initialize the Tauri desktop bridge:', error)
-    root.render(
+    renderRoot(
       <div role="alert" className="app-bootstrap-error">
         {t.runtimeInitFailed}
       </div>
