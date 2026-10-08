@@ -9,6 +9,7 @@ import {
   type SavedTheme
 } from '@fileterm/core'
 import { actionTextColor } from './action-text-color'
+import { configuredFontStack } from './font-stacks'
 
 export type ThemeMode =
   'fileterm-dark' | 'fileterm-light' | 'codex-dark' | 'codex-light' | 'default-dark' | 'default-light'
@@ -803,8 +804,8 @@ function buildThemeVariables(
     '--theme-action-primary': theme.semanticColors.primaryAction ?? theme.accent,
     '--theme-action-danger': theme.semanticColors.dangerAction ?? (variant === 'light' ? '#d32f2f' : '#c93b3b'),
     '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
-    '--theme-font-ui': theme.fonts.ui ?? 'var(--font-ui)',
-    '--theme-font-code': theme.fonts.code ?? 'var(--font-mono)',
+    '--theme-font-ui': theme.fonts.ui ? configuredFontStack(theme.fonts.ui, 'ui') : 'var(--font-ui)',
+    '--theme-font-code': theme.fonts.code ? configuredFontStack(theme.fonts.code, 'code') : 'var(--font-mono)',
     '--theme-semantic-diff-added': theme.semanticColors.diffAdded,
     '--theme-semantic-diff-removed': theme.semanticColors.diffRemoved,
     '--theme-semantic-skill': theme.semanticColors.skill,
@@ -867,10 +868,10 @@ function buildThemeVariables(
     variables[variableName] = theme.terminal.ansi[colorName]
   }
   if (theme.fonts.ui) {
-    variables['--font-ui'] = theme.fonts.ui
+    variables['--font-ui'] = configuredFontStack(theme.fonts.ui, 'ui')
   }
   if (theme.fonts.code) {
-    variables['--font-mono'] = theme.fonts.code
+    variables['--font-mono'] = configuredFontStack(theme.fonts.code, 'code')
   }
 
   return { normalized, variables, isDefaultTheme }

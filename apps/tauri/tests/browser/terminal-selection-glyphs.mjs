@@ -33,6 +33,7 @@ try {
     await page.addScriptTag({ path: fileURLToPath(new URL('node_modules/@xterm/xterm/lib/xterm.js', root)) })
     for (const [file, symbol] of [
       ['terminal-selection-renderer.ts', 'registerTerminalSelectionRenderer'],
+      ['terminal-symbol-glyph-renderer.ts', 'registerTerminalSymbolGlyphRenderer'],
       ['terminal-block-glyph-renderer.ts', 'registerTerminalBlockGlyphRenderer']
     ]) {
       const code = ts
@@ -65,6 +66,7 @@ try {
           })
           terminal.open(host)
           window.testSelectionRenderer = fixed ? window.registerTerminalSelectionRenderer(terminal) : undefined
+          if (fixed) window.registerTerminalSymbolGlyphRenderer(terminal)
           window.registerTerminalBlockGlyphRenderer(terminal)
           if (!fixed)
             terminal.onRender(() =>

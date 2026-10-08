@@ -67,7 +67,7 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [isSavingUiZoomPercent, setIsSavingUiZoomPercent] = useState(false)
   const [uiZoomPercentError, setUiZoomPercentError] = useState<string | null>(null)
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
-  const [fontImportKind, setFontImportKind] = useState<'ui' | 'code' | null>(null)
+  const [isImportingFont, setIsImportingFont] = useState(false)
   const [fontImportError, setFontImportError] = useState<string | null>(null)
   const [fontToDelete, setFontToDelete] = useState<ImportedFont | null>(null)
   const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
@@ -205,8 +205,8 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setUiZoomPercentError,
     importedFonts,
     setImportedFonts,
-    fontImportKind,
-    setFontImportKind,
+    isImportingFont,
+    setIsImportingFont,
     fontImportError,
     setFontImportError,
     fontToDelete,

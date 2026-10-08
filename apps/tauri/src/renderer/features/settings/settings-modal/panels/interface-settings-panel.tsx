@@ -1,3 +1,4 @@
+import './interface-font-settings.css'
 import type { Dispatch, SetStateAction, PointerEvent as ReactPointerEvent } from 'react'
 import type {
   FileTermDesktopApi,
@@ -17,6 +18,7 @@ import { SelectionControl } from '../../../common/selection-control'
 import { StableButtonContent } from '../../../common/stable-button-content'
 import { type LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
+import { useSystemFontAvailability } from '../../../../app/use-system-font-availability'
 import {
   ANSI_COLOR_LABELS,
   ANSI_COLOR_NAMES,
@@ -50,8 +52,8 @@ type InterfaceSettingsPanelContext = {
   setShowDeleteThemeConfirm: Dispatch<SetStateAction<boolean>>
   deleteCustomTheme(): void
   importedFonts: ImportedFont[]
-  fontImportKind: 'ui' | 'code' | null
-  importFontFor(kind: 'ui' | 'code'): Promise<void>
+  isImportingFont: boolean
+  importFont(): Promise<void>
   fontToDelete: ImportedFont | null
   setFontToDelete: Dispatch<SetStateAction<ImportedFont | null>>
   handleDeleteFont(font: ImportedFont): Promise<void>
@@ -102,6 +104,7 @@ type InterfaceSettingsPanelContext = {
 }
 
 export function InterfaceSettingsPanel() {
+  const systemFonts = useSystemFontAvailability()
   const {
     t,
     desktopApi,
@@ -127,8 +130,8 @@ export function InterfaceSettingsPanel() {
     setShowDeleteThemeConfirm,
     deleteCustomTheme,
     importedFonts,
-    fontImportKind,
-    importFontFor,
+    isImportingFont,
+    importFont,
     fontToDelete,
     setFontToDelete,
     handleDeleteFont,
@@ -463,7 +466,13 @@ export function InterfaceSettingsPanel() {
                 options={[
                   { value: '', label: t.themeSystemDefault },
                   { value: 'Inter', label: 'Inter' },
-                  { value: 'SF Pro Text', label: 'SF Pro Text' },
+                  {
+                    value: 'SF Pro Text',
+                    label: systemFonts['SF Pro Text']
+                      ? 'SF Pro Text'
+                      : `SF Pro Text (${t.remoteCapabilityUnavailable})`,
+                    disabled: !systemFonts['SF Pro Text']
+                  },
                   { value: 'Noto Sans SC', label: 'Noto Sans SC' },
                   ...importedFonts.map((font) => ({
                     value: font.family,
@@ -472,22 +481,6 @@ export function InterfaceSettingsPanel() {
                 ]}
                 value={themeConfig.theme.fonts.ui ?? ''}
               />
-              <button
-                aria-label={t.themeImportFont}
-                aria-busy={fontImportKind === 'ui'}
-                className="flat-button compact theme-font-import-button"
-                disabled={!desktopApi || fontImportKind !== null}
-                onClick={() => void importFontFor('ui')}
-                title={t.themeImportFont}
-                type="button"
-              >
-                <StableButtonContent
-                  busy={fontImportKind === 'ui'}
-                  busyLabel={t.themeImportingFont}
-                  icon={<AppIcon name="upload" size={14} />}
-                  label={t.themeImportFont}
-                />
-              </button>
             </div>
           </div>
           <div className="theme-config-control">
@@ -500,7 +493,11 @@ export function InterfaceSettingsPanel() {
                 options={[
                   { value: '', label: t.themeSystemDefault },
                   { value: 'JetBrains Mono', label: 'JetBrains Mono' },
-                  { value: 'SF Mono', label: 'SF Mono' },
+                  {
+                    value: 'SF Mono',
+                    label: systemFonts['SF Mono'] ? 'SF Mono' : `SF Mono (${t.remoteCapabilityUnavailable})`,
+                    disabled: !systemFonts['SF Mono']
+                  },
                   { value: 'Cascadia Code', label: 'Cascadia Code' },
                   ...importedFonts.map((font) => ({
                     value: font.family,
@@ -509,24 +506,25 @@ export function InterfaceSettingsPanel() {
                 ]}
                 value={themeConfig.theme.fonts.code ?? ''}
               />
-              <button
-                aria-label={t.themeImportFont}
-                aria-busy={fontImportKind === 'code'}
-                className="flat-button compact theme-font-import-button"
-                disabled={!desktopApi || fontImportKind !== null}
-                onClick={() => void importFontFor('code')}
-                title={t.themeImportFont}
-                type="button"
-              >
-                <StableButtonContent
-                  busy={fontImportKind === 'code'}
-                  busyLabel={t.themeImportingFont}
-                  icon={<AppIcon name="upload" size={14} />}
-                  label={t.themeImportFont}
-                />
-              </button>
             </div>
           </div>
+        </div>
+        <div className="theme-font-import-toolbar">
+          <button
+            aria-busy={isImportingFont}
+            className="flat-button compact theme-font-import-button"
+            disabled={!desktopApi || isImportingFont}
+            onClick={() => void importFont()}
+            type="button"
+          >
+            <StableButtonContent
+              busy={isImportingFont}
+              busyLabel={t.themeImportingFont}
+              icon={<AppIcon name="upload" size={14} />}
+              label={t.themeImportFont}
+            />
+          </button>
+          <p className="settings-tools-hint">{t.themeImportFontHint}</p>
         </div>
         {fontImportError ? <p className="settings-tools-error">{fontImportError}</p> : null}
 

@@ -52,8 +52,8 @@ export function useThemeSettingsController({
     desktopApi,
     importedFonts,
     setImportedFonts,
-    fontImportKind,
-    setFontImportKind,
+    isImportingFont,
+    setIsImportingFont,
     fontImportError,
     setFontImportError,
     fontToDelete,
@@ -116,10 +116,10 @@ export function useThemeSettingsController({
     })
   }
 
-  const importFontFor = async (kind: 'ui' | 'code') => {
-    if (!desktopApi || fontImportKind) return
+  const importFont = async () => {
+    if (!desktopApi || isImportingFont) return
 
-    setFontImportKind(kind)
+    setIsImportingFont(true)
     setFontImportError(null)
     try {
       const font = await desktopApi.importFont()
@@ -128,12 +128,11 @@ export function useThemeSettingsController({
       const dataUrl = await desktopApi.getImportedFontData(font.id)
       if (dataUrl) registerImportedFont(font, dataUrl)
       setImportedFonts((current) => [font, ...current.filter((item) => item.id !== font.id)])
-      updateThemeFonts({ [kind]: font.family })
     } catch (cause: unknown) {
       console.error('[FileTerm] 导入字体', cause)
       setFontImportError(t.themeFontImportFailed)
     } finally {
-      setFontImportKind(null)
+      setIsImportingFont(false)
     }
   }
 
@@ -469,8 +468,8 @@ export function useThemeSettingsController({
 
   return {
     importedFonts,
-    fontImportKind,
-    importFontFor,
+    isImportingFont,
+    importFont,
     fontToDelete,
     setFontToDelete,
     handleDeleteFont,
