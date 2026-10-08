@@ -28,6 +28,7 @@ function files(directory) {
 }
 
 const hash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
+const normalizedText = (path) => readFileSync(path, 'utf8').replace(/\r\n?/g, '\n')
 const isFont = (path) => /\.(?:ttf|otf|woff2?)$/i.test(path)
 const outputFonts = files(dist).filter(isFont)
 const outputHashes = new Set(outputFonts.map(hash))
@@ -67,7 +68,11 @@ knownHashes.add(codiconHash)
 assert.ok(readFileSync(join(licenses, 'codicons/LICENSE.txt'), 'utf8').includes('Attribution 4.0 International'))
 assert.ok(notices.includes('licenses/codicons/LICENSE.txt'), 'Codicons attribution must be included')
 for (const name of ['LICENSE', 'ThirdPartyNotices.txt']) {
-  assert.equal(hash(join(licenses, 'monaco-editor', name)), hash(join(root, 'node_modules/monaco-editor', name)))
+  assert.equal(
+    normalizedText(join(licenses, 'monaco-editor', name)),
+    normalizedText(join(root, 'node_modules/monaco-editor', name)),
+    `Monaco ${name} must be packaged without content changes`
+  )
 }
 for (const path of outputFonts) assert.ok(knownHashes.has(hash(path)), `Undeclared output font: ${path}`)
 for (const path of files(licenses)) {
