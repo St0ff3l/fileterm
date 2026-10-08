@@ -88,7 +88,7 @@ export function MonitoringOverlay({
         !
       </span>
     )
-  const canRetry = ['paused', 'waiting', 'failed', 'disconnected', 'ssh-disconnected'].includes(phase)
+  const canRetry = ['paused', 'waiting', 'failed', 'disconnected'].includes(phase)
   async function retry() {
     const api = window.fileterm
     if (!api || !tabId || !state || !canRetry || pending.current) return
@@ -96,24 +96,9 @@ export function MonitoringOverlay({
     setSubmitting(true)
     setError('')
     try {
-      if (sshDisconnected) {
-        await waitForMonitoringRequest(
-          api.reconnectTab(tabId).then((snapshot) => {
-            onSnapshot(snapshot)
-            if (
-              !snapshot.tabs.some(
-                (tab) => tab.id === tabId && (tab.status === 'connecting' || tab.status === 'connected')
-              )
-            ) {
-              throw new Error('Session reconnect was not started')
-            }
-          })
-        )
-      } else {
-        await waitForMonitoringRequest(api.retryMonitoring(tabId, state.generation))
-      }
+      await waitForMonitoringRequest(api.retryMonitoring(tabId, state.generation))
     } catch {
-      if (mounted.current) setError(sshDisconnected ? t.monitoringReconnectError : t.monitoringRetryError)
+      if (mounted.current) setError(t.monitoringRetryError)
     } finally {
       pending.current = false
       if (mounted.current) setSubmitting(false)
@@ -130,7 +115,7 @@ export function MonitoringOverlay({
         </strong>
         {phase === 'stopped' ? <p>{t.monitoringStoppedDescription}</p> : null}
         {phase === 'paused' ? <p>{t.monitoringWaitingChannel}</p> : null}
-        {phase === 'ssh-disconnected' ? <p>{t.monitoringReconnectDescription}</p> : null}
+        {phase === 'ssh-disconnected' ? <p>{t.monitoringSshDisconnectedDescription}</p> : null}
         {phase === 'starting' ? <p>{t.monitoringWaitingSample}</p> : null}
         {state.lastSampleAt !== undefined && phase !== 'starting' ? (
           <>
@@ -162,13 +147,7 @@ export function MonitoringOverlay({
         {phase === 'failed' ? <p>{formatMessage(t.monitoringExhausted, { max: state.maxAttempts })}</p> : null}
         {canRetry ? (
           <Button size="sm" disabled={!window.fileterm} loading={submitting} onClick={() => void retry()}>
-            {sshDisconnected || reconnecting
-              ? submitting
-                ? t.monitoringSshReconnecting
-                : t.monitoringReconnect
-              : submitting
-                ? t.monitoringRetryBusy
-                : t.monitoringRetry}
+            {submitting ? t.monitoringRetryBusy : t.monitoringRetry}
           </Button>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
