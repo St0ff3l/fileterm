@@ -15,6 +15,7 @@ FileTerm 2.2.26 fixes terminal glyph selection and Windows password prompts, add
 
 ### 本版本包含的主要 PR 和问题修复
 
+- [PR #300](https://github.com/St0ff3l/fileterm/pull/300)：改进多种等宽字体下终端特殊字形的选区绘制，打包 Cascadia Code 并补充字体许可证与产物校验；简化字体导入和选择流程。
 - [PR #286](https://github.com/St0ff3l/fileterm/pull/286)：改善侧栏未选中文字对比度。
 - [PR #287](https://github.com/St0ff3l/fileterm/pull/287)、[PR #288](https://github.com/St0ff3l/fileterm/pull/288)：改进 macOS DMG 安装界面及 Finder 布局，并修复终端特殊字符选区显示。
 - [PR #289](https://github.com/St0ff3l/fileterm/pull/289)：修复 Windows 本地终端输入乱序导致隐藏密码提示重复的问题。
@@ -51,6 +52,7 @@ FileTerm 2.2.26 fixes terminal glyph selection and Windows password prompts, add
 
 ### Main PRs and issues
 
+- [PR #300](https://github.com/St0ff3l/fileterm/pull/300): Improves terminal selection rendering for special glyphs across monospace fonts, bundles Cascadia Code with license notices and artifact validation, and simplifies font import and selection.
 - [PR #286](https://github.com/St0ff3l/fileterm/pull/286): Improves unselected sidebar text contrast.
 - [PR #287](https://github.com/St0ff3l/fileterm/pull/287) and [PR #288](https://github.com/St0ff3l/fileterm/pull/288): Improve the macOS DMG installer and Finder layout, and fix selected terminal glyph rendering.
 - [PR #289](https://github.com/St0ff3l/fileterm/pull/289): Fixes out-of-order Windows local terminal input that could repeat hidden password prompts.
