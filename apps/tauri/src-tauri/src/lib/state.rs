@@ -29,16 +29,6 @@ struct HiddenWithMainRegistry {
 }
 
 #[cfg(target_os = "macos")]
-static MACOS_TRAFFIC_LIGHTS_CALIBRATED: AtomicBool = AtomicBool::new(false);
-
-/// A fullscreen transition emits several resize notifications while AppKit is
-/// still rebuilding the title-bar hierarchy. Only the final notification may
-/// position the traffic lights, otherwise they retain an obsolete y-coordinate
-/// when the window returns from fullscreen.
-#[cfg(target_os = "macos")]
-static MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION: AtomicU64 = AtomicU64::new(0);
-
-#[cfg(target_os = "macos")]
 const MACOS_RENDERER_TITLEBAR_BASE_HEIGHT: f64 = 48.0;
 #[cfg(target_os = "macos")]
 const MACOS_TRAFFIC_LIGHT_FRAME_SIZE: f64 = 14.0;
@@ -46,8 +36,6 @@ const MACOS_TRAFFIC_LIGHT_FRAME_SIZE: f64 = 14.0;
 const MACOS_TRAFFIC_LIGHT_LEFT_INSET: f64 = 20.0;
 #[cfg(target_os = "macos")]
 const MACOS_TRAFFIC_LIGHT_CENTER_SPACING: f64 = 23.0;
-#[cfg(target_os = "macos")]
-const MACOS_TRAFFIC_LIGHT_RECALIBRATION_DELAY_MS: u64 = 140;
 
 #[cfg(target_os = "macos")]
 fn macos_renderer_titlebar_height(ui_zoom_percent: i32) -> f64 {

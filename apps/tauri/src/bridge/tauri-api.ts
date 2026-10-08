@@ -95,6 +95,7 @@ import { APP_EVENT, dispatchAppEvent } from '../renderer/lib/app-events'
 let latestNativeDropPaths: string[] = []
 let latestNativeDropAt = 0
 const currentWindow = getCurrentWindow()
+export const showCurrentWindow = () => invoke<void>('app_window_action', { action: 'show' })
 const terminalDataListeners = new Set<(payload: TerminalDataPayload) => void>()
 const securitySettingsListeners = new Set<(settings: SecuritySettings) => void>()
 let terminalDataChannel: Channel<TerminalDataPayload> | null = null
@@ -430,7 +431,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     serialTransferCancel: (tabId: string) => invoke<void>('app_serial_cancel_transfer', { tabId }),
     saveSessionLog: (tabId: string) => invoke<string | null>('app_save_session_log', { tabId }),
     minimizeCurrentWindow: () => invoke<void>('app_window_action', { action: 'minimize' }),
-    showCurrentWindow: () => invoke<void>('app_window_action', { action: 'show' }),
+    showCurrentWindow,
     isCurrentWindowMaximized: () => invoke<boolean>('app_is_window_maximized'),
     toggleMaximizeCurrentWindow: () => invoke<void>('app_window_action', { action: 'toggle-maximize' }),
     closeCurrentWindow: () => invoke<void>('app_window_action', { action: 'close' }),

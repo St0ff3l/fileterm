@@ -14,8 +14,6 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
 use crate::commands::OpenWindowInput;
 #[cfg(target_os = "linux")]
 use gtk::prelude::GtkWindowExt;
-#[cfg(target_os = "macos")]
-use std::sync::atomic::AtomicU64;
 use std::{
     collections::{HashMap, HashSet},
     sync::{atomic::AtomicBool, atomic::Ordering, Mutex},
@@ -45,6 +43,8 @@ include!("lib/error.rs");
 include!("lib/state.rs");
 include!("lib/menu.rs");
 include!("lib/platform.rs");
+#[cfg(target_os = "macos")]
+include!("lib/macos_titlebar/mod.rs");
 include!("lib/window_geometry.rs");
 include!("lib/windows.rs");
 include!("lib/runtime.rs");

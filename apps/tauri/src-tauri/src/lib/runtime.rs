@@ -6,23 +6,6 @@ pub fn run() {
     #[cfg(target_os = "windows")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
-    #[cfg(target_os = "macos")]
-    let builder = builder.on_page_load(|webview, payload| {
-        if webview.label() == "main"
-            && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
-            && !MACOS_TRAFFIC_LIGHTS_CALIBRATED.load(Ordering::Acquire)
-        {
-            if let Some(window) = webview.get_webview_window("main") {
-                let calibration_window = window.clone();
-                let _ = window.run_on_main_thread(move || {
-                    if calibrate_macos_traffic_lights(&calibration_window) {
-                        MACOS_TRAFFIC_LIGHTS_CALIBRATED.store(true, Ordering::Release);
-                    }
-                });
-            }
-        }
-    });
-
     builder
         .setup(|app| {
             // Initialize the logger before migration so portable-root and
@@ -117,7 +100,7 @@ pub fn run() {
             // ── Platform-specific window chrome ────────────────────────────
             // macOS: keep decorations + Overlay titleBarStyle so the traffic
             //        lights float over renderer content. AppKit control size
-            //        and frames are calibrated after the first page load.
+            //        and frames are calibrated before the renderer reveals it.
             // Windows/Linux: drop the OS frame so the renderer owns the
             // compact menu/title row. This also avoids a GTK titlebar above
             // the themed renderer menu on Linux.
@@ -165,8 +148,6 @@ pub fn run() {
                             window.is_maximized().unwrap_or(false),
                         );
                     }
-                    #[cfg(target_os = "macos")]
-                    schedule_macos_traffic_light_recalibration(&app_handle);
                 }
                 _ => {}
             });
@@ -290,6 +271,21 @@ pub fn run() {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                     let _ = crate::services::updates::check(&startup_handle).await;
                 });
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                // The config creates this window hidden. Read persisted zoom
+                // and restore native geometry before the first visible frame.
+                refresh_macos_titlebar_zoom(app.handle());
+                install_macos_titlebar_observers(&main_window);
+                if !calibrate_macos_traffic_lights(&main_window) {
+                    crate::services::logging::warn(
+                        app.handle(),
+                        "window",
+                        "native titlebar unavailable before show",
+                    );
+                }
             }
 
             Ok(())
@@ -682,6 +678,7 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             if matches!(_event, tauri::RunEvent::Exit) {
+                remove_macos_titlebar_observers();
                 crate::sessions::local_files::cleanup_network_mounts();
             }
             if matches!(_event, tauri::RunEvent::Exit) {
