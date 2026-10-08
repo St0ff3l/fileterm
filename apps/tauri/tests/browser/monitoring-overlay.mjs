@@ -33,11 +33,12 @@ import { SystemSidebar } from './apps/tauri/src/renderer/features/system/system-
 import './apps/tauri/src/renderer/styles/index.css'
 setLocale('zhCN')
 window.calls = []
+window.reconnectCalls = []
 window.toggleCalls = []
 window.toggleFails = false
 window.toggleHangs = false
 window.snapshots = []
-window.fileterm = { setMonitoringEnabled: async (...args) => {window.toggleCalls.push(args); if(window.toggleHangs) return new Promise(() => {}); await new Promise(resolve => setTimeout(resolve, 100)); if(window.toggleFails) throw new Error('control failure'); return {phase:args[2] ? 'starting' : 'stopped'}}, retryMonitoring: async (...args) => { window.calls.push(args); await new Promise(resolve => setTimeout(resolve, 300)) } }
+window.fileterm = { reconnectTab: async (...args) => { window.reconnectCalls.push(args) }, setMonitoringEnabled: async (...args) => {window.toggleCalls.push(args); if(window.toggleHangs) return new Promise(() => {}); await new Promise(resolve => setTimeout(resolve, 100)); if(window.toggleFails) throw new Error('control failure'); return {phase:args[2] ? 'starting' : 'stopped'}}, retryMonitoring: async (...args) => { window.calls.push(args); await new Promise(resolve => setTimeout(resolve, 300)) } }
 const root = createRoot(document.getElementById('root'))
 window.renderMonitoring = (phase = 'paused', collapsed = false, connected = true, connectionStatus = connected ? 'connected' : 'error') => {
  window.view = {phase,collapsed,connected,connectionStatus}
@@ -138,11 +139,13 @@ try {
   await assertMonitoringTitleColor(page, '--text-primary')
   assert.equal(await page.locator('.monitoring-toggle').count(), 0)
   assert.equal(await page.locator('.monitoring-overlay button').count(), 0)
+  assert.equal(await page.evaluate(() => window.reconnectCalls.length), 0)
   assert.match(await page.locator('.monitoring-overlay').innerText(), /仍显示已停止，可点击右上角电源按钮启动监控/)
   await page.evaluate(() => window.renderMonitoring('disconnected', false, false, 'connecting'))
   await page.locator('.monitoring-overlay[data-phase="reconnecting"]').waitFor()
   await assertMonitoringTitleColor(page, '--text-primary')
   assert.equal(await page.locator('.monitoring-overlay button').count(), 0)
+  assert.equal(await page.evaluate(() => window.reconnectCalls.length), 0)
   assert.equal(await page.evaluate(() => window.calls.length), before + 1)
   await page.evaluate(() => window.renderMonitoring('healthy'))
   await page.locator('.monitoring-overlay').waitFor({ state: 'detached' })
@@ -275,32 +278,24 @@ try {
   assert.equal(await page.getByRole('dialog').count(), 1)
   await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
 
-  // Both overlay commands recover their buttons after a missing IPC reply.
-  for (const ssh of [false, true]) {
-    await page.evaluate((ssh) => {
-      window.renderMonitoring(ssh ? 'disconnected' : 'failed', false, !ssh)
-      if (ssh) window.fileterm.reconnectTab = async () => new Promise(() => {})
-      else window.fileterm.retryMonitoring = async () => new Promise(() => {})
-    }, ssh)
-    const button = page.locator('.monitoring-overlay button')
-    await button.click()
-    await page.clock.fastForward(21000)
-    await page.locator('.monitoring-overlay [role="alert"]').waitFor()
-    assert.equal(await button.isDisabled(), false)
-    await page.evaluate((ssh) => {
-      if (ssh) window.fileterm.reconnectTab = async () => ({ tabs: [{ id: 'tab', status: 'connecting' }] })
-      else
-        window.fileterm.retryMonitoring = async () => {
-          window.calls.push(['retry-after-timeout'])
-        }
-    }, ssh)
-    await button.click()
-    if (ssh) await page.locator('.monitoring-overlay[data-phase="reconnecting"]').waitFor()
-    else {
-      await page.waitForFunction(() => window.calls.at(-1)?.[0] === 'retry-after-timeout')
-      assert.equal(await page.locator('.monitoring-overlay [role="alert"]').count(), 0)
+  // The monitoring retry button recovers after a missing IPC reply.
+  await page.evaluate(() => {
+    window.renderMonitoring('failed')
+    window.fileterm.retryMonitoring = async () => new Promise(() => {})
+  })
+  const retryButton = page.locator('.monitoring-overlay button')
+  await retryButton.click()
+  await page.clock.fastForward(21000)
+  await page.locator('.monitoring-overlay [role="alert"]').waitFor()
+  assert.equal(await retryButton.isDisabled(), false)
+  await page.evaluate(() => {
+    window.fileterm.retryMonitoring = async () => {
+      window.calls.push(['retry-after-timeout'])
     }
-  }
+  })
+  await retryButton.click()
+  await page.waitForFunction(() => window.calls.at(-1)?.[0] === 'retry-after-timeout')
+  assert.equal(await page.locator('.monitoring-overlay [role="alert"]').count(), 0)
   assert.deepEqual(errors, [])
   console.log(
     'PASS: overlay recovery states, manual retry, terminal input, collapse, four themes, 214px width, disconnect'
