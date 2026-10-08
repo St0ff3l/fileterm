@@ -22,6 +22,7 @@
     "typecheck": "npm run build:packages && node ./scripts/workspace-run.mjs typecheck packages/core packages/shared packages/storage apps/tauri",
     "test": "npm run test:tauri",
     "test:tauri": "node ./scripts/workspace-run.mjs test apps/tauri",
+    "test:local": "npm run typecheck && npm run lint && npx prettier --check apps/tauri packages/core packages/shared packages/storage && npm run test:renderer -w @fileterm/tauri && npm run test:tauri",
     "prepare": "husky",
     "version:bump": "node ./scripts/bump-version.mjs",
     "release:mac": "node ./scripts/workspace-run.mjs release:mac apps/tauri",
