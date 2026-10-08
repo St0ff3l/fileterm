@@ -11,6 +11,20 @@ import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
 import assert from 'node:assert/strict'
 const root = fileURLToPath(new URL('../../../../', import.meta.url))
 const directory = mkdtempSync(join(tmpdir(), 'fileterm-monitoring-browser-'))
+async function assertMonitoringTitleColor(page, token) {
+  const actual = await page
+    .locator('.monitoring-overlay-title')
+    .evaluate((element) => window.getComputedStyle(element).color)
+  const expected = await page.evaluate((name) => {
+    const probe = document.createElement('span')
+    probe.style.color = `var(${name})`
+    document.body.append(probe)
+    const color = window.getComputedStyle(probe).color
+    probe.remove()
+    return color
+  }, token)
+  assert.equal(actual, expected)
+}
 const entry = `
 import { setLocale } from './apps/tauri/src/renderer/i18n'
 import React from 'react'
@@ -19,13 +33,11 @@ import { SystemSidebar } from './apps/tauri/src/renderer/features/system/system-
 import './apps/tauri/src/renderer/styles/index.css'
 setLocale('zhCN')
 window.calls = []
-window.reconnectCalls = []
-window.reconnectFails = false
 window.toggleCalls = []
 window.toggleFails = false
 window.toggleHangs = false
 window.snapshots = []
-window.fileterm = { reconnectTab: async (tabId) => { window.reconnectCalls.push(tabId); await new Promise(resolve => setTimeout(resolve, 300)); if(window.reconnectFails) throw new Error('failure'); window.renderMonitoring('disconnected', false, false, 'connecting'); return {tabs:[{id:tabId,status:'connecting'}]} }, setMonitoringEnabled: async (...args) => {window.toggleCalls.push(args); if(window.toggleHangs) return new Promise(() => {}); await new Promise(resolve => setTimeout(resolve, 100)); if(window.toggleFails) throw new Error('control failure'); return {phase:args[2] ? 'starting' : 'stopped'}}, retryMonitoring: async (...args) => { window.calls.push(args); await new Promise(resolve => setTimeout(resolve, 300)) } }
+window.fileterm = { setMonitoringEnabled: async (...args) => {window.toggleCalls.push(args); if(window.toggleHangs) return new Promise(() => {}); await new Promise(resolve => setTimeout(resolve, 100)); if(window.toggleFails) throw new Error('control failure'); return {phase:args[2] ? 'starting' : 'stopped'}}, retryMonitoring: async (...args) => { window.calls.push(args); await new Promise(resolve => setTimeout(resolve, 300)) } }
 const root = createRoot(document.getElementById('root'))
 window.renderMonitoring = (phase = 'paused', collapsed = false, connected = true, connectionStatus = connected ? 'connected' : 'error') => {
  window.view = {phase,collapsed,connected,connectionStatus}
@@ -117,23 +129,20 @@ try {
   assert.equal(await page.locator('.monitoring-toggle').getAttribute('data-stopped'), 'true')
   await page.getByRole('button', { name: '启动监控', exact: true }).click()
   await page.locator('.monitoring-overlay[data-phase="starting"]').waitFor()
+  await assertMonitoringTitleColor(page, '--text-primary')
   assert.equal(await page.evaluate(() => window.toggleCalls.length), 2)
   await page.evaluate(() => {
-    window.reconnectFails = true
     window.renderMonitoring('disconnected', false, false)
   })
   await page.locator('.monitoring-overlay[data-phase="ssh-disconnected"]').waitFor()
+  await assertMonitoringTitleColor(page, '--text-primary')
   assert.equal(await page.locator('.monitoring-toggle').count(), 0)
-  await page.getByRole('button', { name: '重新连接 SSH', exact: true }).click()
-  await page.locator('.monitoring-overlay [role="alert"]').waitFor()
-  await page.evaluate(() => {
-    window.reconnectFails = false
-  })
-  await page.getByRole('button', { name: '重新连接 SSH', exact: true }).click()
-  assert.equal(await page.locator('.monitoring-overlay button').isDisabled(), true)
+  assert.equal(await page.locator('.monitoring-overlay button').count(), 0)
+  assert.match(await page.locator('.monitoring-overlay').innerText(), /仍显示已停止，可点击右上角电源按钮启动监控/)
+  await page.evaluate(() => window.renderMonitoring('disconnected', false, false, 'connecting'))
   await page.locator('.monitoring-overlay[data-phase="reconnecting"]').waitFor()
-  assert.equal(await page.locator('.monitoring-overlay button').isDisabled(), true)
-  assert.equal(await page.evaluate(() => window.reconnectCalls.length), 2)
+  await assertMonitoringTitleColor(page, '--text-primary')
+  assert.equal(await page.locator('.monitoring-overlay button').count(), 0)
   assert.equal(await page.evaluate(() => window.calls.length), before + 1)
   await page.evaluate(() => window.renderMonitoring('healthy'))
   await page.locator('.monitoring-overlay').waitFor({ state: 'detached' })

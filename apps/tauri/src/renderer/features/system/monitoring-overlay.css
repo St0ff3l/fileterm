@@ -26,7 +26,7 @@
   overflow-wrap: anywhere;
 }
 .monitoring-overlay-message strong {
-  color: var(--status-warning-text);
+  color: var(--text-primary);
   font-size: 13px;
 }
 .monitoring-overlay-message p {
@@ -44,9 +44,6 @@
   color: var(--status-warning-text);
 }
 
-.monitoring-overlay[data-phase='stopped'] strong {
-  color: var(--text-primary);
-}
 .monitoring-overlay-message p {
   color: var(--text-secondary);
 }
@@ -62,10 +59,11 @@
   justify-content: center;
   gap: 6px;
 }
-.monitoring-overlay[data-phase='starting'] strong,
-.monitoring-overlay[data-phase='recovering'] strong,
-.monitoring-overlay[data-phase='reconnecting'] strong {
-  color: var(--text-primary);
+.monitoring-overlay[data-phase='paused'] strong,
+.monitoring-overlay[data-phase='waiting'] strong,
+.monitoring-overlay[data-phase='disconnected'] strong,
+.monitoring-overlay[data-phase='unsupported'] strong {
+  color: var(--status-warning-text);
 }
 .monitoring-overlay-spinner {
   box-sizing: border-box;
