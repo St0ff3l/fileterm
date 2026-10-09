@@ -132,6 +132,20 @@ pub fn run() {
                 .unwrap_or(false);
             restore_main_window_geometry(app.handle(), &main_window, remember_window_size);
 
+            // The Windows main window starts hidden, and restoring its size
+            // can change its initial position. Center the final geometry
+            // before the renderer reveals the window.
+            #[cfg(target_os = "windows")]
+            if !main_window.is_maximized().unwrap_or(false) {
+                if let Err(error) = main_window.center() {
+                    crate::services::logging::warn(
+                        app.handle(),
+                        "window",
+                        format!("unable to center Windows main window: {error}"),
+                    );
+                }
+            }
+
             let app_handle = app.handle().clone();
             main_window.on_window_event(move |event| match event {
                 WindowEvent::CloseRequested { api, .. } => {

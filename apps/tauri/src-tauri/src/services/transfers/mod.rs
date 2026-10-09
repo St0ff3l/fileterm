@@ -16,6 +16,8 @@ include!("directory_entry.rs");
 include!("cleanup.rs");
 include!("tests.rs");
 
+mod power;
+
 #[cfg(test)]
 mod journal_tests;
 

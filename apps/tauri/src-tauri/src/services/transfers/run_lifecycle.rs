@@ -152,6 +152,12 @@ async fn run(
             "文件访问权限模式已变化，请切换回创建任务时的视图后再传输",
         ));
     }
+    // Hold through directory discovery, streaming, verification and commit.
+    // Dropping this lease on every return/panic releases our activity claim.
+    let _power_lease = tokio::select! {
+        _ = cancel.cancelled() => return Ok(()),
+        lease = power::acquire(app.clone()) => lease,
+    };
     task = patch_task_for_execution(
         &app,
         &transfer_id,
