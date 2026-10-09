@@ -53,32 +53,6 @@
   z-index: 5;
 }
 
-.terminal-right-frame {
-  grid-column: 3;
-  grid-row: 2;
-  width: 12px;
-  min-height: 0;
-  height: 100%;
-  background: linear-gradient(
-    to left,
-    var(--terminal-right-frame-outer) 0px,
-    var(--terminal-right-frame-outer) 11px,
-    var(--terminal-right-frame-accent) 11px,
-    var(--terminal-right-frame-accent) 12px
-  );
-  z-index: 6;
-}
-
-.fs-shell.has-window-menubar .terminal-right-frame {
-  grid-row: 3;
-}
-
-.fs-shell.is-local-terminal .terminal-right-frame,
-.fs-shell.is-home-active .terminal-right-frame,
-.fs-shell.has-ai-copilot .terminal-right-frame {
-  display: none;
-}
-
 .session-split-resizer {
   position: absolute;
   right: 0;

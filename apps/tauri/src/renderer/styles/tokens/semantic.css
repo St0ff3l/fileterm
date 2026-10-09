@@ -254,7 +254,7 @@
   --terminal-frame-shadow: var(--ref-terminal-frame-shadow, none);
   --terminal-frame-gradient: var(--ref-terminal-frame-gradient, none);
   --terminal-right-frame-outer: var(--surface-toolbar);
-  --terminal-right-frame-accent: var(--border-subtle);
+  --terminal-right-frame-accent: var(--border-default);
   --terminal-dock-shadow: var(--shadow-lg);
   --terminal-dock-header-shadow: var(--shadow-md);
 

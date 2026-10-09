@@ -281,7 +281,8 @@ async fn follow_shell_cwd(
     root_file_access_method: RootFileAccessMethod,
     sudo_user: Option<String>,
     sudo_password: Option<String>,
-) {
+    silent: bool,
+) -> Option<String> {
     crate::services::logging::ssh_debug(
         &app,
         &tab_id,
@@ -291,29 +292,38 @@ async fn follow_shell_cwd(
             sudo_password.is_some(),
         ),
     );
-    let previous_remote_path = {
+    let (previous_remote_path, previous_files) = {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
         let mut sessions = state.sessions.write().await;
-        let Some(session) = sessions.get_mut(&tab_id) else {
-            return;
-        };
+        let session = sessions.get_mut(&tab_id)?;
         if session.shell_cwd.as_deref() != Some(cwd.as_str())
             || !session.follow_shell_cwd
             || session.file_access_mode != file_access_mode
             || (file_access_mode == "root" && session.sudo_user != sudo_user)
+            || (silent && session.remote_files_loading)
         {
-            return;
+            return None;
         }
-        session.remote_files_loading = true;
-        session.remote_path.clone()
+        if !silent {
+            session.remote_files_loading = true;
+        }
+        (
+            session.remote_path.clone(),
+            silent.then(|| session.remote_files.clone()),
+        )
     };
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    if !silent {
+        if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
     }
+    // A completed command re-aligns a manually browsed pane even when the
+    // shell CWD did not change. Resolve the actual SFTP namespace in both
+    // modes; silence only suppresses loading and unchanged snapshots.
 
     // The SFTP session belongs to the login user. Once `sudo -i` has started
     // a root shell, following CWD through that channel silently remains in
-    // the old user's view. Electron switches to its sudo shell path here.
+    // the old user's view. Use the authenticated privileged shell instead.
     let listing = match timeout(operation_timeout, async {
         if file_access_mode == "root" {
             exec_list_dir_via_shell(
@@ -343,19 +353,29 @@ async fn follow_shell_cwd(
     let follow_error = listing.as_ref().err().cloned();
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let mut sessions = state.sessions.write().await;
-    let Some(session) = sessions.get_mut(&tab_id) else {
-        return;
-    };
-    session.remote_files_loading = false;
+    let session = sessions.get_mut(&tab_id)?;
+    if !silent {
+        session.remote_files_loading = false;
+    }
+    let mut publish = !silent;
+    let mut applied_path = None;
     if session.shell_cwd.as_deref() == Some(cwd.as_str())
         && session.follow_shell_cwd
         && session.remote_path == previous_remote_path
         && session.file_access_mode == file_access_mode
         && (file_access_mode != "root" || session.sudo_user == sudo_user)
+        && (!silent
+            || (!session.remote_files_loading
+                && previous_files.as_ref() == Some(&session.remote_files)))
     {
         if let Ok((files, resolved_path)) = &listing {
-            session.remote_path = resolved_path.clone();
-            session.remote_files = files.clone();
+            applied_path = Some(resolved_path.clone());
+            publish |= apply_followed_remote_listing(
+                &mut session.remote_path,
+                &mut session.remote_files,
+                resolved_path,
+                files,
+            );
         }
     }
     drop(sessions);
@@ -382,9 +402,33 @@ async fn follow_shell_cwd(
         }
     }
 
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    if publish {
+        if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
     }
+    applied_path
+}
+
+fn apply_followed_remote_listing(
+    current_path: &mut String,
+    current_files: &mut Vec<Value>,
+    resolved_path: &str,
+    files: &[Value],
+) -> bool {
+    let path_changed = current_path != resolved_path;
+    if path_changed {
+        *current_path = resolved_path.to_owned();
+    }
+    replace_changed_remote_files(current_files, files) || path_changed
+}
+
+fn replace_changed_remote_files(current: &mut Vec<Value>, files: &[Value]) -> bool {
+    if current == files {
+        return false;
+    }
+    *current = files.to_vec();
+    true
 }
 
 /// Flush the batch buffer to the terminal output pump channel.

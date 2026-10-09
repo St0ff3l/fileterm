@@ -46,7 +46,7 @@ async fn run_worker_event_loop(
     // split those two markers into separate packets; defer a CWD-only event
     // until its matching user marker arrives so a root transition cannot
     // briefly browse through the stale sudo method.
-    let mut pending_cwd_marker_without_user: Option<String> = None;
+    let mut prompt_refresh = ShellPromptRefresh::default();
     let mut batch_buffer: Vec<u8> = Vec::new();
     let mut stdout_decoder = SshUtf8Decoder::default();
     let mut stderr_decoder = SshUtf8Decoder::default();
@@ -84,10 +84,9 @@ async fn run_worker_event_loop(
     let mut pending_root_access_command: Option<PendingRootAccessAuth> = None;
     let mut last_authenticated_root_access: Option<PendingRootAccessAuth> = None;
     let mut root_file_access_method = RootFileAccessMethod::Sudo;
-    // A new `sudo -i` shell discards the login shell's PROMPT_COMMAND.  Keep
-    // Electron's two-second guard so a root prompt causes one safe reinject
-    // of the OSC CWD/RemoteUser hook, not an injection loop.
-    let mut last_shell_setup_injection = Instant::now() - Duration::from_secs(3);
+    // A login shell discards its parent's hooks. Arm exactly one installation
+    // per submitted interactive transition, including nested root shells.
+    let mut root_shell_setup_pending = false;
 
     let tunnel_command_tx = start_tunnel_command_runtime(profile, tab_id, app, &handle).await;
 
@@ -123,14 +122,15 @@ async fn run_worker_event_loop(
                             .filter(|session| session.follow_shell_cwd)
                             .and_then(|session| session.shell_cwd.clone());
                         if let Some(cwd) = startup_cwd {
-                            cwd_refresh.send_replace(Some(CwdRefreshRequest {
+                            cwd_refresh.enqueue(CwdRefreshRequest {
                                 cwd,
+                                silent: false,
                                 sftp: Arc::clone(sftp),
                                 file_access_mode: file_access_mode.clone(),
                                 root_file_access_method,
                                 sudo_user: sudo_user.clone(),
                                 sudo_password: root_password.clone(),
-                            }));
+                            });
                         }
                     }
                     // Never inject a setup command into a command the user has
@@ -145,7 +145,6 @@ async fn run_worker_event_loop(
                                     // replacement instead of displaying two
                                     // identical username/host prompts.
                                     pending_shell_setup_echo = Some(ShellSetupEchoSuppression::without_replacement_prompt());
-                                    last_shell_setup_injection = Instant::now();
                                 }
                             } else {
                                 shell_setup_waiting_for_prompt = true;
@@ -184,6 +183,11 @@ async fn run_worker_event_loop(
                     deferred_terminal_input.clear();
                 }
                 if !network_device_mode {
+                    root_shell_setup_pending |= root_shell_setup_requested(
+                        &data,
+                        &recent_terminal_input,
+                        awaiting_root_access_auth.is_some(),
+                    );
                     let previous_pending_command = pending_root_access_command.clone();
                     if capture_root_access_password_input(
                         &data,
@@ -280,6 +284,13 @@ async fn run_worker_event_loop(
                 }
                 if let Some(WorkerCmd::WriteTerminal(data)) = &cmd {
                     terminal_input_started |= !data.is_empty();
+                    if !network_device_mode {
+                        root_shell_setup_pending |= root_shell_setup_requested(
+                            data,
+                            &recent_terminal_input,
+                            awaiting_root_access_auth.is_some(),
+                        );
+                    }
                 }
                 match handle_worker_command_event(
                     cmd,
@@ -386,6 +397,10 @@ async fn run_worker_event_loop(
                         // before the file exec channel is opened.
                         let text = stderr_decoder.decode(data.as_ref());
                         if !network_device_mode {
+                            // Bash writes PS0 to stderr; some servers preserve
+                            // it as ExtendedData even with a PTY.
+                            prompt_refresh.observe_output(&text);
+                            let previous_pending_command = pending_root_access_command.clone();
                             if track_root_access_prompt_from_terminal(
                                 &text,
                                 &mut sudo_prompt_buffer,
@@ -421,6 +436,11 @@ async fn run_worker_event_loop(
                                     tab_id,
                                     "interactive privilege password filled from connection profile",
                                 );
+                            }
+                            if pending_root_access_command != previous_pending_command {
+                                root_shell_setup_pending |= pending_root_access_command
+                                    .as_ref()
+                                    .is_some_and(|auth| auth.interactive_shell);
                             }
                         }
                         let visible = filter_shell_setup_output(

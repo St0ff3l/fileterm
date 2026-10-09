@@ -1,0 +1,21 @@
+.terminal-right-frame {
+  grid-column: 3;
+  grid-row: 2;
+  box-sizing: border-box;
+  width: 12px;
+  min-height: 0;
+  height: 100%;
+  border-inline: 1px solid var(--terminal-right-frame-accent);
+  background: var(--terminal-right-frame-outer);
+  z-index: 6;
+}
+
+.fs-shell.has-window-menubar .terminal-right-frame {
+  grid-row: 3;
+}
+
+.fs-shell.is-local-terminal .terminal-right-frame,
+.fs-shell.is-home-active .terminal-right-frame,
+.fs-shell.has-ai-copilot .terminal-right-frame {
+  display: none;
+}

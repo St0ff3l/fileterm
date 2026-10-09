@@ -134,15 +134,68 @@ fn should_reinject_root_shell_setup(
     setup_echo_pending: bool,
     waiting_for_initial_prompt: bool,
     interactive_root_transition_pending: bool,
-    shell_is_root: bool,
     visible: &str,
 ) -> bool {
     shell_setup_available
         && !setup_echo_pending
         && !waiting_for_initial_prompt
         && interactive_root_transition_pending
-        && !shell_is_root
         && looks_like_root_prompt(visible)
+}
+
+/// Detect a submitted interactive privilege command, including split/pasted
+/// input. Password input must never arm another hook injection.
+fn root_shell_setup_requested(input: &str, recent_input: &str, awaiting_password: bool) -> bool {
+    if awaiting_password {
+        return false;
+    }
+    let mut line = recent_input
+        .rsplit(['\r', '\n'])
+        .next()
+        .unwrap_or("")
+        .to_string();
+    for ch in input.chars() {
+        match ch {
+            '\r' | '\n' => {
+                if privilege_command_from_terminal_input(&line)
+                    .is_some_and(|auth| auth.interactive_shell)
+                {
+                    return true;
+                }
+                line.clear();
+            }
+            '\u{8}' | '\u{7f}' => {
+                line.pop();
+            }
+            '\u{3}' => line.clear(),
+            _ => line.push(ch),
+        }
+    }
+    false
+}
+
+/// The PTY echoes the submitted command after readline/history expansion.
+/// Inspect completed lines only: raw Up/Tab/bracketed-paste bytes are not a
+/// reliable representation of the command the user actually submitted.
+fn privilege_command_from_shell_echo(output: &str) -> Option<PendingRootAccessAuth> {
+    let (completed, _) = output.rsplit_once(['\r', '\n'])?;
+    for line in completed.rsplit(['\r', '\n']) {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let prompt = ["$ ", "# ", "% ", "> "]
+            .iter()
+            .filter_map(|marker| line.rfind(marker).map(|index| index + marker.len()))
+            .max();
+        if let Some(start) = prompt {
+            return privilege_command_from_terminal_input(&line[start..]);
+        }
+        if let Some(auth) = privilege_command_from_terminal_input(line) {
+            return Some(auth);
+        }
+        // Authentication/banner lines may follow the submitted command.
+    }
+    None
 }
 
 fn looks_like_shell_prompt(value: &str) -> bool {
@@ -226,11 +279,21 @@ struct PendingRootAccessAuth {
 }
 
 fn privilege_command_from_terminal_input(input: &str) -> Option<PendingRootAccessAuth> {
-    let command = input
+    let visible = visible_shell_text(input);
+    let line = visible
         .trim_end_matches(['\r', '\n'])
         .rsplit(['\r', '\n'])
-        .next()?
-        .trim();
+        .next()?;
+    let mut command = String::new();
+    for ch in line.chars() {
+        match ch {
+            '\u{8}' | '\u{7f}' => {
+                command.pop();
+            }
+            '\u{3}' | '\u{15}' => command.clear(),
+            _ => command.push(ch),
+        }
+    }
     let mut parts = command.split_whitespace();
     let executable = parts.next()?;
     let args = parts.collect::<Vec<_>>();
@@ -320,13 +383,15 @@ fn capture_root_access_password_input(
                 // prompt is observed, so a passwordless `su` cannot turn an
                 // arbitrary later shell command into credentials.
                 pending_password.clear();
-            } else if !current_line.is_empty()
-                && pending_command
-                    .as_ref()
-                    .is_some_and(|auth| auth.interactive_shell)
-            {
+            } else {
                 pending_password.clear();
-                pending_password.push_str(current_line);
+                // History recall may hide the privilege command from input
+                // tracking. Retain a plain submitted line until the PTY echo
+                // and password prompt can prove it was a credential exchange.
+                // Escape sequences from Up/Tab/paste are never credentials.
+                if !current_line.is_empty() && !current_line.chars().any(char::is_control) {
+                    pending_password.push_str(current_line);
+                }
             }
         }
         recent_input.push(ch);
@@ -357,7 +422,11 @@ fn capture_root_access_password_input(
         match ch {
             '\r' | '\n' => {
                 if !pending_password.is_empty() {
-                    changed = sudo_password.as_deref() != Some(pending_password.as_str());
+                    // Equal sudo/su passwords still belong to distinct caches.
+                    // Report a method/target transition so the worker copies
+                    // this credential into the newly authenticated cache.
+                    changed = sudo_password.as_deref() != Some(pending_password.as_str())
+                        || last_authenticated_access.as_ref() != Some(&auth);
                     *sudo_password = Some(std::mem::take(pending_password));
                     *last_authenticated_access = Some(auth);
                 }
@@ -399,13 +468,16 @@ fn track_root_access_prompt_from_terminal(
     pending_command: &mut Option<PendingRootAccessAuth>,
 ) -> bool {
     let mut changed = false;
-    prompt_buffer.push_str(&visible_shell_text(output));
+    // Retain raw bytes across packets: readline CSI/OSC sequences can split
+    // anywhere, including immediately before the echoed privilege command.
+    prompt_buffer.push_str(output);
     if prompt_buffer.len() > 2048 {
         // shell 输出含中文时直接字节切片会 panic 杀死 worker，
         // 滚动窗口必须 char 边界安全。
         trim_string_front(prompt_buffer, 1024);
     }
-    let lower = prompt_buffer.to_ascii_lowercase();
+    let visible = visible_shell_text(prompt_buffer);
+    let lower = visible.to_ascii_lowercase();
     let auth_failed = root_access_auth_failed(&lower);
     if auth_failed {
         *awaiting_auth = None;
@@ -415,13 +487,17 @@ fn track_root_access_prompt_from_terminal(
         *pending_command = None;
         return sudo_password.take().is_some();
     }
-    if lower.contains("password") || prompt_buffer.contains("密码") {
+    if pending_command.is_none() {
+        *pending_command = privilege_command_from_shell_echo(&visible);
+    }
+    if lower.contains("password") || visible.contains("密码") {
         if let Some(auth) = pending_command.clone() {
             if !pending_password.is_empty() {
                 // The user may have entered the password before this output
                 // packet reached the worker. Promote the deferred line now
                 // that the prompt proves it was an authentication exchange.
-                changed = sudo_password.as_deref() != Some(pending_password.as_str());
+                changed = sudo_password.as_deref() != Some(pending_password.as_str())
+                    || last_authenticated_access.as_ref() != Some(&auth);
                 *sudo_password = Some(std::mem::take(pending_password));
                 *last_authenticated_access = Some(auth);
                 *awaiting_auth = None;
@@ -445,4 +521,9 @@ fn root_access_auth_failed(output: &str) -> bool {
         || output.contains("密码不正确")
         || output.contains("身份验证失败")
         || output.contains("认证失败")
+}
+
+#[cfg(test)]
+mod root_auth_cache_tests {
+    include!("root_auth_cache_tests.rs");
 }
