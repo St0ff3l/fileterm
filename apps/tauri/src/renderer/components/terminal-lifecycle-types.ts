@@ -75,7 +75,7 @@ export type TerminalLifecycleOptions = {
   findOpenRef: MutableRef<boolean>
   terminalZoomLockedRef: MutableRef<boolean>
   setHasSelection: Dispatch<SetStateAction<boolean>>
-  setContextMenu: Dispatch<SetStateAction<{ x: number; y: number } | null>>
+  setContextMenu: Dispatch<SetStateAction<{ x: number; y: number; selectedText?: string } | null>>
   setFindMatchCount: Dispatch<SetStateAction<number>>
   setActiveFindIndex: Dispatch<SetStateAction<number>>
   setFindMiss: Dispatch<SetStateAction<boolean>>

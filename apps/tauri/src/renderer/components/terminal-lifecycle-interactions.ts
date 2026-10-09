@@ -61,6 +61,7 @@ export function registerTerminalInteractionHandlers(
     // is authoritative. Pointerdown/mousedown are too early.
     // Keep the terminal as the focus owner while the portal menu is open so
     // a menu click cannot make a paste target ambiguous on WebKitGTK.
+    const selectedText = terminal.getSelection()
     markTerminalFocused()
     terminal.focus()
     const vimVisualSelection = getVimVisualSelection(terminal, true)
@@ -72,7 +73,7 @@ export function registerTerminalInteractionHandlers(
       vimVisualMode: vimVisualSelection?.mode,
       vimVisualRows: vimVisualSelection ? `${vimVisualSelection.startRow}-${vimVisualSelection.endRow}` : undefined
     })
-    setContextMenu({ x: event.clientX, y: event.clientY })
+    setContextMenu({ x: event.clientX, y: event.clientY, selectedText })
   }
 
   const isSecondaryButton = (event: MouseEvent | PointerEvent) => {
