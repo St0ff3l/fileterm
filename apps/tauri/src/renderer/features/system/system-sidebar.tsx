@@ -214,8 +214,8 @@ export function SystemSidebar({
                   {rows.length
                     ? rows.map((row) => (
                         <div className="disk-row" key={row.path}>
-                          <span>{row.path}</span>
-                          <span>{row.usage}</span>
+                          <span title={row.path}>{row.path}</span>
+                          <span title={row.usage}>{row.usage}</span>
                         </div>
                       ))
                     : Array.from({ length: 8 }).map((_, i) => (

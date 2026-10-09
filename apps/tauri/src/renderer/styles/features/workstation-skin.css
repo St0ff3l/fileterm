@@ -367,6 +367,7 @@ textarea:focus-visible,
 }
 
 .system-title {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1001,9 +1002,9 @@ textarea:focus-visible,
 
 .network-panel {
   height: 36px;
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border-light);
+  margin: 0 -12px;
+  padding: 6px 12px 0;
+  border-top: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -1069,6 +1070,14 @@ textarea:focus-visible,
 
 .disk-head {
   height: 25px;
+}
+
+/* Reserve the same footer height as the adjacent transfer strip. */
+.system-sidebar-layout .disk-table::after {
+  content: '';
+  box-sizing: border-box;
+  flex: 0 0 24px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .session-workspace {

@@ -473,23 +473,16 @@ fn apply_macos_main_window_vibrancy(window: &WebviewWindow<Wry>) -> Result<(), S
     }
 
     let view = unsafe { &*(handle.ns_view.as_ptr() as *const NSView) };
-    // Force a dark AppKit appearance for the native material. Without this,
-    // the material can resolve against the system light appearance while the
-    // renderer is using the Codex dark theme, which is the source of the
-    // intermittent gray/over-transparent result during focus and movement.
-    if let Some(native_window) = view.window() {
-        let dark_appearance =
-            unsafe { NSAppearance::appearanceNamed(objc2_app_kit::NSAppearanceNameDarkAqua) };
-        if let Some(dark_appearance) = dark_appearance {
-            native_window.setAppearance(Some(&dark_appearance));
-        }
-    }
-
     // window-vibrancy uses this stable tag for the view it inserts beneath
     // the WebView. Leave it visible so AppKit owns blur consistently; the
     // renderer's semi-transparent surface overlay keeps the resulting color
     // deterministic.
     if let Some(effect_view) = view.viewWithTag(91_376_254) {
+        // Keep Codex's dark blur local to the material; window controls must
+        // inherit the application's current light/dark appearance.
+        let dark_appearance =
+            unsafe { NSAppearance::appearanceNamed(objc2_app_kit::NSAppearanceNameDarkAqua) };
+        effect_view.setAppearance(dark_appearance.as_deref());
         effect_view.setHidden(false);
         effect_view.setAlphaValue(1.0);
     }

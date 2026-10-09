@@ -19,6 +19,14 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn macos_native_controls_follow_theme_variant() {
+        assert_eq!(super::macos_native_theme("light"), tauri::Theme::Light);
+        assert_eq!(super::macos_native_theme("dark"), tauri::Theme::Dark);
+        assert_eq!(super::macos_native_theme("unknown"), tauri::Theme::Dark);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn macos_traffic_lights_use_absolute_renderer_titlebar_geometry() {
         let window_height = 820.0;
         let titlebar_height = macos_renderer_titlebar_height(100);

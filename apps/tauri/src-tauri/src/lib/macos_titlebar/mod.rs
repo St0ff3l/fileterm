@@ -13,11 +13,31 @@ impl Drop for MacosTitlebarLayoutGuard {
     }
 }
 
+fn macos_native_theme(variant: &str) -> tauri::Theme {
+    if variant == "light" {
+        tauri::Theme::Light
+    } else {
+        tauri::Theme::Dark
+    }
+}
+
 fn refresh_macos_titlebar_zoom(app: &AppHandle<Wry>) {
-    let percent = crate::commands::app_get_ui_preferences(app.clone())
-        .map(|preferences| preferences.ui_zoom_percent)
-        .unwrap_or(100);
+    let preferences = crate::commands::app_get_ui_preferences(app.clone()).ok();
+    let percent = preferences
+        .as_ref()
+        .map_or(100, |value| value.ui_zoom_percent);
     MACOS_TITLEBAR_ZOOM.store(percent, Ordering::Relaxed);
+    if let (Some(preferences), Some(window)) = (preferences, app.get_webview_window("main")) {
+        if let Err(error) =
+            window.set_theme(Some(macos_native_theme(&preferences.theme_config.variant)))
+        {
+            crate::services::logging::warn(
+                app,
+                "window",
+                format!("failed to sync macOS appearance: {error}"),
+            );
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]

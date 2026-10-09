@@ -748,6 +748,9 @@
   color: var(--folder-accent);
 }
 
+:root:not([data-theme]) .system-sidebar-layout .disk-table::after,
+:root:not([data-theme*='light']) .system-sidebar-layout .disk-table::after,
+:root[data-theme='default'] .system-sidebar-layout .disk-table::after,
 :root:not([data-theme]) .transfer-strip,
 :root:not([data-theme*='light']) .transfer-strip,
 :root[data-theme='default'] .transfer-strip {

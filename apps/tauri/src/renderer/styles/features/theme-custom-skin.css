@@ -105,6 +105,7 @@
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .pane-path-bar,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .pane-filter-bar,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .file-tabs,
+:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .disk-table::after,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .transfer-strip,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .fs-file-table th {
   background: var(--surface-elevated) !important;
@@ -148,16 +149,28 @@
   color: var(--text-secondary) !important;
 }
 
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .fs-file-table tbody tr:nth-child(odd),
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .process-row:nth-child(odd),
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .disk-row:nth-child(odd) {
+:root[data-theme-base='codex']:not([data-theme-preset^='iterm2-']) .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme-base='codex']:not([data-theme-preset^='iterm2-']) .process-row:nth-child(odd),
+:root[data-theme-base='codex']:not([data-theme-preset^='iterm2-']) .disk-row:nth-child(odd) {
   background: var(--surface-sidebar) !important;
 }
 
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .fs-file-table tbody tr:nth-child(even),
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .process-row:nth-child(even),
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .disk-row:nth-child(even) {
+:root[data-theme-base='codex']:not([data-theme-preset^='iterm2-']) .fs-file-table tbody tr:nth-child(even),
+:root[data-theme-base='codex']:not([data-theme-preset^='iterm2-']) .process-row:nth-child(even),
+:root[data-theme-base='codex']:not([data-theme-preset^='iterm2-']) .disk-row:nth-child(even) {
   background: color-mix(in srgb, var(--surface-sidebar) 92%, var(--surface-elevated) 8%) !important;
+}
+
+:root[data-theme-preset^='iterm2-'] .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme-preset^='iterm2-'] .process-row:nth-child(odd),
+:root[data-theme-preset^='iterm2-'] .disk-row:nth-child(odd) {
+  background: var(--surface-card);
+}
+
+:root[data-theme-preset^='iterm2-'] .fs-file-table tbody tr:nth-child(even),
+:root[data-theme-preset^='iterm2-'] .process-row:nth-child(even),
+:root[data-theme-preset^='iterm2-'] .disk-row:nth-child(even) {
+  background: var(--surface-hover);
 }
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .fs-file-table tbody tr:hover,
@@ -175,10 +188,13 @@
 }
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .system-title,
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .network-select,
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .grid-chart {
+:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .network-select {
   background: var(--surface-elevated) !important;
   color: var(--text-primary) !important;
+}
+
+:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .grid-chart {
+  background: transparent;
 }
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .mini-tabs {
