@@ -1,163 +1,30 @@
 ---
 name: multiplatform-desktop-skill
-description: 为 FileTerm 的 Tauri + Rust + React + TypeScript 桌面应用处理 macOS、Windows、Linux 的 UI 差异、原生窗口与菜单、终端手势/字体、快捷键和功能归属冲突。用户提到跨平台、平台专用 UI、标题栏、菜单、终端快捷键、触控板/滚轮、字体、复制粘贴、窗口或标签关闭时使用。
+description: 修改 FileTerm 的平台差异、原生窗口/菜单、终端快捷键、手势或字体度量时使用。
 ---
 
-# FileTerm 跨平台 UI 与快捷键技能
+# FileTerm 跨平台桌面行为
 
-FileTerm 的生产链路是 **Tauri 2 + Rust + React + TypeScript**。当前分支只维护 Tauri；不要引用已移除的迁移前实现、目录或验证命令。
+先确定行为属于原生窗口、renderer 还是 xterm/远端程序。同名“关闭”和“缩放”不能共用错误的处理链。
 
-## 先定位归属
+## 平台与归属
 
-先分清用户要操作的对象；同一个按键或菜单名落在不同对象上，语义完全不同。
+- 平台唯一来源是 `window.fileterm.platform`（`darwin` / `win32` / `linux` / `browser`）；CSS 使用根节点 `data-platform`，不用 UA 或 `navigator.platform` 猜测。
+- 原生窗口/菜单走 Rust commands；renderer 经 `tauri-api.ts` 调用。终端选择、查找和字号留在 TerminalView/xterm。
+- macOS 保留原生 traffic lights；Windows/Linux 用自绘 WindowMenubar。拖拽区域与可点击控件分离；主窗口和独立窗口保持各自 frame/关闭链路。
+- 菜单、快捷键、标题栏和 tray 汇聚到同一关闭/退出决策链。区分关闭 pane/tab、关闭窗口、退出、隐藏到 tray。
+- 新增/迁移快捷键时核对平台、焦点、既有拥有者及 xterm 远端输入；不抢裸 `Ctrl+W` 等远端按键。
+- 终端字号变化重新计算网格并同步远端 PTY；保留字体度量校准，不用 WebView zoom 代替终端字号。
 
-| 用户意图                         | 正确归属                               | 典型反例                            |
-| -------------------------------- | -------------------------------------- | ----------------------------------- |
-| 退出、最小化、原生菜单、系统窗口 | Rust / Tauri window command            | Renderer 直接调用系统 API           |
-| 菜单项、标题栏布局、平台 CSS     | React renderer                         | 把 macOS 视觉留白套给 Windows/Linux |
-| 终端复制、输入、选择、分屏、字号 | `TerminalView` / xterm                 | 用应用 WebView 缩放代替终端字号     |
-| SSH / SFTP / FTP、远端 PTY 尺寸  | Rust command/event → bridge → renderer | Renderer 直接访问协议 client        |
+## 按需细节
 
-实现前确认完整链路：`Rust command/event → apps/tauri/src/bridge/tauri-api.ts → packages/core 类型 → renderer`。新系统能力必须经过这条边界。
-
-## 平台来源与 UI 分支
-
-- 只使用 `window.fileterm.platform`；Tauri bridge 归一化为 `darwin`、`win32`、`linux` 或 `browser`。
-- Renderer 启动时将该值写入 `document.documentElement.dataset.platform`；样式优先以 `:root[data-platform='…']` 分支。
-- 禁止 `navigator.platform`、UA 猜测、硬编码平台布尔值，或用 CSS 媒体查询猜操作系统。
-- macOS 使用原生窗口语义与 traffic lights；Windows/Linux 使用自绘 `WindowMenubar`。不要让任一方的标题栏、拖拽区或菜单结构泄漏到另一方。
-- 平台视觉差异应写在 theme token / 平台样式层，而不是散落在业务 JSX 内。
-
-## 详细 UI 实现规则
-
-### 标题栏、窗口与布局
-
-- **macOS**：保留系统 decorations 与 traffic lights，renderer 只为左上角控件留出避让空间。不要渲染 Windows/Linux 的菜单栏或自绘关闭按钮；不要把 traffic lights 当作普通 React button。
-- **Windows/Linux**：主窗口由 renderer 提供紧凑的 `WindowMenubar` 与窗口控制。拖拽区必须使用 `data-tauri-drag-region`，菜单、关闭/最小化/最大化按钮及其他可点击控件必须排除拖拽行为。
-- **独立窗口**：连接表单、命令表单和文件编辑器有自己的 frame 与关闭链路。检查主窗口的标题栏样式不会覆盖独立窗口，也不要把主窗口的菜单状态复用到独立窗口。
-- **布局改动**：同时验证 macOS traffic lights 避让、Windows/Linux 自绘 menubar 高度、最大化状态、窄窗口换行和高 DPI。标题栏的一个像素变化会向下挤压整个工作区。
-
-主要位置：
-
-- Rust 窗口创建、原生菜单、tray、关闭生命周期：`apps/tauri/src-tauri/src/lib.rs`
-- 窗口动作与命令边界：`apps/tauri/src-tauri/src/commands/mod.rs`
-- 自绘菜单：`apps/tauri/src/renderer/features/layout/window-menubar.tsx`
-- renderer 平台分支：`apps/tauri/src/renderer/app.tsx`、`apps/tauri/src/renderer/main.tsx`
-- shell 与平台样式：`apps/tauri/src/renderer/styles/features/shell.css`、`apps/tauri/src/renderer/styles/features/workstation-skin.css`
-
-### 原生菜单、context menu 与关闭链路
-
-- 原生窗口动作只能走 `app_window_action` 或专用 Tauri command；renderer 不能直接猜测窗口状态或调用 Web API 代替。
-- 同一能力只能有一个权威入口：菜单项、标题栏按钮、键盘快捷键和 tray 必须汇聚到同一关闭/退出决定链。
-- 区分“关闭当前 terminal pane/tab”“关闭主窗口”“退出应用”“隐藏到 tray”。相同的“关闭”文案不代表相同行为。
-- 菜单在某个平台不适用时应直接隐藏，而不是显示一个无效、没有 handler 或会抢终端输入的菜单项。
-- debug-only 的 devtools 入口必须受 `debug_assertions` / `import.meta.env.DEV` 双端约束；生产构建不暴露。
-
-### 主题、平台 CSS 与视觉密度
-
-- 颜色、阴影、圆角和间距先进入 `token → theme vars → component skin`，不要在业务组件散落十六进制颜色或平台专用 magic number。
-- 所有表单下拉框统一使用 `<DropdownSelect>`：macOS 下渲染 `.ft-select-shell` 原生样式外壳，Windows 和 Linux 下自动开启自绘 Popover 浮层菜单 (`dropdown-select-trigger` + `dropdown-select-menu`)，严禁直接写原生 `<select>` 标签。
-- `DropdownSelect` 的下拉箭头必须由公用组件通过控件实际高度自适应，不能在业务组件中固定一个跨尺寸的箭头大小；新增或调整控件高度时，同时验证 macOS 原生外壳与 Windows/Linux 自绘触发器的箭头比例、边距和垂直居中。
-- **紧凑系统指标磁盘选择器例外**：系统侧栏磁盘容量行中的 `disk-select` 仍必须使用 `<DropdownSelect>`，以保留键盘和跨平台切换语义；由于该行只有约 28px 宽、挂载点本身已经是可识别的交互文本，可通过 `hideArrow` 隐藏视觉箭头。不得把这个例外扩展到普通表单或其他下拉框；macOS 原生壳与 Windows/Linux 自绘触发器仍必须验证点击、键盘和菜单定位。
-- 优先在已有 `data-platform` 选择器中写差异。需要新增 CSS 时，写清楚为何只影响一个平台；不要用 `!important` 覆盖不清楚来源的规则。
-- Windows/Linux 的 CJK 字体高度可能高于 macOS。检查按钮、表格行、地址栏、标签栏、状态栏和弹窗标题的 line-height，避免文字垂直截断。
-- 高 DPI 下检查图标是否发虚、1px 边框是否稳定、紧凑布局是否仍可点击。不要只依赖开发机浏览器的像素结果。
-
-### Renderer 公共组件目录
-
-跨 feature 的 renderer 公共组件统一放在 `apps/tauri/src/renderer/features/common/`。新增界面前先查下面的目录，优先组合现有组件；不要在业务 feature 中重新实现相同的交互、焦点管理或圆点控件样式。
-
-| 组件                                        | 用途与边界                                                                                      |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `AppIcon`                                   | 离线 SVG 图标入口。按钮、状态和装饰图标优先使用它，禁止新增外部 WebFont 图标依赖。              |
-| `CloseButton`                               | 统一关闭按钮的语义、尺寸、图标和 `type="button"`。                                              |
-| `ConfirmActionDialog`                       | 删除、清空、危险操作以及需要二次确认的操作；禁止使用 `window.confirm()`。                       |
-| `ContextMenu`                               | 通用右键/上下文菜单，包含定位、键盘导航、Escape 关闭和焦点恢复。                                |
-| `DropdownSelect`                            | 所有表单下拉框；负责 macOS 原生外壳及 Windows/Linux 自绘菜单。                                  |
-| `ErrorBoundary`                             | renderer 错误边界和故障兜底展示。                                                               |
-| `FeedbackText`                              | 统一成功、提示和错误反馈文字的语义与样式。                                                      |
-| `ManagerInlineFolderRow`                    | 连接/命令管理器中的文件夹行及内联编辑交互。                                                     |
-| `RadioCardGroup`                            | 卡片式单选组；内部保持原生 radio 语义和键盘行为。                                               |
-| `ResourceMonitoringMetricsEditor`           | 系统资源监控指标的启用、排序和恢复默认编辑器。                                                  |
-| `SelectionControl`                          | 统一的原生 checkbox/radio 选择控件与圆点皮肤，支持 disabled、focus、ref 和 indeterminate 状态。 |
-| `SessionSendTargetPicker`                   | 多终端发送目标选择器，包含全选、不定态和记忆选择。                                              |
-| `StableButtonContent` / `StableButtonLabel` | 按钮忙碌态、图标、标签和占位宽度的稳定布局。                                                    |
-| `VerticalScrollbar`                         | 文件区、终端区等纵向滚动区域的统一滚动条；通过 `scrollRef` 绑定。                               |
-| `WorkspaceLoadingState`                     | 工作区、文件区和异步面板的统一加载状态。                                                        |
-
-终端专用但可跨终端复用的组件位于 `apps/tauri/src/renderer/components/`：`TerminalView` 负责 xterm 容器和终端生命周期，`TerminalContextMenu` 负责终端菜单适配，`TerminalFindBar` 负责终端查找栏。它们可以组合 `features/common/` 中的公共组件，但不应把终端/xterm 逻辑下沉到通用表单组件。
-
-公共选择控件规则：
-
-- 多选或独立开关使用 `<SelectionControl type="checkbox">`；互斥选择使用 `<SelectionControl type="radio">`，同一组 radio 必须共享 `name`。
-- 默认使用 `size="default"`；只有 18px 高密度场景才使用 `size="large"`。会话目标选择器和终端 dock 这类紧凑目标列表使用 `className="selection-control--target"`，不在业务 CSS 中复制一套圆点样式。
-- 需要“全选但部分选中”时通过 ref 设置原生 `indeterminate`，不要用第三种伪造状态替代 checkbox 语义。
-- `SelectionControl` 保留原生 input 的键盘、表单和辅助技术语义；业务层只负责状态与布局。自定义轨道式开关（例如递归操作开关）可以继续使用隐藏原生 input + track，但不应冒充圆点选择控件。
-- 不得在 feature CSS 中重新写 `appearance: none`、圆形边框、中心圆点、checked/focus 状态；需要尺寸或上下文差异时扩展公共组件的 size/skin/token。
-
-### 字体、图标、tray 与离线资源
-
-- 所有字体、图标和基础样式必须随应用打包；禁止运行时依赖外部 CDN。
-- 终端字体使用 `FILETERM_MONO_FONT_FAMILY`，UI 字体必须提供 CJK fallback。改变字体族、字重、字号或行高后，要重新检查标题栏、表格和终端网格。
-- `observeCanvasTextMetrics()` 是终端字体度量同步的一部分；不要删除后只凭 CSS 看起来“正常”。
-- macOS tray 使用 template image；Dock 图标、tray 图标、窗口图标是不同资源和尺寸策略，不能互相缩放复用。
-- 资源路径必须同时验证开发态与打包态。文件能在仓库中找到，不代表 Tauri bundle 一定包含它。
-
-## 快捷键：先做冲突表，再写代码
-
-每次新增或迁移快捷键，先列出目标、平台、优先级和既有拥有者；不要只搜索菜单标签。
-
-| 优先级 | 所属                | 规则                                                                                               |
-| ------ | ------------------- | -------------------------------------------------------------------------------------------------- |
-| 1      | 操作系统 / 原生窗口 | 保留 macOS `Cmd+Q`、`Cmd+W` 等原生语义；Windows/Linux 退出使用 `Alt+F4`。                          |
-| 2      | 浏览器/WebView      | 避免默认页面缩放、打印、开发者工具和系统预留键抢终端输入。                                         |
-| 3      | xterm / 远端程序    | `Ctrl+W`、Vim 键、readline、TUI 鼠标协议默认应交给远端。                                           |
-| 4      | FileTerm 终端功能   | 只在终端焦点内拦截，调用 `preventDefault()`、`stopPropagation()` 并让 xterm handler 返回 `false`。 |
-| 5      | 菜单展示            | 菜单快捷键文案必须与实际 handler 一致；没有实际绑定就不要展示。                                    |
-
-当前已确认的终端边界：
-
-- macOS 复制/粘贴：`Cmd+C` / `Cmd+V`；Windows/Linux：`Ctrl+Shift+C` / `Ctrl+Shift+V`。
-- 关闭当前终端 pane/tab：macOS `Cmd+W`；Windows/Linux `Ctrl+Shift+W`。不要绑定裸 `Ctrl+W`。
-- 分屏和终端缩放必须检查修饰键组合，避免 Windows 的 `Alt+Shift±` 分屏与 `Ctrl+Shift±` 终端缩放混淆。
-- 终端字号属于 xterm：macOS `Cmd±`，Windows/Linux `Ctrl+Shift±`；回到默认分别使用 `Cmd+0` / `Ctrl+Shift+0`。不要调用 Tauri WebView zoom。
-- 触控板 pinch 需要双路径：Chromium/WebView2 通常发送 `ctrlKey` wheel，macOS WKWebView 使用 `gesturestart` / `gesturechange` 的 `scale`。两条路径都只缩放当前终端并阻止 WebView 页面缩放。
-
-检查点：菜单、`attachCustomKeyEventHandler`、窗口捕获阶段的 `keydown`、原生 Rust menu accelerator，以及 xterm 实际发送给远端的输入必须一起核对。
-
-## 终端交互与功能方向冲突
-
-- 先区分 **xterm 本地文本选择** 与 **Vim/TUI Visual 选择**。Vim 开启 mouse tracking 后，xterm 的 `hasSelection()` 会为空；不能把两者当作同一份状态。
-- 右键菜单只在 `contextmenu` 时读取选择状态。`pointerdown` / `mousedown` 只负责阻断 xterm 向远端上报右键，不能提前清空或写入选区 state。
-- 焦点切换可能产生 xterm focus tracking 数据；不要把该数据误当普通输入而清除选区或关闭菜单。
-- 改变 `terminal.options.fontSize` 后必须重新计算 xterm 网格，并通过现有 resize 链路同步远端 PTY 的 cols/rows；否则 Vim、readline、表格和光标会错位。
-- 一个用户请求若同时涉及“窗口缩放”和“终端缩放”，优先确认目标：前者影响整张 WebView，后者只影响焦点终端及其远端网格。两者不要共用 handler。
-
-## 字体、图标与离线资源
-
-- 所有字体、图标和基础样式必须随应用打包；禁止运行时依赖外部 CDN。
-- 终端字体使用 `FILETERM_MONO_FONT_FAMILY`，并保留 `observeCanvasTextMetrics()` 触发的度量与 resize 同步。
-- 调整 UI 字体时同时检查 CJK 回退、高 DPI、不同字重、行高和标题栏高度；不要只在 macOS 或开发态浏览器中目测。
-- macOS tray 使用 template image；Dock 图标、tray 图标和窗口图标是不同资源，不要互相缩放复用。
-
-## 实施顺序
-
-1. 明确行为对象和三端预期；列出冲突表。
-2. 找到当前平台来源、菜单入口、快捷键 handler、终端/xterm handler 与 Rust command。
-3. 先删除或迁移旧功能入口，再实现新入口；避免旧应用级行为仍在后台抢事件。
-4. 经由 `packages/core` 和 Tauri bridge 收敛新增系统能力；纯终端交互留在 `TerminalView`。
-5. 在三个平台分别检查：菜单可见性、快捷键文案、实际按键、触控板/滚轮、焦点在输入框与终端时的差异、字体与布局。
+- 窗口、菜单、复制粘贴、选择、快捷键、pinch 或字体变更：读 [窗口与终端交互](references/windows-and-terminal.md) 对应章节。
+- UI 控件和 CSS：使用 [通用组件 skill](../common-components-skill/SKILL.md)，不另立目录或颜色规范。
+- Dock/tray、CWD 或远端平台探测：读 [平台与协议约束](../../../docs/quality/agent-platform-contracts.md)。
+- macOS 标题栏几何、Windows 建窗线程及启动显窗行为：按需查 `docs/design.md` 与 `docs/architecture.md` 对应章节，保留原生校准算法。
 
 ## 验证
 
-代码改动至少运行：
+遵守 AGENTS.md 的代码门禁。窗口布局检查 traffic lights/menubar、窄窗口、最大化、高 DPI 与 CJK 字体截断；快捷键/手势检查输入框和终端焦点、菜单文案与实际 handler。
 
-```bash
-npm run typecheck -w @fileterm/tauri
-npm run lint
-npx prettier --check apps/tauri packages/core packages/shared packages/storage
-npm run test:tauri
-cargo clippy --manifest-path apps/tauri/src-tauri/Cargo.toml --locked --all-targets --all-features -- -D warnings
-```
-
-涉及窗口、菜单、终端手势或快捷键时，还要在 macOS、Windows、Linux 手测对应焦点场景。报告时说明：行为归属、影响平台、冲突结论、改动层级和验证结果。
+对应行为仍需 macOS、Windows、Linux 实测；没有平台环境时如实报告，不能把浏览器模拟视为原生平台通过。桌面截图与操作先按 `docs/quality/desktop-ui-preview.md` 识别目标开发进程。

@@ -1,6 +1,6 @@
 ---
 name: fileterm-release
-description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说明、创建 release 分支和 tag、触发并监督 Tauri 发布流水线，以及确保 GitHub 自动生成 What's Changed、Full Changelog、New Contributors 和贡献者头像区域。适用于正式版、Beta/RC 测试版和用户要求“提 PR、合 main、打 tag、发版”的任务。
+description: 准备或发布 FileTerm 版本说明、release 分支、tag 和 GitHub Release，以及排查发布流水线时使用；普通 PR 不触发发布。
 ---
 
 # FileTerm GitHub Release
@@ -14,16 +14,19 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 自定义正文只负责第一部分，绝不能手写或覆盖第二部分。
 
-## 必须先读取
+## 发布任务所需资料
 
-进入仓库后先读取：
+按正在执行的发布步骤读取：
 
-- `AGENTS.md`
 - `docs/quality/git-branch-release-convention.md`
-- `.github/workflows/release.yml`
+- 创建 tag、触发发布或排查流水线时：`.github/workflows/release.yml`
 - 目标版本对应的 `docs/release-notes/release-notes-<version>.md`（如果已经存在）
 
 以仓库文件为准，不要凭记忆替换发布命令、分支规则或版本同步方式。
+
+## 执行范围
+
+准备版本说明不等于授权合并、推送 tag 或发布；只执行用户要求的步骤，已有明确授权不重复询问。PR 使用普通 Merge，Issue 只用 Refs / Related to 关联，发布后也须按用户确认保留 Issue 生命周期。
 
 ## 标准流程
 
@@ -38,104 +41,7 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 ### 2. 发布说明正文格式
 
-推荐结构：中文正文、英文正文、GitHub 官方生成区。中文和英文都属于自定义正文，英文版本紧跟在中文版本后面；官方生成区必须由 GitHub 在最后追加。
-
-每份 Release 正文都要在版本简介之后、更新重点之前放置对应语言的安装指南入口。中文区域只使用 `**安装指南**` 标题和一个中文安装指南徽章；英文区域只使用 `**Installation guides**` 标题和一个英文安装指南徽章。每个语言区域仅一个按钮，禁止重复放置中英文两个按钮或使用双语拼接标题。GitHub Release 正文使用可点击的 Shields 徽章实现按钮式入口；徽章统一使用中性深灰标签和标准 GitHub 蓝 `#0969DA`，链接固定指向 `main` 上维护的对应语言安装指南：
-
-```md
-**安装指南**
-
-[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md)
-
-**Installation guides**
-
-[![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
-```
-
-撰写每个版本正文时，将上面的两个入口分别放入对应语言区域，不要在任一区域同时放置两个徽章。不要替换为本地文件路径、短链接或特定版本的分支链接。README 保留中英文安装指南入口。
-
-以下标题属于固定格式，必须原样保留，不得改写成“相关 Pull Request”“本版本包含的主要 PR”或其他近义标题：中文使用 `### 本版本包含的主要 PR 和问题修复`、`### 反馈与支持`，英文使用 `### Main PRs and issues`、`### Feedback & Support`。
-
-`### 反馈与支持` 以及其下的两段中文正文、空行和链接组成一个逐字固定块，必须整体复制，不得改写、拆分、改成列表或替换链接：
-
-```md
-### 反馈与支持
-
-> &bull;&nbsp;遇到问题请前往 [GitHub Issues](https://github.com/St0ff3l/fileterm/issues) 提交反馈，并附上操作系统、FileTerm 版本、连接类型、复现步骤和脱敏日志；不要提交密码、私钥或 token。
-> &bull;&nbsp;也可以加入微信群交流：请打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81) 扫描二维码进微信群，也可加入 QQ 群 534418986。
-```
-
-```md
-## FileTerm <version>
-
-一句话版本简介。
-
-**安装指南**
-
-[![简体中文安装指南](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%AE%89%E8%A3%85%E6%8C%87%E5%8D%97-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/zh-CN.md)
-
-### <version> 更新重点
-
-- **功能主题**：用户能感知的变化和边界。
-- **稳定性/兼容性**：平台或核心链路变化。
-- **安全与隐私**：数据发送、权限、凭据和人工确认边界。
-
-### 本版本包含的主要 PR 和问题修复
-
-- [PR #123](https://github.com/St0ff3l/fileterm/pull/123)：简要说明。
-- [Issue #456](https://github.com/St0ff3l/fileterm/issues/456)：简要说明。
-
-完整变更记录请查看 [v<old> 与 v<version> 的比较](https://github.com/St0ff3l/fileterm/compare/v<old>...v<version>)。
-
-### 反馈与支持
-
-> &bull;&nbsp;遇到问题请前往 [GitHub Issues](https://github.com/St0ff3l/fileterm/issues) 提交反馈，并附上操作系统、FileTerm 版本、连接类型、复现步骤和脱敏日志；不要提交密码、私钥或 token。
-> &bull;&nbsp;也可以加入微信群交流：请打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81) 扫描二维码进微信群，也可加入 QQ 群 534418986。
-
----
-
-## FileTerm <version>
-
-One-sentence release summary in English.
-
-**Installation guides**
-
-[![English Installation Guide](https://img.shields.io/badge/English-Installation_Guide-0969DA?style=for-the-badge&labelColor=555)](https://github.com/St0ff3l/fileterm/blob/main/docs/installation/en-US.md)
-
-### Highlights
-
-- **Feature theme**: Describe the user-visible change and its boundaries.
-- **Stability and compatibility**: Describe platform or core workflow changes.
-- **Security and privacy**: Describe data scope, permissions, credentials, and confirmation boundaries.
-
-### Main PRs and issues
-
-- [PR #123](https://github.com/St0ff3l/fileterm/pull/123): Short description.
-- [Issue #456](https://github.com/St0ff3l/fileterm/issues/456): Short description.
-
-See the [comparison between v<old> and v<version>](https://github.com/St0ff3l/fileterm/compare/v<old>...v<version>) for the complete change set.
-
-### Feedback & Support
-
-> &bull;&nbsp;For problems, open a [GitHub Issue](https://github.com/St0ff3l/fileterm/issues) with the operating system, FileTerm version, connection type, reproduction steps, and redacted logs. Do not submit passwords, private keys, or tokens.
-> &bull;&nbsp;Join the community through the [README community section](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81).
-```
-
-链接要求：
-
-- GitHub Issues 使用完整可点击链接：`[GitHub Issues](https://github.com/St0ff3l/fileterm/issues)`。
-- PR 使用 `/pull/<number>`，Issue 使用 `/issues/<number>`。
-- 版本对比使用 `/compare/v<old>...v<new>`，例如：
-  `[Full Changelog](https://github.com/St0ff3l/fileterm/compare/v2.1.6...v2.2.0-beta.1)`。
-- README 社区入口固定使用 `https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81`，并确认锚点与 README 标题一致。
-- 发布正文中的链接必须是 Markdown 链接，不要只写裸 URL，也不要把本地文件路径写入 release notes。
-- 中文正文之后必须紧跟英文正文；英文正文应翻译相同的功能范围、安全边界和反馈信息，不要新增未在中文正文确认的功能。
-
-禁止在自定义正文中添加：
-
-- `### Contributors`、贡献者用户名列表或头像 URL。
-- 手写 `What's Changed`、`New Contributors`、`Full Changelog` 区域。
-- 与本版本无关的 MCP CLI、内部试验或未发布功能；除非用户明确要求写入。
+编写或审查发布说明时读取 [双语模板与固定格式](references/release-notes.md)。保留双语顺序、各自的安装指南徽章、固定标题和逐字反馈块。
 
 ### 3. PR 合入 main
 
@@ -208,7 +114,7 @@ gh release view "v$VERSION"
 ## 失败处理
 
 - CI 失败：先读取失败 job 的日志，修复必须进入普通分支并 PR 合入 `main`；不要在 `release/*` 上直接修。
-- tag 指向错误提交：停止发布，删除错误 tag/release 分支后，按最新 `origin/main` 重新创建；操作前确认目标和远端状态。
+- tag 指向错误提交：停止推进，先查远端 ref、发布状态与已有产物；不得把已发布版本静默改指。仅在用户已授权对应删除/重建操作后恢复；否则报告具体目标和状态。
 - release notes 缺失：回到普通分支补文件并合入 `main`，再重新切 release 分支；不要直接修改已推送的 release 快照。
 - 生成区缺失：检查 `--generate-notes`、GitHub 权限、tag 是否有对应前一版本和 PR 历史；不要手写头像或 Contributors。
 - 链接失效：优先修正 Markdown 链接和 README 锚点，再进入发布流程；发布说明中的链接必须可直接在 GitHub Release 页面点击。

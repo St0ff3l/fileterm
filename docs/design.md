@@ -62,10 +62,12 @@ tokens -> theme vars -> component skins -> terminal colors
 - Danger / destructive：使用 `--danger`、`--danger-text`、`--danger-surface`，只用于删除、关闭、错误。
 - Info / action blue：使用 `--primary`、`--copy-link`、`--folder-accent`，不能随手写新的蓝色。
 - `--focus-outline` 只用于焦点、选中态和拖拽目标的描边或光环；不要把它当作实心按钮背景。
-- 文件图标和发送等文件相关操作使用 `--folder-accent`；实心主按钮使用 `--button-primary-*`。
+- 文件图标和发送等文件相关操作使用 `--folder-accent`；实心主按钮使用 `--action-primary-*`。
 - 主按钮和危险按钮的文字通过 action 语义 token 根据背景选择白色或深色，透明背景先合成 panel surface；不要固定白字。原生控件的兜底继承规则必须保持低优先级，不能覆盖公用组件自身的文字颜色。
 - `--accent-highlight` 用于非按钮的图标、辅助文字和状态强调，不替代焦点描边。
 - 侧栏当前项在暗色模式使用白色强调，浅色模式使用主文本色，避免蓝色过度出现。
+
+新组件使用 `styles/tokens/semantic.css` 的规范语义变量；上文 `--primary`、`--success`、`--warning`、`--danger` 等为旧皮肤兼容名，迁移时按用途选择 `--action-*` / `--status-*`，不新增旧别名引用。公共视觉组件与 CSS 共址于 `components/common/<name>/`，`features/common/` 保留辅助组件与兼容导出。
 
 ## 4. Typography
 
@@ -93,7 +95,7 @@ tokens -> theme vars -> component skins -> terminal colors
 | 40–44px  | 13px | 600  | 弹窗页脚、主要确认、新建连接等显著操作 |
 
 - 确认和取消按钮一律使用 UI 字体栈、`line-height: 1` 与 `letter-spacing: 0`；不得为同尺寸按钮单独设为 400/500 字重或使用非 UI 字体。
-- 蓝色主操作使用 `--button-primary-*` 主题变量；取消和次级操作使用 `flat-button` 或对应的中性色 token，不能自行写新的蓝色。
+- 蓝色主操作使用 `--action-primary-*` 主题变量；取消和次级操作使用 `flat-button` 或对应的中性色 token，不能自行写新的蓝色。
 
 排版规则：
 
