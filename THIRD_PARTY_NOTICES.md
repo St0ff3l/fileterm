@@ -4,6 +4,17 @@ FileTerm is open-sourced under the MIT License in the repository root
 (`LICENSE`). That MIT License applies to FileTerm's own source code only.
 The bundled fonts and icon fonts below remain under their own licenses.
 
+## Native dependencies
+
+### keepawake
+
+- Version: 0.6.1
+- Copyright: (c) 2022 Segev Finer
+- License: MIT
+- Source: https://github.com/segevfiner/keepawake-rs
+- Purpose: inhibit idle system sleep while file transfers are running.
+- Packaged license: `licenses/keepawake/LICENSE.txt`
+
 ## Bundled fonts
 
 ### Outfit

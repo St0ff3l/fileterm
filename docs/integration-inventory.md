@@ -167,6 +167,13 @@ term: 'xterm-256color'
 
 ## 6. 新依赖准入规则
 
+### 传输系统电源保持：keepawake
+
+- Rust crate：`keepawake 0.6.1`，MIT；依赖版本以 Cargo.lock 为准。
+- 用途与位置：`services/transfers/power.rs` 持有原生 idle-sleep guard，整个 transfer run 通过共享租约保持系统运行。
+- 维护边界：原生 guard 始终在专用线程创建和销毁，满足 Windows 的线程归属；允许关闭显示器和用户显式睡眠。Linux 依赖 logind/system bus；不支持或拒绝请求时记录失败日志，不阻止传输。
+- 回归清单：[transfer-power-regression.md](./quality/transfer-power-regression.md)。
+
 新增或替换第三方项目时，至少补齐这些信息：
 
 1. 在对应 `package.json` 添加依赖。

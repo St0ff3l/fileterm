@@ -588,6 +588,7 @@ SSH/SFTP 和 FTP/FTPS 会在会话建立后上报实际能力，而不是把所�
 
 ### 9.2 可恢复传输边界
 
+- Rust transfer run 在目录扫描、上传/下载、校验和替换目标期间持有共享系统防睡租约。`services/transfers/power.rs` 使用 `keepawake` 的原生电源请求：Windows `SetThreadExecutionState`、macOS IOPM assertion、Linux logind idle inhibitor。创建和释放均在同一专用线程上执行；最后一个活动任务退出（包括暂停、取消、失败、panic 与应用退出收口）后释放。仅抑制空闲自动睡眠，允许屏幕关闭，尊重用户显式睡眠；申请失败记日志并继续传输。手测步骤见 [传输防睡回归](./quality/transfer-power-regression.md)。
 - 单文件和目录 manifest 任务由 Rust backend 持久化到当前存储根目录的 `transfer-journal.json`（便携版位于 exe 旁的 `config`）；renderer 不直接读写 journal。
 - 上传和下载都先写入 `.fileterm-part` 临时文件，校验大小后再替换正式目标。
 - SFTP 与 FTP/FTPS 分别在 controller 内实现 offset 读写和远端收尾，不把协议命令伪统一到 renderer 或 transfer UI。
