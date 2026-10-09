@@ -11,6 +11,7 @@
         (None, None)
     } else {
         let previous_awaiting_auth = awaiting_root_access_auth.clone();
+        let previous_pending_command = pending_root_access_command.clone();
         if track_root_access_prompt_from_terminal(
             &text,
             &mut sudo_prompt_buffer,
@@ -63,22 +64,50 @@
                 );
             }
         }
+        if pending_root_access_command != previous_pending_command {
+            root_shell_setup_pending |= pending_root_access_command
+                .as_ref()
+                .is_some_and(|auth| auth.interactive_shell);
+            if let Some(auth) = pending_root_access_command.as_ref() {
+                crate::services::logging::ssh_debug(
+                    app,
+                    tab_id,
+                    format!("privilege command observed from shell echo method={:?} target_user={} interactive_shell={}",
+                        auth.method, auth.target_user, auth.interactive_shell),
+                );
+            }
+        }
+        prompt_refresh.observe_output(&text);
         track_cwd_and_user(&text, &mut cwd_buffer)
     };
-    let prompt_cwd = take_prompt_cwd(
-        new_cwd.clone(),
-        new_user.is_some(),
-        &mut pending_cwd_marker_without_user,
-    );
     let mut cwd_to_follow = None;
+    let mut silent_refresh = false;
     let mut file_mode_switch: Option<(String, Option<String>, RootFileAccessMethod)> = None;
     let mut session_state_changed = false;
     let mut ai_target_changed = false;
     if new_cwd.is_some() || new_user.is_some() {
         let mut sessions = state.sessions.write().await;
         if let Some(s) = sessions.get_mut(tab_id) {
+            let prompt_cwd = prompt_refresh.take_prompt(
+                new_cwd.clone(),
+                s.shell_cwd.as_deref(),
+                new_user.is_some(),
+            );
             if s.follow_shell_cwd {
-                cwd_to_follow = prompt_cwd;
+                if let Some((cwd, silent)) = prompt_cwd {
+                    cwd_to_follow = Some(cwd);
+                    silent_refresh = silent;
+                }
+            }
+            // A diverged pane navigates with loading, whether this prompt
+            // follows a command or an empty Enter. Aligned prompts stay quiet.
+            if s.follow_shell_cwd && new_user.is_some() {
+                if let Some(cwd) = cwd_to_follow.as_ref().or(s.shell_cwd.as_ref()) {
+                    if cwd_refresh.needs_realign(cwd, &s.remote_path, &s.file_access_mode, &s.sudo_user) {
+                        cwd_to_follow = Some(cwd.clone());
+                        silent_refresh = false;
+                    }
+                }
             }
             if let Some(cwd) = new_cwd.as_ref() {
                 if s.shell_cwd.as_deref() != Some(cwd.as_str()) {
@@ -187,8 +216,25 @@
                         // 身份或提权方式变化即使没有伴随 CWD 变化也要刷新
                         // 当前目录，确保列表内容和访问模型同步切换。
                         cwd_to_follow = s.shell_cwd.clone();
+                        silent_refresh = false;
                     }
                 }
+                // A confirmed identity consumes the transition, including
+                // passwordless sudo. Keep its method for subsequent file IO,
+                // but allow a later history-recalled transition to be detected.
+                if pending_root_access_command.as_ref().is_some_and(|auth|
+                    auth.interactive_shell && auth.target_user == *user)
+                {
+                    last_authenticated_root_access = pending_root_access_command.take();
+                }
+                // A prompt ends the submitted command even for noninteractive
+                // sudo. Stale commands/password candidates must not classify
+                // the next history-recalled su exchange as the old method.
+                pending_root_access_command = None;
+                root_shell_setup_pending = false;
+                awaiting_root_access_auth = None;
+                pending_sudo_password.clear();
+                sudo_prompt_buffer.clear();
             }
         }
         drop(sessions);
@@ -204,14 +250,15 @@
             root_password = root_password_for_method(access_method, &sudo_password, &su_password);
         }
         if let (Some(cwd), Some(sftp)) = (cwd_to_follow, sftp_arc.as_ref()) {
-            cwd_refresh.send_replace(Some(CwdRefreshRequest {
+            cwd_refresh.enqueue(CwdRefreshRequest {
                 cwd,
+                silent: silent_refresh,
                 sftp: Arc::clone(sftp),
                 file_access_mode: file_access_mode.clone(),
                 root_file_access_method,
                 sudo_user: sudo_user.clone(),
                 sudo_password: root_password.clone(),
-            }));
+            });
         } else if session_state_changed {
             // 解耦：get_workspace_snapshot 会读整个 sessions
             // RwLock + 序列化所有 tab 数据，在 shell output 分支
@@ -256,51 +303,41 @@
         // discard the stale transition so a later literal
         // `#` cannot trigger setup injection.
         pending_root_access_command = None;
+        root_shell_setup_pending = false;
     }
-    if last_shell_setup_injection.elapsed() > Duration::from_secs(2)
-        && pending_root_access_command
+    if root_shell_setup_pending && should_reinject_root_shell_setup(
+        shell_setup_script.is_some(),
+        pending_shell_setup_echo.is_some(),
+        shell_setup_waiting_for_prompt,
+        pending_root_access_command
             .as_ref()
-            .is_some_and(|auth| auth.interactive_shell)
-    {
-        let shell_is_root = state
-            .sessions
-            .read()
-            .await
-            .get(tab_id)
-            .and_then(|session| session.shell_user.as_deref())
-            == Some("root");
-        if should_reinject_root_shell_setup(
-            shell_setup_script.is_some(),
-            pending_shell_setup_echo.is_some(),
-            shell_setup_waiting_for_prompt,
-            pending_root_access_command
-                .as_ref()
-                .is_some_and(|auth| auth.interactive_shell),
-            shell_is_root,
-            &visible,
-        ) {
-            if let Some(setup) = shell_setup_script {
-                let (banner, prompt_tail) = split_prompt_tail_for_setup_wait(&visible);
-                last_shell_setup_injection = Instant::now();
-                match write_shell_data(&shell_writer, interactive_shell_setup_command(setup)).await {
-                    Ok(()) => {
-                        visible = banner;
-                        pending_shell_setup_echo =
-                            Some(ShellSetupEchoSuppression::with_fallback(prompt_tail));
-                    }
-                    Err(error) => {
-                        // Fail open: retain the original
-                        // prompt if the hook cannot be
-                        // written to the shell channel.
-                        visible = format!("{banner}{prompt_tail}");
-                        crate::services::logging::session(
-                            app,
-                            "WARN",
-                            "ssh",
-                            tab_id,
-                            format!("root shell setup write failed: {error}"),
-                        );
-                    }
+            .is_some_and(|auth| auth.interactive_shell),
+        &visible,
+    ) {
+        if let Some(setup) = shell_setup_script {
+            let (banner, prompt_tail) = split_prompt_tail_for_setup_wait(&visible);
+            root_shell_setup_pending = false;
+            crate::services::logging::ssh_debug(
+                app, tab_id, "installing CWD hook for interactive root transition",
+            );
+            match write_shell_data(&shell_writer, interactive_shell_setup_command(setup)).await {
+                Ok(()) => {
+                    visible = banner;
+                    pending_shell_setup_echo =
+                        Some(ShellSetupEchoSuppression::with_fallback(prompt_tail));
+                }
+                Err(error) => {
+                    // Fail open: retain the original
+                    // prompt if the hook cannot be
+                    // written to the shell channel.
+                    visible = format!("{banner}{prompt_tail}");
+                    crate::services::logging::session(
+                        app,
+                        "WARN",
+                        "ssh",
+                        tab_id,
+                        format!("root shell setup write failed: {error}"),
+                    );
                 }
             }
         }
@@ -340,7 +377,6 @@
         shell_setup_prompt_deadline = None;
         shell_prompt_buffer.clear();
         if let Some(setup) = shell_setup_script {
-            last_shell_setup_injection = Instant::now();
             let setup_command = interactive_shell_setup_command(setup);
             match write_shell_data(&shell_writer, setup_command).await {
                 Ok(()) => {

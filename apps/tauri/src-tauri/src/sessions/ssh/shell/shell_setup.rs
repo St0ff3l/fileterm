@@ -248,8 +248,16 @@ fn interactive_shell_setup_command(setup: &str) -> Vec<u8> {
 const SHELL_CWD_SETUP: &str = concat!(
     "test -z \"${FISH_VERSION-}\" && eval '",
     "__tdcwd() { printf \"\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007\" \"$(pwd -P 2>/dev/null)\" \"$(id -un 2>/dev/null)\"; }; ",
+    "__ftcommand() { printf \"\\033]7777;FileTermCommand\\007\"; }; ",
+    "printf \"\\033]7777;FileTermCommandTracking=0\\007\"; ",
     "if [ -n \"${ZSH_VERSION-}\" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook -D precmd __tdcwd 2>/dev/null; add-zsh-hook precmd __tdcwd 2>/dev/null; ",
+    "add-zsh-hook -D preexec __ftcommand 2>/dev/null; if add-zsh-hook preexec __ftcommand 2>/dev/null; then printf \"\\033]7777;FileTermCommandTracking=1\\007\"; fi; ",
     "elif [ -n \"${BASH_VERSION-}\" ]; then case \"${PROMPT_COMMAND-}\" in *\"__tdcwd\"*) ;; *) PROMPT_COMMAND=\"__tdcwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\" ;; esac; ",
+    // PS0 is available from Bash 4.4. Preserve user PS0 and do not install
+    // DEBUG traps (which can interfere with debuggers and shell frameworks).
+    "if [ \"${BASH_VERSINFO[0]}\" -gt 4 ] || { [ \"${BASH_VERSINFO[0]}\" -eq 4 ] && [ \"${BASH_VERSINFO[1]}\" -ge 4 ]; }; then ",
+    "case \"${PS0-}\" in *\"FileTermCommand\"*) ;; *) PS0=\"$(printf \"\\033]7777;FileTermCommand\\007\")${PS0-}\" ;; esac; ",
+    "printf \"\\033]7777;FileTermCommandTracking=1\\007\"; fi; ",
     "else case \"${PS1-}\" in *\"__tdcwd\"*) ;; *) PS1=\"\\$(__tdcwd)${PS1-}\" ;; esac; fi; ",
     "__tdcwd; ",
     // A leading space is only a best-effort history guard. Bash users may
@@ -275,4 +283,9 @@ const BUSYBOX_SHELL_CWD_SETUP: &str = "__tdcwd(){ printf '\\033]7;file://%s\\007
 #[cfg(test)]
 mod shell_setup_echo_tests {
     include!("setup_echo_tests.rs");
+}
+
+#[cfg(all(test, unix))]
+mod shell_command_hook_tests {
+    include!("command_hook_tests.rs");
 }

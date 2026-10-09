@@ -7,6 +7,7 @@ include!("context.rs");
 include!("startup_lifecycle.rs");
 include!("utf8.rs");
 include!("cwd_refresh.rs");
+include!("prompt_refresh.rs");
 include!("loop.rs");
 include!("event_loop.rs");
 include!("terminal_output.rs");

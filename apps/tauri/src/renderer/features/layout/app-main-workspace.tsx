@@ -1,3 +1,4 @@
+import './app-main-workspace.css'
 import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react'
 import { DEFAULT_UI_ZOOM_PERCENT, MAX_UI_ZOOM_PERCENT, MIN_UI_ZOOM_PERCENT, UI_ZOOM_PERCENT_STEP } from '@fileterm/core'
 import { AiCopilotPanel } from '../ai/ai-copilot-panel'

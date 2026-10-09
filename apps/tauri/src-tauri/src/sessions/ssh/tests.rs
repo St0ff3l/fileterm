@@ -1598,22 +1598,20 @@ mod tests {
     #[test]
     fn literal_hash_does_not_trigger_root_shell_setup_without_transition() {
         assert!(!should_reinject_root_shell_setup(
-            true, false, false, false, false, "#"
+            true, false, false, false, "#"
         ));
         assert!(should_reinject_root_shell_setup(
             true,
             false,
             false,
             true,
-            false,
             "root@host:~# "
         ));
         assert!(!should_reinject_root_shell_setup(
             true,
             false,
             false,
-            true,
-            true,
+            false,
             "root@host:~# "
         ));
     }
