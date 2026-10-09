@@ -931,13 +931,12 @@
 .disk-row span {
   box-sizing: border-box;
   min-width: 0;
-  padding: 4px 12px;
+  padding: 0 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  display: block;
+  line-height: 24px;
   text-align: left;
 }
 

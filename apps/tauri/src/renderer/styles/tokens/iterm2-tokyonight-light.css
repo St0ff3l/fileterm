@@ -3,19 +3,19 @@
  */
 
 :root[data-theme='fileterm-light'][data-theme-preset='iterm2-tokyonight'] {
-  /* Solid tinted canvas and sections, brighter panels, and clear input surfaces. */
+  /* Solid tinted canvas and sections, tinted panels, controls, and input surfaces. */
   --ref-surface-canvas: #e1e2e7;
   --ref-surface-sidebar: #e2e2e6;
-  --ref-surface-panel: #f6f6f8;
-  --ref-surface-card: #f6f6f8;
+  --ref-surface-panel: color-mix(in srgb, var(--ref-surface-canvas) 65%, var(--ref-surface-section));
+  --ref-surface-card: color-mix(in srgb, var(--ref-surface-canvas) 65%, var(--ref-surface-section));
   --ref-surface-section: #ecedf0;
-  --ref-surface-elevated: #f6f6f8;
-  --ref-surface-modal: #f6f6f8;
-  --ref-surface-context-menu: #ecedf0;
+  --ref-surface-elevated: color-mix(in srgb, var(--ref-surface-canvas) 65%, var(--ref-surface-section));
+  --ref-surface-modal: color-mix(in srgb, var(--ref-surface-canvas) 65%, var(--ref-surface-section));
+  --ref-surface-context-menu: color-mix(in srgb, var(--ref-surface-canvas) 65%, var(--ref-surface-section));
   --ref-surface-overlay: rgba(0, 0, 0, 0.32);
   --ref-surface-hover: #dfe0e3;
   --ref-surface-active: #d5deec;
-  --ref-surface-input: color-mix(in srgb, var(--ref-surface-elevated) 45%, #ffffff);
+  --ref-surface-input: color-mix(in srgb, var(--ref-surface-canvas) 65%, var(--ref-surface-section));
   --ref-surface-input-focus: #dce3ee;
   --ref-surface-toolbar: #e1e2e7;
   --ref-surface-titlebar: #e1e2e7;

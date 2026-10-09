@@ -1,6 +1,6 @@
 ## FileTerm 2.2.28
 
-FileTerm 2.2.28 improves SSH terminal and SFTP directory following, including privileged shells, and refines the workspace frame border.
+FileTerm 2.2.28 improves SSH terminal and SFTP directory following, refines the workspace frame, and polishes native macOS and iTerm2 theme rendering.
 
 **安装指南**
 
@@ -10,7 +10,7 @@ FileTerm 2.2.28 improves SSH terminal and SFTP directory following, including pr
 
 - **SSH 目录跟随与文件刷新**：`sudo -i`、`su -` 等交互式提权 shell 会同步工作目录和文件访问身份。终端命令完成后，文件面板在偏离终端目录时恢复跟随并显示加载状态；目录一致时不重复加载。命令造成文件变化时静默检查列表，仅在内容变化后更新。
 - **终端粘贴选中文字**：右键终端选区可将选中文字粘贴到当前终端输入，不访问系统剪贴板，也不会自动回车。
-- **工作区边框**：统一终端右侧框线颜色，暗色主题使用 `#383838`。
+- **工作区边框与主题**：统一终端右侧框线颜色，暗色主题使用 `#383838`。修复 macOS 浅色主题红绿灯外观跟随，并优化 FileTerm/iTerm2 主题下的面板色、磁盘容量省略、网络分隔线及底栏对齐。
 
 ### 本版本包含的主要 PR 和问题修复
 
@@ -28,7 +28,7 @@ FileTerm 2.2.28 improves SSH terminal and SFTP directory following, including pr
 
 ## FileTerm 2.2.28
 
-FileTerm 2.2.28 improves SSH terminal and SFTP directory following, including privileged shells, and refines the workspace frame border.
+FileTerm 2.2.28 improves SSH terminal and SFTP directory following, refines the workspace frame, and polishes native macOS and iTerm2 theme rendering.
 
 **Installation guides**
 
@@ -38,7 +38,7 @@ FileTerm 2.2.28 improves SSH terminal and SFTP directory following, including pr
 
 - **SSH directory following and file refresh**: Interactive privileged shells such as `sudo -i` and `su -` synchronize the working directory and file access identity. After a terminal command completes, the file pane follows the terminal directory with a loading indicator when it has diverged; it skips redundant loads when paths match. Commands that change files trigger a quiet listing check and update the view only when its contents change.
 - **Paste selected terminal text**: Right-clicking a terminal selection pastes it into the active terminal input without accessing the system clipboard or pressing Enter automatically.
-- **Workspace frame**: Unifies the right terminal frame border color, using `#383838` in the dark theme.
+- **Workspace frame and themes**: Unifies the right terminal frame border color, using `#383838` in the dark theme. Fixes native macOS traffic lights following the light appearance and improves FileTerm/iTerm2 panel colors, disk usage truncation, network divider placement, and footer alignment.
 
 ### Main PRs and issues
 

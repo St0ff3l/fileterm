@@ -170,6 +170,10 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 90%, transparent);
 }
 
+:root:is([data-theme='fileterm-light'], [data-theme='default-light']) .system-title {
+  box-shadow: none;
+}
+
 /* Segmented Control style for .mini-tabs to eliminate heavy control borders */
 :root[data-theme*='light'] .mini-tabs {
   border: none !important;
@@ -665,6 +669,12 @@
   color: var(--text-muted);
 }
 
+/* Keep one divider that moves with the sticky header while scrolling. */
+:root:is([data-theme='fileterm-light'], [data-theme='default-light']) .fs-file-table th {
+  border-bottom: 0;
+  box-shadow: 0 1px 0 var(--border-subtle);
+}
+
 :root[data-theme*='light'] .fs-file-table td {
   border-bottom-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
@@ -702,6 +712,7 @@
   box-shadow: var(--shadow-lg);
 }
 
+:root[data-theme*='light'] .system-sidebar-layout .disk-table::after,
 :root[data-theme*='light'] .transfer-strip {
   border-top-color: var(--border-light);
   background: var(--surface-hover);
