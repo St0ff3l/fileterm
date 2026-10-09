@@ -42,6 +42,7 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
     searchTerminal,
     runCopy,
     runPaste,
+    runPasteSelection,
     runFind,
     runSaveSessionLog,
     runClear,
@@ -81,6 +82,7 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
       {contextMenu ? (
         <TerminalContextMenu
           position={contextMenu}
+          selectedText={contextMenu.selectedText ?? ''}
           hasSelection={hasSelection}
           shortcuts={shortcuts}
           hasSplitPane={Boolean(onSplitPane)}
@@ -88,6 +90,7 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
           setContextMenu={setContextMenu}
           runCopy={runCopy}
           runPaste={runPaste}
+          runPasteSelection={runPasteSelection}
           runFind={runFind}
           runSaveSessionLog={runSaveSessionLog}
           runClear={runClear}

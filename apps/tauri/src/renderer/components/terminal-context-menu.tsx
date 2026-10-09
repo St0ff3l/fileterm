@@ -4,6 +4,7 @@ import type { SplitPaneDirection } from './terminal-view-utils'
 
 type TerminalContextMenuProps = {
   position: { x: number; y: number }
+  selectedText: string
   hasSelection: boolean
   shortcuts: {
     copy: string
@@ -18,6 +19,7 @@ type TerminalContextMenuProps = {
   setContextMenu(position: { x: number; y: number } | null): void
   runCopy(): void
   runPaste(): Promise<void>
+  runPasteSelection(selectedText: string): void
   runFind(): void
   runSaveSessionLog(): Promise<void>
   runClear(): void
@@ -27,6 +29,7 @@ type TerminalContextMenuProps = {
 
 export function TerminalContextMenu({
   position,
+  selectedText,
   hasSelection,
   shortcuts,
   hasSplitPane,
@@ -34,6 +37,7 @@ export function TerminalContextMenu({
   setContextMenu,
   runCopy,
   runPaste,
+  runPasteSelection,
   runFind,
   runSaveSessionLog,
   runClear,
@@ -43,6 +47,11 @@ export function TerminalContextMenu({
   const items: ContextMenuEntry[] = [
     { label: t.copy, shortcut: shortcuts.copy, disabled: !hasSelection, action: runCopy },
     { label: t.paste, shortcut: shortcuts.paste, action: () => void runPaste() },
+    {
+      label: t.pasteSelectedText,
+      disabled: !selectedText,
+      action: () => runPasteSelection(selectedText)
+    },
     ...(hasSplitPane
       ? [
           { separator: true },

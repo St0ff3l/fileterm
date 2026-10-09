@@ -52,7 +52,7 @@ export type TerminalViewActionsOptions = {
   onClosePaneRef: MutableRef<(() => void) | undefined>
   onCloseTabRef: MutableRef<(() => void) | undefined>
   setHasSelection: Dispatch<SetStateAction<boolean>>
-  setContextMenu: Dispatch<SetStateAction<{ x: number; y: number } | null>>
+  setContextMenu: Dispatch<SetStateAction<{ x: number; y: number; selectedText?: string } | null>>
   setFindOpen: Dispatch<SetStateAction<boolean>>
   setFindQuery: Dispatch<SetStateAction<string>>
   setFindMatchCount: Dispatch<SetStateAction<number>>
@@ -253,6 +253,18 @@ export function useTerminalViewActions({
     } finally {
       terminal.focus()
     }
+  }
+
+  const runPasteSelection = (selectedText: string) => {
+    const terminal = terminalRef.current
+    if (!terminal || !selectedText) {
+      return
+    }
+    terminal.focus()
+    clearEphemeralHighlight()
+    // Use xterm's paste path for bracketed paste and newline handling without
+    // reading or writing the OS clipboard or appending an Enter keystroke.
+    terminal.paste(selectedText)
   }
 
   const searchTerminal = (query: string, direction: 1 | -1 = 1) => {
@@ -636,6 +648,7 @@ export function useTerminalViewActions({
     snapshotTerminalBuffer,
     runCopy,
     runPaste,
+    runPasteSelection,
     runSaveSessionLog,
     openFind,
     closeFind,

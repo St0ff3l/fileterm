@@ -151,7 +151,7 @@ export function useTerminalView({
     })
   }, [sessionType, tabId])
   const [hasSelection, setHasSelection] = useState(false)
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selectedText?: string } | null>(null)
   const [findOpen, setFindOpen] = useState(false)
   const findOpenRef = useRef(findOpen)
   useEffect(() => {
@@ -287,6 +287,7 @@ export function useTerminalView({
     snapshotTerminalBuffer,
     runCopy,
     runPaste,
+    runPasteSelection,
     runSaveSessionLog,
     openFind,
     closeFind,
@@ -622,6 +623,7 @@ export function useTerminalView({
     searchTerminal,
     runCopy,
     runPaste,
+    runPasteSelection,
     runFind,
     runSaveSessionLog,
     runClear,
