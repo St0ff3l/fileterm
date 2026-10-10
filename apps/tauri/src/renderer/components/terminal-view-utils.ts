@@ -76,7 +76,7 @@ export const TERMINAL_RESIZE_PIXEL_EPSILON = 2
 export const TERMINAL_RESIZE_SETTLE_MS = 140
 export const TERMINAL_RESIZE_OUTPUT_QUIET_MS = 260
 // Bound one xterm parse pass without serializing the native input path.
-export const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
+export const TERMINAL_WRITE_CHUNK_SIZE = 16 * 1024
 // Some IMEs can emit the committed composition once through xterm's normal
 // input path and then emit the same text again when the user switches back to
 // an ASCII keyboard layout. Keep this window narrow so this is not a general

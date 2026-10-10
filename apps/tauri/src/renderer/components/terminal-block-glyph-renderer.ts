@@ -14,6 +14,15 @@ type ThemeServiceView = { _core?: { _themeService?: { colors?: GlyphPalette } } 
 type SourceBackground = { resolved: string; inline: string; priority: string }
 type BufferGlyph = { codepoint: number; column: number; color: string }
 
+function isGraphicGlyph(codepoint: number) {
+  return (
+    (codepoint >= BLOCK_ELEMENT_START && codepoint <= BLOCK_ELEMENT_END) ||
+    codepoint === 0x2500 ||
+    codepoint === 0x2501 ||
+    codepoint === 0x2550
+  )
+}
+
 function getGlyphForeground(cell: IBufferCell, palette: GlyphPalette, drawBoldTextInBrightColors: boolean) {
   const inverse = Boolean(cell.isInverse())
   const rgb = inverse ? cell.isBgRGB() : cell.isFgRGB()
@@ -53,6 +62,18 @@ function snapSize(size: number, fraction: number, pixelRatio: number) {
 }
 
 function getBlockGlyphRects(codepoint: number, width: number, height: number, pixelRatio: number): BlockGlyphRect[] {
+  if (codepoint === 0x2500 || codepoint === 0x2501 || codepoint === 0x2550) {
+    const light = Math.max(1, Math.round(height / 16))
+    const thickness = codepoint === 0x2501 ? light * 2 : light
+    const y = Math.floor((height - thickness) / 2)
+    // Draw full cell edges on the row bitmap, avoiding font bearings and antialiasing seams.
+    return codepoint === 0x2550
+      ? [
+          { x: 0, y: y - light, width, height: light },
+          { x: 0, y: y + light, width, height: light }
+        ]
+      : [{ x: 0, y, width, height: thickness }]
+  }
   const halfWidth = snapSize(width, 0.5, pixelRatio)
   const halfHeight = snapSize(height, 0.5, pixelRatio)
   const full = [{ x: 0, y: 0, width, height }]
@@ -130,18 +151,18 @@ function replaceBlockGlyphs(
   cellWidth: number,
   pixelRatio: number,
   bufferGlyphs: BufferGlyph[],
-  sourceBackgrounds: WeakMap<HTMLElement, SourceBackground>
+  sourceBackgrounds: WeakMap<HTMLElement, SourceBackground>,
+  screenBounds: DOMRect,
+  rowBounds: DOMRect
 ) {
   const document = row.ownerDocument
-  const screenBounds = screen.getBoundingClientRect()
-  const rowBounds = row.getBoundingClientRect()
-  const existingCanvas = screen.querySelector<HTMLElement>(`.xterm-block-glyph-row[data-row-index="${rowIndex}"]`)
+  const existingCanvas = screen.querySelector<HTMLCanvasElement>(`.xterm-block-glyph-row[data-row-index="${rowIndex}"]`)
   const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
   const textNodes: Text[] = []
   let current = walker.nextNode()
   while (current) {
     const text = current.textContent ?? ''
-    if (/[\u2580-\u259f]/u.test(text)) {
+    if (/[\u2500\u2501\u2550\u2580-\u259f]/u.test(text)) {
       textNodes.push(current as Text)
     }
     current = walker.nextNode()
@@ -166,7 +187,7 @@ function replaceBlockGlyphs(
     const background = sourceBackgrounds.get(source)!.resolved
     for (const character of text) {
       const codepoint = character.codePointAt(0)!
-      if (codepoint >= BLOCK_ELEMENT_START && codepoint <= BLOCK_ELEMENT_END) {
+      if (isGraphicGlyph(codepoint)) {
         domGlyphs.push({
           codepoint,
           color: style.color,
@@ -213,19 +234,20 @@ function replaceBlockGlyphs(
   const pixelBottom = Math.round((rowBounds.bottom - screenBounds.top) * pixelRatio)
   const pixelWidth = Math.round(screenBounds.width * pixelRatio)
   const pixelHeight = pixelBottom - pixelTop
-  const canvas = document.createElement('canvas')
+  const canvas = existingCanvas ?? document.createElement('canvas')
   canvas.className = `${BLOCK_GLYPH_CLASS} xterm-block-glyph-row`
   canvas.dataset.rowIndex = String(rowIndex)
   canvas.dataset.blockCount = String(glyphs.length)
   canvas.setAttribute('aria-hidden', 'true')
-  canvas.width = pixelWidth
-  canvas.height = pixelHeight
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight
   const context = canvas.getContext('2d', { alpha: true })
   if (!context) {
     return
   }
 
   context.imageSmoothingEnabled = false
+  context.clearRect(0, 0, pixelWidth, pixelHeight)
   for (const { codepoint, column, color, background } of glyphs) {
     const cellLeft = Math.round(column * cellWidth * pixelRatio)
     const cellRight = Math.round((column + 1) * cellWidth * pixelRatio)
@@ -254,67 +276,70 @@ function replaceBlockGlyphs(
     zIndex: '2',
     cursor: 'inherit'
   })
-  existingCanvas?.remove()
-  const selectionLayer = screen.querySelector('.xterm-selection')
-  screen.insertBefore(canvas, selectionLayer ?? null)
+  return () => {
+    if (!existingCanvas) {
+      const selectionLayer = screen.querySelector('.xterm-selection')
+      screen.insertBefore(canvas, selectionLayer ?? null)
+    }
 
-  for (const textNode of textNodes) {
-    const placeholder = textNode.parentElement?.classList.contains(BLOCK_GLYPH_PLACEHOLDER_CLASS)
-      ? textNode.parentElement
-      : null
-    const source = placeholder?.parentElement ?? textNode.parentElement
-    if (!source) continue
-    const background = sourceBackgrounds.get(source)!.resolved
-    // Span backgrounds use font line boxes rather than snapped terminal cells.
-    // Move graphical backgrounds into the same bitmap as their foreground so
-    // fractional UI positions cannot expose a black border above the sprite.
-    if (!source.classList.contains('xterm-cursor')) {
-      source.classList.add(BLOCK_GLYPH_SOURCE_CLASS)
-      source.style.backgroundColor = 'transparent'
-    }
-    if (placeholder) {
-      placeholder.style.color = 'transparent'
-      continue
-    }
-    const fragment = document.createDocumentFragment()
-    let plainText = ''
-    const flushPlainText = () => {
-      if (plainText) {
-        const text = document.createElement('span')
-        text.className = BLOCK_GLYPH_TEXT_CLASS
-        text.style.backgroundColor = background
-        text.textContent = plainText
-        fragment.append(text)
-        plainText = ''
+    for (const textNode of textNodes) {
+      const placeholder = textNode.parentElement?.classList.contains(BLOCK_GLYPH_PLACEHOLDER_CLASS)
+        ? textNode.parentElement
+        : null
+      const source = placeholder?.parentElement ?? textNode.parentElement
+      if (!source) continue
+      const background = sourceBackgrounds.get(source)!.resolved
+      // Span backgrounds use font line boxes rather than snapped terminal cells.
+      // Move graphical backgrounds into the same bitmap as their foreground so
+      // fractional UI positions cannot expose a black border above the sprite.
+      if (!source.classList.contains('xterm-cursor')) {
+        source.classList.add(BLOCK_GLYPH_SOURCE_CLASS)
+        source.style.backgroundColor = 'transparent'
       }
-    }
-    for (const character of textNode.data) {
-      const codepoint = character.codePointAt(0)!
-      if (codepoint < BLOCK_ELEMENT_START || codepoint > BLOCK_ELEMENT_END) {
-        plainText += character
+      if (placeholder) {
+        placeholder.style.color = 'transparent'
         continue
       }
+      const fragment = document.createDocumentFragment()
+      let plainText = ''
+      const flushPlainText = () => {
+        if (plainText) {
+          const text = document.createElement('span')
+          text.className = BLOCK_GLYPH_TEXT_CLASS
+          text.style.backgroundColor = background
+          text.textContent = plainText
+          fragment.append(text)
+          plainText = ''
+        }
+      }
+      for (const character of textNode.data) {
+        const codepoint = character.codePointAt(0)!
+        if (!isGraphicGlyph(codepoint)) {
+          plainText += character
+          continue
+        }
 
+        flushPlainText()
+        const placeholder = document.createElement('span')
+        placeholder.className = BLOCK_GLYPH_PLACEHOLDER_CLASS
+        placeholder.textContent = character
+        placeholder.style.color = 'transparent'
+        fragment.append(placeholder)
+      }
       flushPlainText()
-      const placeholder = document.createElement('span')
-      placeholder.className = BLOCK_GLYPH_PLACEHOLDER_CLASS
-      placeholder.textContent = character
-      placeholder.style.color = 'transparent'
-      fragment.append(placeholder)
+      textNode.replaceWith(fragment)
     }
-    flushPlainText()
-    textNode.replaceWith(fragment)
-  }
 
-  row.querySelectorAll<HTMLElement>('.xterm-cursor').forEach((cursor) => {
-    cursor.style.position = 'relative'
-    cursor.style.zIndex = '2'
-  })
+    row.querySelectorAll<HTMLElement>('.xterm-cursor').forEach((cursor) => {
+      cursor.style.position = 'relative'
+      cursor.style.zIndex = '2'
+    })
+  }
 }
 
 /**
- * xterm's DOM renderer draws U+2580-U+259F from the active font. Ghostty
- * rasterizes block elements from terminal-cell geometry, so draw each row into
+ * xterm's DOM renderer draws blocks and horizontal rules from the active font. Ghostty
+ * rasterizes graphical cells from terminal-cell geometry, so draw each row into
  * one device-pixel bitmap using the terminal buffer's exact cell columns. This
  * keeps ANSI style-span boundaries and glyph bearings from shifting block art.
  */
@@ -340,6 +365,11 @@ export function registerTerminalBlockGlyphRenderer(terminal: Terminal) {
 
     const first = Math.max(0, start)
     const last = Math.min(end, rows.length - 1)
+    // Snapshot geometry before any row canvas/wrapper mutations force layout.
+    const rowBounds = Array.from(rows)
+      .slice(first, last + 1)
+      .map((row) => row.getBoundingClientRect())
+    const updates: Array<() => void> = []
     for (let rowIndex = first; rowIndex <= last; rowIndex++) {
       const row = rows[rowIndex]
       if (row instanceof HTMLElement) {
@@ -350,7 +380,7 @@ export function registerTerminalBlockGlyphRenderer(terminal: Terminal) {
           for (let column = 0; column < Math.min(terminal.cols, bufferLine.length); column++) {
             const cell = bufferLine.getCell(column)
             const codepoint = cell?.getCode() ?? 0
-            if (codepoint >= BLOCK_ELEMENT_START && codepoint <= BLOCK_ELEMENT_END) {
+            if (isGraphicGlyph(codepoint)) {
               bufferGlyphs.push({
                 codepoint,
                 column,
@@ -359,7 +389,7 @@ export function registerTerminalBlockGlyphRenderer(terminal: Terminal) {
             }
           }
         }
-        replaceBlockGlyphs(
+        const update = replaceBlockGlyphs(
           row,
           screen,
           rowIndex,
@@ -367,10 +397,14 @@ export function registerTerminalBlockGlyphRenderer(terminal: Terminal) {
           cellWidth,
           window.devicePixelRatio || 1,
           bufferGlyphs,
-          sourceBackgrounds
+          sourceBackgrounds,
+          bounds,
+          rowBounds[rowIndex - first]
         )
+        if (update) updates.push(update)
       }
     }
+    for (const update of updates) update()
   }
 
   const renderAllRows = () => renderRows(0, terminal.rows - 1)

@@ -178,7 +178,8 @@ export function useWorkspaceIpcSync({
   )
 
   const applySessionMetrics = useCallback((update: SessionMetricsUpdate) => {
-    startTransition(() => setWorkspace((current) => applyMonitoringUpdate(current, update)))
+    // Live health/samples must not wait indefinitely behind interruptible transitions.
+    setWorkspace((current) => applyMonitoringUpdate(current, update))
   }, [])
 
   const applyRemoteFilesUpdate = useCallback(({ tabId, path, files }: RemoteFilesUpdate) => {
@@ -497,6 +498,7 @@ export function useWorkspaceIpcSync({
     let receivedSnapshotEvent = false
     const pendingMetrics: SessionMetricsUpdate[] = []
     let receivedMetricsEventCount = 0
+    const lastMetricsDiagnosticAtByTab = new Map<string, number>()
     const pendingTransfers: TransferTask[] = []
     const pendingRemoteFiles: RemoteFilesUpdate[] = []
     let unsubscribeSnapshot: (() => void) | null = null
@@ -592,11 +594,14 @@ export function useWorkspaceIpcSync({
             return
           }
           receivedMetricsEventCount += 1
-          const shouldLogMetricsEvent = receivedMetricsEventCount === 1 || receivedMetricsEventCount % 60 === 0
+          const now = performance.now()
+          const lastDiagnosticAt = lastMetricsDiagnosticAtByTab.get(payload.tabId)
+          const shouldLogMetricsEvent = lastDiagnosticAt === undefined || now - lastDiagnosticAt >= 10_000
           if (shouldLogMetricsEvent) {
+            lastMetricsDiagnosticAtByTab.set(payload.tabId, now)
             logWorkspaceDiagnostic(
               'DEBUG',
-              `session metrics event received count=${receivedMetricsEventCount} tab_id=${payload.tabId} mode=${payload.mode ?? 'replace'} has_system_metrics=${payload.systemMetrics !== undefined} hydrated=${hydrated}`
+              `session metrics event received count=${receivedMetricsEventCount} tab_id=${payload.tabId} mode=${payload.mode ?? 'replace'} has_system_metrics=${payload.systemMetrics !== undefined} hydrated=${hydrated} generation=${payload.monitoring?.generation ?? 'none'} revision=${payload.monitoring?.revision ?? 'none'}`
             )
           }
           if (!hydrated) {
@@ -611,7 +616,7 @@ export function useWorkspaceIpcSync({
           if (shouldLogMetricsEvent) {
             logWorkspaceDiagnostic(
               'DEBUG',
-              `session metrics update scheduled count=${receivedMetricsEventCount} tab_id=${payload.tabId} mode=${payload.mode ?? 'replace'}`
+              `session metrics update scheduled count=${receivedMetricsEventCount} tab_id=${payload.tabId} mode=${payload.mode ?? 'replace'} generation=${payload.monitoring?.generation ?? 'none'} revision=${payload.monitoring?.revision ?? 'none'}`
             )
           }
         })

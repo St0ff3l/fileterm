@@ -17,10 +17,9 @@ export function registerTerminalSymbolGlyphRenderer(terminal: Terminal) {
   const sources = new Map<HTMLElement, SourceStyle>()
   const metrics = new Map<string, { left: number; width: number }>()
 
-  const renderRow = (row: HTMLElement, rowIndex: number) => {
+  const collectRow = (row: HTMLElement, rowIndex: number, cellWidth: number, updates: Array<() => void>) => {
     if (!/[\u0080-\u{10ffff}]/u.test(row.textContent ?? '')) return
     const line = terminal.buffer.active.getLine(terminal.buffer.active.viewportY + rowIndex)
-    const cellWidth = rows.getBoundingClientRect().width / terminal.cols
     if (!line || cellWidth <= 0) return
     let column = 0
     for (const source of Array.from(row.children)) {
@@ -49,6 +48,8 @@ export function registerTerminalSymbolGlyphRenderer(terminal: Terminal) {
       context.font = font
       const fits = cells.map((cell) => {
         if (!/[\p{Symbol}\p{Punctuation}]/u.test(cell.text)) return undefined
+        // Horizontal rules need their native edge overhang to join adjacent cells.
+        if (/^[\u2500\u2501\u2550]$/u.test(cell.text)) return undefined
         const key = `${font}\n${cell.text}`
         let ink = metrics.get(key)
         if (!ink) {
@@ -63,40 +64,49 @@ export function registerTerminalSymbolGlyphRenderer(terminal: Terminal) {
         return ink.width > cellWidth * cell.width + 0.01 ? ink : undefined
       })
       if (!fits.some(Boolean)) continue
-      sources.set(source, { width: source.style.width, spacing: source.style.letterSpacing, text })
-      source.classList.add(SOURCE_CLASS)
-      source.style.width = `${cellWidth * columns}px`
-      source.style.letterSpacing = '0px'
-      const fragment = row.ownerDocument.createDocumentFragment()
-      cells.forEach((cell, index) => {
-        const slot = row.ownerDocument.createElement('span')
-        slot.style.width = `${cellWidth * cell.width}px`
-        // xterm assigns normal weight to every non-bold span, including nested
-        // wrappers. Preserve the source's actual font weight in both wrappers.
-        slot.style.fontWeight = 'inherit'
-        const ink = fits[index]
-        if (ink) {
-          const glyph = row.ownerDocument.createElement('span')
-          const scale = (cellWidth * cell.width) / ink.width
-          glyph.textContent = cell.text
-          glyph.style.fontWeight = 'inherit'
-          glyph.style.transformOrigin = 'left center'
-          glyph.style.transform = `translateX(${-ink.left * scale}px) scaleX(${scale})`
-          slot.append(glyph)
-        } else slot.textContent = cell.text
-        fragment.append(slot)
+      updates.push(() => {
+        sources.set(source, { width: source.style.width, spacing: source.style.letterSpacing, text })
+        source.classList.add(SOURCE_CLASS)
+        source.style.width = `${cellWidth * columns}px`
+        source.style.letterSpacing = '0px'
+        const fragment = row.ownerDocument.createDocumentFragment()
+        cells.forEach((cell, index) => {
+          const slot = row.ownerDocument.createElement('span')
+          slot.style.width = `${cellWidth * cell.width}px`
+          // xterm assigns normal weight to every non-bold span, including nested
+          // wrappers. Preserve the source's actual font weight in both wrappers.
+          slot.style.fontWeight = 'inherit'
+          const ink = fits[index]
+          if (ink) {
+            const glyph = row.ownerDocument.createElement('span')
+            const scale = (cellWidth * cell.width) / ink.width
+            glyph.textContent = cell.text
+            glyph.style.fontWeight = 'inherit'
+            glyph.style.transformOrigin = 'left center'
+            glyph.style.transform = `translateX(${-ink.left * scale}px) scaleX(${scale})`
+            slot.append(glyph)
+          } else slot.textContent = cell.text
+          fragment.append(slot)
+        })
+        source.replaceChildren(fragment)
       })
-      source.replaceChildren(fragment)
     }
   }
-  const render = (start = 0, end = rows.children.length - 1) => {
-    // xterm replaces the spans on output, selection, resize and theme changes.
+  const renderRows = (indexes: number[]) => {
     for (const source of sources.keys()) if (!rows.contains(source)) sources.delete(source)
-    for (let index = start; index <= end; index++) {
+    const cellWidth = rows.getBoundingClientRect().width / terminal.cols
+    const updates: Array<() => void> = []
+    // Measure all affected rows before changing DOM, avoiding a layout flush per symbol.
+    for (const index of indexes) {
       const row = rows.children[index]
-      if (row instanceof view.HTMLElement) renderRow(row, index)
+      if (row instanceof view.HTMLElement) collectRow(row, index, cellWidth, updates)
     }
+    for (const update of updates) update()
+    // Our wrappers are already fitted; observing them again only repeats the row scan.
+    observer.takeRecords()
   }
+  const render = (start = 0, end = rows.children.length - 1) =>
+    renderRows(Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index))
   const subscription = terminal.onRender(({ start, end }) => render(start, end))
   const observer = new view.MutationObserver((records) => {
     const changed = new Set<HTMLElement>()
@@ -106,10 +116,8 @@ export function registerTerminalSymbolGlyphRenderer(terminal: Terminal) {
       if (row) changed.add(row)
     }
     const children = Array.from(rows.children)
-    for (const row of changed) {
-      const index = children.indexOf(row)
-      if (index >= 0) render(index, index)
-    }
+    const indexes = [...changed].map((row) => children.indexOf(row)).filter((index) => index >= 0)
+    if (indexes.length) renderRows(indexes)
   })
   observer.observe(rows, { childList: true, subtree: true })
   render()

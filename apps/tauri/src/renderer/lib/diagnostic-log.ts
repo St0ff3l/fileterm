@@ -5,6 +5,7 @@ export type DiagnosticLogLevel = Parameters<FileTermDesktopApi['writeDiagnosticL
 export const DIAGNOSTIC_SCOPES = {
   workspace: 'renderer:workspace',
   monitoring: 'renderer:monitoring',
+  performance: 'renderer:performance',
   error: 'renderer:error'
 } as const
 

@@ -35,7 +35,6 @@ export type TerminalLifecycleOptions = {
   bootTextRef: MutableRef<string>
   renderedTranscriptRef: MutableRef<string>
   pendingWriteRef: MutableRef<string>
-  writeFrameRef: MutableRef<number | null>
   resizeTimerRef: MutableRef<number | null>
   resizeSettleTimerRef: MutableRef<number | null>
   pendingResizeForceRef: MutableRef<boolean>

@@ -39,10 +39,7 @@ export function buildLinePath(samples: NetworkSamplePoint[], key: 'rx' | 'tx', m
 export function buildScrollingWindow(samples: NetworkSamplePoint[], visibleCount: number) {
   const windowSize = visibleCount + 1
   const padded = Array.from({ length: Math.max(0, windowSize - samples.length) }, () => ({ rx: 0, tx: 0 }))
-  return [
-    ...padded,
-    ...samples.map((point, index) => (index === 0 && padded.length ? { ...point, breakBefore: true } : point))
-  ].slice(-windowSize)
+  return [...padded, ...samples].slice(-windowSize)
 }
 
 export function areSampleWindowsEqual(left: NetworkSamplePoint[], right: NetworkSamplePoint[]) {

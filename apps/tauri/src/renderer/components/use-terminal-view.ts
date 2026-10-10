@@ -69,7 +69,6 @@ export function useTerminalView({
   const bootTextRef = useRef(hydratedBootText)
   const renderedTranscriptRef = useRef('')
   const pendingWriteRef = useRef('')
-  const writeFrameRef = useRef<number | null>(null)
   const resizeTimerRef = useRef<number | null>(null)
   const resizeSettleTimerRef = useRef<number | null>(null)
   const pendingResizeForceRef = useRef(false)
@@ -312,7 +311,6 @@ export function useTerminalView({
     findOpenRef,
     renderedTranscriptRef,
     pendingWriteRef,
-    writeFrameRef,
     isWritingRef,
     suppressHydratedChunksUntilRef,
     preserveVisibleBufferRef,
@@ -347,7 +345,6 @@ export function useTerminalView({
     bootTextRef,
     renderedTranscriptRef,
     pendingWriteRef,
-    writeFrameRef,
     resizeTimerRef,
     resizeSettleTimerRef,
     pendingResizeForceRef,
