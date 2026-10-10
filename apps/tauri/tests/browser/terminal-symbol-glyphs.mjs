@@ -11,7 +11,10 @@ const ts = require('typescript')
 const root = new URL('../../../../', import.meta.url)
 const source = new URL('../../src/renderer/', import.meta.url)
 const engine = process.env.PLAYWRIGHT_ENGINE === 'webkit' ? webkit : chromium
-const browser = await engine.launch({ channel: process.env.PLAYWRIGHT_CHANNEL })
+const browser = await engine.launch({
+  channel: process.env.PLAYWRIGHT_CHANNEL,
+  executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH
+})
 let reproduced = false
 const glyphs = ['▢', '▣', '☐', '□', '✻', '┌', '→', '※']
 try {

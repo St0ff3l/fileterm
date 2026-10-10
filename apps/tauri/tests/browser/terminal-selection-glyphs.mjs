@@ -11,7 +11,11 @@ const ts = require('typescript')
 const root = new URL('../../../../', import.meta.url)
 const source = new URL('../../src/renderer/components/', import.meta.url)
 const engine = process.env.PLAYWRIGHT_ENGINE === 'webkit' ? webkit : chromium
-const browser = await engine.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
+const browser = await engine.launch({
+  headless: true,
+  channel: process.env.PLAYWRIGHT_CHANNEL,
+  executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH
+})
 let reproduced = false
 try {
   for (const { scale, fontSize } of [1, 2].flatMap((scale) => [14, 24].map((fontSize) => ({ scale, fontSize })))) {

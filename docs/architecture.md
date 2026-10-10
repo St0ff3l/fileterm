@@ -77,6 +77,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - `apps/tauri/src/renderer/components/terminal-view.tsx`
   - 从 CSS 变量读取终端主题色，确保终端外观和全局主题联动。
   - `terminal-lifecycle-core.ts` 使用 xterm 的最低文字对比度保护，在显示层处理 ANSI/256 色/RGB 与选区/搜索背景，不改写协议流。
+  - `terminal-block-glyph-renderer.ts` 将块字符和连续横线 `─`、`━`、`═` 按字符格几何绘入逐行设备像素位图，复用实时 palette 与选区前景，避免字体边缘和 ANSI span 接缝造成断线或粗细变化。
 - `apps/tauri/src/renderer/app/terminal-log-colorizer.ts`
   - 在 xterm 完成解析后对普通缓冲区的时间戳、服务名和常见日志级别着色；不向远端输出注入 ANSI，不处理 `top`、`vim`、`less` 等备用屏幕程序，并随终端主题重新套用颜色。
 - `apps/tauri/src/renderer/app/terminal-foreground-adapter.ts`
@@ -577,7 +578,7 @@ SSH/SFTP 和 FTP/FTPS 会在会话建立后上报实际能力，而不是把所�
 - 传输层逐数据块累计真实字节数，Rust backend 最多每 200ms 发送一次轻量 `transfer:update` 任务事件；完成、失败和取消立即发送。
 - Renderer 的传输订阅与列表状态收敛在独立 `TransferCenter`，进度变化不更新顶层 workspace state。
 - Tauri 的 SSH 终端输入使用 renderer 到 Rust backend 的单向 command，并进入每个 tab 独立的无界输入 channel；SSH worker 在写入 PTY 前按序合并当前积压，不能与 SFTP/文件操作共用有界 worker command 队列，也不能因该队列满而丢失按键。
-- 终端 resize 同样使用单向 command；终端输出在 Rust backend 按 16ms 合并，再交给 renderer 逐帧写入 xterm。
+- 终端 resize 同样使用单向 command；终端输出在 Rust backend 按 16ms 合并，再交给 renderer 按 16 KiB 分批写入 xterm；空闲时立即提交，积压由解析完成回调继续排空，绘制帧交给 xterm，避免后台 WebView 暂停动画帧时停止消费输出。
 - 终端日志颜色属于 renderer 的 xterm 表现层：远端原有 ANSI 继续由 xterm 解析，纯文本日志只在普通缓冲区完成解析后按主题色补充语义颜色；备用屏幕程序保持原始输出，避免破坏 TUI。
 - Tauri 终端输出必须使用持久的 IPC `Channel` 流式传送；普通 Tauri events 只承载低频状态和 snapshot，避免持续 PTY 输出与状态广播争用同一事件路径。
 - SSH transcript 由 controller 的有界分块缓冲统一维护，runtime 不重复拼接第二份历史。

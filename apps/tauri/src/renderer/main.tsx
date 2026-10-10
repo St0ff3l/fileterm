@@ -12,9 +12,12 @@ import { applyUiZoomPercent } from './app/ui-zoom'
 import { MainWindowReveal } from './lib/main-window-reveal'
 import './styles/index.css'
 import { installRendererErrorLogging, reportRendererError } from './lib/renderer-error-log'
+import { installRendererPerformanceLogging } from './lib/renderer-performance-log'
 
 const removeErrorLogging = installRendererErrorLogging()
 if (import.meta.hot) import.meta.hot.dispose(removeErrorLogging)
+const removePerformanceLogging = installRendererPerformanceLogging()
+if (import.meta.hot) import.meta.hot.dispose(removePerformanceLogging)
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
 // Keep renderer-only chrome adjustments scoped to the Tauri window model.

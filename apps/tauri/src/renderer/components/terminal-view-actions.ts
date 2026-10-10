@@ -18,7 +18,7 @@ import {
   TERMINAL_FIT_GUARD_ROWS,
   TERMINAL_REMOTE_GUARD_COLS,
   TERMINAL_RESIZE_PIXEL_EPSILON,
-  TERMINAL_WRITE_FRAME_BUDGET,
+  TERMINAL_WRITE_CHUNK_SIZE,
   type SplitPaneDirection
 } from './terminal-view-utils'
 
@@ -39,7 +39,6 @@ export type TerminalViewActionsOptions = {
   findOpenRef: MutableRef<boolean>
   renderedTranscriptRef: MutableRef<string>
   pendingWriteRef: MutableRef<string>
-  writeFrameRef: MutableRef<number | null>
   isWritingRef: MutableRef<boolean>
   suppressHydratedChunksUntilRef: MutableRef<number>
   preserveVisibleBufferRef: MutableRef<boolean>
@@ -75,7 +74,6 @@ export function useTerminalViewActions({
   findOpenRef,
   renderedTranscriptRef,
   pendingWriteRef,
-  writeFrameRef,
   isWritingRef,
   suppressHydratedChunksUntilRef,
   preserveVisibleBufferRef,
@@ -356,7 +354,6 @@ export function useTerminalViewActions({
   }
 
   const flushPendingWrite = () => {
-    writeFrameRef.current = null
     const terminal = terminalRef.current
     if (!terminal) {
       pendingWriteRef.current = ''
@@ -368,18 +365,18 @@ export function useTerminalViewActions({
     }
 
     if (isWritingRef.current) {
-      writeFrameRef.current = window.requestAnimationFrame(flushPendingWrite)
       return
     }
 
-    const nextChunk = pendingWriteRef.current.slice(0, TERMINAL_WRITE_FRAME_BUDGET)
+    const nextChunk = pendingWriteRef.current.slice(0, TERMINAL_WRITE_CHUNK_SIZE)
     pendingWriteRef.current = pendingWriteRef.current.slice(nextChunk.length)
     isWritingRef.current = true
+    const generation = transcriptReplayGenerationRef.current
     terminal.write(nextChunk, () => {
+      if (terminalRef.current !== terminal || transcriptReplayGenerationRef.current !== generation) return
       isWritingRef.current = false
-      if (pendingWriteRef.current && writeFrameRef.current === null) {
-        writeFrameRef.current = window.requestAnimationFrame(flushPendingWrite)
-      }
+      // Parsing owns backpressure; hidden WebViews may stop animation frames entirely.
+      if (pendingWriteRef.current) queueMicrotask(flushPendingWrite)
     })
   }
 
@@ -389,8 +386,9 @@ export function useTerminalViewActions({
     }
 
     pendingWriteRef.current += text
-    if (writeFrameRef.current === null) {
-      writeFrameRef.current = window.requestAnimationFrame(flushPendingWrite)
+    if (!isWritingRef.current) {
+      // xterm already batches parsing/rendering; do not delay an idle terminal another frame.
+      flushPendingWrite()
     }
   }
 
@@ -427,10 +425,6 @@ export function useTerminalViewActions({
   const replaceTerminalWithTranscript = (terminal: Terminal, transcript: string) => {
     renderedTranscriptRef.current = trimTranscript(transcript)
     pendingWriteRef.current = ''
-    if (writeFrameRef.current !== null) {
-      window.cancelAnimationFrame(writeFrameRef.current)
-      writeFrameRef.current = null
-    }
     isWritingRef.current = false
     const replayGeneration = transcriptReplayGenerationRef.current + 1
     transcriptReplayGenerationRef.current = replayGeneration

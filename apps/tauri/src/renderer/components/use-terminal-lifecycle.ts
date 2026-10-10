@@ -43,16 +43,12 @@ export function useTerminalLifecycle(options: TerminalLifecycleOptions) {
       inputHandlers.dispose()
       outputHandlers.dispose()
 
-      if (runtime.writeFrameRef.current !== null) {
-        window.cancelAnimationFrame(runtime.writeFrameRef.current)
-      }
       if (runtime.resizeTimerRef.current !== null) {
         window.cancelAnimationFrame(runtime.resizeTimerRef.current)
       }
       if (runtime.resizeSettleTimerRef.current !== null) {
         window.clearTimeout(runtime.resizeSettleTimerRef.current)
       }
-      runtime.writeFrameRef.current = null
       runtime.resizeTimerRef.current = null
       runtime.resizeSettleTimerRef.current = null
       runtime.pendingResizeForceRef.current = false
