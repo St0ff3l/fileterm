@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
+use tracing_log::NormalizeEvent;
 use tracing_subscriber::layer::{Context, Layer};
 use tracing_subscriber::registry::LookupSpan;
 
@@ -120,7 +121,8 @@ where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
 {
     fn on_event(&self, event: &Event<'_>, context: Context<'_, S>) {
-        let metadata = event.metadata();
+        let normalized = event.normalized_metadata();
+        let metadata = normalized.as_ref().unwrap_or_else(|| event.metadata());
         let Some(level) = level_from_tracing(metadata.level()) else {
             return;
         };
@@ -147,5 +149,37 @@ where
         let message = fields.message(metadata.name(), span_path.as_deref());
         let line = build_line(level, category, scope, &message);
         writer::dispatch(self.directory.clone(), level, line);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracing_log::log::{Level, Log, Record};
+    use tracing_subscriber::prelude::*;
+
+    #[test]
+    fn bridged_russh_warning_uses_connection_category() {
+        let directory = std::env::temp_dir().join(format!(
+            "fileterm-log-bridge-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let subscriber =
+            tracing_subscriber::registry().with(FileTermLogLayer::new(directory.clone()));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing_log::LogTracer::new().log(
+                &Record::builder()
+                    .level(Level::Warn)
+                    .target("russh::client::kex")
+                    .args(format_args!("DH prime size outside requested range"))
+                    .build(),
+            );
+        });
+        writer::flush(std::time::Duration::from_secs(2));
+        let log = std::fs::read_to_string(directory.join("app.log")).unwrap();
+        assert!(log.contains("category=connection"), "{log}");
+        assert!(log.contains("russh::client::kex"), "{log}");
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

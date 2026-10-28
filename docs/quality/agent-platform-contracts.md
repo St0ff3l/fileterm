@@ -16,8 +16,12 @@
 
 - **离线资源就地化**：所有图标、字体与基础样式资源预置在代码库中打包输出，严禁运行时动态拉取外部 CDN 资源。
 - **macOS 钥匙串规避**：禁用 safeStorage，用品牌重命名等替代机制存储凭据，避免触发 macOS 系统安全弹窗。
-- **旧 Comware SSH 兼容边界**：`vendor/russh` 基于 `russh 0.63.1`，通过
-  `[patch.crates-io]` 供 Tauri 使用。它只保留一个显式开启的窄范围兼容分支：远端 SSH
+- **旧服务器 SSH/SFTP 兼容边界**：仅在显式开启 `legacyAlgorithms` 时，应用层追加
+  SHA-1 算法，并将 GEX-SHA1/SHA256 的请求范围设为 `1024/8192/8192`，允许旧服务器
+  返回固定的 1024 位 DH 组；界面提示必须说明较弱的 DH 参数。关闭时保留 russh 默认
+  `3072/8192/8192`，不自动重试降级，不改变主机密钥验证。
+  `vendor/russh` 基于 `russh 0.63.1`，通过 `[patch.crates-io]` 供 Tauri 使用。
+  vendor 仍只保留一个显式开启的窄范围兼容分支：远端 SSH
   identification 精确匹配 Comware、且协商到 `diffie-hellman-group-exchange-sha1` 时，请求
   `1024/1024/8192`；开启兼容选项时仍先按正常算法协商，默认安全算法不放宽。普通 Linux/Windows SSH、其他网络设备、
   `network-device` 模式、Banner 识别和服务器探测禁用由应用层逻辑负责，不由该兼容分支改变。
