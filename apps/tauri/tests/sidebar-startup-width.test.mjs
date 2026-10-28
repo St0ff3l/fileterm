@@ -224,15 +224,18 @@ function renderWorkspace({
   }).children[0]
 }
 
-test('home and session titlebars and sidebars start at the same default width', () => {
+test('titlebar brand width stays fixed when home, session and host sidebars resize', () => {
   for (const home of [false, true]) {
-    const shell = renderWorkspace({ home })
-    assert.equal(shell.props.style['--sidebar-width'], '214px')
-    assert.equal(shell.props.style['--brand-width'], '214px')
+    for (const width of [190, 214, 320]) {
+      const shell = renderWorkspace({ home, width })
+      assert.equal(shell.props.style['--sidebar-width'], `${home ? Math.min(width, 220) : width}px`)
+      assert.equal(shell.props.style['--brand-width'], '214px')
+    }
   }
   const grouped = renderWorkspace({ hostGroups: true, width: 300 })
   assert.equal(grouped.props.style['--sidebar-width'], '300px')
   assert.equal(grouped.props.style['--host-rail-width'], '320px')
+  assert.equal(grouped.props.style['--brand-width'], '214px')
 })
 
 test('remote, transfer and local tabs reuse the same visible terminal edge frame', () => {

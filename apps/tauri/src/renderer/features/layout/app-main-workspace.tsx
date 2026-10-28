@@ -210,17 +210,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   const activeJumpHosts =
     activeProfile?.type === 'ssh' ? resolveSshJumpRoute(activeProfile, workspace.profiles).jumpHosts : []
   const activeRouteTarget = activeJumpHosts.length && activeProfile?.type === 'ssh' ? activeProfile : undefined
-  // Home and session titlebars share the expanded sidebar's live width.
-  // A collapsed sidebar keeps enough titlebar space for the native window controls.
-  // The host-groups layout puts the machine list on the left and machine info on the right.
   const showHostRail = usesHostGroups && !isHomeWorkspaceVisible
-  const brandWidth = showHostRail
-    ? isHostRailCollapsed
-      ? DEFAULT_SIDEBAR_WIDTH
-      : sidebarWidth
-    : isSystemSidebarCollapsed
-      ? DEFAULT_SIDEBAR_WIDTH
-      : resolvedSidebarWidth
   const activateSession = (tabId: string) => {
     void activateSessionTab(tabId)
   }
@@ -303,7 +293,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
-            '--brand-width': `${brandWidth}px`,
+            '--brand-width': `${DEFAULT_SIDEBAR_WIDTH}px`,
             '--host-rail-width': `${isHostRailCollapsed ? 44 : sidebarWidth}px`,
             '--ai-copilot-panel-width': `${aiCopilotWidth}px`
           } as CSSProperties
