@@ -134,6 +134,10 @@
   box-sizing: border-box;
 }
 
+:root[data-platform='win32'] .sidebar-nav-link {
+  line-height: 1.4;
+}
+
 .sidebar-nav-link span.material-symbols-outlined {
   display: block;
   flex: 0 0 18px;

@@ -170,6 +170,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
         pendingHomeReplacementKeyRef.current = null
         onError('打开连接', error)
       } finally {
+        if (replacementKey) setTabOrder((current) => [...current])
         onBusyChange(false)
       }
     })
@@ -216,6 +217,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
       pendingHomeReplacementKeyRef.current = null
       onError('打开本地终端', error)
     } finally {
+      if (replacementKey) setTabOrder((current) => [...current])
       onBusyChange(false)
     }
   }

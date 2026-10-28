@@ -27,7 +27,7 @@ const utils = load('../src/renderer/hooks/workspace-tabs-utils.ts', {
   '../features/layout/host-groups': groups
 })
 const profileOpenGuard = load('../src/renderer/hooks/profile-open-guard.ts')
-const { buildOrderedTabs, nextTabAfterClose } = utils
+const { buildOrderedTabs, nextTabAfterClose, reconcileTabOrder } = utils
 const { createWorkspaceTabsSessionActions } = load('../src/renderer/hooks/workspace-tabs-session-actions.ts', {
   '../app/app-utils': { homeTabKey: (id) => `home:${id}`, sessionTabKey: (id) => `session:${id}` },
   '../features/common/session-send-targets': {},
@@ -67,6 +67,14 @@ test('a pending home replacement defers the new session tab until tabOrder is re
     Array.from(replaced, (entry) => entry.key),
     ['session:new-session']
   )
+})
+
+test('an early snapshot cannot replace the home order before the open request completes', () => {
+  const order = ['session:a', 'home:home-1']
+  const keys = ['home:home-1', 'session:a', 'session:new-session']
+  const pending = reconcileTabOrder(order, keys, true)
+  assert.deepEqual(Array.from(pending), order)
+  assert.deepEqual(Array.from(reconcileTabOrder(pending, keys, false)), [...order, 'session:new-session'])
 })
 
 test('closing selects the right neighbour, then the left, using dragged and grouped order', () => {
@@ -187,4 +195,21 @@ test('opening a connection replaces the active home tab instead of adding a tab'
   assert.deepEqual(state.localTabs, [])
   assert.equal(state.order[0], 'session:new-session')
   assert.equal(state.activeLocalTabId, null)
+})
+
+test('failed connection opening keeps the home tab and clears the pending replacement', async () => {
+  const { state, actions } = fixture(
+    {
+      openProfile: async () => {
+        throw new Error('open failed')
+      }
+    },
+    'home-1',
+    'home-1'
+  )
+  state.order.unshift('home:home-1')
+  await actions.openProfile('profile')
+  assert.equal(state.localTabs[0].id, 'home-1')
+  assert.equal(state.order[0], 'home:home-1')
+  assert.equal(state.errors.length, 1)
 })
