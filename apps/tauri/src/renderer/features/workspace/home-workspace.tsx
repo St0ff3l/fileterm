@@ -1,4 +1,5 @@
 import { MaterialIcon, type MaterialIconName } from '../../components/common/material-icon/material-icon'
+import { SidebarAlignedLabel } from '../../components/common/icon-label/icon-label'
 import './home-workspace.css'
 import type {
   CommandFolder,
@@ -296,7 +297,7 @@ export function HomeWorkspace({
             type="button"
           >
             <MaterialIcon name="dashboard" className="material-symbols-outlined" />
-            <span>{t.overview}</span>
+            <SidebarAlignedLabel>{t.overview}</SidebarAlignedLabel>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'connection-manager' ? 'active' : ''}`}
@@ -306,7 +307,7 @@ export function HomeWorkspace({
             type="button"
           >
             <MaterialIcon name="settings_ethernet" className="material-symbols-outlined" />
-            <span>{t.connectionManager}</span>
+            <SidebarAlignedLabel>{t.connectionManager}</SidebarAlignedLabel>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'proxy-manager' ? 'active' : ''}`}
@@ -316,7 +317,7 @@ export function HomeWorkspace({
             type="button"
           >
             <AppIcon name="shield" size={20} />
-            <span>{t.proxyManager}</span>
+            <SidebarAlignedLabel>{t.proxyManager}</SidebarAlignedLabel>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'command-manager' ? 'active' : ''}`}
@@ -326,7 +327,7 @@ export function HomeWorkspace({
             type="button"
           >
             <MaterialIcon name="terminal" className="material-symbols-outlined" />
-            <span>{t.commandManager}</span>
+            <SidebarAlignedLabel>{t.commandManager}</SidebarAlignedLabel>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'ssh-key-manager' ? 'active' : ''}`}
@@ -336,7 +337,7 @@ export function HomeWorkspace({
             type="button"
           >
             <MaterialIcon name="key" className="material-symbols-outlined" />
-            <span>{t.sshKeyManager}</span>
+            <SidebarAlignedLabel>{t.sshKeyManager}</SidebarAlignedLabel>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'background-sessions' ? 'active' : ''}`}
@@ -346,7 +347,7 @@ export function HomeWorkspace({
             type="button"
           >
             <AppIcon name="history" size={18} />
-            <span>{t.backgroundSessions}</span>
+            <SidebarAlignedLabel>{t.backgroundSessions}</SidebarAlignedLabel>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}
@@ -356,7 +357,7 @@ export function HomeWorkspace({
             type="button"
           >
             <MaterialIcon name="settings" className="material-symbols-outlined" />
-            <span>{t.settings}</span>
+            <SidebarAlignedLabel>{t.settings}</SidebarAlignedLabel>
           </button>
           {/* Quick Connect sidebar button hidden — code preserved in QuickLinksPage.tsx */}
           {/* Docs sidebar button hidden — handleOpenDocs still available */}
@@ -379,7 +380,7 @@ export function HomeWorkspace({
             type="button"
           >
             <MaterialIcon name="star" className="material-symbols-outlined" />
-            <span>GitHub</span>
+            <SidebarAlignedLabel>GitHub</SidebarAlignedLabel>
           </button>
           {updateHint ? (
             <button

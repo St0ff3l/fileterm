@@ -28,10 +28,16 @@ description: 修改 FileTerm renderer 的 React/TSX、组件 CSS、主题 token�
 
 ## 验证与完成
 
-组件/CSS 改动前后运行（仓库根目录）：
+组件/CSS 改动前后运行（仓库根目录，均需 `rg` 和 Git；Windows 入口需要 Git for Windows）：
 
 ```bash
 bash .agents/skills/fileterm-common-components/scripts/check-css-contract.sh
+```
+
+Windows PowerShell：
+
+```powershell
+pwsh -NoProfile -File .agents/skills/fileterm-common-components/scripts/check-css-contract.ps1
 ```
 
 对比已有债务与本次新增问题，不为通过检查顺手重写无关样式。检查器全量检查 semantic.css 和公共组件；feature CSS 只阻塞相对 `CSS_CONTRACT_BASE`（默认 `origin/main`）的 merge-base 变更文件及未跟踪文件，避免历史债务阻塞。需要其他基准时设置该环境变量。它也检查十六进制、颜色函数和 CSS 命名颜色；四个主题文件检查是否缺失。feature TSX 行内颜色、原生 select/confirm 和自定义主题映射需另外检查。
