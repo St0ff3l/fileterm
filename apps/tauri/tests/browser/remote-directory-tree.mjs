@@ -28,6 +28,8 @@ import { useThemeSettingsController } from '${root}apps/tauri/src/renderer/featu
 import { applyThemeVariables, deriveThemeVariant, getThemeConfigFromTokenPreset } from '${root}apps/tauri/src/renderer/app/theme-config'
 import '${root}apps/tauri/src/renderer/styles/index.css'
 import '${root}apps/tauri/src/renderer/features/layout/tab-bar.css'
+window.fixtureApplyConfig = (config) => applyThemeVariables('fileterm-light', config)
+window.fixturePresetConfigFor = (preset,variant) => normalizeThemeConfig(preset === 'fileterm' ? createDefaultThemeConfig(variant) : preset === 'codex' ? createCodexThemeConfig(variant) : getThemeConfigFromTokenPreset(preset,variant),variant)
 window.fixtureTheme = (mode) => {
  const variant = mode.endsWith('light') ? 'light' : 'dark'
  const config = mode.startsWith('iterm2-') ? getThemeConfigFromTokenPreset(mode.replace(/-(dark|light)$/,''),variant) : mode.startsWith('codex') ? createCodexThemeConfig(variant) : undefined
@@ -102,12 +104,19 @@ function Fixture() {
 }
 function PresetSyncProbe() {
  const [themeConfig,setThemeConfig] = useState(() => {
-  const config = createDefaultThemeConfig('light')
-  config.codeThemeId = 'iterm2-gruvbox'
-  return config
+  const preset = new URLSearchParams(location.search).get('preset')
+  return preset === 'fileterm' ? createDefaultThemeConfig('light') : preset === 'codex' ? createCodexThemeConfig('light') : getThemeConfigFromTokenPreset('iterm2-gruvbox','light')
  })
+ const [theme,setTheme] = useState('fileterm-light')
+ const [customThemes,setCustomThemes] = useState([])
  const state = useSettingsModalState('interface')
- useThemeSettingsController({state,options:{theme:'fileterm-light',themeConfig,customThemes:[],onSetTheme:()=>{},onSetThemeConfig:setThemeConfig,onSetCustomThemes:()=>{}}})
+ const controller = useThemeSettingsController({state,options:{theme,themeConfig,customThemes,onSetTheme:setTheme,onSetThemeConfig:setThemeConfig,onSetCustomThemes:setCustomThemes}})
+ window.fixtureSetFont = controller.updateThemeFonts
+ window.fixtureSwitchVariant = controller.switchThemeVariant
+ window.fixtureSetThemeName = controller.setCustomThemeName
+ window.fixtureSaveTheme = controller.saveCustomTheme
+ window.fixtureSavedThemes = customThemes
+ window.fixturePresetConfig = themeConfig
  window.fixturePresetSyncRerender = () => setThemeConfig(current=>({...current}))
  return null
 }
@@ -315,7 +324,65 @@ try {
     assert.equal(colors.headerDivider.borderBottomWidth, '0px', JSON.stringify(colors.headerDivider))
     assert.match(colors.headerDivider.boxShadow, /\) 0px 1px 0px 0px$/, JSON.stringify(colors.headerDivider))
   }
-  for (const platform of ['darwin', 'win32', 'linux']) {
+  if (process.argv.includes('--font-only')) {
+    for (const preset of ['fileterm', 'codex', 'iterm2-gruvbox']) {
+      await page.goto(`${address}/?platform=darwin&preset=${preset}`)
+      await page.evaluate(() => {
+        const preset = new URLSearchParams(window.location.search).get('preset')
+        window.fixtureTheme(preset + '-light')
+        window.fixtureStartPresetSync()
+      })
+      await page.waitForFunction(() => typeof window.fixtureSetFont === 'function')
+      await page.evaluate(() => window.fixtureSetFont({ ui: 'Inter', code: 'JetBrains Mono' }))
+      await page.waitForFunction(() => window.fixturePresetConfig.theme.fonts.ui === 'Inter')
+      const config = await page.evaluate(() => window.fixturePresetConfig)
+      assert.equal(config.codeThemeId, preset)
+      assert.equal(config.theme.fonts.code, 'JetBrains Mono')
+      const result = await page.evaluate((config) => {
+        const before = window.getComputedStyle(document.documentElement).getPropertyValue('--ref-surface-panel')
+        window.fixtureApplyConfig(config)
+        return {
+          before,
+          after: window.getComputedStyle(document.documentElement).getPropertyValue('--ref-surface-panel'),
+          font: window.getComputedStyle(document.documentElement).getPropertyValue('--font-ui')
+        }
+      }, config)
+      assert.equal(result.before, result.after)
+      assert.match(result.font, /Inter/)
+      await page.evaluate(() => window.fixtureSwitchVariant('dark'))
+      await page.waitForFunction(() => window.fixturePresetConfig.variant === 'dark')
+      const dark = await page.evaluate(() => window.fixturePresetConfig)
+      assert.equal(dark.codeThemeId, preset)
+      assert.deepEqual(dark.theme.fonts, config.theme.fonts)
+      const expected = await page.evaluate((preset) => window.fixturePresetConfigFor(preset, 'dark'), preset)
+      assert.equal(dark.theme.surface, expected.theme.surface, preset)
+      assert.deepEqual(dark.theme.semanticColors, expected.theme.semanticColors, preset)
+      assert.deepEqual(dark.theme.terminal, expected.theme.terminal, preset)
+      await page.evaluate(() => window.fixtureSwitchVariant('light'))
+      await page.waitForFunction(() => window.fixturePresetConfig.variant === 'light')
+      assert.deepEqual((await page.evaluate(() => window.fixturePresetConfig)).theme.fonts, config.theme.fonts)
+    }
+    await page.evaluate(() => window.fixtureSetThemeName('Font test'))
+    await page.waitForFunction(() => window.fixturePresetConfig.variant === 'light')
+    await page.evaluate(() => window.fixtureSaveTheme())
+    await page.waitForFunction(() => window.fixtureSavedThemes.length === 1)
+    const beforeSave = await page.evaluate(() => window.fixtureSavedThemes[0])
+    await page.evaluate(() => window.fixtureSetFont({ ui: 'Noto Sans SC', code: 'Cascadia Code' }))
+    await page.waitForFunction(() => window.fixturePresetConfig.theme.fonts.ui === 'Noto Sans SC')
+    await page.evaluate(() => window.fixtureSaveTheme())
+    await page.waitForFunction(() => window.fixtureSavedThemes[0]?.variants.dark.theme.fonts.ui === 'Noto Sans SC')
+    const saved = await page.evaluate(() => window.fixtureSavedThemes[0])
+    assert.deepEqual(saved.variants.dark.theme.fonts, { ui: 'Noto Sans SC', code: 'Cascadia Code' })
+    assert.deepEqual(saved.variants.light.theme.fonts, saved.variants.dark.theme.fonts)
+    assert.equal(saved.variants.dark.theme.surface, beforeSave.variants.dark.theme.surface)
+    await page.evaluate(() => window.fixtureSwitchVariant('dark'))
+    await page.waitForFunction(() => window.fixturePresetConfig.variant === 'dark')
+    assert.deepEqual(
+      (await page.evaluate(() => window.fixturePresetConfig)).theme.fonts,
+      saved.variants.dark.theme.fonts
+    )
+  }
+  for (const platform of process.argv.includes('--font-only') ? [] : ['darwin', 'win32', 'linux']) {
     await page.goto(`${address}/?platform=${platform}`)
     await page.evaluate((platform) => (document.documentElement.dataset.platform = platform), platform)
     await page.locator('.local-pane').waitFor()
@@ -593,9 +660,11 @@ try {
   }
   assert.deepEqual(errors, [])
   console.log(
-    process.argv.includes('--drag-only')
-      ? 'Passed: name/icon uploads, name downloads, multi-selection, same-pane/cancelled/disconnected drops; macOS/Windows/Linux renderer branches.'
-      : 'Passed: file dragging, layout modes, lazy expansion, navigation, errors/retry, keyboard/locate, persistence, reconnect and access-mode isolation; macOS/Windows/Linux controls and dark/light themes.'
+    process.argv.includes('--font-only')
+      ? 'Passed: font selection preserves theme identity and saved custom fonts across light/dark switches.'
+      : process.argv.includes('--drag-only')
+        ? 'Passed: name/icon uploads, name downloads, multi-selection, same-pane/cancelled/disconnected drops; macOS/Windows/Linux renderer branches.'
+        : 'Passed: file dragging, layout modes, lazy expansion, navigation, errors/retry, keyboard/locate, persistence, reconnect and access-mode isolation; macOS/Windows/Linux controls and dark/light themes.'
   )
 } finally {
   await browser.close()

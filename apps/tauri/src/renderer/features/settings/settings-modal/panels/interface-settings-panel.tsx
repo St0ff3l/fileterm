@@ -401,7 +401,9 @@ export function InterfaceSettingsPanel() {
                 options={[
                   { value: '', label: t.themeSystemDefault },
                   { value: 'Inter', label: 'Inter' },
-                  ...(systemFonts['SF Pro Text'] ? [{ value: 'SF Pro Text', label: 'SF Pro Text' }] : []),
+                  ...(themeConfig.theme.fonts.ui === 'SF Pro Text'
+                    ? [{ value: 'SF Pro Text', label: 'SF Pro Text', disabled: true }]
+                    : []),
                   { value: 'Noto Sans SC', label: 'Noto Sans SC' },
                   ...importedFonts.map((font) => ({
                     value: font.family,

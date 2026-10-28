@@ -83,6 +83,7 @@ export function useThemeSettingsController({
     syncedPresetKeyRef.current = presetSyncKey
     if (!isIterm2ThemePresetId(themeConfig.codeThemeId) || themeConfig.theme.overrides) return
     const currentPreset = getThemeConfigFromTokenPreset(themeConfig.codeThemeId, themeVariant)
+    currentPreset.theme.fonts = themeConfig.theme.fonts
     if (JSON.stringify(normalizeThemeConfig(themeConfig, themeVariant)) !== JSON.stringify(currentPreset)) {
       onSetThemeConfig(currentPreset)
     }
@@ -122,12 +123,11 @@ export function useThemeSettingsController({
   }
 
   const updateThemeFonts = (patch: Partial<ThemeConfig['theme']['fonts']>) => {
-    updateThemeBody({
-      fonts: {
-        ...themeConfig.theme.fonts,
-        ...patch
-      }
+    onSetThemeConfig({
+      ...normalizedThemeConfig,
+      theme: { ...normalizedThemeConfig.theme, fonts: { ...normalizedThemeConfig.theme.fonts, ...patch } }
     })
+    setThemeConfigMessage(null)
   }
 
   const importFont = async () => {
@@ -206,7 +206,7 @@ export function useThemeSettingsController({
     })
   }
 
-  const applyThemePreset = (presetId: string, variant: ThemePresetVariant = themeVariant) => {
+  const applyThemePreset = (presetId: string, variant: ThemePresetVariant = themeVariant, keepFonts = false) => {
     if (presetId === 'custom') {
       const nextThemeConfig = normalizeThemeConfig(
         {
@@ -240,6 +240,7 @@ export function useThemeSettingsController({
     const preset = THEME_PRESETS.find((candidate) => candidate.id === presetId)
     if (!preset) return
     const nextThemeConfig = normalizeThemeConfig(preset.getConfig(variant), variant)
+    if (keepFonts) nextThemeConfig.theme.fonts = themeConfig.theme.fonts
     onSetThemeConfig(nextThemeConfig)
     onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
     setEditingCustomThemeId(null)
@@ -272,6 +273,8 @@ export function useThemeSettingsController({
       light: normalizedExistingTheme?.variants?.light ?? deriveThemeVariant(nextThemeConfig, 'light')
     }
     variants[themeVariant] = nextThemeConfig
+    variants.dark.theme.fonts = { ...nextThemeConfig.theme.fonts }
+    variants.light.theme.fonts = { ...nextThemeConfig.theme.fonts }
     const nextCustomThemes = [
       ...customThemes.filter((candidate) => candidate.id !== id),
       { id, name, config: nextThemeConfig, variants }
@@ -302,7 +305,7 @@ export function useThemeSettingsController({
 
     const matchingPreset = findMatchingThemePreset(themeConfig)
     if (matchingPreset) {
-      applyThemePreset(matchingPreset.id, nextVariant)
+      applyThemePreset(matchingPreset.id, nextVariant, true)
       return
     }
 

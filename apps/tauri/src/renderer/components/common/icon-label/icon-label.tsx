@@ -15,11 +15,36 @@ export function SidebarAlignedLabel({ children, className }: { children: string;
       const style = getComputedStyle(element)
       context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
       const metrics = context.measureText(element.textContent ?? '')
+      const lineHeight = Number.parseFloat(style.lineHeight)
+      const fontHeight = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent
+      let paddingTop = 0
+      let paddingBottom = 0
+      if (
+        Number.isFinite(lineHeight) &&
+        Number.isFinite(fontHeight) &&
+        fontHeight > 0 &&
+        Number.isFinite(metrics.actualBoundingBoxAscent) &&
+        Number.isFinite(metrics.actualBoundingBoxDescent)
+      ) {
+        const leading = (lineHeight - fontHeight) / 2
+        // Keep one pixel for antialiasing and fractional glyph boundaries.
+        paddingTop =
+          1 + Math.ceil(Math.max(0, metrics.actualBoundingBoxAscent - metrics.fontBoundingBoxAscent - leading))
+        paddingBottom =
+          1 + Math.ceil(Math.max(0, metrics.actualBoundingBoxDescent - metrics.fontBoundingBoxDescent - leading))
+        element.style.paddingBlockStart = `${paddingTop}px`
+        element.style.paddingBlockEnd = `${paddingBottom}px`
+      } else {
+        element.style.removeProperty('padding-block-start')
+        element.style.removeProperty('padding-block-end')
+      }
       const textOffset =
         (metrics.actualBoundingBoxAscent -
           metrics.actualBoundingBoxDescent -
           metrics.fontBoundingBoxAscent +
-          metrics.fontBoundingBoxDescent) /
+          metrics.fontBoundingBoxDescent -
+          paddingTop +
+          paddingBottom) /
         2
       const icon = element.parentElement?.querySelector('svg')
       const iconBox = icon?.getBBox()
@@ -29,12 +54,7 @@ export function SidebarAlignedLabel({ children, className }: { children: string;
         iconBox && iconBox.width && iconBox.height && matrix && labelBox.height
           ? matrix.b * (iconBox.x + iconBox.width / 2) + matrix.d * (iconBox.y + iconBox.height / 2) + matrix.f
           : labelBox.top + labelBox.height / 2
-      // These CJK glyphs appear high at compact Windows UI sizes.
-      const opticalAdjustment =
-        window.fileterm?.platform === 'win32' && /^['"]?(?:Inter|Noto Sans SC)['"]?(?:\s*,|$)/i.test(style.fontFamily)
-          ? 1
-          : 0
-      const offset = textOffset + iconCenter - (labelBox.top + labelBox.height / 2) + opticalAdjustment
+      const offset = textOffset + iconCenter - (labelBox.top + labelBox.height / 2)
       element.style.transform = Number.isFinite(offset) ? `translateY(${offset}px)` : ''
     }
     const schedule = () => {
