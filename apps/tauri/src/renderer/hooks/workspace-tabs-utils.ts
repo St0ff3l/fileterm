@@ -44,6 +44,27 @@ export function uniqueStrings(values: string[]) {
   return [...new Set(values)]
 }
 
+export function reconcileTabOrder(previousOrder: string[], allKeys: string[], pendingReplacement: boolean) {
+  if (pendingReplacement) return previousOrder
+  const allKeySet = new Set(allKeys)
+  const kept = uniqueStrings(previousOrder.filter((key) => allKeySet.has(key)))
+  const keptSet = new Set(kept)
+  const missing = allKeys.filter((key) => !keptSet.has(key))
+  const removedKeys = previousOrder.filter((key) => !allKeySet.has(key))
+  if (missing.length && removedKeys.length) {
+    let missingIdx = 0
+    const replacedOrder: string[] = []
+    for (const key of previousOrder) {
+      if (allKeySet.has(key)) replacedOrder.push(key)
+      else if (missingIdx < missing.length) replacedOrder.push(missing[missingIdx++])
+    }
+    const next = uniqueStrings([...replacedOrder, ...missing.slice(missingIdx)])
+    return areStringArraysEqual(previousOrder, next) ? previousOrder : next
+  }
+  const next = [...kept, ...missing]
+  return areStringArraysEqual(previousOrder, next) ? previousOrder : next
+}
+
 /** Snapshot tabs must be visible before the effect persists their order. */
 export function buildOrderedTabs(
   tabOrder: string[],

@@ -401,13 +401,9 @@ export function InterfaceSettingsPanel() {
                 options={[
                   { value: '', label: t.themeSystemDefault },
                   { value: 'Inter', label: 'Inter' },
-                  {
-                    value: 'SF Pro Text',
-                    label: systemFonts['SF Pro Text']
-                      ? 'SF Pro Text'
-                      : `SF Pro Text (${t.remoteCapabilityUnavailable})`,
-                    disabled: !systemFonts['SF Pro Text']
-                  },
+                  ...(themeConfig.theme.fonts.ui === 'SF Pro Text'
+                    ? [{ value: 'SF Pro Text', label: 'SF Pro Text', disabled: true }]
+                    : []),
                   { value: 'Noto Sans SC', label: 'Noto Sans SC' },
                   ...importedFonts.map((font) => ({
                     value: font.family,
@@ -428,11 +424,7 @@ export function InterfaceSettingsPanel() {
                 options={[
                   { value: '', label: t.themeSystemDefault },
                   { value: 'JetBrains Mono', label: 'JetBrains Mono' },
-                  {
-                    value: 'SF Mono',
-                    label: systemFonts['SF Mono'] ? 'SF Mono' : `SF Mono (${t.remoteCapabilityUnavailable})`,
-                    disabled: !systemFonts['SF Mono']
-                  },
+                  ...(systemFonts['SF Mono'] ? [{ value: 'SF Mono', label: 'SF Mono' }] : []),
                   { value: 'Cascadia Code', label: 'Cascadia Code' },
                   ...importedFonts.map((font) => ({
                     value: font.family,

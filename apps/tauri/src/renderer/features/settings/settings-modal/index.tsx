@@ -1,4 +1,5 @@
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
+import { SidebarAlignedLabel } from '../../../components/common/icon-label/icon-label'
 import type { McpAgentClientStatus, SavedTheme, ThemeConfig } from '@fileterm/core'
 import type { ThemeMode } from '../../../app/theme-config'
 import { t } from '../../../i18n'
@@ -129,7 +130,9 @@ export function SettingsModal({
                     <MaterialIcon name={item.materialIcon} className="material-symbols-outlined" />
                   )}
                 </span>
-                <span className="connection-manager-sidebar-label">{t[item.labelKey]}</span>
+                <SidebarAlignedLabel className="connection-manager-sidebar-label">
+                  {t[item.labelKey]}
+                </SidebarAlignedLabel>
               </button>
             ))}
             {visibleSettingsTabs.size === 0 ? <p className="settings-sidebar-empty">{t.noMatchingSettings}</p> : null}

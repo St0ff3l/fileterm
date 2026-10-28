@@ -20,7 +20,6 @@ import { createWorkspaceTabsSessionActions } from './workspace-tabs-session-acti
 import { createWorkspaceTabsContextActions } from './workspace-tabs-context-actions'
 import { createWorkspaceTabsPaneActions } from './workspace-tabs-pane-actions'
 import {
-  areStringArraysEqual,
   buildOrderedTabs,
   collectPaneLeafTabIds,
   createDefaultTerminalDockSendState,
@@ -28,6 +27,7 @@ import {
   formatSystemInfoTabTitle,
   isDefaultPlaceholderHomeTab,
   parseStoredMainTabUiState,
+  reconcileTabOrder,
   resolveFallbackHomeTabId,
   uniqueItemsById,
   withPendingActiveTab,
@@ -215,48 +215,17 @@ export function useWorkspaceTabs({
       ...localTabs.map((tab) => homeTabKey(tab.id)),
       ...visibleWorkspaceTabs.map((tab) => sessionTabKey(tab.id))
     ])
-    const allKeySet = new Set(allKeys)
-
-    setTabOrder((previousOrder) => {
-      const kept = uniqueStrings(previousOrder.filter((key) => allKeySet.has(key)))
-      const keptSet = new Set(kept)
-      const missing = allKeys.filter((key) => !keptSet.has(key))
-      const replacementKey = pendingHomeReplacementKeyRef.current
-
-      if (replacementKey && missing.length) {
-        const replaceIndex = kept.indexOf(replacementKey)
-        if (replaceIndex !== -1) {
-          const next = [...kept]
-          next.splice(replaceIndex, 1, missing[0])
-          pendingHomeReplacementKeyRef.current = null
-          const nextOrder = [...next, ...missing.slice(1)]
-          return areStringArraysEqual(previousOrder, nextOrder) ? previousOrder : nextOrder
-        }
-      }
-
-      if (missing.length > 0) {
-        const removedKeys = previousOrder.filter((key) => !allKeySet.has(key))
-        if (removedKeys.length > 0) {
-          let missingIdx = 0
-          const replacedOrder: string[] = []
-          for (const key of previousOrder) {
-            if (allKeySet.has(key)) {
-              replacedOrder.push(key)
-            } else if (missingIdx < missing.length) {
-              replacedOrder.push(missing[missingIdx])
-              missingIdx++
-            }
-          }
-          const remainingMissing = missing.slice(missingIdx)
-          const nextOrder = uniqueStrings([...replacedOrder, ...remainingMissing])
-          return areStringArraysEqual(previousOrder, nextOrder) ? previousOrder : nextOrder
-        }
-      }
-
-      const nextOrder = [...kept, ...missing]
-      return areStringArraysEqual(previousOrder, nextOrder) ? previousOrder : nextOrder
-    })
-  }, [hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, localTabs, visibleWorkspaceTabs])
+    setTabOrder((previousOrder) =>
+      reconcileTabOrder(previousOrder, allKeys, Boolean(pendingHomeReplacementKeyRef.current))
+    )
+  }, [
+    hasHydratedMainTabUiState,
+    hasLoadedInitialSnapshot,
+    isMainWorkspaceWindow,
+    localTabs,
+    tabOrder,
+    visibleWorkspaceTabs
+  ])
 
   useEffect(() => {
     if (

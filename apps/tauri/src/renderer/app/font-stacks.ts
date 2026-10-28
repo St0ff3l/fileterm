@@ -25,3 +25,16 @@ export function configuredFontStack(
 export function systemFontAvailability(platform: string | undefined) {
   return { 'SF Mono': platform === 'darwin', 'SF Pro Text': platform === 'darwin' }
 }
+
+export function applyConfiguredFonts(
+  root: HTMLElement,
+  fonts: { ui: string | null; code: string | null },
+  applied: Set<string>
+) {
+  for (const kind of ['ui', 'code'] as const) {
+    if (!fonts[kind]) continue
+    const name = kind === 'ui' ? '--font-ui' : '--font-mono'
+    root.style.setProperty(name, configuredFontStack(fonts[kind], kind))
+    applied.add(name)
+  }
+}

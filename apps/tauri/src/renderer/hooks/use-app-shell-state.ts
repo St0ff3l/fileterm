@@ -261,14 +261,18 @@ export function useAppShellState({
       const nextVariant = themeVariantForMode(nextTheme)
       if (current.variant === nextVariant) return current
       if (current.codeThemeId === 'codex' || current.codeThemeId.startsWith('codex-')) {
-        return createCodexThemeConfig(nextVariant)
+        const next = createCodexThemeConfig(nextVariant)
+        next.theme.fonts = current.theme.fonts
+        return next
       }
       if (
         current.codeThemeId === 'fileterm' ||
         current.codeThemeId === 'fileterm-dark' ||
         current.codeThemeId === 'fileterm-light'
       ) {
-        return createDefaultThemeConfig(nextVariant)
+        const next = createDefaultThemeConfig(nextVariant)
+        next.theme.fonts = current.theme.fonts
+        return next
       }
       return deriveThemeVariant(current, nextVariant)
     })

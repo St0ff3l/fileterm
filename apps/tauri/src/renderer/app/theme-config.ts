@@ -10,7 +10,9 @@ import {
   type SavedTheme
 } from '@fileterm/core'
 import { actionTextColor } from './action-text-color'
-import { configuredFontStack } from './font-stacks'
+import { deriveThemeVariant } from './theme-variant'
+export { deriveThemeVariant, getSavedThemeConfig } from './theme-variant'
+import { applyConfiguredFonts, configuredFontStack } from './font-stacks'
 
 export type ThemeMode =
   'fileterm-dark' | 'fileterm-light' | 'codex-dark' | 'codex-light' | 'default-dark' | 'default-light'
@@ -609,64 +611,6 @@ function baseThemeConfigFor(config: ThemeConfig, variant: ThemeVariant): ThemeCo
   return null
 }
 
-const THEME_VARIANT_KEYS = [
-  'accent',
-  'contrast',
-  'fonts',
-  'ink',
-  'opaqueWindows',
-  'semanticColors',
-  'surface',
-  'surfaceSecondary',
-  'surfaceElevated',
-  'surfaceSidebar',
-  'surfaceInput',
-  'surfaceContextMenu',
-  'overrides',
-  'terminal'
-] as const
-
-function cloneThemeValue<T>(value: T): T {
-  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T)
-}
-
-function sameThemeValue(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
-/**
- * Creates the other light/dark variant of a custom theme. Values that still
- * match the selected base preset follow that preset's other variant; values
- * explicitly changed by the user are carried across unchanged.
- */
-export function deriveThemeVariant(config: ThemeConfig, targetVariant: ThemeVariant): ThemeConfig {
-  const source = normalizeThemeConfig(config, config.variant)
-  if (source.variant === targetVariant) return source
-
-  const sourceBase = baseThemeConfigFor(source, source.variant) ?? createDefaultThemeConfig(source.variant)
-  const targetBase = baseThemeConfigFor(source, targetVariant) ?? createDefaultThemeConfig(targetVariant)
-  const target = cloneThemeValue(targetBase)
-  target.codeThemeId = source.codeThemeId
-  target.baseThemeId = source.baseThemeId ?? targetBase.baseThemeId
-  target.variant = targetVariant
-
-  for (const key of THEME_VARIANT_KEYS) {
-    if (!sameThemeValue(source.theme[key], sourceBase.theme[key])) {
-      Object.assign(target.theme, { [key]: cloneThemeValue(source.theme[key]) })
-    }
-  }
-
-  return normalizeThemeConfig(target, targetVariant)
-}
-
-export function getSavedThemeConfig(savedTheme: SavedTheme, variant: ThemeVariant): ThemeConfig {
-  const directVariant = savedTheme.variants?.[variant]
-  if (directVariant) return normalizeThemeConfig({ ...directVariant, variant }, variant)
-
-  const source = normalizeThemeConfig(savedTheme.config, savedTheme.config.variant)
-  return deriveThemeVariant(source, variant)
-}
-
 /**
  * Reads a built-in palette from its static token stylesheet. Theme colors stay
  * in styles/tokens; this config snapshot is only used by the settings editor
@@ -937,6 +881,7 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
     root.dataset.themePreset = normalizedInput.codeThemeId
     root.dataset.themeCustom = 'true'
     root.style.colorScheme = variant
+    applyConfiguredFonts(root, normalizedInput.theme.fonts, appliedThemeVariableNames)
     return
   }
 
