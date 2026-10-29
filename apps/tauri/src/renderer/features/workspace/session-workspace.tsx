@@ -26,7 +26,7 @@ import { TerminalDock } from '../terminal/terminal-dock'
 import { t } from '../../i18n'
 import { SplitPaneLayout } from './split-pane-layout'
 import { FILE_PANEL_SNAP_TARGETS, FILE_PANEL_SNAP_TARGET_SELECTORS, type FilePanelSnapTarget } from './file-panel-snap'
-import { observeFilePanelLayout } from './file-panel-layout-observer'
+import { observeFilePanelLayout, shouldSyncFilePanelForResize } from './file-panel-layout-observer'
 
 const DEFAULT_FILE_PANEL_HEIGHT = 218
 const DEFAULT_FILE_PANEL_RATIO = 30
@@ -528,10 +528,12 @@ export function SessionWorkspace({
       })
     }
 
-    const resizeObserver = new ResizeObserver(() => {
-      syncAfterLayout()
+    const observedHeights = new WeakMap<Element, number>()
+    const workspace = workspaceRef.current
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (shouldSyncFilePanelForResize(entries, workspace, observedHeights)) syncAfterLayout()
     })
-    resizeObserver.observe(workspaceRef.current)
+    resizeObserver.observe(workspace)
 
     // The snap targets are in the sibling system sidebar rather than inside
     // the workspace. Observe both sides of the alignment so a window resize

@@ -12,3 +12,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.home-sidebar .sidebar-brand {
+  overflow: hidden;
+}
+
+.home-sidebar .brand-version {
+  white-space: nowrap;
+}

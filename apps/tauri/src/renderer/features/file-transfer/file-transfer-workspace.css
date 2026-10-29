@@ -120,10 +120,6 @@
   background: var(--surface-panel);
 }
 
-.file-transfer-pane.is-active {
-  border-color: var(--border-focus);
-}
-
 .file-transfer-pane.is-drop-target {
   outline: 2px solid var(--focus-outline);
   outline-offset: -3px;

@@ -69,6 +69,22 @@ try {
   })
   await page.addStyleTag({ content: readFileSync(join(directory, 'bundle.css'), 'utf8') })
   await page.addScriptTag({ content: readFileSync(join(directory, 'bundle.js'), 'utf8') })
+  const dropdown = page.locator('.dropdown-select-trigger')
+  await dropdown.waitFor()
+  for (const height of [40, 32]) {
+    await dropdown.evaluate((element, value) => {
+      element.style.height = `${value}px`
+    }, height)
+    await page.waitForFunction(() => {
+      const icon = document.querySelector('.dropdown-select-arrow')
+      const control = document.querySelector('.dropdown-select-trigger')
+      const expected = Math.max(12, Math.min(20, Math.round(control.getBoundingClientRect().height * 0.45)))
+      return icon && Number(icon.getAttribute('width')) === expected
+    })
+  }
+  await dropdown.evaluate((element) => {
+    element.style.height = ''
+  })
   for (const [kind, trigger, popup] of [
     ['dropdown', '.dropdown-select-trigger', '.dropdown-select-menu'],
     ['targets', '.custom-select-trigger', '.custom-select-dropdown']

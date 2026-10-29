@@ -25,7 +25,7 @@ export type VerticalScrollMetrics = {
  */
 export type VerticalScrollController = {
   getElement?(): HTMLElement | null
-  getMetrics(): VerticalScrollMetrics | null
+  getMetrics(clientHeight?: number): VerticalScrollMetrics | null
   scrollTo(scrollTop: number): void
   scrollBy(delta: number): void
   subscribe(listener: () => void): () => void
@@ -59,12 +59,14 @@ export function VerticalScrollbar({
   const hideTimerRef = useRef<number | null>(null)
   const isVisibleRef = useRef(false)
   const metricsRef = useRef<ScrollMetrics>(EMPTY_METRICS)
+  const scrollTopRef = useRef(0)
+  const observedHeightRef = useRef<number | undefined>(undefined)
   const scrollbarRef = useRef<HTMLDivElement | null>(null)
   const thumbRef = useRef<HTMLDivElement | null>(null)
 
   const readScrollMetrics = useCallback((): VerticalScrollMetrics | null => {
     if (scrollController) {
-      return scrollController.getMetrics()
+      return scrollController.getMetrics(observedHeightRef.current)
     }
 
     const element = scrollRef?.current
@@ -103,66 +105,70 @@ export function VerticalScrollbar({
     []
   )
 
-  const publishMetrics = useCallback(
-    (next: ScrollMetrics) => {
-      const previous = metricsRef.current
-      metricsRef.current = next
+  const publishMetrics = useCallback((next: ScrollMetrics, scrollTop = 0) => {
+    const previous = metricsRef.current
+    metricsRef.current = next
+    scrollTopRef.current = scrollTop
 
-      const thumb = thumbRef.current
-      if (thumb) {
-        thumb.style.height = `${next.thumbHeight}px`
-        thumb.style.transform = `translateY(${next.thumbTop}px)`
+    const thumb = thumbRef.current
+    if (thumb) {
+      thumb.style.height = `${next.thumbHeight}px`
+      thumb.style.transform = `translateY(${next.thumbTop}px)`
+    }
+
+    const scrollbar = scrollbarRef.current
+    if (scrollbar) {
+      scrollbar.setAttribute('aria-valuenow', `${Math.round(scrollTop)}`)
+    }
+
+    const staticMetricsChanged =
+      previous.maxScrollTop !== next.maxScrollTop ||
+      previous.trackHeight !== next.trackHeight ||
+      previous.thumbHeight !== next.thumbHeight
+    if (staticMetricsChanged) {
+      setMetrics(next)
+    }
+  }, [])
+
+  const updateMetrics = useCallback(
+    (observed?: VerticalScrollMetrics | null) => {
+      const current = observed === undefined ? readScrollMetrics() : observed
+      if (!current || current.clientHeight <= 0) {
+        publishMetrics(EMPTY_METRICS, current?.scrollTop)
+        return
       }
 
-      const scrollbar = scrollbarRef.current
-      if (scrollbar) {
-        scrollbar.setAttribute('aria-valuenow', `${Math.round(readScrollMetrics()?.scrollTop ?? 0)}`)
+      const maxScrollTop = Math.max(0, current.scrollHeight - current.clientHeight)
+      if (maxScrollTop === 0) {
+        publishMetrics(EMPTY_METRICS, current.scrollTop)
+        return
       }
 
-      const staticMetricsChanged =
-        previous.maxScrollTop !== next.maxScrollTop ||
-        previous.trackHeight !== next.trackHeight ||
-        previous.thumbHeight !== next.thumbHeight
-      if (staticMetricsChanged) {
-        setMetrics(next)
+      const trackHeight = Math.max(0, current.clientHeight - topInset)
+      const scrollableContentHeight = Math.max(trackHeight, current.scrollHeight - topInset)
+      if (trackHeight === 0) {
+        publishMetrics(EMPTY_METRICS, current.scrollTop)
+        return
       }
+
+      const thumbHeight = Math.min(
+        trackHeight,
+        Math.max(MIN_THUMB_HEIGHT, (trackHeight * trackHeight) / scrollableContentHeight)
+      )
+      const maxThumbTop = trackHeight - thumbHeight
+      const scrollTop = Math.max(0, Math.min(maxScrollTop, current.scrollTop))
+      publishMetrics(
+        {
+          maxScrollTop,
+          trackHeight,
+          thumbHeight,
+          thumbTop: (scrollTop / maxScrollTop) * maxThumbTop
+        },
+        current.scrollTop
+      )
     },
-    [readScrollMetrics]
+    [publishMetrics, readScrollMetrics, topInset]
   )
-
-  const updateMetrics = useCallback(() => {
-    const current = readScrollMetrics()
-    if (!current || current.clientHeight <= 0) {
-      publishMetrics(EMPTY_METRICS)
-      return
-    }
-
-    const maxScrollTop = Math.max(0, current.scrollHeight - current.clientHeight)
-    if (maxScrollTop === 0) {
-      publishMetrics(EMPTY_METRICS)
-      return
-    }
-
-    const trackHeight = Math.max(0, current.clientHeight - topInset)
-    const scrollableContentHeight = Math.max(trackHeight, current.scrollHeight - topInset)
-    if (trackHeight === 0) {
-      publishMetrics(EMPTY_METRICS)
-      return
-    }
-
-    const thumbHeight = Math.min(
-      trackHeight,
-      Math.max(MIN_THUMB_HEIGHT, (trackHeight * trackHeight) / scrollableContentHeight)
-    )
-    const maxThumbTop = trackHeight - thumbHeight
-    const scrollTop = Math.max(0, Math.min(maxScrollTop, current.scrollTop))
-    publishMetrics({
-      maxScrollTop,
-      trackHeight,
-      thumbHeight,
-      thumbTop: (scrollTop / maxScrollTop) * maxThumbTop
-    })
-  }, [publishMetrics, readScrollMetrics, topInset])
 
   const updateThumbPosition = useCallback(() => {
     const currentScroll = readScrollMetrics()
@@ -173,10 +179,13 @@ export function VerticalScrollbar({
     if (maxThumbTop <= 0) return
 
     const scrollTop = Math.max(0, Math.min(current.maxScrollTop, currentScroll.scrollTop))
-    publishMetrics({
-      ...current,
-      thumbTop: (scrollTop / current.maxScrollTop) * maxThumbTop
-    })
+    publishMetrics(
+      {
+        ...current,
+        thumbTop: (scrollTop / current.maxScrollTop) * maxThumbTop
+      },
+      currentScroll.scrollTop
+    )
   }, [publishMetrics, readScrollMetrics])
 
   useEffect(() => {
@@ -190,15 +199,20 @@ export function VerticalScrollbar({
     }
 
     let frame = 0
-    const scheduleMetricsUpdate = () => {
+    const scheduleMetricsUpdate = (observed?: VerticalScrollMetrics | null) => {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(updateMetrics)
+      frame = requestAnimationFrame(() => updateMetrics(observed))
     }
     const scheduleThumbUpdate = () => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(updateThumbPosition)
     }
-    const resizeObserver = new ResizeObserver(scheduleMetricsUpdate)
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (scrollController && element && entries.some((entry) => entry.target === element)) {
+        observedHeightRef.current = element.clientHeight
+      }
+      scheduleMetricsUpdate(readScrollMetrics())
+    })
     const handleNativeScroll = () => {
       reveal()
       scheduleThumbUpdate()
@@ -223,6 +237,7 @@ export function VerticalScrollbar({
         cancelAnimationFrame(frame)
         unsubscribe()
         resizeObserver.disconnect()
+        observedHeightRef.current = undefined
       }
     }
 
@@ -237,7 +252,7 @@ export function VerticalScrollbar({
       element?.removeEventListener('scroll', handleNativeScroll)
       resizeObserver.disconnect()
     }
-  }, [reveal, scrollController, scrollRef, updateMetrics, updateThumbPosition])
+  }, [readScrollMetrics, reveal, scrollController, scrollRef, updateMetrics, updateThumbPosition])
 
   const setScrollFromThumbTop = (thumbTop: number) => {
     const currentScroll = readScrollMetrics()
@@ -320,7 +335,7 @@ export function VerticalScrollbar({
       aria-orientation="vertical"
       aria-valuemax={Math.round(renderedMetrics.maxScrollTop)}
       aria-valuemin={0}
-      aria-valuenow={Math.round(readScrollMetrics()?.scrollTop ?? 0)}
+      aria-valuenow={Math.round(scrollTopRef.current)}
       className={`vertical-scrollbar${isVisible ? ' is-visible' : ''}`}
       onBlur={() => {
         if (!dragRef.current) reveal()

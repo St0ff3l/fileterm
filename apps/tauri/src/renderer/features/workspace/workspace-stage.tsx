@@ -456,6 +456,7 @@ export function WorkspaceStage({
       overviewShowQuickActions={overviewShowQuickActions}
       overviewSectionOrder={overviewSectionOrder}
       onOpen={onOpenProfile}
+      onOpenFileTransfers={onOpenFileTransfers}
       backgroundTabs={backgroundTabs}
       sessions={sessions}
       onAttachBackgroundSession={onAttachBackgroundSession}

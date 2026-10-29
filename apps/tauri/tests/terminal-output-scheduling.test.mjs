@@ -202,6 +202,32 @@ test('pixel-only resizing repaints frozen columns without sending a mismatched P
   assert.deepEqual(terminalResizes, [['tab', 81, 24, 810, 400]])
 })
 
+test('observed terminal layout is reused without a second synchronous geometry read', () => {
+  const f = fixture()
+  Object.assign(f.terminalRef.current, { cols: 80, rows: 24, refresh() {} })
+  f.hostRef = {
+    current: {
+      getBoundingClientRect: () => {
+        throw new Error('unexpected layout read')
+      }
+    }
+  }
+  f.lastSyncedSizeRef = { current: { cols: 80, rows: 24, width: 800, height: 400 } }
+  const fit = {
+    proposeDimensions: () => {
+      throw new Error('unexpected fit read')
+    }
+  }
+  const { syncTerminalSize } = exports.useTerminalViewActions(f)
+  terminalResizes.length = 0
+  syncTerminalSize(fit, f.terminalRef.current, {
+    freezeCols: true,
+    observedLayout: { width: 810, height: 400, cols: 81, rows: 24 }
+  })
+  assert.equal(f.lastSyncedSizeRef.current.width, 810)
+  assert.equal(terminalResizes.length, 0)
+})
+
 test('a rejected xterm write cannot latch the writer busy or leak later display credit', async () => {
   const f = fixture()
   const terminal = f.terminalRef.current

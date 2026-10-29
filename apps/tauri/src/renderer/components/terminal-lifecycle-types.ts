@@ -19,6 +19,7 @@ export type TerminalResizeOptions = {
   force?: boolean
   freezeCols?: boolean
   preserveVisibleBuffer?: boolean
+  observedLayout?: { width: number; height: number; cols: number; rows: number }
 }
 
 export type TerminalLifecycleOptions = {

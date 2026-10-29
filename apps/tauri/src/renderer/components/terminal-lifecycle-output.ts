@@ -18,7 +18,11 @@ import {
   TERMINAL_RESIZE_PIXEL_EPSILON,
   TERMINAL_RESIZE_SETTLE_MS
 } from './terminal-view-utils'
-import type { TerminalLifecycleResizeHandlers, TerminalLifecycleRuntime } from './terminal-lifecycle-types'
+import type {
+  TerminalLifecycleResizeHandlers,
+  TerminalLifecycleRuntime,
+  TerminalResizeOptions
+} from './terminal-lifecycle-types'
 
 export function registerTerminalOutputHandlers(runtime: TerminalLifecycleRuntime): TerminalLifecycleResizeHandlers {
   const {
@@ -68,6 +72,7 @@ export function registerTerminalOutputHandlers(runtime: TerminalLifecycleRuntime
   let disposed = false
   let surfaceRefreshFrame: number | null = null
   let pendingPreserveVisibleBuffer = false
+  let pendingObservedLayout: TerminalResizeOptions['observedLayout']
 
   const screenBufferRenderDisposable = registerTerminalBufferRenderRecovery(
     terminal,
@@ -128,17 +133,27 @@ export function registerTerminalOutputHandlers(runtime: TerminalLifecycleRuntime
   syncTerminalSize(fitAddon, terminal)
   activeTerminalTabIdRef.current = tabIdRef.current
 
-  const resize = (force = false, freezeCols = false, preserveVisibleBuffer = false) => {
-    if (disposed) return
-    syncTerminalSize(fitAddon, terminal, { force, freezeCols, preserveVisibleBuffer })
+  const resize = (
+    force = false,
+    freezeCols = false,
+    preserveVisibleBuffer = false,
+    observedLayout?: TerminalResizeOptions['observedLayout']
+  ) => {
+    if (!disposed) syncTerminalSize(fitAddon, terminal, { force, freezeCols, preserveVisibleBuffer, observedLayout })
   }
-  const scheduleResize = (force = false, freezeCols = false, preserveVisibleBuffer = false) => {
+  const scheduleResize = (
+    force = false,
+    freezeCols = false,
+    preserveVisibleBuffer = false,
+    observedLayout?: TerminalResizeOptions['observedLayout']
+  ) => {
     if (disposed || !isActiveRef.current) {
       return
     }
     pendingResizeForceRef.current = pendingResizeForceRef.current || force
     pendingResizeFreezeColsRef.current = pendingResizeFreezeColsRef.current || freezeCols
     pendingPreserveVisibleBuffer ||= preserveVisibleBuffer
+    pendingObservedLayout = observedLayout
 
     if (resizeTimerRef.current !== null) {
       window.cancelAnimationFrame(resizeTimerRef.current)
@@ -152,7 +167,9 @@ export function registerTerminalOutputHandlers(runtime: TerminalLifecycleRuntime
       pendingResizeForceRef.current = false
       pendingResizeFreezeColsRef.current = false
       pendingPreserveVisibleBuffer = false
-      resize(shouldForce, shouldFreezeCols, shouldPreserveVisibleBuffer)
+      const layout = pendingObservedLayout
+      pendingObservedLayout = undefined
+      resize(shouldForce, shouldFreezeCols, shouldPreserveVisibleBuffer, layout)
     })
   }
 
@@ -182,6 +199,8 @@ export function registerTerminalOutputHandlers(runtime: TerminalLifecycleRuntime
     const lastObservedRect = lastObservedHostRectRef.current
     lastObservedHostRectRef.current = { left, top, right, bottom, width, height }
 
+    const dimensions = isActiveRef.current && width > 0 && height > 0 ? fitAddon.proposeDimensions() : undefined
+    const observedLayout = dimensions ? { width, height, ...dimensions } : undefined
     const hostBecameUsable =
       isActiveRef.current &&
       width > 0 &&
@@ -193,7 +212,7 @@ export function registerTerminalOutputHandlers(runtime: TerminalLifecycleRuntime
       // Rebuild the cached glyph atlas at that boundary instead of waiting
       // for another terminal write to make the missing canvas repaint.
       terminal.clearTextureAtlas()
-      scheduleResize(true)
+      scheduleResize(true, false, false, observedLayout)
       if (surfaceRefreshFrame !== null) window.cancelAnimationFrame(surfaceRefreshFrame)
       surfaceRefreshFrame = window.requestAnimationFrame(() => {
         surfaceRefreshFrame = null
@@ -209,17 +228,17 @@ export function registerTerminalOutputHandlers(runtime: TerminalLifecycleRuntime
     )
     if (widthChanged) {
       isHorizontalResizeActiveRef.current = true
-      scheduleResize(false, true)
+      scheduleResize(false, true, false, observedLayout)
       scheduleSettledHorizontalResize()
       return
     }
     if (isHorizontalResizeActiveRef.current) {
-      scheduleResize(false, true)
+      scheduleResize(false, true, false, observedLayout)
       scheduleSettledHorizontalResize()
       return
     }
 
-    scheduleResize()
+    scheduleResize(false, false, false, observedLayout)
   })
   resizeObserver.observe(host)
 

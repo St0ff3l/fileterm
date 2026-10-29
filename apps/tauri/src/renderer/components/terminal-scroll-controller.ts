@@ -7,11 +7,11 @@ export function createTerminalScrollController(
 ): VerticalScrollController {
   return {
     getElement: () => element,
-    getMetrics: () => {
+    getMetrics: (observedHeight) => {
       const terminal = terminalRef.current
       if (!terminal) return null
       const rows = Math.max(1, terminal.rows)
-      const clientHeight = element.clientHeight
+      const clientHeight = observedHeight ?? element.clientHeight
       if (clientHeight <= 0) return null
       const buffer = terminal.buffer.active
       const scrollHeight = Math.max(clientHeight, (clientHeight * Math.max(rows, buffer.length)) / rows)

@@ -12,7 +12,7 @@
 
 .system-sidebar-layout.is-collapsed > .system-sidebar-controls {
   position: static;
-  margin: 0 auto;
+  margin: 5px auto 0;
 }
 
 .system-sidebar-layout .monitoring-toggle {
@@ -69,4 +69,24 @@
   grid-template-columns: 40px minmax(0, 1fr);
   column-gap: 4px;
   height: 22px;
+}
+
+.system-sidebar-layout .system-title {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.system-sidebar-layout:not(.is-collapsed) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.system-sidebar-layout:not(.is-collapsed) .sys-card {
+  box-sizing: border-box;
+  width: var(--sidebar-width, 214px);
+}
+
+.system-sidebar-layout .mini-tabs span {
+  overflow: hidden;
+  white-space: nowrap;
 }

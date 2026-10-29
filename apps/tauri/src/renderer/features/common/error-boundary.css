@@ -1,0 +1,23 @@
+.error-boundary-backdrop {
+  overflow: auto;
+}
+
+.modal-card.form-dialog.error-boundary-dialog {
+  --form-dialog-width: 440px;
+}
+
+.error-boundary-dialog .form-dialog__body p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.error-boundary-dialog .form-dialog__body pre {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

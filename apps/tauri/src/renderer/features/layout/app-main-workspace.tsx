@@ -337,6 +337,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
         {showHostRail ? (
           <HostRail
             navigation={hostNavigation}
+            onOpenFileTransfers={openFileTransfers}
             collapsed={isHostRailCollapsed}
             width={sidebarWidth}
             isResizing={isResizingHostRail}

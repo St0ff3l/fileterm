@@ -526,6 +526,7 @@ export function useTerminalViewActions({
         force?: boolean
         freezeCols?: boolean
         preserveVisibleBuffer?: boolean
+        observedLayout?: { width: number; height: number; cols: number; rows: number }
       } = {}
     ) => {
       const { force = false, freezeCols = false } = options
@@ -534,12 +535,12 @@ export function useTerminalViewActions({
         return
       }
 
-      const { width, height } = host.getBoundingClientRect()
+      const { width, height } = options.observedLayout ?? host.getBoundingClientRect()
       if (width <= 0 || height <= 0) {
         return
       }
 
-      const proposed = fitAddon.proposeDimensions()
+      const proposed = options.observedLayout ?? fitAddon.proposeDimensions()
       if (!proposed) {
         return
       }
