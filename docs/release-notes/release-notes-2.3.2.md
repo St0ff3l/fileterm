@@ -33,6 +33,7 @@ FileTerm 2.3.2 加入服务器间文件传输，并整合 Linux 应用内更新�
 - 本版本包含 Linux 侧栏启动宽度修正；Linux 应用内更新实现见 [PR #362](https://github.com/St0ff3l/fileterm/pull/362)。
 - [PR #365](https://github.com/St0ff3l/fileterm/pull/365)：修复 Linux 窗口启动后侧栏宽度变窄的问题。
 - [PR #366](https://github.com/St0ff3l/fileterm/pull/366)：加入服务器间文件传输并改进工作区界面；相关需求见 [Issue #354](https://github.com/St0ff3l/fileterm/issues/354)。
+- [PR #372](https://github.com/St0ff3l/fileterm/pull/372)：改进侧栏和标签切换性能，并准备 2.3.2 正式版。
 
 完整变更记录请查看 [v2.3.1 与 v2.3.2 的比较](https://github.com/St0ff3l/fileterm/compare/v2.3.1...v2.3.2)。
 
@@ -78,6 +79,7 @@ FileTerm 2.3.2 adds remote-to-remote file transfers and brings Linux in-app upda
 - [PR #362](https://github.com/St0ff3l/fileterm/pull/362): Add signed in-app updates for supported Linux packages.
 - [PR #365](https://github.com/St0ff3l/fileterm/pull/365): Keep the Linux sidebar width stable after startup.
 - [PR #366](https://github.com/St0ff3l/fileterm/pull/366): Add remote-to-remote transfers and refine the workspace UI; related to [Issue #354](https://github.com/St0ff3l/fileterm/issues/354).
+- [PR #372](https://github.com/St0ff3l/fileterm/pull/372): Improve sidebar and tab-switching performance, and prepare the 2.3.2 stable release.
 
 See the [comparison between v2.3.1 and v2.3.2](https://github.com/St0ff3l/fileterm/compare/v2.3.1...v2.3.2) for the complete change set.
 
