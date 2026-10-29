@@ -1,3 +1,5 @@
+import { AppIcon } from '../common/app-icon'
+import { SidebarAlignedLabel } from '../../components/common/icon-label/icon-label'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
 import { DEFAULT_SIDEBAR_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '../../app/app-shell-utils'
 import { t } from '../../i18n'
@@ -11,7 +13,8 @@ export function HostRail({
   isResizing,
   onToggleCollapsed,
   onResizeStart,
-  onWidthChange
+  onWidthChange,
+  onOpenFileTransfers
 }: {
   navigation: HostNavigation
   collapsed: boolean
@@ -20,6 +23,7 @@ export function HostRail({
   onToggleCollapsed(): void
   onResizeStart(): void
   onWidthChange(width: number): void
+  onOpenFileTransfers(): void
 }) {
   return (
     <aside aria-label={t.hostRailTitle} className={`fs-host-rail ${collapsed ? 'is-collapsed' : ''}`}>
@@ -33,6 +37,16 @@ export function HostRail({
         />
       </div>
       <HostGroupList navigation={navigation} collapsed={collapsed} />
+      <button
+        className="sidebar-nav-link"
+        onClick={onOpenFileTransfers}
+        aria-label={t.fileTransferWorkspace}
+        title={t.fileTransferWorkspace}
+        type="button"
+      >
+        <AppIcon name="transfer" size={18} />
+        {!collapsed ? <SidebarAlignedLabel>{t.fileTransferWorkspace}</SidebarAlignedLabel> : null}
+      </button>
       {!collapsed ? (
         <div
           aria-label={t.resizeSidebar}

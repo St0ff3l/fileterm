@@ -18,6 +18,7 @@ await build({
     contents: `
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
 import { SystemSidebarShell } from './apps/tauri/src/renderer/features/system/system-sidebar-shell'
 import './apps/tauri/src/renderer/styles/index.css'
 function Fixture({ capability, hasMetrics }) {
@@ -30,13 +31,13 @@ function Fixture({ capability, hasMetrics }) {
         systemMetrics: hasMetrics ? {cpuPercent:5,memoryPercent:10,
           networkInterfaces:['eth0'],activeNetworkInterface:'eth0',networkSamples:[],
           fileSystemRows:[{name:'/dev/root',mountPoint:'/',size:'10G',available:'5G',used:'5G',usePercent:50}]} : undefined}}
-      showResourceMeters={capability !== false} visibleMetrics={['cpu','memory','disk','network']}
+      showResourceMeters={capability !== false} visibleMetrics={['cpu','memory','disk','network','processes']}
       isResizing={false} onMonitoringSnapshot={() => {}} onOpenSystemInfo={() => {}}
       onResizeStart={() => {}} onRestoreWidth={() => setWidth(214)} onToggleCollapsed={setCollapsed}/>
   </div>
 }
 const root = createRoot(document.getElementById('root'))
-window.renderFixture = (capability, hasMetrics) => root.render(<Fixture key={String(capability)+hasMetrics} capability={capability} hasMetrics={hasMetrics}/>)
+window.renderFixture = (capability, hasMetrics) => flushSync(() => root.render(<Fixture key={String(capability)+hasMetrics} capability={capability} hasMetrics={hasMetrics}/>))
 `
   },
   bundle: true,
@@ -67,10 +68,37 @@ try {
           capability,
           hasMetrics
         })
+        if (capability === true && hasMetrics) {
+          const positions = await page.evaluate(() => {
+            const wrapper = document.querySelector('.fs-sidebar').parentElement
+            const card = document.querySelector('.sys-card')
+            const elements = [document.querySelector('.connection-summary'), document.querySelector('.mini-tabs')]
+            return [214, 100, 60, 214].map((width) => {
+              wrapper.style.width = `${width}px`
+              const top = card.getBoundingClientRect().top
+              return elements.map((element) => element.getBoundingClientRect().top - top)
+            })
+          })
+          for (const position of positions.slice(1))
+            assert.deepEqual(position, positions[0], 'sidebar rows must not move while width changes')
+        }
         const toggle = page.locator('.system-sidebar-toggle')
         await toggle.waitFor()
         for (let cycle = 0; cycle < 10; cycle++) {
+          const controlOffsets = () =>
+            page.locator('.system-sidebar-controls').evaluate((controls) => {
+              const top = controls.closest('.fs-sidebar').getBoundingClientRect().top
+              return Array.from(controls.querySelectorAll('button')).map(
+                (button) => button.getBoundingClientRect().top - top
+              )
+            })
+          const expandedOffsets = await controlOffsets()
           await toggle.click()
+          assert.deepEqual(
+            await controlOffsets(),
+            expandedOffsets,
+            'control buttons must keep their vertical positions'
+          )
           assert.equal(await page.locator('.fs-sidebar').evaluate((el) => el.classList.contains('is-collapsed')), true)
           await toggle.click()
           assert.equal(await page.locator('.fs-sidebar').evaluate((el) => el.classList.contains('is-collapsed')), false)

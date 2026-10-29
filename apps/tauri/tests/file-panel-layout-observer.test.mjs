@@ -82,3 +82,31 @@ test('layout observes sidebar replacement and collapse without terminal subtree 
   assert.equal(observed.size, 0)
   assert.ok(observers.every((observer) => observer.target === null))
 })
+
+test('width-only shell animation does not repeatedly realign the file panel', () => {
+  const exports = {}
+  vm.runInNewContext(
+    ts.transpileModule(
+      readFileSync(
+        new URL('../src/renderer/features/workspace/file-panel-layout-observer.ts', import.meta.url),
+        'utf8'
+      ),
+      { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }
+    ).outputText,
+    { exports, require: () => ({}) }
+  )
+  const workspace = { classList: { contains: () => false } }
+  const sidebar = { classList: { contains: (name) => name === 'fs-sidebar' } }
+  const target = { classList: { contains: () => false } }
+  const heights = new WeakMap()
+  const entry = (target, height, width) => ({ target, contentRect: { height, width } })
+  const shouldSync = (entries) => exports.shouldSyncFilePanelForResize(entries, workspace, heights)
+  assert.equal(shouldSync([entry(workspace, 700, 600), entry(sidebar, 700, 214)]), true)
+  for (const width of [180, 120, 44]) {
+    assert.equal(shouldSync([entry(workspace, 700, 600 + 214 - width), entry(sidebar, 700, width)]), false)
+  }
+  assert.equal(shouldSync([entry(workspace, 720, 770)]), true, 'height changes still clamp the panel')
+  assert.equal(shouldSync([entry(sidebar, 720, 44)]), true, 'sidebar height changes still realign')
+  assert.equal(shouldSync([entry(target, 25, 100)]), true, 'anchor changes still realign')
+  assert.equal(shouldSync([entry(target, 25, 120)]), true, 'anchor width changes can move other anchors')
+})

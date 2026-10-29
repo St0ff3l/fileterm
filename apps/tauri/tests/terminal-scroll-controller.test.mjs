@@ -124,3 +124,17 @@ test('metrics and input keep pixel-to-row mapping for scrollback, alternate scre
   f.controller.scrollBy(100)
   assert.equal(f.controller.getMetrics(), null)
 })
+
+test('observed viewport height avoids a synchronous element measurement', () => {
+  const f = fixture()
+  Object.defineProperty(f.element, 'clientHeight', {
+    get() {
+      throw new Error('unexpected layout read')
+    }
+  })
+  const metrics = f.controller.getMetrics(300)
+  assert.equal(metrics.clientHeight, 300)
+  assert.equal(metrics.scrollHeight, 3000)
+  assert.equal(metrics.scrollTop, 2700)
+  assert.equal(f.controller.getMetrics(0), null)
+})

@@ -53,6 +53,7 @@ export function HomeWorkspace({
   overviewShowQuickActions,
   overviewSectionOrder,
   onOpen,
+  onOpenFileTransfers,
   onOpenLocalTerminal,
   onCreateConnection,
   onEditConnection,
@@ -102,6 +103,7 @@ export function HomeWorkspace({
   overviewShowQuickActions: boolean
   overviewSectionOrder: OverviewSectionId[]
   onOpen(profileId: string): void
+  onOpenFileTransfers(): void
   onOpenLocalTerminal(): void
   onCreateConnection(): void
   onEditConnection(profile: ConnectionProfile): void
@@ -348,6 +350,16 @@ export function HomeWorkspace({
           >
             <AppIcon name="history" size={18} />
             <SidebarAlignedLabel>{t.backgroundSessions}</SidebarAlignedLabel>
+          </button>
+          <button
+            className="sidebar-nav-link"
+            onClick={onOpenFileTransfers}
+            aria-label={t.fileTransferWorkspace}
+            title={t.fileTransferWorkspace}
+            type="button"
+          >
+            <AppIcon name="transfer" size={18} />
+            <SidebarAlignedLabel>{t.fileTransferWorkspace}</SidebarAlignedLabel>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}

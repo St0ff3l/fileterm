@@ -3,7 +3,7 @@
   grid-column: 1;
   grid-row: 2 / 4;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   z-index: 10;

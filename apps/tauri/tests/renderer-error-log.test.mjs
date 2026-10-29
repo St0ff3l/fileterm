@@ -73,6 +73,9 @@ function fixture(writer) {
     react: { Component: class {} },
     'react/jsx-runtime': {},
     '../../i18n': { t: {} },
+    '../../components/common/button/button': {},
+    '../../components/common/dialog/form-dialog.css': {},
+    './error-boundary.css': {},
     '../../lib/renderer-error-log': reporter
   })
   return {

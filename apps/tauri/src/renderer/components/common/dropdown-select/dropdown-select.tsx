@@ -73,22 +73,26 @@ export function DropdownSelect({
   const selectedLabel = selectedOption?.label ?? placeholder ?? value
 
   useEffect(() => {
+    if (hideArrow) return
     const control = nativeSelect ? selectRef.current : triggerRef.current
     if (!control) return
 
-    const updateArrowSize = () => {
-      const controlHeight = control.getBoundingClientRect().height
-      const nextSize = Math.max(12, Math.min(20, Math.round(controlHeight * 0.45)))
+    const updateArrowSize = (height: number) => {
+      const nextSize = Math.max(12, Math.min(20, Math.round(height * 0.45)))
       setArrowSize((current) => (current === nextSize ? current : nextSize))
     }
 
-    updateArrowSize()
-    if (typeof ResizeObserver === 'undefined') return
-
-    const observer = new ResizeObserver(updateArrowSize)
+    if (typeof ResizeObserver === 'undefined') {
+      updateArrowSize(control.getBoundingClientRect().height)
+      return
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      updateArrowSize(entry.borderBoxSize?.[0]?.blockSize ?? control.getBoundingClientRect().height)
+    })
     observer.observe(control)
     return () => observer.disconnect()
-  }, [nativeSelect])
+  }, [nativeSelect, hideArrow])
 
   const focusMenuItem = useCallback((direction: 'first' | 'last' | 'next' | 'previous') => {
     const menu = menuRef.current

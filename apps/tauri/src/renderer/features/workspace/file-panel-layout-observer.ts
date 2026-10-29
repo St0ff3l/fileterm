@@ -55,3 +55,22 @@ export function observeFilePanelLayout(
     sidebar = null
   }
 }
+
+export function shouldSyncFilePanelForResize(
+  entries: ResizeObserverEntry[],
+  workspace: HTMLElement,
+  previousHeights: WeakMap<Element, number>
+): boolean {
+  let changed = false
+  for (const entry of entries) {
+    const previousHeight = previousHeights.get(entry.target)
+    previousHeights.set(entry.target, entry.contentRect.height)
+    if (
+      (entry.target !== workspace && !entry.target.classList.contains('fs-sidebar')) ||
+      previousHeight !== entry.contentRect.height
+    ) {
+      changed = true
+    }
+  }
+  return changed
+}

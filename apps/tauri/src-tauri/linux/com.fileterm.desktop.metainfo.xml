@@ -57,7 +57,7 @@
     <content_attribute id="money-gambling">none</content_attribute>
   </content_rating>
   <releases>
-    <release version="2.3.2-beta.3" date="2026-10-27">
+    <release version="2.3.2" date="2026-10-29">
       <description>
         <p>Official release with multi-tab remote terminal and file management workspace.</p>
       </description>
