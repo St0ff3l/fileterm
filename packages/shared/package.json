@@ -1,6 +1,6 @@
 {
   "name": "@fileterm/shared",
-  "version": "2.3.2-beta.3",
+  "version": "2.3.2",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
