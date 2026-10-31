@@ -108,9 +108,31 @@ async fn list_remote_directory(app: &AppHandle, params: &Value) -> Result<Value,
     let tab_id = required_string(params, "tab_id", 256)?;
     let path = optional_string(params, "path", 4_096)?;
     let (limit, offset) = pagination(params)?;
+    let context = {
+        let state = app.state::<crate::services::workspace::WorkspaceState>();
+        let sessions = state.sessions.read().await;
+        sessions.get(&tab_id).map(|session| {
+            (
+                session.file_access_mode.clone(),
+                path.as_deref()
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or(&session.remote_path)
+                    .to_string(),
+            )
+        })
+    };
     let snapshot = crate::commands::mcp_list_remote_directory(app.clone(), tab_id, path)
         .await
-        .map_err(public_app_error)?;
+        .map_err(|error| {
+            let message = public_app_error(error);
+            match &context {
+                Some((mode, path)) => format!(
+                    "{message} Requested path: {path:?}; file view mode at request: {mode}. In SSH user mode paths use the SFTP namespace; root mode uses the privileged shell namespace."
+                ),
+                None => message,
+            }
+        })?;
     let items = snapshot
         .get("items")
         .and_then(Value::as_array)

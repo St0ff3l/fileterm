@@ -354,7 +354,7 @@ fn tool_definitions() -> Vec<Value> {
             "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
             "offset": { "type": "integer", "minimum": 0 }
         }), &[], true, false, true, false),
-        tool_definition("fileterm_list_remote_directory", "List a remote directory", "List entries through an already-open file-capable session. Results are paginated.", json!({
+        tool_definition("fileterm_list_remote_directory", "List a remote directory", "List entries through an already-open file-capable session. Paths use the current file view: SSH user mode uses the SFTP namespace; root mode uses the privileged shell namespace. These roots may differ on Synology (for example SFTP /docker and shell /volume1/docker). Check fileAccessMode with fileterm_get_session_context. Results are paginated.", json!({
             "tab_id": { "type": "string" },
             "path": { "type": "string" },
             "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },

@@ -93,6 +93,12 @@ fn agent_contract() -> Value {
                 "never": "Use visible-terminal as a silent fallback or run a long deployment as repeated short commands."
             },
             {
+                "id": "remote-paths-and-command-lookup",
+                "severity": "must",
+                "do": "Check fileAccessMode and use the current file view's namespace for directory tools: SSH user mode uses SFTP paths and root mode uses privileged shell paths. On Synology these roots can differ. Treat command -v as a PATH lookup only; inspect other evidence before concluding a service or its data is absent.",
+                "never": "Assume a shell path is an SFTP path or that a missing executable in PATH means a service is not installed."
+            },
+            {
                 "id": "read-background-command",
                 "severity": "must",
                 "do": "Read with the same tabId and commandId, starting at offset 0 and then using each returned nextOffset.",
