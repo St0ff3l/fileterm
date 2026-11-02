@@ -560,16 +560,21 @@ jobs:
     if: ${{ needs.release.result == 'success' && !contains(github.ref_name, '-') }}
     runs-on: windows-latest
     steps:
-      - name: Require WinGet submission token
+      - name: Check WinGet submission token
+        id: winget-token
         shell: pwsh
         env:
           WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINGET_CREATE_GITHUB_TOKEN)) {
-            throw 'Missing repository secret WINGET_CREATE_GITHUB_TOKEN. See docs/quality/auto-update-release-checklist.md.'
+            "configured=false" >> $env:GITHUB_OUTPUT
+            Write-Host 'Skipping WinGet submission because WINGET_CREATE_GITHUB_TOKEN is not configured.'
+          } else {
+            "configured=true" >> $env:GITHUB_OUTPUT
           }
 
       - name: Install WinGet Create
+        if: steps.winget-token.outputs.configured == 'true'
         shell: pwsh
         run: |
           $runtime = Join-Path $env:RUNNER_TEMP 'Microsoft.VCLibs.x64.14.00.Desktop.appx'
@@ -580,6 +585,7 @@ jobs:
           Add-AppxPackage -Path $wingetCreate
 
       - name: Submit WinGet manifest update
+        if: steps.winget-token.outputs.configured == 'true'
         shell: pwsh
         env:
           WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
