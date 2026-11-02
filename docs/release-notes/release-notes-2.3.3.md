@@ -23,6 +23,7 @@ FileTerm 2.3.3 改进 MCP 远程目录访问的路径提示，帮助 Agent 区�
 - **MCP 远程目录**：明确目录路径按当前文件视图解释；SSH 用户模式使用 SFTP 路径，root 模式使用提权 Shell 路径。群晖的两种路径根目录可能不同。
 - **目录错误提示**：列目录失败时显示请求路径和当时的文件视图模式，帮助 Agent 判断路径是否属于当前命名空间。
 - **Agent 排查指引**：说明 `command -v` 只检查命令搜索路径，避免仅凭该结果判断服务或数据目录不存在。
+- **更新器安全修复**：升级更新器依赖，修复下载更新包解压时使用的 ZIP 库安全问题。
 
 ### 本版本包含的主要 PR 和问题修复
 
@@ -62,6 +63,7 @@ FileTerm 2.3.3 clarifies remote directory paths in MCP so Agents can distinguish
 - **MCP remote directories**: Explain that paths follow the active file view. SSH user mode uses SFTP paths, while root mode uses privileged shell paths; these roots may differ on Synology.
 - **Directory error context**: Include the requested path and active file view mode when listing fails, helping Agents determine whether the path belongs to the current namespace.
 - **Agent troubleshooting guidance**: Clarify that `command -v` only checks the command search path, so its result alone does not establish that a service or data directory is absent.
+- **Updater security fix**: Update the updater dependency to fix a security issue in the ZIP library used to extract downloaded updates.
 
 ### Main PRs and issues
 
