@@ -1,3 +1,15 @@
+fn transfer_checksum_available(
+    exec_enabled: bool,
+    mode: &str,
+    algorithms: Option<&[String]>,
+) -> bool {
+    // Root resume verification is mandatory; never turn a failed probe into a bypass.
+    mode == "root"
+        || (exec_enabled
+            && algorithms
+                .is_some_and(|items| items.iter().any(|item| item == "SHA-256 (SSH exec)")))
+}
+
 const TRANSFER_CANCELED: &str = "transfer canceled";
 
 async fn ensure_transfer_parent_dir(sftp: &SftpSession, path: &str) -> Result<(), String> {
@@ -28,15 +40,32 @@ async fn ensure_transfer_parent_dir(sftp: &SftpSession, path: &str) -> Result<()
     Ok(())
 }
 
-async fn read_remote_transfer_chunk(
-    file: &mut russh_sftp::client::fs::File,
+async fn read_remote_transfer_chunk<R: AsyncRead + Unpin>(
+    file: &mut R,
     buffer: &mut [u8],
-    cancel: &tokio_util::sync::CancellationToken,
+    remaining: u64,
+    cancel: &CancellationToken,
+    io_timeout: Duration,
 ) -> Result<usize, String> {
-    tokio::select! {
-        _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
-        result = file.read(buffer) => result.map_err(|error| error.to_string()),
+    // Do not issue an extra READ at EOF: some older SFTP servers never answer it.
+    if remaining == 0 {
+        return Ok(0);
     }
+    let limit = remaining.min(buffer.len() as u64) as usize;
+    let count = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+        result = timeout(io_timeout, file.read(&mut buffer[..limit])) => {
+            result.map_err(|_| "读取远端下载数据超时".to_string())?
+                .map_err(|error| format!("读取远端下载数据失败: {error}"))?
+        }
+    };
+    if count == 0 {
+        return Err(format!(
+            "下载源提前结束，还缺 {remaining} bytes，断点已保留"
+        ));
+    }
+    Ok(count)
 }
 
 async fn write_remote_transfer_chunk(
@@ -54,10 +83,13 @@ async fn write_local_transfer_chunk(
     file: &mut tokio::fs::File,
     bytes: &[u8],
     cancel: &tokio_util::sync::CancellationToken,
+    io_timeout: Duration,
 ) -> Result<(), String> {
     tokio::select! {
         _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
-        result = file.write_all(bytes) => result.map_err(|error| error.to_string()),
+        result = timeout(io_timeout, file.write_all(bytes)) => result
+            .map_err(|_| "写入本地下载文件超时".to_string())?
+            .map_err(|error| format!("写入本地下载文件失败: {error}")),
     }
 }
 
@@ -143,6 +175,7 @@ async fn upload_local_file(
     Ok(source.hash())
 }
 
+#[allow(clippy::too_many_arguments)] // Download carries its per-operation timeout.
 async fn download_remote_file(
     sftp: &SftpSession,
     remote_path: &str,
@@ -151,28 +184,33 @@ async fn download_remote_file(
     transfer_id: &str,
     cancel: tokio_util::sync::CancellationToken,
     app: &AppHandle,
+    io_timeout: Duration,
 ) -> Result<(), String> {
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "download-metadata", "SFTP download stage started");
     let metadata = sftp
         .metadata(remote_path)
         .await
-        .map_err(|error| error.to_string())?;
-    let total = metadata.size.unwrap_or(0);
+        .map_err(|error| format!("读取远端下载文件属性失败: {error}"))?;
+    let total = metadata.size.ok_or("远端未返回下载文件大小")?;
     if resume_offset > total {
         return Err("下载断点大于源文件".to_string());
     }
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "remote-open", "SFTP download stage started");
     let mut source = sftp
         .open(remote_path)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("打开远端下载文件失败: {error}"))?;
     source
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await
         .map_err(|error| error.to_string())?;
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "local-open", "SFTP download stage started");
     let mut destination = crate::sessions::transfer_file_safety::open_local_download_checkpoint(
         local_path,
         resume_offset,
     )
-    .await?;
+    .await
+    .map_err(|error| format!("打开本地下载断点失败: {error}"))?;
     destination
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await
@@ -180,19 +218,36 @@ async fn download_remote_file(
     let mut transferred = resume_offset;
     let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "download-read", total_bytes = total, resume_offset, "SFTP download stage started");
     loop {
-        let read = read_remote_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
+        let read = read_remote_transfer_chunk(
+            &mut source,
+            &mut buffer,
+            total - transferred,
+            &cancel,
+            io_timeout,
+        )
+        .await
+        .map_err(|error| {
+            format!("{error} (transferred_bytes={transferred} total_bytes={total})")
+        })?;
         if read == 0 {
             break;
         }
-        write_local_transfer_chunk(&mut destination, &buffer[..read], &cancel).await?;
+        write_local_transfer_chunk(&mut destination, &buffer[..read], &cancel, io_timeout).await?;
         transferred += read as u64;
         crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
     }
-    destination
-        .flush()
-        .await
-        .map_err(|error| error.to_string())?;
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "download-read", transferred_bytes = transferred, "SFTP download stage completed");
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "local-flush", "SFTP download stage started");
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+        result = timeout(io_timeout, destination.flush()) => result
+            .map_err(|_| "刷新本地下载文件超时".to_string())?
+            .map_err(|error| format!("刷新本地下载文件失败: {error}"))?,
+    }
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "local-flush", "SFTP download stage completed");
     Ok(())
 }
 
