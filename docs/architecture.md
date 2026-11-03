@@ -646,6 +646,7 @@ SSH/SFTP 和 FTP/FTPS 会在会话建立后上报实际能力，而不是把所�
 - 单文件和目录 manifest 任务由 Rust backend 持久化到当前存储根目录的 `transfer-journal.json`（便携版位于 exe 旁的 `config`）；renderer 不直接读写 journal。
 - 上传和下载都先写入 `.fileterm-part` 临时文件，校验大小后再替换正式目标。
 - 上传使用任务记录的固定源长度，读取数据块时累计 SHA-256，远端校验与该结果比较，不在上传后重读原文件，也不创建本地副本。SFTP/FTP 续传先核对本地和远端已有前缀的长度与 hash，再追加后缀；FTP 从零回退时重新初始化 hash。旧 root exec 回退路径恢复时必须取得远端完整 SHA-256，否则拒绝提交。原有源身份变化检查保留；固定长度不提供原地改写期间的原子快照语义。
+- 普通 SFTP 下载按远端已知大小限制每次读取，读满后不额外请求 EOF；提前 EOF、缺失大小和读写/flush 超时会失败并保留断点。可选 SSH exec SHA-256 仅在收尾时已确认支持该能力的普通会话上执行，能力未知或不可用会记录跳过，仍校验文件大小；root 校验要求保持不变。大小校验不保证内容一致，也不提供远端并发改写时的原子快照。阶段日志见 [本地诊断日志](./quality/logging.md)。
 - SFTP 与 FTP/FTPS 分别在 controller 内实现 offset 读写和远端收尾，不把协议命令伪统一到 renderer 或 transfer UI。
 - 传输调度使用 `profileId` 作为跨重启身份，不依赖生命周期短暂的 `tabId` 恢复连接；所有中断任务都等待用户手动继续，root 任务继续前还需要恢复 root 授权。
 - 高频字节进度仍只走 `transfer:update`，UI 投影直接构造且不深拷贝 manifest。目录条目按索引同步内存状态，journal 在任务创建、状态切换、目录检查点和收尾时更新；序列化与 fsync 在 blocking pool 中持有写锁完成，恢复 offset 以实际临时文件大小为准。

@@ -32,6 +32,7 @@ async fn transfer_directory_entry_once(
     throttler: &mut DirectoryTransferThrottler,
 ) -> Result<DirectoryEntryAttempt, AppError> {
     let entry = manifest.files[index].clone();
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, entry_index = index, "Directory transfer entry started");
     if skip_existing_transfer_target(
         app,
         tab_id,
@@ -247,6 +248,7 @@ async fn transfer_directory_entry_once(
         return Err(transfer_error("transfer canceled"));
     }
 
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, entry_index = index, stage = "size-verification", "Transfer stage started");
     let completed_size = if direction == "upload" {
         entry.source_identity.size
     } else {
@@ -262,6 +264,8 @@ async fn transfer_directory_entry_once(
         )));
     }
 
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, entry_index = index, stage = "size-verification", actual_bytes = completed_size, "Transfer stage completed");
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, entry_index = index, stage = "commit", "Transfer stage started");
     let committed = if direction == "upload" {
         if let Some(policy) = conflict_policy {
             commit_remote_transfer(
@@ -296,6 +300,7 @@ async fn transfer_directory_entry_once(
         )
         .await?
     };
+    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, entry_index = index, stage = "commit", committed, "Transfer stage completed");
     if !committed {
         if direction == "upload" {
             remove_remote_transfer_file(app, tab_id, &entry.partial_path, None).await?;

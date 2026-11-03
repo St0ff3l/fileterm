@@ -9,3 +9,6 @@ include!("files/root_listing.rs");
 
 #[cfg(test)]
 mod commit_tests;
+
+#[cfg(test)]
+mod transfer_io_tests;

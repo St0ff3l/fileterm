@@ -407,6 +407,7 @@ async fn run(
                 PatchDelivery::PersistedEvent,
             )
             .await?;
+            tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "size-verification", expected_bytes = source_size, "Transfer stage started");
             let completed_size = if task.direction == "upload" {
                 let plan = upload_plan
                     .as_ref()
@@ -439,6 +440,8 @@ async fn run(
                 PatchDelivery::PersistedEvent,
             )
             .await?;
+            tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "size-verification", actual_bytes = completed_size, "Transfer stage completed");
+            tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "commit", "Transfer stage started");
             let committed = if task.direction == "upload" {
                 if let Some(policy) = task.conflict_policy {
                     commit_remote_transfer(&app, &tab_id, &partial, &destination_path, policy)
@@ -470,6 +473,7 @@ async fn run(
                 )
                 .await?
             };
+            tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "commit", committed, "Transfer stage completed");
             if !committed {
                 if task.direction == "upload" {
                     remove_remote_transfer_file(&app, &tab_id, &partial, None).await?;

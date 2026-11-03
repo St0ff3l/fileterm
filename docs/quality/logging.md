@@ -306,3 +306,17 @@ SSH、FTP、本地终端、Telnet 和串口的状态更新仅在状态实际改�
 不包含 GPU 纹理副本、mipmap、分配器/驱动和浏览器其他内存，不能直接与任务管理器 RSS 相等。
 
 `terminalResources.uniqueWebglAtlasGlyphs` 统计共享 CPU 图集保留的字形对象数，图集只计一次；页面不暴露计数时为 `null`，64 页上限继续沿用截断标记。可与图集字节估计交叉观察“页面占用稳定但旧字形引用增加”的情况；不是 GPU 对象计数。
+
+## SFTP 下载停在 99%（Refs #369）
+
+按 `category=transfer` 和 `transfer_id` 串联日志。普通 SFTP 下载依次记录
+`transfer-channel`（获取通道）、`transfer-lock`（等待通道锁）、
+`download-metadata`、`remote-open`、`local-open`、`download-read`、`local-flush`，
+随后为 `local-checksum` / `remote-checksum`，或 `checksum` 跳过原因，最后为
+`size-verification` 与 `commit`。阶段起止记录不包含文件内容、凭据或命令输出。
+
+`download-read` 完成包含字节数；读取失败包含已传输与期望字节数，并区分超时、
+权限错误和提前 EOF。普通 SFTP 未确认支持 SSH exec SHA-256 时跳过可选哈希校验，
+继续验证文件大小；这不能证明文件内容完全一致。root 校验要求不受该能力判断放宽。
+99% 是完成前的进度上限，最后一个开始但未完成的阶段用于缩小排查范围，
+不能单凭缺失日志断定根因（仍受日志分类、级别过滤和队列丢弃影响）。
