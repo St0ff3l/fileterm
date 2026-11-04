@@ -31,6 +31,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - SSH 会话连接
 - SSH shell 输出接入
 - SSH keyboard-interactive/MFA、SOCKS5/HTTP outbound proxy、多级 Jump Host（最多 8 个跳板） 与运行时 `-L/-R/-D` tunnel service；隧道运行状态归属具体 workspace tab，断线自动回收。
+- SSH 连接可保存 Base32 OTP 密钥与可选提示识别文本，通过 keyboard-interactive 自动提交标准 TOTP（SHA-1、6 位、30 秒）；每次认证最多自动提交一次，重复/不明确的提示保持手动输入。密钥复用 `profile-secrets.json` 加密凭据存储，公开快照只暴露 `hasSavedOtpSecret`。
 - SSH 私钥库：私钥、元数据和可选口令分离存储；连接 profile 仅保存 `privateKeyId`，口令交互通过 `ssh:interaction` 返回 renderer。
 - SSH 私钥导入同时支持文件和临时文本输入；文本只在导入弹窗与一次 IPC 调用期间存在，不进入 profile、workspace snapshot 或日志。
 - SSH 密码认证缺少凭据时，登录补全弹窗可显式改用密钥库私钥；响应仅传递密钥 ID，私钥解析与口令交互仍由 Rust 完成，选择只作用于本次连接。Kubernetes 模式保持密码认证。

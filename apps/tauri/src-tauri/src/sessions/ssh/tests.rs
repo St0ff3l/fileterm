@@ -2486,6 +2486,8 @@ mod tests {
             &mut handle,
             "alice",
             Some("saved-password"),
+            None,
+            None,
             KeyboardInteractiveMode::PasswordFallback,
             move |request| {
                 let requested_prompts = requested_prompts.clone();
@@ -2579,6 +2581,8 @@ mod tests {
             &mut handle,
             "alice",
             Some("saved-password"),
+            None,
+            None,
             KeyboardInteractiveMode::PasswordFallback,
             move |request| {
                 let requested_prompts = requested_prompts.clone();
@@ -2651,6 +2655,8 @@ mod tests {
         let authenticated = try_keyboard_interactive_with_responder(
             &mut handle,
             "alice",
+            None,
+            None,
             None,
             KeyboardInteractiveMode::AdditionalFactor,
             move |request| {
@@ -3345,6 +3351,7 @@ mod tests {
         assert_eq!(output.skipped_bytes, 0);
     }
 
+    include!("authentication/otp_tests.rs");
     include!("transport/route_tests.rs");
     include!("transport/ssh_config_route_tests.rs");
 }

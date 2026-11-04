@@ -78,6 +78,7 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
 
     let id = new_id("profile");
     let mut profile = ensure_object(&input);
+    crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, None);
     profile.insert("id".to_string(), Value::String(id.clone()));
     profile.insert("group".to_string(), Value::String(group));
@@ -116,6 +117,7 @@ pub fn replace_profiles(app: &AppHandle, inputs: Vec<Value>) -> Result<(), AppEr
             .map(|id| Value::String(id.to_string()))
             .unwrap_or(Value::Null);
         let mut profile = ensure_object(&input);
+        crate::services::totp::validate_profile(&profile)?;
         normalize_profile_secret_input(&mut profile, None);
         let profile_id = profile
             .get("id")
@@ -161,6 +163,7 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
 
     let mut profile = ensure_object(&input);
     preserve_trusted_host_fingerprint(&mut profile, Some(&previous));
+    crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, Some(&previous));
     profile.insert("id".to_string(), Value::String(profile_id.to_string()));
     profile.insert("group".to_string(), Value::String(group));

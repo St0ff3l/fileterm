@@ -36,6 +36,7 @@ export function ConnectionModal({
   mode,
   form,
   hasSavedPassword = false,
+  hasSavedOtpSecret = false,
   hasSavedSudoPassword = false,
   hasSavedSuPassword = false,
   setForm,
@@ -57,6 +58,7 @@ export function ConnectionModal({
   mode: ConnectionFormMode
   form: CreateProfileInput
   hasSavedPassword?: boolean
+  hasSavedOtpSecret?: boolean
   hasSavedSudoPassword?: boolean
   hasSavedSuPassword?: boolean
   setForm(value: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)): void
@@ -398,6 +400,7 @@ export function ConnectionModal({
                 form={form}
                 groupOptions={groupOptions}
                 hasSavedPassword={hasSavedPassword}
+                hasSavedOtpSecret={hasSavedOtpSecret}
                 hasSavedSuPassword={hasSavedSuPassword}
                 hasSavedSudoPassword={hasSavedSudoPassword}
                 isMacOs={isMacOs}

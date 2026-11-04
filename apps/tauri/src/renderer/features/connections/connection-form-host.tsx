@@ -64,6 +64,7 @@ export function ConnectionFormHost({
       mode={mode}
       form={form}
       hasSavedPassword={editingProfile?.hasSavedPassword === true}
+      hasSavedOtpSecret={editingProfile?.hasSavedOtpSecret === true}
       hasSavedSudoPassword={editingProfile?.hasSavedSudoPassword === true}
       hasSavedSuPassword={editingProfile?.hasSavedSuPassword === true}
       profiles={profiles}

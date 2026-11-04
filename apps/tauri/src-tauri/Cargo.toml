@@ -40,6 +40,9 @@ encoding_rs = "0.8"
 rfd = "0.17"
 sha2 = "0.10"
 hmac = "0.12"
+hmac-next = { package = "hmac", version = "0.13" }
+sha1 = "0.11"
+data-encoding = "2"
 subtle = "2.6"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

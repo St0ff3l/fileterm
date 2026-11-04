@@ -151,6 +151,9 @@ export function AppStandaloneWindows({ model }: { model: AppViewModel }) {
                   ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedPassword === true
                   : false
               }
+              hasSavedOtpSecret={
+                workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedOtpSecret === true
+              }
               hasSavedSudoPassword={
                 editingProfileId
                   ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedSudoPassword === true

@@ -11,7 +11,7 @@ static AUTHORIZATION_PATTERN: LazyLock<regex::Regex> = LazyLock::new(|| {
 });
 static SECRET_PATTERN: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(
-        r##"(?i)(password|passphrase|authorization|proxy[_-]?password|otp|mfa|one[-_ ]?time[-_ ]?password|verification[-_ ]?code|private[-_ ]?key|secret|api[-_ ]?key|token)["']?\s*([:=])\s*(?:"[^"]*"|'[^']*'|[^\s,;"'}\]]+)"##,
+        r##"(?i)(password|passphrase|authorization|proxy[_-]?password|otp(?:[_-]?secret)?|mfa|one[-_ ]?time[-_ ]?password|verification[-_ ]?code|private[-_ ]?key|secret|api[-_ ]?key|token)["']?\s*([:=])\s*(?:"[^"]*"|'[^']*'|[^\s,;"'}\]]+)"##,
     )
         .expect("static redaction regex")
 });
@@ -116,6 +116,16 @@ mod tests {
     fn preserves_non_secret_diagnostics() {
         let line = redact("session=tab-1 platform=windows cpu=12%");
         assert_eq!(line, "session=tab-1 platform=windows cpu=12%");
+    }
+
+    #[test]
+    fn redacts_otp_secret_field_names() {
+        for name in ["otpSecret", "otp_secret", "otp-secret"] {
+            assert_eq!(
+                redact(&format!("{name}=GEZDGNBVGY3TQOJQ")),
+                format!("{name}=[REDACTED]")
+            );
+        }
     }
 
     #[test]

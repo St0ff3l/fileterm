@@ -168,6 +168,7 @@ mod tests {
         let source = vec![json!({
             "id": "profile-current",
             "password": "login-password",
+            "otpSecret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
             "sudoPassword": "sudo-password",
             "suPassword": "su-password",
             "proxy": { "password": "proxy-password" }
@@ -179,6 +180,9 @@ mod tests {
         )
         .unwrap();
 
+        assert!(!std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("GEZDGNBVGY3TQOJQ"));
         let mut public_profiles = vec![json!({
             "id": "profile-current",
             "name": "Server",
@@ -187,6 +191,10 @@ mod tests {
         hydrate_profile_secrets(&path, &mut public_profiles).unwrap();
 
         assert_eq!(public_profiles[0]["password"], "login-password");
+        assert_eq!(
+            public_profiles[0]["otpSecret"],
+            "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        );
         assert_eq!(public_profiles[0]["sudoPassword"], "sudo-password");
         assert_eq!(public_profiles[0]["suPassword"], "su-password");
         assert_eq!(public_profiles[0]["proxy"]["password"], "proxy-password");
@@ -195,8 +203,33 @@ mod tests {
         assert!(!public.as_object().unwrap().contains_key("sudoPassword"));
         assert_eq!(public["hasSavedSudoPassword"], true);
         assert_eq!(public["hasSavedSuPassword"], true);
+        assert!(public.get("otpSecret").is_none());
+        assert_eq!(public["hasSavedOtpSecret"], true);
 
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn otp_secret_edits_preserve_replace_and_clear() {
+        let previous = json!({"otpSecret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"});
+        for input in [json!({}), json!({"otpSecret": ""})] {
+            let mut edit = input.as_object().unwrap().clone();
+            normalize_profile_secret_input(&mut edit, Some(&previous));
+            assert_eq!(edit["otpSecret"], previous["otpSecret"]);
+        }
+        let mut edit = json!({"otpSecret": "JBSWY3DPEHPK3PXP"})
+            .as_object()
+            .unwrap()
+            .clone();
+        normalize_profile_secret_input(&mut edit, Some(&previous));
+        assert_eq!(edit["otpSecret"], "JBSWY3DPEHPK3PXP");
+        edit.insert("otpSecret".to_string(), Value::Null);
+        normalize_profile_secret_input(&mut edit, Some(&previous));
+        assert!(!edit.contains_key("otpSecret"));
+        assert_eq!(
+            strip_secret_fields_public(&Value::Object(edit))["hasSavedOtpSecret"],
+            false
+        );
     }
 
     #[test]

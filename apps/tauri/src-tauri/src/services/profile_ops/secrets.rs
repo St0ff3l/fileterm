@@ -69,6 +69,7 @@ fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Re
             "privateKeyPath",
             "sudoPassword",
             "suPassword",
+            "otpSecret",
         ] {
             let Some(stored_value) =
                 current_profile_secret(Some(&store), &profile_id, field).and_then(Value::as_str)
@@ -334,6 +335,7 @@ fn build_profile_secrets(
             "privateKeyPath",
             "sudoPassword",
             "suPassword",
+            "otpSecret",
         ] {
             if let Some(value) = profile.get(key).and_then(Value::as_str) {
                 entry.insert(

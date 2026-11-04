@@ -1,63 +1,39 @@
 .ssh-low-resource-mode {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
-  gap: 6px;
   align-items: start;
-  font-size: 13px;
+  gap: 6px;
 }
 
-.ssh-low-resource-mode__label {
-  padding-top: 4px;
+.ssh-grid label.ssh-low-resource-mode__label {
+  display: block;
+  padding-top: 2px;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .ssh-low-resource-mode__controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 4px 8px;
   min-height: 24px;
-}
-
-.ssh-grid .ssh-low-resource-mode__control {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
 }
 
 .ssh-low-resource-mode__hint,
 .ssh-low-resource-mode__details {
   color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
+}
+
+.ssh-low-resource-mode__help {
+  min-height: 24px;
+  height: 24px;
+  padding: 0 4px;
+  font-size: 12px;
 }
 
 .ssh-low-resource-mode__details {
-  margin-top: 4px;
-}
-
-.ssh-low-resource-mode__details summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: fit-content;
-  list-style: none;
-  cursor: pointer;
-}
-
-.ssh-low-resource-mode__details summary::-webkit-details-marker {
-  display: none;
-}
-
-.ssh-low-resource-mode__details summary:hover {
-  color: var(--text-primary);
-}
-
-.ssh-low-resource-mode__details summary:focus-visible {
-  outline: 2px solid var(--focus-outline);
-  outline-offset: 2px;
-}
-
-.ssh-low-resource-mode__details p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
 }
