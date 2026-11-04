@@ -8,7 +8,9 @@ include!("shell_exec.rs");
 include!("files/root_listing.rs");
 
 #[cfg(test)]
+#[path = "tests/commit.rs"]
 mod commit_tests;
 
 #[cfg(test)]
+#[path = "tests/transfer_io.rs"]
 mod transfer_io_tests;

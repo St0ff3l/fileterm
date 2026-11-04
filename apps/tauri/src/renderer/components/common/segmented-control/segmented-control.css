@@ -1,0 +1,77 @@
+.ft-segmented-control {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-canvas);
+}
+
+.ft-segmented-control > label.ft-segmented-control__option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.ft-segmented-control > .ft-segmented-control__option:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ft-segmented-control > .ft-segmented-control__option.is-selected {
+  background: var(--action-primary-bg);
+  color: var(--action-primary-text);
+  box-shadow: var(--control-shadow);
+}
+
+.ft-segmented-control > .ft-segmented-control__option.is-selected:hover {
+  background: var(--action-primary-hover);
+}
+
+.ft-segmented-control .selection-control {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+
+.ft-segmented-control__option:has(input:focus-visible) {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-segmented-control > label.ft-segmented-control__option {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ft-segmented-control > .ft-segmented-control__option.is-selected {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+}

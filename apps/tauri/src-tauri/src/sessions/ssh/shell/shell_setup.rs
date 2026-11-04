@@ -286,11 +286,9 @@ const SHELL_CWD_SETUP: &str = concat!(
 const BUSYBOX_SHELL_CWD_SETUP: &str = "__tdcwd(){ printf '\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007' \"$(pwd -P 2>/dev/null)\" \"$(id -un 2>/dev/null)\";};PS1='$(__tdcwd)'\"${PS1-}\";__tdcwd;printf '\\033]7777;FileTermReady\\007'";
 
 #[cfg(test)]
-mod shell_setup_echo_tests {
-    include!("setup_echo_tests.rs");
-}
+#[path = "tests/setup_echo.rs"]
+mod shell_setup_echo_tests;
 
 #[cfg(all(test, unix))]
-mod shell_command_hook_tests {
-    include!("command_hook_tests.rs");
-}
+#[path = "tests/command_hook.rs"]
+mod shell_command_hook_tests;

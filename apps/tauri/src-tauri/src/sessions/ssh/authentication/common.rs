@@ -115,7 +115,7 @@ async fn authenticate_session(
             try_keyboard_interactive(
                 handle,
                 username,
-                password_for_authentication(profile),
+                profile,
                 app,
                 interaction,
                 mode,

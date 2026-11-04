@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Button } from '../../components/common/button/button'
 import type {
   CreateProfileInput,
   SerialPortInfo,
@@ -6,6 +8,8 @@ import type {
   SshDeviceMode
 } from '@fileterm/core'
 import './connection-low-resource-mode.css'
+import './connection-ssh-general-section.css'
+import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { normalizeConnectionHost } from '@fileterm/shared'
 import { localizeSerialTerminalText, t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
@@ -52,6 +56,7 @@ export function ConnectionSshGeneralSection({
   refreshSerialPorts(): Promise<void>
   setForm: ConnectionFormSetter
 }) {
+  const [showLowResourceHelp, setShowLowResourceHelp] = useState(false)
   const lowResourceMode = isLowResourceSshMode(form, connectionDefaults)
   // The alias resolves HostName and Port from ~/.ssh/config.
   const usesSshConfigAlias = form.type === 'ssh' && form.authType === 'sshConfig'
@@ -124,62 +129,110 @@ export function ConnectionSshGeneralSection({
         </label>
         {form.type === 'ssh' ? (
           <>
-            <label className="span-2">
-              {t.sshDeviceMode}:
-              <DropdownSelect
-                value={form.deviceMode ?? 'server'}
-                options={[
-                  { value: 'server', label: t.sshDeviceModeServer },
-                  { value: 'network-device', label: t.sshDeviceModeNetworkDevice },
-                  { value: 'auto', label: t.sshDeviceModeAuto }
-                ]}
-                onChange={(value) => {
-                  const nextMode = value as SshDeviceMode
-                  setForm((prev) => {
-                    const wasNetworkDevice = prev.type === 'ssh' && prev.deviceMode === 'network-device'
-                    const nextIsNetworkDevice = nextMode === 'network-device'
-                    return {
-                      ...prev,
-                      deviceMode: nextMode,
-                      networkDeviceVendor: nextIsNetworkDevice
-                        ? (prev.networkDeviceVendor ?? 'auto')
-                        : prev.networkDeviceVendor,
-                      terminalType:
-                        nextIsNetworkDevice && !wasNetworkDevice
-                          ? 'vt100'
-                          : wasNetworkDevice
-                            ? nextMode === 'auto'
-                              ? undefined
-                              : 'xterm-256color'
-                            : prev.terminalType
-                    }
-                  })
-                }}
-              />
-            </label>
-            {showsNetworkDeviceVendor ? (
-              <label className="span-2">
-                {t.networkDeviceVendor}:
-                <DropdownSelect
-                  value={form.networkDeviceVendor ?? 'auto'}
+            <div className="span-2 ssh-device-mode">
+              <div className="ssh-device-mode-row">
+                <span>{t.sshDeviceMode}:</span>
+                <SegmentedControl
+                  ariaLabel={t.sshDeviceMode}
+                  value={form.deviceMode ?? 'server'}
                   options={[
-                    { value: 'auto', label: t.networkDeviceVendorAuto },
-                    { value: 'generic', label: t.networkDeviceVendorGeneric },
-                    { value: 'cisco', label: t.networkDeviceVendorCisco },
-                    { value: 'huawei', label: t.networkDeviceVendorHuawei },
-                    { value: 'h3c-comware', label: t.networkDeviceVendorH3c },
-                    { value: 'custom', label: t.networkDeviceVendorCustom }
+                    { value: 'server', label: t.sshDeviceModeServer },
+                    { value: 'network-device', label: t.sshDeviceModeNetworkDevice },
+                    { value: 'auto', label: t.sshDeviceModeAuto }
                   ]}
-                  onChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      networkDeviceVendor: value as CreateProfileInput['networkDeviceVendor']
-                    }))
-                  }
+                  onChange={(value) => {
+                    const nextMode = value as SshDeviceMode
+                    setForm((prev) => {
+                      const wasNetworkDevice = prev.type === 'ssh' && prev.deviceMode === 'network-device'
+                      const nextIsNetworkDevice = nextMode === 'network-device'
+                      return {
+                        ...prev,
+                        deviceMode: nextMode,
+                        networkDeviceVendor: nextIsNetworkDevice
+                          ? (prev.networkDeviceVendor ?? 'auto')
+                          : prev.networkDeviceVendor,
+                        terminalType:
+                          nextIsNetworkDevice && !wasNetworkDevice
+                            ? 'vt100'
+                            : wasNetworkDevice
+                              ? nextMode === 'auto'
+                                ? undefined
+                                : 'xterm-256color'
+                              : prev.terminalType
+                      }
+                    })
+                  }}
                 />
-              </label>
+              </div>
+              {showsNetworkDeviceVendor ? (
+                <label className="span-2">
+                  {t.networkDeviceVendor}:
+                  <DropdownSelect
+                    value={form.networkDeviceVendor ?? 'auto'}
+                    options={[
+                      { value: 'auto', label: t.networkDeviceVendorAuto },
+                      { value: 'generic', label: t.networkDeviceVendorGeneric },
+                      { value: 'cisco', label: t.networkDeviceVendorCisco },
+                      { value: 'huawei', label: t.networkDeviceVendorHuawei },
+                      { value: 'h3c-comware', label: t.networkDeviceVendorH3c },
+                      { value: 'custom', label: t.networkDeviceVendorCustom }
+                    ]}
+                    onChange={(value) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        networkDeviceVendor: value as CreateProfileInput['networkDeviceVendor']
+                      }))
+                    }
+                  />
+                </label>
+              ) : null}
+              {form.deviceMode === 'network-device' || form.deviceMode === 'auto' ? (
+                <div className="ssh-field-hint">
+                  {form.deviceMode === 'network-device' ? t.sshDeviceModeHint : t.sshDeviceModeAutoHint}
+                </div>
+              ) : null}
+            </div>
+            {form.type === 'ssh' && !isNetworkDevice ? (
+              <div className="span-2 ssh-low-resource-mode">
+                <label className="ssh-low-resource-mode__label" htmlFor="connection-low-resource-mode">
+                  {t.sshLowResourceModeLabel}:
+                </label>
+                <div className="ssh-low-resource-mode__body">
+                  <div className="ssh-low-resource-mode__controls">
+                    <span className="command-toggle">
+                      <SelectionControl
+                        id="connection-low-resource-mode"
+                        aria-describedby="ssh-low-resource-mode-hint"
+                        checked={lowResourceMode}
+                        type="checkbox"
+                        onChange={() => setForm((previous) => toggleLowResourceSshMode(previous, connectionDefaults))}
+                      />
+                    </span>
+                    <span id="ssh-low-resource-mode-hint" className="ssh-low-resource-mode__hint">
+                      {t.sshLowResourceModeSummary}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="compact"
+                      className="ssh-low-resource-mode__help"
+                      aria-expanded={showLowResourceHelp}
+                      aria-controls="connection-low-resource-mode-details"
+                      icon={<AppIcon name="info" size={13} />}
+                      onClick={() => setShowLowResourceHelp((shown) => !shown)}
+                    >
+                      {t.description}
+                    </Button>
+                  </div>
+                  <p
+                    className="ssh-low-resource-mode__details"
+                    id="connection-low-resource-mode-details"
+                    hidden={!showLowResourceHelp}
+                  >
+                    {t.sshLowResourceModeHint}
+                  </p>
+                </div>
+              </div>
             ) : null}
-            <div className="span-2 ssh-field-hint">{t.sshDeviceModeHint}</div>
           </>
         ) : null}
         <label>
@@ -454,32 +507,6 @@ export function ConnectionSshGeneralSection({
             ) : !supportsBuiltInRs485 && form.rs485Mode === 'half-duplex' ? (
               <p className="ssh-field-hint span-2">{t.serialRs485Unsupported}</p>
             ) : null}
-          </div>
-        ) : null}
-        {form.type === 'ssh' && !isNetworkDevice ? (
-          <div className="span-2 ssh-low-resource-mode">
-            <span className="ssh-low-resource-mode__label">{t.sshLowResourceModeLabel}:</span>
-            <div className="ssh-low-resource-mode__body">
-              <div className="ssh-low-resource-mode__controls">
-                <label className="ssh-checkbox advanced-toggle-label ssh-low-resource-mode__control">
-                  <SelectionControl
-                    aria-label={t.sshLowResourceMode}
-                    checked={lowResourceMode}
-                    type="checkbox"
-                    onChange={() => setForm((previous) => toggleLowResourceSshMode(previous, connectionDefaults))}
-                  />
-                  <span className="advanced-toggle-name">{lowResourceMode ? t.enabled : t.disabled}</span>
-                </label>
-                <span className="ssh-low-resource-mode__hint">{t.sshLowResourceModeSummary}</span>
-              </div>
-              <details className="ssh-low-resource-mode__details">
-                <summary>
-                  <AppIcon name="info" size={13} />
-                  <span>{t.description}</span>
-                </summary>
-                <p>{t.sshLowResourceModeHint}</p>
-              </details>
-            </div>
           </div>
         ) : null}
         <label className="full">

@@ -116,5 +116,5 @@ pub(super) async fn verify_resume_prefix(
 }
 
 #[cfg(test)]
-#[path = "upload_source_tests.rs"]
+#[path = "tests/upload_source.rs"]
 mod tests;

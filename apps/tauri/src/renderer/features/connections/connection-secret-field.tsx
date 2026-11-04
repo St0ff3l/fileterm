@@ -11,6 +11,8 @@ export function ConnectionSecretField({
   fullWidth = false,
   optional = false,
   disabled = false,
+  annotation,
+  annotationTitle,
   onChange,
   onClear,
   onUndo
@@ -23,6 +25,8 @@ export function ConnectionSecretField({
   fullWidth?: boolean
   optional?: boolean
   disabled?: boolean
+  annotation?: string
+  annotationTitle?: string
   onChange(value: string): void
   onClear(): void
   onUndo(): void
@@ -40,16 +44,26 @@ export function ConnectionSecretField({
       <div className="ssh-secret-field__header">
         <label htmlFor={id}>
           {label}
+          {annotation ? (
+            <span className="ssh-secret-field__optional" id={`${id}-annotation`} title={annotationTitle}>
+              {annotation}
+            </span>
+          ) : null}
           {optional ? <span className="ssh-secret-field__optional">{t.optionalField}</span> : null}:
         </label>
         {showClearButton ? (
-          <button className="ssh-secret-field__clear" type="button" onClick={onClear} title={t.clearSavedPassword}>
+          <button
+            className="ssh-secret-field__clear"
+            type="button"
+            onClick={onClear}
+            title={t.clearSavedSecret.replace('{label}', label)}
+          >
             <AppIcon name="trash" size={13} />
-            {t.clearSavedPassword}
+            {t.clearSavedSecret.replace('{label}', label)}
           </button>
         ) : markedForClear ? (
           <span className="ssh-secret-field__cleared">
-            {t.passwordMarkedForClear}
+            {t.secretMarkedForClear.replace('{label}', label)}
             <button className="ssh-secret-field__undo" type="button" onClick={onUndo}>
               {t.undoClearSavedPassword}
             </button>
@@ -59,27 +73,28 @@ export function ConnectionSecretField({
       <div className="ssh-secret-field__input-wrap">
         <input
           id={id}
+          aria-describedby={annotation ? `${id}-annotation` : undefined}
           autoComplete="new-password"
           disabled={disabled || markedForClear}
           placeholder={
             markedForClear
-              ? t.passwordMarkedForClear
+              ? t.secretMarkedForClear.replace('{label}', label)
               : hasSavedValue
-                ? t.passwordReplacePlaceholder
-                : t.passwordPlaceholder
+                ? t.savedSecretPlaceholder.replace('{label}', label)
+                : t.secretPlaceholder.replace('{label}', label)
           }
           type={isVisible ? 'text' : 'password'}
           value={value ?? ''}
           onChange={(event) => onChange(event.target.value)}
         />
         <button
-          aria-label={isVisible ? t.hidePassword : t.showPassword}
+          aria-label={isVisible ? t.hideSecret.replace('{label}', label) : t.showSecret.replace('{label}', label)}
           aria-pressed={isVisible}
           className="ssh-secret-field__toggle"
           disabled={disabled || markedForClear}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setIsVisible((visible) => !visible)}
-          title={isVisible ? t.hidePassword : t.showPassword}
+          title={isVisible ? t.hideSecret.replace('{label}', label) : t.showSecret.replace('{label}', label)}
           type="button"
         >
           <AppIcon name={isVisible ? 'eye-off' : 'eye'} size={15} />

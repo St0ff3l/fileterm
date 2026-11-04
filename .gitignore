@@ -9,7 +9,9 @@ apps/tauri/release/
 apps/tauri/src-tauri/target/
 vendor/russh/target
 apps/tauri/src-tauri/gen/
-.github/fixtures/tauri-socket-lifecycle/target/
+tests/ci/*/target/
+# Build directories from before the CI fixture relocation.
+.github/fixtures/*/target/
 
 .DS_Store
 npm-debug.log*

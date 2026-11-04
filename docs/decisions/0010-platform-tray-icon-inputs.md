@@ -40,4 +40,4 @@ Tauri 会把 Linux bundle 配置中第一张 PNG 嵌入为原始像素缓冲。�
 - `apps/tauri/src-tauri/icons/app/{linux,macos}/`：Linux bundle 图标与 macOS ICNS。
 - `apps/tauri/src-tauri/icons/tray/macos/`：macOS template tray 资源。
 - `apps/tauri/scripts/generate-platform-app-icons.py`：从满版 1024px 母图生成 Windows/Linux 的派生图标及 Linux bundle 图标。
-- `apps/tauri/src-tauri/src/lib/tests.rs`：Linux bundle 图标格式回归测试。
+- `apps/tauri/src-tauri/src/lib/tests/mod.rs`：Linux bundle 图标格式回归测试。

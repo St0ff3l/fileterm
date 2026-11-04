@@ -532,6 +532,5 @@ fn root_access_auth_failed(output: &str) -> bool {
 }
 
 #[cfg(test)]
-mod root_auth_cache_tests {
-    include!("root_auth_cache_tests.rs");
-}
+#[path = "tests/root_auth_cache.rs"]
+mod root_auth_cache_tests;

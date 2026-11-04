@@ -187,6 +187,8 @@ export function profileToForm(
     note: profile.note ?? '',
     sessionLogEnabled: profile.sessionLogEnabled ?? false,
     sessionLogDirectory: profile.sessionLogDirectory ?? '',
+    otpSecret: '',
+    otpPrompt: profile.type === 'ssh' ? (profile.otpPrompt ?? '') : '',
     password: profile.type === 'ssh' || profile.type === 'ftp' ? (profile.password ?? '') : '',
     useEmptyPassword: profile.type === 'ssh' ? sshConnectionSettings.useEmptyPassword : false,
     trustedHostFingerprint: profile.type === 'ssh' ? (profile.trustedHostFingerprint ?? '') : '',

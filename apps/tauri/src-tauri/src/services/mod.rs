@@ -18,6 +18,7 @@ pub mod serial_ports;
 pub mod session_logs;
 pub mod ssh_config;
 pub mod ssh_keys;
+pub mod totp;
 pub mod transfers;
 pub mod tunnels;
 pub mod updates;

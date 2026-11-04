@@ -109,6 +109,8 @@ export interface BaseProfile extends BaseEntity {
   hasSavedSudoPassword?: boolean
   /** Non-secret indicator for a saved `su` password. */
   hasSavedSuPassword?: boolean
+  /** Non-secret indicator for a saved SSH TOTP key. */
+  hasSavedOtpSecret?: boolean
   /** Retry policy shared by network sessions. Zero/undefined means unlimited. */
   reconnectMode?: 'none' | 'enter' | 'auto'
   reconnectMaxAttempts?: number
@@ -425,6 +427,10 @@ export interface SshProfile extends NetworkProfile {
   networkDeviceVendor?: SshNetworkDeviceVendor
   username: string
   authType: SshAuthType
+  /** Transient internally; redacted from desktop snapshots. */
+  otpSecret?: string
+  /** Optional case-insensitive text match for an SSH OTP challenge. */
+  otpPrompt?: string
   note?: string
   password?: string
   /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
@@ -1292,6 +1298,9 @@ export interface CreateProfileInput {
   note?: string
   sessionLogEnabled?: boolean
   sessionLogDirectory?: string
+  /** Base32 TOTP key; empty preserves a saved key, null explicitly clears it. */
+  otpSecret?: string | null
+  otpPrompt?: string
   password?: string | null
   /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
   useEmptyPassword?: boolean

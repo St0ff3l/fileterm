@@ -1,0 +1,16 @@
+.ssh-device-mode {
+  display: grid;
+  gap: 6px;
+}
+
+.ssh-device-mode > .ssh-field-hint {
+  margin-top: 0;
+}
+
+.ssh-device-mode-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}

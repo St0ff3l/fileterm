@@ -116,7 +116,7 @@ $env:FILETERM_RENDERER_SCREENSHOT_DIR = Join-Path $env:FILETERM_VALIDATION_ARCHI
 New-Item -ItemType Directory -Force -Path $env:FILETERM_VALIDATION_RESULTS, $env:FILETERM_RENDERER_SCREENSHOT_DIR | Out-Null
 $env:FILETERM_EXPECTED_RENDERER = 'dom' # or 'webgl'
 $env:FILETERM_WEBVIEW2_OUTPUT = Join-Path $env:FILETERM_VALIDATION_RESULTS "tauri-webview2-$($env:FILETERM_EXPECTED_RENDERER).json"
-node docs/quality/terminal-renderer-windows-2026-10-20/run-tauri-webview2-smoke.mjs
+node tests/local/run-tauri-webview2-smoke.mjs
 ```
 
 The smoke script attaches to `127.0.0.1:9223`; the selected renderer applies to newly opened terminals.

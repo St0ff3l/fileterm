@@ -26,3 +26,7 @@
   border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
 }
+
+.ssh-grid-auth {
+  align-items: start;
+}

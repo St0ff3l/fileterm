@@ -709,6 +709,5 @@ fn join_thread(handle: &Mutex<Option<JoinHandle<()>>>) {
 }
 
 #[cfg(test)]
-mod tests {
-    include!("client_tests.rs");
-}
+#[path = "tests/client.rs"]
+mod tests;

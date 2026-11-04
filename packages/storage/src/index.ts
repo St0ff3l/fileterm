@@ -351,6 +351,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         authType: input.authType ?? 'system',
         note: input.note,
         password: input.password ?? undefined,
+        otpSecret: input.otpSecret ?? undefined,
+        otpPrompt: input.otpPrompt,
         privateKeyId: input.privateKeyId,
         privateKeyPath: input.privateKeyPath,
         passphrase: input.passphrase,

@@ -66,5 +66,5 @@ include!("process_selection.rs");
 include!("posix/mod.rs");
 include!("freebsd.rs");
 include!("windows.rs");
-include!("tests.rs");
-include!("process_selection_tests.rs");
+include!("tests/mod.rs");
+include!("tests/process_selection.rs");

@@ -9,7 +9,8 @@ include!("transport.rs");
 include!("capabilities.rs");
 include!("listing.rs");
 include!("file_operations.rs");
-include!("tests.rs");
+include!("tests/mod.rs");
 
 #[cfg(test)]
+#[path = "tests/commit.rs"]
 mod commit_tests;

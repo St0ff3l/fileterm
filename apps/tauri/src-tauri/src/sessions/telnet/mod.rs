@@ -49,4 +49,4 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> TelnetTransport for T {}
 include!("parser.rs");
 include!("worker.rs");
 include!("transport.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

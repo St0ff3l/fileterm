@@ -17,7 +17,7 @@ struct KeyboardInteractiveRequest {
 async fn try_keyboard_interactive(
     handle: &mut Handle<ClientHandler>,
     username: &str,
-    password: Option<&str>,
+    profile: &Value,
     app: &AppHandle,
     interaction: &SshInteractionContext,
     mode: KeyboardInteractiveMode,
@@ -25,7 +25,7 @@ async fn try_keyboard_interactive(
 ) -> Result<bool, String> {
     let app = app.clone();
     let interaction = interaction.clone();
-    try_keyboard_interactive_with_responder(handle, username, password, mode, move |request| {
+    try_keyboard_interactive_with_responder(handle, username, password_for_authentication(profile), profile.get("otpSecret").and_then(Value::as_str), profile.get("otpPrompt").and_then(Value::as_str), mode, move |request| {
         let app = app.clone();
         let interaction = interaction.clone();
         let interaction_timeout = interaction_timeout;
@@ -217,6 +217,8 @@ async fn try_keyboard_interactive_with_responder<H, F, Fut>(
     handle: &mut Handle<H>,
     username: &str,
     password: Option<&str>,
+    otp_secret: Option<&str>,
+    otp_prompt: Option<&str>,
     mode: KeyboardInteractiveMode,
     mut request_answers: F,
 ) -> Result<bool, String>
@@ -230,6 +232,7 @@ where
     // 阶段调用，卡住会让 worker 永远起不来。request_answers 等待用户
     // 输入 MFA，不加 timeout。
     let mut password_used = false;
+    let mut otp_used = false;
     let mut allow_password_autofill = mode == KeyboardInteractiveMode::PasswordFallback;
     let mut challenge_round = 0;
     let mut restart_count = 0;
@@ -299,10 +302,20 @@ where
                         .collect(),
                 };
                 let mut answers = vec![String::new(); current.prompts.len()];
+                let mut matches = current.prompts.iter().enumerate().filter(|(_, prompt)| {
+                    crate::services::totp::is_otp_prompt(&prompt.prompt, otp_prompt)
+                });
+                let otp_index = matches
+                    .next()
+                    .map(|(index, _)| index)
+                    .filter(|_| matches.next().is_none())
+                    .filter(|_| !otp_used && otp_secret.is_some());
                 let mut pending_indexes = Vec::new();
                 let mut pending_prompts = Vec::new();
                 for (index, prompt) in current.prompts.iter().enumerate() {
-                    if allow_password_autofill
+                    if otp_index == Some(index) {
+                        otp_used = true;
+                    } else if allow_password_autofill
                         && !password_used
                         && password.is_some()
                         && is_password_prompt(&prompt.prompt)
@@ -334,6 +347,11 @@ where
                     }
                 }
 
+                if let Some(index) = otp_index {
+                    // Generate after human answers so another prompt cannot age the code out.
+                    answers[index] =
+                        crate::services::totp::generate(otp_secret.unwrap_or_default())?;
+                }
                 wait_for_ssh_stage(
                     "SSH keyboard-interactive respond",
                     SSH_PASSWORD_AUTH_TIMEOUT,

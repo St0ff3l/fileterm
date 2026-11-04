@@ -69,8 +69,8 @@ SSH-over-`direct-tcpip` 通道可承载各跳之间的 SSH 流量。
 - `apps/tauri/src/renderer/features/connections/connection-modal.tsx`
 - `apps/tauri/src/renderer/features/connections/connection-network-section.tsx`
 - `apps/tauri/src/renderer/features/layout/app-main-workspace.tsx` 与 transfer 路径摘要
-- `apps/tauri/src-tauri/src/sessions/ssh/transport/route_tests.rs`
-- `apps/tauri/src/renderer/app/ssh-jump-route.ts` 与 `apps/tauri/tests/ssh-jump-route.test.mjs`
+- `apps/tauri/src-tauri/src/sessions/ssh/transport/tests/route.rs`
+- `apps/tauri/src/renderer/app/ssh-jump-route.ts` 与 `apps/tauri/tests/renderer/ssh-jump-route.test.mjs`
 - `apps/tauri/src-tauri/src/commands/ui_preferences.rs` 与测试连接调用方
 
 已同步 `docs/architecture.md`、`docs/roadmap.md` 和

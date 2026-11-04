@@ -11,6 +11,7 @@ export function ConnectionSshAuthSection({
   connectionDefaults,
   form,
   hasSavedPassword,
+  hasSavedOtpSecret,
   hasSavedSuPassword,
   hasSavedSudoPassword,
   isNetworkDevice,
@@ -21,6 +22,7 @@ export function ConnectionSshAuthSection({
   connectionDefaults: SshConnectionDefaults
   form: CreateProfileInput
   hasSavedPassword: boolean
+  hasSavedOtpSecret: boolean
   hasSavedSuPassword: boolean
   hasSavedSudoPassword: boolean
   isNetworkDevice: boolean
@@ -31,248 +33,342 @@ export function ConnectionSshAuthSection({
   const isKeyboardInteractiveAuth = form.authType === 'keyboard-interactive' || form.authType === 'jumpserver-koko-mfa'
   const isPasswordAuth = form.authType === 'password' || form.authType === 'kubernetes'
   const hasPasswordField = form.type === 'ftp' || isPasswordAuth || isKeyboardInteractiveAuth
+  const usernameHint =
+    form.type !== 'ssh'
+      ? undefined
+      : form.authType === 'sshConfig'
+        ? t.sshConfigUsernamePlaceholder
+        : isPasswordAuth
+          ? t.sshUsernameOnConnectHint
+          : t.sshUsernameRequiredHint
+  const passwordHint =
+    form.type !== 'ssh'
+      ? undefined
+      : form.authType === 'jumpserver-koko-mfa'
+        ? t.sshKokoPasswordHint
+        : isKeyboardInteractiveAuth
+          ? t.sshKeyboardPasswordHint
+          : isPasswordAuth
+            ? effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
+              ? t.useEmptyPasswordHint
+              : t.sshPasswordOnConnectHint
+            : undefined
+
+  const usernameAnnotation =
+    form.type !== 'ssh'
+      ? undefined
+      : form.authType === 'sshConfig'
+        ? t.sshConfigUsernameAnnotation
+        : isPasswordAuth
+          ? t.sshCredentialAskAnnotation
+          : t.sshCredentialRequiredAnnotation
+  const passwordAnnotation = !passwordHint
+    ? undefined
+    : isPasswordAuth && effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
+      ? t.sshEmptyPasswordAnnotation
+      : hasSavedPassword && form.password !== null
+        ? t.sshSavedPasswordAnnotation
+        : form.authType === 'jumpserver-koko-mfa'
+          ? t.sshCredentialRequiredAnnotation
+          : isKeyboardInteractiveAuth
+            ? t.sshKeyboardPasswordAnnotation
+            : t.sshCredentialAskAnnotation
 
   return (
-    <fieldset className="ssh-fieldset">
-      <legend>{t.auth}</legend>
-      <div className="ssh-grid ssh-grid-auth">
-        {form.type === 'ssh' && form.authType !== 'sshConfig' ? (
-          <label className="span-2">
-            {t.method}:
-            <DropdownSelect
-              value={form.authType ?? 'password'}
-              options={[
-                { value: 'password', label: t.password },
-                { value: 'privateKey', label: t.privateKey },
-                { value: 'keyboard-interactive', label: t.keyboardInteractiveAuth },
-                { value: 'jumpserver-koko-mfa', label: t.jumpServerKokoMfaAuth },
-                { value: 'kubernetes', label: t.kubernetesAuth },
-                { value: 'system', label: t.systemSshAuth }
-              ]}
-              onChange={(value) => setForm((prev) => ({ ...prev, authType: value as CreateProfileInput['authType'] }))}
-            />
-          </label>
-        ) : null}
-        {form.type !== 'telnet' && form.type !== 'serial' ? (
-          <div className={`ssh-form-field${hasPasswordField ? '' : ' span-2'}`}>
-            <div className="ssh-form-field__header">
-              <label htmlFor="connection-username">{t.username}:</label>
-            </div>
-            <input
-              id="connection-username"
-              autoComplete="username"
-              spellCheck={false}
-              placeholder={
-                form.type === 'ssh' && form.authType === 'sshConfig'
-                  ? t.sshConfigUsernamePlaceholder
-                  : t.usernamePlaceholder
-              }
-              value={form.username}
-              onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
-            />
-          </div>
-        ) : null}
-        {hasPasswordField ? (
-          <ConnectionSecretField
-            id="connection-password"
-            label={t.password}
-            value={form.password}
-            hasSavedValue={hasSavedPassword}
-            canClear={mode === 'edit'}
-            disabled={
-              form.type === 'ssh' &&
-              isPasswordAuth &&
-              effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
-            }
-            onChange={(value) =>
-              setForm((prev) => ({
-                ...prev,
-                password: value,
-                useEmptyPassword: value ? false : prev.useEmptyPassword
-              }))
-            }
-            onClear={() => setForm((prev) => ({ ...prev, password: null, useEmptyPassword: false }))}
-            onUndo={() => setForm((prev) => ({ ...prev, password: '' }))}
-          />
-        ) : null}
-        {form.type === 'ssh' && form.authType === 'privateKey' ? (
-          <SshPrivateKeyField
-            privateKeyId={form.privateKeyId}
-            privateKeyPath={form.privateKeyPath}
-            onChange={(privateKeyId) =>
-              setForm((previous) => ({
-                ...previous,
-                privateKeyId: privateKeyId || undefined,
-                privateKeyPath: privateKeyId ? undefined : previous.privateKeyPath
-              }))
-            }
-          />
-        ) : null}
-        {form.type === 'ssh' && form.authType === 'sshConfig' ? (
-          <div className="span-2 ssh-auth-hint">
-            <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
-            <div className="ssh-auth-hint__content">
-              <div className="ssh-auth-hint__item">{t.sshConfigAuthHint}</div>
-            </div>
-          </div>
-        ) : null}
-        {form.type === 'ssh' && (isKeyboardInteractiveAuth || form.authType === 'kubernetes') ? (
-          <div className="span-2 ssh-auth-hint">
-            <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
-            <div className="ssh-auth-hint__content">
-              {isKeyboardInteractiveAuth ? (
-                <div className="ssh-auth-hint__item">{t.keyboardInteractiveHint}</div>
-              ) : null}
-              {form.authType === 'jumpserver-koko-mfa' ? (
-                <div className="ssh-auth-hint__item">
-                  <div className="ssh-auth-hint__line">
-                    <span className="ssh-auth-hint__lead">{t.jumpServerRuleTitle}</span>
-                    <span>{t.jumpServerHostDesc} </span>
-                    <code className="ssh-auth-hint__code">{t.jumpServerUsernameFormat}</code>
-                    <span className="ssh-auth-hint__subtle"> {t.jumpServerSuffixNote}</span>
-                  </div>
-                  <div className="ssh-auth-hint__example">
-                    <span className="ssh-auth-hint__example-tag">{t.jumpServerExamplePrefix}</span>
-                    <code className="ssh-auth-hint__code">{t.jumpServerExampleHost}</code>
-                    <span className="ssh-auth-hint__example-sep">;</span>
-                    <code className="ssh-auth-hint__code">{t.jumpServerExampleUser}</code>
-                  </div>
-                </div>
-              ) : null}
-              {form.authType === 'kubernetes' ? (
-                <div className="ssh-auth-hint__item">
-                  <div className="ssh-auth-hint__line">
-                    <span className="ssh-auth-hint__lead">{t.kubernetesModeLead}</span>
-                    <span>{t.kubernetesRulePrefix} </span>
-                    <code className="ssh-auth-hint__code">{t.kubernetesCommandFormat}</code>
-                    <span> {t.kubernetesRuleSuffix}</span>
-                  </div>
-                  <div className="ssh-auth-hint__subtle">{t.kubernetesAuxiliaryNote}</div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ) : form.type === 'ftp' ? (
-          <>
-            <div className="ssh-form-field">
-              <div className="ssh-form-field__header">
-                <label htmlFor="connection-ftp-security">{t.ftpSecurityMode}:</label>
-              </div>
+    <>
+      <fieldset className="ssh-fieldset">
+        <legend>{t.auth}</legend>
+        <div className="ssh-grid ssh-grid-auth">
+          {form.type === 'ssh' && form.authType !== 'sshConfig' ? (
+            <label className="span-2">
+              {t.method}:
               <DropdownSelect
-                id="connection-ftp-security"
-                value={form.securityMode ?? (form.secure ? 'explicit' : 'none')}
+                value={form.authType ?? 'password'}
                 options={[
-                  { value: 'none', label: t.ftpSecurityNone },
-                  { value: 'explicit', label: t.ftpSecurityExplicit },
-                  { value: 'implicit', label: t.ftpSecurityImplicit }
-                ]}
-                onChange={(value) => {
-                  const securityMode = value as FtpSecurityMode
-                  setForm((prev) => ({
-                    ...prev,
-                    securityMode,
-                    secure: securityMode !== 'none',
-                    certificateFingerprint: securityMode === 'none' ? '' : prev.certificateFingerprint,
-                    port:
-                      securityMode === 'implicit' && prev.port === 21
-                        ? 990
-                        : securityMode !== 'implicit' && prev.port === 990
-                          ? 21
-                          : prev.port
-                  }))
-                }}
-              />
-            </div>
-            <div className="ssh-form-field">
-              <div className="ssh-form-field__header">
-                <label htmlFor="connection-ftp-transfer-mode">{t.ftpTransferMode}:</label>
-              </div>
-              <DropdownSelect
-                id="connection-ftp-transfer-mode"
-                value={form.transferMode ?? 'passive'}
-                options={[
-                  { value: 'passive', label: t.ftpTransferPassive },
-                  { value: 'active', label: t.ftpTransferActive }
+                  { value: 'password', label: t.password },
+                  { value: 'privateKey', label: t.privateKey },
+                  { value: 'keyboard-interactive', label: t.keyboardInteractiveAuth },
+                  { value: 'jumpserver-koko-mfa', label: t.jumpServerKokoMfaAuth },
+                  { value: 'kubernetes', label: t.kubernetesAuth },
+                  { value: 'system', label: t.systemSshAuth }
                 ]}
                 onChange={(value) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    transferMode: value as CreateProfileInput['transferMode']
-                  }))
+                  setForm((prev) => ({ ...prev, authType: value as CreateProfileInput['authType'] }))
                 }
               />
-            </div>
-            <div className="span-2 ssh-field-hint">{t.ftpTransferModeHint}</div>
-            {form.securityMode !== 'none' ? (
-              <div className="span-2 ssh-form-field">
-                <div className="ssh-form-field__header">
-                  <label htmlFor="connection-ftp-certificate-fingerprint">{t.ftpCertificateFingerprint}:</label>
-                </div>
-                <input
-                  id="connection-ftp-certificate-fingerprint"
-                  value={form.certificateFingerprint ?? ''}
-                  placeholder="sha256:..."
-                  onChange={(event) => setForm((prev) => ({ ...prev, certificateFingerprint: event.target.value }))}
-                />
-                <div className="ssh-field-hint">{t.ftpCertificateFingerprintHint}</div>
+            </label>
+          ) : null}
+          {form.type !== 'telnet' && form.type !== 'serial' ? (
+            <div className={`ssh-form-field${hasPasswordField ? '' : ' span-2'}`}>
+              <div className="ssh-form-field__header">
+                <label htmlFor="connection-username">
+                  {t.username}
+                  {usernameAnnotation ? (
+                    <span
+                      className="ssh-secret-field__optional"
+                      id="connection-username-annotation"
+                      title={usernameHint}
+                    >
+                      {usernameAnnotation}
+                    </span>
+                  ) : null}
+                  :
+                </label>
               </div>
-            ) : null}
+              <input
+                id="connection-username"
+                aria-describedby={usernameAnnotation ? 'connection-username-annotation' : undefined}
+                autoComplete="username"
+                spellCheck={false}
+                placeholder={
+                  form.type === 'ssh' && form.authType === 'sshConfig'
+                    ? t.sshConfigUsernamePlaceholder
+                    : t.usernamePlaceholder
+                }
+                value={form.username}
+                onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
+              />
+            </div>
+          ) : null}
+          {hasPasswordField ? (
+            <ConnectionSecretField
+              id="connection-password"
+              annotation={passwordAnnotation}
+              annotationTitle={passwordHint}
+              label={t.password}
+              value={form.password}
+              hasSavedValue={hasSavedPassword}
+              canClear={mode === 'edit'}
+              disabled={
+                form.type === 'ssh' &&
+                isPasswordAuth &&
+                effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
+              }
+              onChange={(value) =>
+                setForm((prev) => ({
+                  ...prev,
+                  password: value,
+                  useEmptyPassword: value ? false : prev.useEmptyPassword
+                }))
+              }
+              onClear={() => setForm((prev) => ({ ...prev, password: null, useEmptyPassword: false }))}
+              onUndo={() => setForm((prev) => ({ ...prev, password: '' }))}
+            />
+          ) : null}
+          {form.type === 'ssh' && form.authType === 'privateKey' ? (
+            <SshPrivateKeyField
+              privateKeyId={form.privateKeyId}
+              privateKeyPath={form.privateKeyPath}
+              onChange={(privateKeyId) =>
+                setForm((previous) => ({
+                  ...previous,
+                  privateKeyId: privateKeyId || undefined,
+                  privateKeyPath: privateKeyId ? undefined : previous.privateKeyPath
+                }))
+              }
+            />
+          ) : null}
+          {form.type === 'ssh' && form.authType === 'sshConfig' ? (
             <div className="span-2 ssh-auth-hint">
               <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
               <div className="ssh-auth-hint__content">
-                <div className="ssh-auth-hint__item">{t.ftpAuthHint}</div>
+                <div className="ssh-auth-hint__item">{t.sshConfigAuthHint}</div>
               </div>
             </div>
-          </>
-        ) : null}
-        {form.type === 'ssh' && !isNetworkDevice ? (
-          <>
-            <ConnectionSecretField
-              id="connection-sudo-password"
-              label={t.sudoPassword}
-              value={form.sudoPassword}
-              hasSavedValue={hasSavedSudoPassword}
-              canClear={mode === 'edit'}
-              optional
-              onChange={(value) => setForm((prev) => ({ ...prev, sudoPassword: value }))}
-              onClear={() => setForm((prev) => ({ ...prev, sudoPassword: null }))}
-              onUndo={() => setForm((prev) => ({ ...prev, sudoPassword: '' }))}
-            />
-            <ConnectionSecretField
-              id="connection-su-password"
-              label={t.suPassword}
-              value={form.suPassword}
-              hasSavedValue={hasSavedSuPassword}
-              canClear={mode === 'edit'}
-              optional
-              onChange={(value) => setForm((prev) => ({ ...prev, suPassword: value }))}
-              onClear={() => setForm((prev) => ({ ...prev, suPassword: null }))}
-              onUndo={() => setForm((prev) => ({ ...prev, suPassword: '' }))}
-            />
-          </>
-        ) : null}
-        {form.type === 'ssh' && mode === 'edit' && form.trustedHostFingerprint ? (
-          <div className="span-2 saved-fingerprint-card">
-            <MaterialIcon
-              name="fingerprint"
-              aria-hidden="true"
-              className="material-symbols-outlined saved-fingerprint-card__icon"
-            />
-            <div className="saved-fingerprint-card__content">
-              <strong>{t.savedHostFingerprint}</strong>
-              <p>{t.clearSavedFingerprintHint}</p>
+          ) : null}
+          {form.type === 'ssh' && (isKeyboardInteractiveAuth || form.authType === 'kubernetes') ? (
+            <div className="span-2 ssh-auth-hint">
+              <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
+              <div className="ssh-auth-hint__content">
+                {isKeyboardInteractiveAuth ? (
+                  <div className="ssh-auth-hint__item">{t.keyboardInteractiveHint}</div>
+                ) : null}
+                {form.authType === 'jumpserver-koko-mfa' ? (
+                  <div className="ssh-auth-hint__item">
+                    <div className="ssh-auth-hint__line">
+                      <span className="ssh-auth-hint__lead">{t.jumpServerRuleTitle}</span>
+                      <span>{t.jumpServerHostDesc} </span>
+                      <code className="ssh-auth-hint__code">{t.jumpServerUsernameFormat}</code>
+                      <span className="ssh-auth-hint__subtle"> {t.jumpServerSuffixNote}</span>
+                    </div>
+                    <div className="ssh-auth-hint__example">
+                      <span className="ssh-auth-hint__example-tag">{t.jumpServerExamplePrefix}</span>
+                      <code className="ssh-auth-hint__code">{t.jumpServerExampleHost}</code>
+                      <span className="ssh-auth-hint__example-sep">;</span>
+                      <code className="ssh-auth-hint__code">{t.jumpServerExampleUser}</code>
+                    </div>
+                  </div>
+                ) : null}
+                {form.authType === 'kubernetes' ? (
+                  <div className="ssh-auth-hint__item">
+                    <div className="ssh-auth-hint__line">
+                      <span className="ssh-auth-hint__lead">{t.kubernetesModeLead}</span>
+                      <span>{t.kubernetesRulePrefix} </span>
+                      <code className="ssh-auth-hint__code">{t.kubernetesCommandFormat}</code>
+                      <span> {t.kubernetesRuleSuffix}</span>
+                    </div>
+                    <div className="ssh-auth-hint__subtle">{t.kubernetesAuxiliaryNote}</div>
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <button
-              className="flat-button saved-fingerprint-card__action"
-              onClick={onClearHostFingerprint}
-              type="button"
-            >
-              <MaterialIcon name="restart_alt" aria-hidden="true" className="material-symbols-outlined" />
-              {t.clearSavedFingerprint}
-            </button>
+          ) : form.type === 'ftp' ? (
+            <>
+              <div className="ssh-form-field">
+                <div className="ssh-form-field__header">
+                  <label htmlFor="connection-ftp-security">{t.ftpSecurityMode}:</label>
+                </div>
+                <DropdownSelect
+                  id="connection-ftp-security"
+                  value={form.securityMode ?? (form.secure ? 'explicit' : 'none')}
+                  options={[
+                    { value: 'none', label: t.ftpSecurityNone },
+                    { value: 'explicit', label: t.ftpSecurityExplicit },
+                    { value: 'implicit', label: t.ftpSecurityImplicit }
+                  ]}
+                  onChange={(value) => {
+                    const securityMode = value as FtpSecurityMode
+                    setForm((prev) => ({
+                      ...prev,
+                      securityMode,
+                      secure: securityMode !== 'none',
+                      certificateFingerprint: securityMode === 'none' ? '' : prev.certificateFingerprint,
+                      port:
+                        securityMode === 'implicit' && prev.port === 21
+                          ? 990
+                          : securityMode !== 'implicit' && prev.port === 990
+                            ? 21
+                            : prev.port
+                    }))
+                  }}
+                />
+              </div>
+              <div className="ssh-form-field">
+                <div className="ssh-form-field__header">
+                  <label htmlFor="connection-ftp-transfer-mode">{t.ftpTransferMode}:</label>
+                </div>
+                <DropdownSelect
+                  id="connection-ftp-transfer-mode"
+                  value={form.transferMode ?? 'passive'}
+                  options={[
+                    { value: 'passive', label: t.ftpTransferPassive },
+                    { value: 'active', label: t.ftpTransferActive }
+                  ]}
+                  onChange={(value) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      transferMode: value as CreateProfileInput['transferMode']
+                    }))
+                  }
+                />
+              </div>
+              <div className="span-2 ssh-field-hint">{t.ftpTransferModeHint}</div>
+              {form.securityMode !== 'none' ? (
+                <div className="span-2 ssh-form-field">
+                  <div className="ssh-form-field__header">
+                    <label htmlFor="connection-ftp-certificate-fingerprint">{t.ftpCertificateFingerprint}:</label>
+                  </div>
+                  <input
+                    id="connection-ftp-certificate-fingerprint"
+                    value={form.certificateFingerprint ?? ''}
+                    placeholder="sha256:..."
+                    onChange={(event) => setForm((prev) => ({ ...prev, certificateFingerprint: event.target.value }))}
+                  />
+                  <div className="ssh-field-hint">{t.ftpCertificateFingerprintHint}</div>
+                </div>
+              ) : null}
+              <div className="span-2 ssh-auth-hint">
+                <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
+                <div className="ssh-auth-hint__content">
+                  <div className="ssh-auth-hint__item">{t.ftpAuthHint}</div>
+                </div>
+              </div>
+            </>
+          ) : null}
+          {form.type === 'ssh' && !isNetworkDevice ? (
+            <>
+              <ConnectionSecretField
+                id="connection-sudo-password"
+                label={t.sudoPassword}
+                value={form.sudoPassword}
+                hasSavedValue={hasSavedSudoPassword}
+                canClear={mode === 'edit'}
+                optional
+                onChange={(value) => setForm((prev) => ({ ...prev, sudoPassword: value }))}
+                onClear={() => setForm((prev) => ({ ...prev, sudoPassword: null }))}
+                onUndo={() => setForm((prev) => ({ ...prev, sudoPassword: '' }))}
+              />
+              <ConnectionSecretField
+                id="connection-su-password"
+                label={t.suPassword}
+                value={form.suPassword}
+                hasSavedValue={hasSavedSuPassword}
+                canClear={mode === 'edit'}
+                optional
+                onChange={(value) => setForm((prev) => ({ ...prev, suPassword: value }))}
+                onClear={() => setForm((prev) => ({ ...prev, suPassword: null }))}
+                onUndo={() => setForm((prev) => ({ ...prev, suPassword: '' }))}
+              />
+            </>
+          ) : null}
+          {form.type === 'ssh' && mode === 'edit' && form.trustedHostFingerprint ? (
+            <div className="span-2 saved-fingerprint-card">
+              <MaterialIcon
+                name="fingerprint"
+                aria-hidden="true"
+                className="material-symbols-outlined saved-fingerprint-card__icon"
+              />
+              <div className="saved-fingerprint-card__content">
+                <strong>{t.savedHostFingerprint}</strong>
+                <p>{t.clearSavedFingerprintHint}</p>
+              </div>
+              <button
+                className="flat-button saved-fingerprint-card__action"
+                onClick={onClearHostFingerprint}
+                type="button"
+              >
+                <MaterialIcon name="restart_alt" aria-hidden="true" className="material-symbols-outlined" />
+                {t.clearSavedFingerprint}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </fieldset>
+      {form.type === 'ssh' ? (
+        <fieldset className="ssh-fieldset">
+          <legend>{t.sshSecondFactor}</legend>
+          <div className="ssh-grid ssh-grid-auth">
+            <ConnectionSecretField
+              id="connection-otp-secret"
+              label={t.otpSecret}
+              value={form.otpSecret}
+              hasSavedValue={hasSavedOtpSecret}
+              canClear={mode === 'edit'}
+              fullWidth
+              optional
+              onChange={(value) => setForm((prev) => ({ ...prev, otpSecret: value }))}
+              onClear={() => setForm((prev) => ({ ...prev, otpSecret: null }))}
+              onUndo={() => setForm((prev) => ({ ...prev, otpSecret: '' }))}
+            />
+            <div className="ssh-form-field span-2">
+              <div className="ssh-form-field__header">
+                <label htmlFor="connection-otp-prompt">
+                  {t.otpPrompt}
+                  <span className="ssh-secret-field__optional">{t.optionalField}</span>:
+                </label>
+              </div>
+              <input
+                id="connection-otp-prompt"
+                value={form.otpPrompt ?? ''}
+                placeholder={t.otpPromptPlaceholder}
+                maxLength={128}
+                onChange={(event) => setForm((prev) => ({ ...prev, otpPrompt: event.target.value }))}
+              />
+            </div>
+            <div className="span-2 ssh-field-hint">{t.otpSecretHint}</div>
           </div>
-        ) : null}
-      </div>
-    </fieldset>
+        </fieldset>
+      ) : null}
+    </>
   )
 }

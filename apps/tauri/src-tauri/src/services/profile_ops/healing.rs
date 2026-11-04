@@ -119,6 +119,7 @@ fn profile_contains_secret_fields(profile: &Value) -> bool {
         "proxyPassword",
         "sudoPassword",
         "suPassword",
+        "otpSecret",
     ]
     .iter()
     .any(|field| profile.get(*field).is_some_and(|value| !value.is_null()))
@@ -138,6 +139,7 @@ fn strip_secret_fields(profile: &Value) -> Value {
             "proxyPassword",
             "sudoPassword",
             "suPassword",
+            "otpSecret",
         ] {
             obj.remove(key);
         }
@@ -172,6 +174,10 @@ pub fn strip_secret_fields_public(profile: &Value) -> Value {
         .get("suPassword")
         .and_then(Value::as_str)
         .is_some_and(|password| !password.is_empty());
+    let has_saved_otp_secret = profile
+        .get("otpSecret")
+        .and_then(Value::as_str)
+        .is_some_and(|secret| !secret.is_empty());
     let mut public = strip_secret_fields(profile);
     if let Some(object) = public.as_object_mut() {
         object.insert(
@@ -185,6 +191,10 @@ pub fn strip_secret_fields_public(profile: &Value) -> Value {
         object.insert(
             "hasSavedSuPassword".to_string(),
             Value::Bool(has_saved_su_password),
+        );
+        object.insert(
+            "hasSavedOtpSecret".to_string(),
+            Value::Bool(has_saved_otp_secret),
         );
     }
     public
@@ -213,6 +223,7 @@ fn normalize_profile_secret_input(
         "privateKeyPath",
         "sudoPassword",
         "suPassword",
+        "otpSecret",
     ] {
         if key == "password" && use_empty_password {
             if profile.remove(key).is_some() {
@@ -369,6 +380,7 @@ pub fn profile_for_connection_test(
         object.insert("id".to_string(), Value::String(profile_id.to_string()));
     }
     preserve_trusted_host_fingerprint(object, previous.as_ref());
+    crate::services::totp::validate_profile(object)?;
     normalize_profile_secret_input(object, previous.as_ref());
     Ok(profile)
 }

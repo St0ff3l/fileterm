@@ -20,7 +20,7 @@
 
 ## 验证
 
-- `node --test apps/tauri/tests/upload-batch.test.mjs`：3 项通过，覆盖首项/中项失败后继续、路径去重、末项失败保留快照、全失败和空批次。
+- `node --test apps/tauri/tests/renderer/upload-batch.test.mjs`：3 项通过，覆盖首项/中项失败后继续、路径去重、末项失败保留快照、全失败和空批次。
 - `npm run test:tauri`：610 个单元测试、10 个 CLI 集成测试和 21 个契约测试通过。
 - 新增空目录保留、扫描失败携带路径的 Rust 用例，与原有嵌套/隐藏文件、符号链接拒绝用例一同针对性回归。
 - 类型检查、ESLint、Prettier、Clippy 通过。

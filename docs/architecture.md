@@ -31,6 +31,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - SSH 会话连接
 - SSH shell 输出接入
 - SSH keyboard-interactive/MFA、SOCKS5/HTTP outbound proxy、多级 Jump Host（最多 8 个跳板） 与运行时 `-L/-R/-D` tunnel service；隧道运行状态归属具体 workspace tab，断线自动回收。
+- SSH 连接可保存 Base32 OTP 密钥与可选提示识别文本，通过 keyboard-interactive 自动提交标准 TOTP（SHA-1、6 位、30 秒）；每次认证最多自动提交一次，重复/不明确的提示保持手动输入。密钥复用 `profile-secrets.json` 加密凭据存储，公开快照只暴露 `hasSavedOtpSecret`。
 - SSH 私钥库：私钥、元数据和可选口令分离存储；连接 profile 仅保存 `privateKeyId`，口令交互通过 `ssh:interaction` 返回 renderer。
 - SSH 私钥导入同时支持文件和临时文本输入；文本只在导入弹窗与一次 IPC 调用期间存在，不进入 profile、workspace snapshot 或日志。
 - SSH 密码认证缺少凭据时，登录补全弹窗可显式改用密钥库私钥；响应仅传递密钥 ID，私钥解析与口令交互仍由 Rust 完成，选择只作用于本次连接。Kubernetes 模式保持密码认证。
@@ -747,7 +748,7 @@ tokens -> theme vars -> component skins -> terminal colors
 - **存储策略已明确**：连接配置与密码仍采用文件型明文存储；SSH 私钥库则将 profile 引用、私钥原文和可选口令分离到独立文件，但不引入 `safeStorage`、系统钥匙串或密文存储层。详见第 12 节。该策略是有意为之，非待办债务。
 - **系统指标多平台覆盖**：Tauri 位于 `apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs`，由 exec、parser 和平台 command builder 片段组成，以 Rust service 测试和三平台 CI 验收。
 - **Rust/Tauri 测试**：以 Rust unit/integration/contract test、协议夹具和发行候选清单为准；历史 controller 测试不再是门禁。
-- **renderer 组件测试**：当前测试集中在 Rust service 与协议领域逻辑，UI 组件与交互暂无自动化覆盖，可作为下一步补充。
+- **renderer 组件测试**：Renderer 逻辑测试、浏览器验证和构建检查分开运行，入口与夹具归属见[测试目录](../tests/README.md)。
 
 建议进入小步迭代阶段：不再做大规模结构拆分，而是围绕安全专项、平台扩展和测试厚度持续巩固。
 

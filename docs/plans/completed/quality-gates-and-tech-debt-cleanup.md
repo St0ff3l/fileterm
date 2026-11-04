@@ -21,7 +21,7 @@
 - 提交代码时 pre-commit 自动 prettier + eslint --fix，pre-push 自动 typecheck。
 - SSH session 实现中的未类型化字段访问全部消除，对应状态由当前 Rust 模块明确维护。
 - 渲染端 6 处 `any` prop 替换为具体类型。
-- `services/profile_ops/tests.rs` 的 group/parentId 自愈逻辑、`services/workspace/tests.rs` 的终端事件转发有单测覆盖。
+- `services/profile_ops/tests/mod.rs` 的 group/parentId 自愈逻辑、`services/workspace/tests/mod.rs` 的终端事件转发有单测覆盖。
 
 ---
 
@@ -213,13 +213,13 @@
 
 **第一批（最高优先，纯逻辑易测）**：
 
-1. `apps/tauri/src-tauri/src/services/profile_ops/tests.rs`
+1. `apps/tauri/src-tauri/src/services/profile_ops/tests/mod.rs`
    - 覆盖 profile 操作的 group/parentId 双向自愈：
      - create profile 时按 folder.name 反查 parentId（:88-92）
      - folder 重命名级联更新子 profile 的 group（:196）
      - folder 删除时子 profile parentId/group 回退上级（:206-226）
      - 用临时目录 mock 文件存储，验证 CRUD 后的 parentId/group 一致性。
-2. `apps/tauri/src-tauri/src/services/workspace/tests.rs`
+2. `apps/tauri/src-tauri/src/services/workspace/tests/mod.rs`
    - 覆盖 workspace state 的终端事件顺序、合并和生命周期逻辑。
    - 验证：高频写入被合并、flush 后缓冲清空、定时器生命周期。
 

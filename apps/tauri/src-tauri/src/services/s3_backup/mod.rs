@@ -82,4 +82,4 @@ struct ObjectTarget {
 include!("config.rs");
 include!("signing.rs");
 include!("sync.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

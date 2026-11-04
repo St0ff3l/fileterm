@@ -17,7 +17,7 @@
 
 ## 验证
 
-- 新增 `apps/tauri/tests/connection-host-trust.test.mjs`：执行生产交互 hook、表单 hook 和保存 handler，mock IPC 与 React 状态边界。12 项回归覆盖新建保存 payload、已保存连接换 key、仅接受一次、取消、过期/失败、重复点击、目标改变、IPv6、跳板机和其他会话隔离。
+- 新增 `apps/tauri/tests/renderer/connection-host-trust.test.mjs`：执行生产交互 hook、表单 hook 和保存 handler，mock IPC 与 React 状态边界。12 项回归覆盖新建保存 payload、已保存连接换 key、仅接受一次、取消、过期/失败、重复点击、目标改变、IPv6、跳板机和其他会话隔离。
 - `npm run test:renderer -w @fileterm/tauri`：21 项通过（含 12 项新增回归）。
 - `npm run typecheck -w @fileterm/tauri`、`npm run lint`、`npx prettier --check apps/tauri packages/core packages/shared packages/storage`：通过。
 - `npm run test:tauri`：675 项通过（644 unit、10 protocol fixture、21 contract）。

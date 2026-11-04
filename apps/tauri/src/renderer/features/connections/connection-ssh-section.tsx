@@ -8,6 +8,7 @@ export function ConnectionSshSection({
   form,
   groupOptions,
   hasSavedPassword,
+  hasSavedOtpSecret,
   hasSavedSuPassword,
   hasSavedSudoPassword,
   isMacOs,
@@ -29,6 +30,7 @@ export function ConnectionSshSection({
   form: CreateProfileInput
   groupOptions: string[]
   hasSavedPassword: boolean
+  hasSavedOtpSecret: boolean
   hasSavedSuPassword: boolean
   hasSavedSudoPassword: boolean
   isMacOs: boolean
@@ -69,6 +71,7 @@ export function ConnectionSshSection({
         connectionDefaults={connectionDefaults}
         form={form}
         hasSavedPassword={hasSavedPassword}
+        hasSavedOtpSecret={hasSavedOtpSecret}
         hasSavedSuPassword={hasSavedSuPassword}
         hasSavedSudoPassword={hasSavedSudoPassword}
         isNetworkDevice={isNetworkDevice}

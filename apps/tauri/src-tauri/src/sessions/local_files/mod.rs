@@ -73,4 +73,4 @@ include!("directory.rs");
 include!("file_operations.rs");
 include!("copy_safety.rs");
 include!("dialogs.rs");
-include!("tests.rs");
+include!("tests/mod.rs");
