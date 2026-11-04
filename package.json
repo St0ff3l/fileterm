@@ -1,6 +1,6 @@
 {
   "name": "fileterm",
-  "version": "2.3.3",
+  "version": "2.3.4-beta.1",
   "private": true,
   "license": "MIT",
   "description": "Modern remote workspace for SSH, SFTP, and FTP.",
@@ -12,6 +12,7 @@
     "dev": "npm run dev:tauri",
     "dev:tauri": "node ./scripts/workspace-run.mjs dev apps/tauri",
     "lint": "eslint apps/tauri packages/core packages/shared packages/storage --max-warnings=0",
+    "lint:md": "markdownlint-cli2",
     "lint:fix": "eslint apps/tauri packages/core packages/shared packages/storage --fix --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -54,6 +55,7 @@
     "globals": "^16.5.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
+    "markdownlint-cli2": "^0.24.0",
     "prettier": "^3.9.5"
   }
 }
