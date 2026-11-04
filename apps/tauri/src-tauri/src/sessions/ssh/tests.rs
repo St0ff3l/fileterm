@@ -3351,7 +3351,7 @@ mod tests {
         assert_eq!(output.skipped_bytes, 0);
     }
 
-    include!("authentication/otp_tests.rs");
+    include!("tests/otp.rs");
     include!("transport/route_tests.rs");
     include!("transport/ssh_config_route_tests.rs");
 }
