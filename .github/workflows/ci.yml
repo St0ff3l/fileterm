@@ -47,6 +47,9 @@ jobs:
       - name: Test renderer operation logic
         run: npm run test:renderer -w @fileterm/tauri
 
+      - name: Test build and package checks
+        run: npm run test:build -w @fileterm/tauri
+
       - name: Exercise AI Copilot fixture smoke
         run: npm run qa:ai-copilot-fixture-smoke
 
@@ -160,7 +163,7 @@ jobs:
       - name: Exercise local ConPTY lifecycle without desktop runtime DLLs
         if: runner.os == 'Windows'
         timeout-minutes: 5
-        run: cargo test --manifest-path .github/fixtures/tauri-local-pty/Cargo.toml --locked -- --nocapture
+        run: cargo test --manifest-path tests/ci/tauri-local-pty/Cargo.toml --locked -- --nocapture
 
       - name: Verify direct Telnet socket release
         if: runner.os != 'Windows'
@@ -169,12 +172,12 @@ jobs:
 
       - name: Verify direct Telnet socket release without desktop runtime DLLs
         if: runner.os == 'Windows'
-        run: cargo test --manifest-path .github/fixtures/tauri-socket-lifecycle/Cargo.toml --locked
+        run: cargo test --manifest-path tests/ci/tauri-socket-lifecycle/Cargo.toml --locked
 
       - name: Exercise bounded Windows scheduler diagnostics without desktop runtime DLLs
         if: runner.os == 'Windows'
         timeout-minutes: 5
-        run: cargo test --manifest-path .github/fixtures/tauri-windows-scheduler/Cargo.toml --locked --features windows-scheduler-fixture -- --test-threads=1
+        run: cargo test --manifest-path tests/ci/tauri-windows-scheduler/Cargo.toml --locked --features windows-scheduler-fixture -- --test-threads=1
 
   tauri-package-smoke:
     name: Tauri unsigned package smoke (${{ matrix.platform }})
@@ -288,11 +291,11 @@ jobs:
           dock_plugin="$app_bundle/Contents/PlugIns/FileTermDockTile.docktileplugin"
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSDockTilePlugIn' "$app_bundle/Contents/Info.plist")" = "FileTermDockTile.docktileplugin"
           codesign --verify --deep --strict "$dock_plugin"
-          xcrun clang -fobjc-arc -framework AppKit apps/tauri/src-tauri/macos-dock-tile/tests/lifecycle.m -o "$RUNNER_TEMP/fileterm-dock-tile-test"
+          xcrun clang -fobjc-arc -framework AppKit tests/ci/macos-dock-tile/lifecycle.m -o "$RUNNER_TEMP/fileterm-dock-tile-test"
           "$RUNNER_TEMP/fileterm-dock-tile-test" "$dock_plugin"
           cmp apps/tauri/src-tauri/icons/app/macos/icon.icns "$app_bundle/Contents/Resources/icon.icns"
           "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm" mcp --help
-          node ./scripts/mcp-stdio-smoke.mjs "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm"
+          node ./tests/ci/mcp-stdio-smoke.mjs "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm"
 
       - name: Verify macOS DMG Finder layout
         if: matrix.platform == 'macos'
@@ -316,7 +319,7 @@ jobs:
           $binary = 'apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/fileterm.exe'
           if (-not (Test-Path -LiteralPath $binary)) { throw 'Release Windows CLI binary was not generated.' }
           & $binary mcp --help
-          node ./scripts/mcp-stdio-smoke.mjs $binary
+          node ./tests/ci/mcp-stdio-smoke.mjs $binary
 
       - name: Verify Linux package
         if: startsWith(matrix.platform, 'linux')
@@ -344,7 +347,7 @@ jobs:
           binary="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/fileterm"
           test -x "$binary"
           "$binary" mcp --help
-          node ./scripts/mcp-stdio-smoke.mjs "$binary"
+          node ./tests/ci/mcp-stdio-smoke.mjs "$binary"
 
       - name: Stage DEB input for Arch package smoke
         if: startsWith(matrix.platform, 'linux')

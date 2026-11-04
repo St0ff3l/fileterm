@@ -131,4 +131,4 @@ include!("chat_runtime.rs");
 include!("prompt.rs");
 include!("stream.rs");
 include!("provider_transport.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

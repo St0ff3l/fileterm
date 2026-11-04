@@ -8,7 +8,7 @@
 
 ```bash
 cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml --locked --lib otp -- --test-threads=1
-node --test apps/tauri/tests/ssh-otp-settings.test.mjs
+node --test apps/tauri/tests/renderer/ssh-otp-settings.test.mjs
 ```
 
 覆盖 RFC 6238 标准向量、周期切换、密钥格式校验、编辑时保留/替换/清除、日志脱敏及真实本地 SSH 握手。SSH 夹具验证正确密钥自动通过、错误密钥拒绝、重复提示转手动、未保存密钥转手动、短信提示转手动、自定义识别文本、多个匹配提示转手动。加密落盘与快照脱敏的回归另在 `profile_ops` 测试中覆盖，运行 `npm run test:tauri` 可一并检查。

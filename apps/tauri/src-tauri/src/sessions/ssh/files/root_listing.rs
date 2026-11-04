@@ -147,4 +147,5 @@ fn parse_root_file_list(output: &str, path: &str) -> Vec<Value> {
 }
 
 #[cfg(test)]
-include!("root_listing_tests.rs");
+#[path = "tests/root_listing.rs"]
+mod root_listing_compatibility_tests;

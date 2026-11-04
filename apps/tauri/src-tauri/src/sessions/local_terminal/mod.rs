@@ -34,4 +34,4 @@ include!("shell.rs");
 include!("terminal_output.rs");
 include!("process.rs");
 include!("worker.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

@@ -52,4 +52,4 @@ use super::reconnect::ReconnectPolicy;
 include!("device.rs");
 include!("worker.rs");
 include!("reconnect.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

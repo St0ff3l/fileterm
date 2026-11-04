@@ -36,4 +36,4 @@ mod health;
 mod terminal_output;
 pub use health::augment_renderer_health;
 use terminal_output::TerminalOutputSubscription;
-include!("tests.rs");
+include!("tests/mod.rs");

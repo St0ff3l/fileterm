@@ -57,6 +57,5 @@ fn build_ssh_algorithm_config(
 }
 
 #[cfg(test)]
-mod legacy_gex_tests {
-    include!("algorithms_tests.rs");
-}
+#[path = "tests/algorithms.rs"]
+mod legacy_gex_tests;

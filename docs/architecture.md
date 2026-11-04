@@ -748,7 +748,7 @@ tokens -> theme vars -> component skins -> terminal colors
 - **存储策略已明确**：连接配置与密码仍采用文件型明文存储；SSH 私钥库则将 profile 引用、私钥原文和可选口令分离到独立文件，但不引入 `safeStorage`、系统钥匙串或密文存储层。详见第 12 节。该策略是有意为之，非待办债务。
 - **系统指标多平台覆盖**：Tauri 位于 `apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs`，由 exec、parser 和平台 command builder 片段组成，以 Rust service 测试和三平台 CI 验收。
 - **Rust/Tauri 测试**：以 Rust unit/integration/contract test、协议夹具和发行候选清单为准；历史 controller 测试不再是门禁。
-- **renderer 组件测试**：当前测试集中在 Rust service 与协议领域逻辑，UI 组件与交互暂无自动化覆盖，可作为下一步补充。
+- **renderer 组件测试**：Renderer 逻辑测试、浏览器验证和构建检查分开运行，入口与夹具归属见[测试目录](../tests/README.md)。
 
 建议进入小步迭代阶段：不再做大规模结构拆分，而是围绕安全专项、平台扩展和测试厚度持续巩固。
 

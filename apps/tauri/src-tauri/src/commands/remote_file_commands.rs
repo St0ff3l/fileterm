@@ -84,23 +84,6 @@ fn apply_remote_mutation_listing(
     }
 }
 
-#[cfg(test)]
-mod independent_mutation_listing_tests {
-    use super::*;
-    #[test]
-    fn modifying_an_independent_directory_or_navigating_during_refresh_keeps_the_visible_listing() {
-        let old = vec![serde_json::json!({"name":"visible-file"})];
-        let incoming = vec![serde_json::json!({"name":"transfer-file"})];
-        let mut files = old.clone();
-        apply_remote_mutation_listing("/terminal", "/transfer", &mut files, incoming.clone());
-        assert_eq!(files, old);
-        apply_remote_mutation_listing("/navigated", "/terminal", &mut files, incoming.clone());
-        assert_eq!(files, old);
-        apply_remote_mutation_listing("/terminal/", "/terminal", &mut files, incoming.clone());
-        assert_eq!(files, incoming);
-    }
-}
-
 #[tauri::command]
 pub async fn app_list_remote_directory(
     app: AppHandle,
@@ -574,30 +557,8 @@ pub async fn app_set_remote_file_access_mode(
 }
 
 #[cfg(test)]
-mod remote_name_tests {
-    use super::{remote_parent_path, validate_remote_name};
-
-    #[test]
-    fn remote_name_operations_cannot_escape_the_parent_directory() {
-        for name in [
-            "",
-            ".",
-            "..",
-            "../outside",
-            "nested/file",
-            "bad\0name",
-            "line\nfeed",
-        ] {
-            assert!(validate_remote_name(name).is_err(), "{name:?}");
-        }
-        assert!(validate_remote_name("safe name.txt").is_ok());
-        assert!(validate_remote_name(r"literal\name").is_ok());
-    }
-
-    #[test]
-    fn remote_parent_paths_ignore_host_platform_separators() {
-        assert_eq!(remote_parent_path("/srv/literal\\name"), "/srv");
-        assert_eq!(remote_parent_path("/srv/dir/file"), "/srv/dir");
-        assert_eq!(remote_parent_path("file"), "/");
-    }
-}
+#[path = "tests/independent_mutation_listing_tests.rs"]
+mod independent_mutation_listing_tests;
+#[cfg(test)]
+#[path = "tests/remote_name_tests.rs"]
+mod remote_name_tests;

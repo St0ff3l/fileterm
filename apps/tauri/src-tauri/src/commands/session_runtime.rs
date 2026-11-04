@@ -442,26 +442,6 @@ fn create_tab_layout(profile: &serde_json::Value) -> String {
     }
 }
 
-#[cfg(test)]
-mod tab_layout_tests {
-    use super::create_tab_layout;
-
-    #[test]
-    fn network_device_ssh_profiles_start_with_terminal_only_layout() {
-        assert_eq!(
-            create_tab_layout(&serde_json::json!({
-                "type": "ssh",
-                "deviceMode": "network-device"
-            })),
-            "terminal-only"
-        );
-        assert_eq!(
-            create_tab_layout(&serde_json::json!({ "type": "ssh" })),
-            "terminal-file"
-        );
-    }
-}
-
 fn start_session_worker(
     tab_id: String,
     profile: serde_json::Value,
@@ -616,3 +596,7 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
     }
     crate::services::session_logs::shutdown(&state).await;
 }
+
+#[cfg(test)]
+#[path = "tests/tab_layout_tests.rs"]
+mod tab_layout_tests;

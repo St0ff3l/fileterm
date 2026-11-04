@@ -33,7 +33,7 @@
 
 `styles/features/session.css` 和各主题 skin 继续维护终端布局、选区颜色与自定义滚动条的样式契约；与字形测量有关的排版修正在本目录的 `xterm-compat.css`。
 
-单元测试在 `apps/tauri/tests/terminal-*.test.mjs`；真实 xterm 的字体、字宽、符号、框线和鼠标选区回归在 `apps/tauri/tests/browser/terminal-*.mjs`。这些 fixture 直接加载生产模块，移动文件时须同步路径。
+单元测试在 `apps/tauri/tests/renderer/terminal-*.test.mjs`；真实 xterm 的字体、字宽、符号、框线和鼠标选区回归在 `apps/tauri/tests/browser/terminal-*.mjs`。这些 fixture 直接加载生产模块，移动文件时须同步路径。
 
 `node apps/tauri/tests/browser/terminal-webgl-glyph-layouts.mjs` 扩展检查 10 档倍率、7 种单窗/分屏布局、4 种字体和 8–28px 全部整数档位，另含超范围字号、主题/行高切换、共享图集重建与隐藏恢复。`FILETERM_WEBGL_DPR=1.2` 可定位单档倍率。覆盖层仍按显示网格定位，但其 `_refreshCharAtlas` 必须使用整数单元尺寸；上游共享图集的 key 没有比较单元尺寸，不能让覆盖层先创建小数图集。升级 xterm 时一起复核此边界。
 

@@ -91,4 +91,4 @@ include!("config.rs");
 include!("bundle.rs");
 include!("download.rs");
 include!("sync.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

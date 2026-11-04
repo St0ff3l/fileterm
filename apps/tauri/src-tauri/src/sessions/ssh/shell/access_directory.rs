@@ -63,4 +63,5 @@ fn parse_root_access_directory(output: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
-include!("access_directory_tests.rs");
+#[path = "tests/access_directory.rs"]
+mod access_directory_tests;

@@ -16,4 +16,4 @@ include!("authentication.rs");
 include!("sftp.rs");
 include!("worker/mod.rs");
 include!("files.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

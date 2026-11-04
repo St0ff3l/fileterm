@@ -137,4 +137,4 @@ include!("approval.rs");
 include!("remote_exec.rs");
 include!("privileged_exec.rs");
 include!("validation.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

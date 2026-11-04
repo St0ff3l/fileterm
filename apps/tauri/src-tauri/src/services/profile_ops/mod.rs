@@ -18,4 +18,4 @@ include!("healing.rs");
 include!("profiles.rs");
 include!("secrets.rs");
 include!("folders.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

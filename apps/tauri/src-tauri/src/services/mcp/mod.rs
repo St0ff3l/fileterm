@@ -119,4 +119,4 @@ include!("snapshots.rs");
 include!("cli_runtime.rs");
 include!("cli.rs");
 include!("protocol.rs");
-include!("tests.rs");
+include!("tests/mod.rs");

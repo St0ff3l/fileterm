@@ -58,7 +58,7 @@ node ./apps/tauri/scripts/create-updater-manifest.mjs --merge \
 
 ## macOS 更新清单与回滚检查
 
-`node --test apps/tauri/tests/updater-manifest.test.mjs` 覆盖 Windows、macOS 与 Linux：合并清单包含十二个目标，Linux 按架构和 AppImage/DEB/RPM 格式区分；缺失/空签名、重复目标及 Linux 格式缺失、错误版本/架构必须拒绝生成。
+`node --test apps/tauri/tests/build/updater-manifest.test.mjs` 覆盖 Windows、macOS 与 Linux：合并清单包含十二个目标，Linux 按架构和 AppImage/DEB/RPM 格式区分；缺失/空签名、重复目标及 Linux 格式缺失、错误版本/架构必须拒绝生成。
 
 正式发布流水线继续保留 DMG，另发布 `FileTerm-<version>-macos-<arm64|x64>.app.tar.gz` 及匹配 `.sig`。macOS 配置与 Windows 使用同一更新公钥，签名私钥只从 CI secrets 注入；签名不提供 Apple 公证。
 

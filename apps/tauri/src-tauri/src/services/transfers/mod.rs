@@ -19,15 +19,18 @@ include!("run_lifecycle.rs");
 include!("directory_execution.rs");
 include!("directory_entry.rs");
 include!("cleanup.rs");
-include!("tests.rs");
+include!("tests/mod.rs");
 
 mod power;
 
 #[cfg(test)]
+#[path = "tests/journal.rs"]
 mod journal_tests;
 
 #[cfg(test)]
+#[path = "tests/cancellation.rs"]
 mod cancellation_tests;
 
 #[cfg(test)]
+#[path = "tests/local_download.rs"]
 mod local_download_tests;

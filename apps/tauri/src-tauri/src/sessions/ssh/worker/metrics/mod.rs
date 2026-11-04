@@ -1,16 +1,16 @@
 include!("policy.rs");
 include!("target.rs");
 include!("attempt.rs");
-include!("attempt_tests.rs");
+include!("tests/attempt.rs");
 include!("state.rs");
 include!("recovery.rs");
 include!("startup.rs");
 include!("channel_open.rs");
 include!("stream.rs");
-include!("tests.rs");
+include!("tests/mod.rs");
 include!("lifecycle.rs");
-include!("lifecycle_tests.rs");
-include!("channel_open_tests.rs");
+include!("tests/lifecycle.rs");
+include!("tests/channel_open.rs");
 
 /// One supervisor owns the monitoring channel, retry queue and retry budget.
 /// Terminal input never waits on this task.

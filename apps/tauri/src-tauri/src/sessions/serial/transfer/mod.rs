@@ -302,4 +302,4 @@ where
 include!("raw.rs");
 include!("xmodem.rs");
 include!("ymodem.rs");
-include!("tests.rs");
+include!("tests/mod.rs");
