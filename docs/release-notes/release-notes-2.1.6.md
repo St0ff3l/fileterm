@@ -17,5 +17,5 @@ FileTerm 2.1.6 聚焦 SSH/SFTP 权限切换后的文件管理稳定性、文件�
 - [PR #165](https://github.com/St0ff3l/fileterm/pull/165)：优化跨平台文件表格、主题边框、滚动条和工作区布局。
 
 > 遇到问题请前往 [GitHub Issues](https://github.com/St0ff3l/fileterm/issues) 提交反馈，并附上操作系统、FileTerm 版本、连接类型、复现步骤和脱敏日志；不要提交密码、私钥或 token。
-
+>
 > 也可以加入微信群交流：请打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81) 扫描二维码进微信群，也可加入 QQ 群 534418986。

@@ -82,10 +82,12 @@
 **具体改法**：
 
 1. 在 `.github/workflows/ci.yml` 的 `validate` job 中，于 "Typecheck" step 之后、"Build" step 之前，新增测试 step：
+
    ```yaml
    - name: Run Tauri tests
      run: npm run test:tauri
    ```
+
 2. Rust contract 与 protocol fixture 统一由 `npm run test:tauri` 运行，避免维护已经移除的分散脚本。
 3. CI 失败时按当前 workflow 的日志/构建产物配置上传 artifact。
 
@@ -113,20 +115,26 @@
 1. 在根 `package.json` devDependencies 引入 `husky` + `lint-staged`。
 2. 初始化 husky：`npx husky init`（生成 `.husky/` 目录）。注意与现有 `.githooks/` 的关系——现有 `prepare-commit-msg` 在 `.githooks/`，需迁移到 `.husky/prepare-commit-msg` 并保留其 co-author 注入逻辑，或配置 `core.hooksPath`。**建议统一到 `.husky/`**，删除 `.githooks/`，避免两套 hook 体系并存。
 3. 新建 `.husky/pre-commit`：
+
    ```sh
    npx lint-staged
    ```
+
 4. 新建 `.husky/pre-push`：
+
    ```sh
    npm run typecheck
    ```
+
 5. 在根 `package.json` 增加 `lint-staged` 配置：
+
    ```json
    "lint-staged": {
      "*.{ts,tsx,cts}": ["prettier --write", "eslint --fix"],
      "*.{json,md,css}": ["prettier --write"]
    }
    ```
+
 6. 在根 `package.json` scripts 增加 `"prepare": "husky"`（确保 clone 后自动安装 hooks）。
 
 **验收标准**：
@@ -157,12 +165,15 @@
 **具体改法**：
 
 1. 在 `LiveSshSessionController` 类的私有字段声明区（当前约 39-83 行附近，已有 `private shellCwd?` 等声明）补充：
+
    ```ts
    private _lastInjectTime = 0
    private _sudoWindow = ''
    private _recentKeystrokes = ''
    ```
+
    （字段名建议去掉前导下划线，改为 `lastInjectTime` / `sudoWindow` / `recentKeystrokes`，与现有命名风格如 `shellCwd` 一致；同时更新所有引用点。）
+
 2. 将这些状态迁移为 Rust 结构体字段，并由 `apps/tauri/src-tauri/src/sessions/ssh/` 内的 worker/shell 模块管理。
 3. 确认这些字段的初始值与原 `|| 0` / `|| ''` 回退语义一致（声明时给默认值即可）。
 4. 跑 `npm run typecheck -w @fileterm/tauri` 确认无新类型错误。

@@ -2,7 +2,7 @@
 
 修改图标、tray、SSH 平台探测、CWD、权限同步或凭据存储时读取相关条目。以下为项目约束，不因模型升级放宽。
 
-### 平台兼容边界
+## 平台兼容边界
 
 - **平台应用图标**：资源按 `icons/app/{shared,macos,windows,linux}` 分类：Windows/Linux 共用的满版 `classic`、`material`、`clean` PNG 变体位于 `app/shared/`，同时供窗口运行时和设置预览使用。macOS Dock、Finder、Launchpad 和 DMG 使用 `app/macos/icon.icns` 及 `dock-*.png`，保留约 9.8% 的透明安全边距。Windows 快捷方式使用 `app/windows/` 下含 16–256px 图层的多尺寸 ICO；运行时窗口的小图标、大图标及任务栏使用 `app/shared/` 中满版 1024px RGBA PNG，通过 `CreateIconFromResourceEx` 创建 1024px HICON，由 Windows 缩放显示；通知区使用从同一母图生成的 256px PNG。Linux 窗口/启动器使用同目录满版 1024px PNG，安装包同时提供 1024px hicolor/pixmaps 图标；包内 `app/linux/32x32.png`、`app/linux/128x128.png`、`app/linux/128x128@2x.png` 与 `tray/linux/` 图标使用满版 8-bit RGBA 图。保留 128x128@2x 源文件名，以便 Tauri 将 256px 包图安装到 `hicolor/256x256@2`。Windows/Linux 的 `app/shared/*-1024.png` 从 Icon Composer 工程直接导出，alpha 边界必须覆盖整个画布，不带 macOS 四边 100px 留白；禁止将较小图放大充当母图。导出后运行 `apps/tauri/scripts/generate-platform-app-icons.py` 生成较小 PNG/ICO/tray，macOS `app/macos/icon.icns` 与 Dock 图不得被该脚本修改。macOS 菜单栏托盘仍使用独立的黑色单色透明 Template 图标（位于 `tray/macos/`），不能用 `icon.icns` 代替。
 - **macOS 菜单栏图标可见性**：设置中的显隐偏好持久化在 UI preferences，默认显示；隐藏仅移除菜单栏图标，Dock Reopen 仍须恢复主窗口。

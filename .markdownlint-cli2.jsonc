@@ -3,6 +3,9 @@
     "MD013": false,
     "MD024": false,
     "MD036": false,
-    "MD041": false
+    "MD041": false,
+    "MD033": {
+      "allowed_elements": ["a", "b", "br", "div", "img", "kbd", "p", "strong", "sub", "table", "td", "tr"]
+    }
   }
 }

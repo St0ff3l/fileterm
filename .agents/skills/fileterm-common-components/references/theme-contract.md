@@ -32,10 +32,10 @@ apps/tauri/src/renderer/
 
 归属规则：
 
-- 可被多个功能复用的视觉组件放在 components/common/<name>/。
-- 只服务一个业务域的组件放在 features/<feature>/，新 CSS 与组件共址。
-- features/common/ 中已有的行为工具、辅助组件和兼容导出可以继续存在；新建的 Button、Card、Dialog、Input、DropdownSelect 等视觉组件以 components/common/ 为唯一实现。
-- styles/features/ 中的旧皮肤和全局样式属于迁移区。修改旧文件时顺手迁移触及的规则，但不要继续往里面新增一套组件皮肤。
+- 可被多个功能复用的视觉组件放在 `components/common/<name>/`。
+- 只服务一个业务域的组件放在 `features/<feature>/`，新 CSS 与组件共址。
+- `features/common/` 中已有的行为工具、辅助组件和兼容导出可以继续存在；新建的 Button、Card、Dialog、Input、DropdownSelect 等视觉组件以 `components/common/` 为唯一实现。
+- `styles/features/` 中的旧皮肤和全局样式属于迁移区。修改旧文件时顺手迁移触及的规则，但不要继续往里面新增一套组件皮肤。
 
 ## 2. 三层颜色模型
 

@@ -231,7 +231,7 @@ rows 容器、即 xterm 重写整行的记录）。每次处理前先 `takeRecor
 选区/搜索的 React 状态发布改为按帧合并；日志着色复用未变化行的匹配/映射，并限制附加缓存预算。补充命名回调失败/耗时、按终端/后端资源与 schema 2 就绪标记，已核对真实 app.log 落盘。171 个 renderer 测试、类型、定向静态/格式、WebView2 混排/回退检查通过。旧 #185 尚未复现确认根因，不能标为完全解决；完整 Rust 门禁受运行中 exe 文件锁限制，lib/CLI/contract/scheduler 分项及 clippy 通过。详情与后续长测步骤见 [日志分析与修补记录](../../quality/terminal-log-analysis-repair-2026-10-21.md)。
 
 > 2026-10-21 字形回归更新：用户真实会话发现先前小数网格候选存在断笔/拖影。已删除 WebGL 小数宽度覆盖，恢复上游整数像素图集，仅保留 backing resize 同步。52 组字体/DPI 与实际 WebView2 独立临时终端验证通过；初始已有会话回退 DOM，后续门禁触发开发版自动重启，详见记录。此前候选的网格一致和短测性能数据不能作为当前候选视觉或性能验收依据。详见 [字形回归修复](../../quality/terminal-renderer-windows-2026-10-20/font-regression-fix-2026-10-21.md)。
-
+>
 > 2026-10-21 renderer 设置：Windows、macOS 和 Linux 均可在“设置 → 界面 → 终端显示”选择 DOM 或 WebGL。新安装及旧 `state.json` 缺少 renderer 字段时默认 WebGL；已保存的选择会保留。已打开终端需重启后切换；WebGL 加载失败、激活失败或 context loss 会回退 DOM。真实 Claude Code 长任务和中文 IME 仍待验证，不能把自动 soak 当作交互长测结论。
 
 ## 2026-10-21：Windows DOM / WebGL 两小时 React workspace soak

@@ -83,6 +83,7 @@ Windows/Linux/macOS 的打包产物验收仍需要对应实体机或 CI runner�
   - 父进程已有 `PROMPT_COMMAND` 时 prepend 我们的 hook，保留用户原有逻辑。
 - **已知限制**：用户 `.bashrc`、starship 或 oh-my-bash 如果在启动过程中重新赋值 `PROMPT_COMMAND`，环境注入的 hook 可能被覆盖；本地终端不会用 DEBUG trap 强行覆盖用户配置，因为它会在每条命令前产生额外输出并放大丢帧压力。需要强制覆盖时，应由用户在自己的 rc 中检测 `TERM_PROGRAM=FileTerm` 后追加 hook。
 - **zsh**：没有自定义 `PROMPT` / `PS1` 时，开启 `promptsubst`，注入保持默认 `%m%#` 样式的 prompt；每次显示 prompt 时通过 `printf` 和 `${PWD//%/%25}` 输出经过编码的 OSC 7 绝对路径。如果 `.zshrc`、主题或用户环境覆盖 prompt，则在 rc 中检测 `TERM_PROGRAM=FileTerm` 后用 `add-zsh-hook` 追加 hook：
+
   ```zsh
   # ~/.zshrc
   if [ "$TERM_PROGRAM" = "FileTerm" ]; then
@@ -91,6 +92,7 @@ Windows/Linux/macOS 的打包产物验收仍需要对应实体机或 CI runner�
     add-zsh-hook precmd fileterm_precmd
   fi
   ```
+
 - **fish / sh / dash**：不自动注入，用户可在 `config.fish` 或对应 rc 中检测 `TERM_PROGRAM=FileTerm` 并加同等 hook。
 - **Windows PowerShell**：默认 `prompt` 函数不 emit OSC 7。用户可在 `$PROFILE` 里覆盖 `prompt`，或后续单独评估自动注入。
 

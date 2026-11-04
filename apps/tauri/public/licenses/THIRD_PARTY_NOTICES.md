@@ -11,7 +11,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Version: 0.6.1
 - Copyright: (c) 2022 Segev Finer
 - License: MIT
-- Source: https://github.com/segevfiner/keepawake-rs
+- Source: <https://github.com/segevfiner/keepawake-rs>
 - Purpose: inhibit idle system sleep while file transfers are running.
 - Packaged license: `licenses/keepawake/LICENSE.txt`
 
@@ -22,7 +22,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/fonts/text/outfit/*`
 - Copyright: 2021 The Outfit Project Authors
 - License: SIL Open Font License 1.1
-- Source: https://github.com/Outfitio/Outfit-Fonts
+- Source: <https://github.com/Outfitio/Outfit-Fonts>
 - Packaged license: `licenses/outfit/OFL.txt`
 
 ### JetBrains Mono
@@ -30,7 +30,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/fonts/text/jetbrains-mono/*`
 - Copyright: 2020 The JetBrains Mono Project Authors
 - License: SIL Open Font License 1.1
-- Source: https://github.com/JetBrains/JetBrainsMono
+- Source: <https://github.com/JetBrains/JetBrainsMono>
 - Packaged license: `licenses/jetbrains-mono/OFL.txt`
 
 ### Cascadia Code
@@ -38,7 +38,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/fonts/text/cascadia-code/*`
 - Copyright: 2019 - Present, Microsoft Corporation, with Reserved Font Name Cascadia Code
 - License: SIL Open Font License 1.1
-- Source: https://github.com/microsoft/cascadia-code/releases/tag/v2407.24
+- Source: <https://github.com/microsoft/cascadia-code/releases/tag/v2407.24>
 - Packaged license: `licenses/cascadia-code/OFL.txt`
 - Changes: the regular and italic variable TTFs are copied from the official release archive without modification.
 
@@ -47,7 +47,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/fonts/text/geist/*`
 - Copyright: 2024 The Geist Project Authors
 - License: SIL Open Font License 1.1
-- Source: https://github.com/vercel/geist-font
+- Source: <https://github.com/vercel/geist-font>
 - Packaged license: `licenses/geist/OFL.txt`
 
 ### Hanken Grotesk
@@ -55,7 +55,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/fonts/text/hanken-grotesk/*`
 - Copyright: 2021 The Hanken Grotesk Project Authors
 - License: SIL Open Font License 1.1
-- Source: https://github.com/marcologous/hanken-grotesk
+- Source: <https://github.com/marcologous/hanken-grotesk>
 - Packaged license: `licenses/hanken-grotesk/OFL.txt`
 
 ### Inter
@@ -63,7 +63,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/fonts/text/inter/*`
 - Copyright: 2016 The Inter Project Authors
 - License: SIL Open Font License 1.1
-- Source: https://github.com/rsms/inter
+- Source: <https://github.com/rsms/inter>
 - Packaged license: `licenses/inter/OFL.txt`
 
 ### Noto Sans SC
@@ -71,7 +71,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/fonts/text/noto-sans-sc/*`
 - Copyright: 2014-2021 Adobe, with Reserved Font Name "Source"
 - License: SIL Open Font License 1.1
-- Source: https://github.com/google/fonts/tree/main/ofl/notosanssc
+- Source: <https://github.com/google/fonts/tree/main/ofl/notosanssc>
 - Packaged license: `licenses/noto-sans-sc/OFL.txt`
 
 ## Bundled UI icon artwork and editor icon fonts
@@ -81,7 +81,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `apps/tauri/src/renderer/assets/icons/*/material-*.svg`
 - Copyright: Google LLC
 - License: Apache License 2.0
-- Source: https://github.com/google/material-design-icons
+- Source: <https://github.com/google/material-design-icons>
 - Changes: FileTerm extracted the used glyph outlines from the previously bundled static 400-weight font into individual SVG files, preserving the original outlines and font baseline. The SVG files replace the application's icon font dependency.
 - Packaged license: `licenses/material-symbols/LICENSE.txt`
 
@@ -90,8 +90,8 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - Files: `node_modules/monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.ttf`, emitted as `assets/codicon-*.ttf`
 - Attribution: Microsoft and contributors, Visual Studio Code Codicons
 - Icon artwork license: Creative Commons Attribution 4.0 International (CC BY 4.0)
-- Source: https://github.com/microsoft/vscode-codicons
-- License: https://creativecommons.org/licenses/by/4.0/
+- Source: <https://github.com/microsoft/vscode-codicons>
+- License: <https://creativecommons.org/licenses/by/4.0/>
 - Packaged license: `licenses/codicons/LICENSE.txt`
 - Changes: FileTerm distributes the font from the installed Monaco Editor package without modifying its bytes; Vite changes only the output filename.
 - Monaco Editor code is MIT-licensed. Its license and third-party notices are included at `licenses/monaco-editor/LICENSE` and `licenses/monaco-editor/ThirdPartyNotices.txt`.

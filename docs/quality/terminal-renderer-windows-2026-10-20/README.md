@@ -3,7 +3,7 @@
 最新日志修补和诊断 schema 3 说明见 [现场日志分析与修补](../terminal-log-analysis-repair-2026-10-21.md)。旧 #185 尚未在真实现场复现确认唯一原因，不标记为彻底解决。
 
 > 2026-10-21 字形回归更新：用户真实会话发现先前小数网格候选存在断笔/拖影。已删除 WebGL 小数宽度覆盖，恢复上游整数像素图集，仅保留 backing resize 同步。52 组字体/DPI 与实际 WebView2 独立临时终端验证通过；初始已有会话回退 DOM，后续门禁触发开发版自动重启，详见记录。此前候选的网格一致和短测性能数据不能作为当前候选视觉或性能验收依据。详见 [字形回归修复](font-regression-fix-2026-10-21.md)。
-
+>
 > 2026-10-21 renderer 设置：Windows、macOS 和 Linux 均可在“设置 → 界面 → 终端显示”选择 DOM 或 WebGL。新安装及旧 `state.json` 缺少 renderer 字段时默认 WebGL；已保存选择会保留。新建终端采用所选项；加载失败、激活失败或 context loss 会回退 DOM。本文中的原生 WebGL 测量针对 Windows WebView2；真实 Claude Code 长任务和中文 IME 仍待交互验证。
 
 This report covers two different test layers on PR #348 branch
