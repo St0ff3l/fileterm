@@ -89,7 +89,7 @@ jobs:
                 > /etc/apt/sources.list
               rm -f /etc/apt/sources.list.d/*
               apt-get update
-              apt-get install -y --no-install-recommends /tmp/fileterm.deb
+              apt-get -o Acquire::Retries=5 install -y --no-install-recommends /tmp/fileterm.deb
               if ! trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1)"; then
                 printf "Debian 11 FileTerm CLI smoke failed:\n%s\n" "$trace" >&2
                 exit 1
