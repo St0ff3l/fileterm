@@ -96,4 +96,4 @@ names containing commas/quotes remain valid CSS.
 - [Codicons legal notices](https://github.com/microsoft/vscode-codicons#legal-notices)
 - [Codicons CC BY 4.0 license](https://github.com/microsoft/vscode-codicons/blob/main/LICENSE)
 
-Apple system generic access: https://webkit.org/blog/10247/new-webkit-features-in-safari-13-1/
+Apple system generic access: <https://webkit.org/blog/10247/new-webkit-features-in-safari-13-1/>

@@ -5,7 +5,7 @@ Refs #254。修复范围为 xterm 6 DOM renderer 的中文标点宽度漂移。
 Chromium 默认压缩连续全角标点；xterm `WidthCache` 使用同一字符重复
 32 次的平均宽度，而实际行中的单个标点没有同样的压缩。由此产生过大的
 `letter-spacing` 补偿。上游分析：
-https://github.com/xtermjs/xterm.js/issues/6058 。
+<https://github.com/xtermjs/xterm.js/issues/6058> 。
 
 `xterm-adapters/xterm-compat.css` 在 `.terminal-host .xterm` 设置
 `text-spacing-trim: space-all`，让显示行与隐藏测量容器继承一致的排版规则；

@@ -84,12 +84,12 @@ jobs:
             debian:bullseye-slim bash -euc '
               export DEBIAN_FRONTEND=noninteractive
               printf "%s\n" \
-                "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260903T220410Z bullseye main" \
-                "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260903T220410Z bullseye-security main" \
+                "deb [check-valid-until=no] http://archive.debian.org/debian bullseye main" \
+                "deb [check-valid-until=no] http://archive.debian.org/debian-security bullseye-security main" \
                 > /etc/apt/sources.list
               rm -f /etc/apt/sources.list.d/*
               apt-get update
-              apt-get install -y --no-install-recommends /tmp/fileterm.deb
+              apt-get -o Acquire::Retries=5 install -y --no-install-recommends /tmp/fileterm.deb
               if ! trace="$(/bin/sh -x /usr/bin/fileterm --help 2>&1)"; then
                 printf "Debian 11 FileTerm CLI smoke failed:\n%s\n" "$trace" >&2
                 exit 1

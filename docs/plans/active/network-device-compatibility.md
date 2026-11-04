@@ -183,7 +183,7 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 - [x] 手动 mode 覆盖自动结果；未知设备保持安全 fallback。
 
 > 2026-08-28 实施记录：`ClientHandler::kex_done` 保存 russh 的远端 SSH identification，解析器按保守前缀规则匹配 Cisco、Juniper、Huawei、H3C/Comware、HPE、MikroTik、Fortinet、Palo Alto、Zyxel、Ruijie 线索，并将规范化结果写入运行时有效 profile。解析发生在主 PTY 建立前，因此识别出的网络设备不会进入平台探测、CWD 注入、指标、SFTP 或 exec 路径；`server` 手动模式始终覆盖 Banner，`auto` 未命中且厂商族仍为 `auto` 时按普通服务器兼容路径处理，明确厂商族提示则作为本地 network-device fallback。auto profile 未显式选择 terminal type 时，最终按识别结果使用网络设备 `vt100` 或服务器 `xterm-256color` 默认值。
-
+>
 > 2026-08-29 补充：自动识别支持老 Huawei VRP 的精确短横线
 > Banner（`SSH-2.0--`、`SSH-1.99--` 及原始 `-` 形式），并完成 Comware legacy GEX 兼容；
 > 匹配保持精确，不把任意未知 Banner 当成网络设备，也不扩大全局弱算法范围。

@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -65,17 +63,10 @@ jobs:
       - name: Lint Tauri and shared source
         run: npx eslint apps/tauri packages/core packages/shared packages/storage --max-warnings=0
 
-      - name: Lint changed Markdown files
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Lint Markdown files
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(git diff --diff-filter=ACMRT --name-only -z "$BASE_SHA" "$GITHUB_SHA" -- '*.md')
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo 'No changed Markdown files.'
-            exit 0
-          fi
-          npm run lint:md -- "${files[@]}"
+          git ls-files -z -- '*.md' '*.markdown' | xargs -0 npm run lint:md --
 
       - name: Check Tauri and shared formatting
         run: npx prettier --check apps/tauri packages/core packages/shared packages/storage package.json package-lock.json .github/workflows/ci.yml .github/workflows/release.yml

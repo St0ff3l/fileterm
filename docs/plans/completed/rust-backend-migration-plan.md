@@ -70,7 +70,7 @@ FileTerm 的迁移前基线是 42.4.0 + React + TypeScript，支持 SSH/SFTP、F
 
 ### 2.2 主进程代码结构（约 50 个 TS 文件）
 
-```
+```text
 迁移前主进程目录（已移除，仅作职责结构记录；不提供当前路径）
 ├── 主入口
 ├── IPC handler 按领域拆分
@@ -181,7 +181,7 @@ graph TB
 
 当前 `apps/tauri/src-tauri/src/` 按领域分层；`mod.rs` facade 通过同目录实现片段保持稳定入口，具体职责以实际目录为准。
 
-```
+```text
 apps/tauri/src-tauri/src/
 ├── main.rs                       # Tauri 入口，装配 AppState
 ├── lib.rs
@@ -423,7 +423,7 @@ impl WorkspaceSessionRuntime {
 > 2. JSON 与现有 迁移前实现 用户数据保持 schema 兼容，可用一次性事务导入而无需领域转换；
 > 3. 把存储格式变更与后端语言迁移**解耦**，降低单次迁移风险；
 > 4. `transfer-journal` 已是原子写，Rust 侧直接复刻即可。
-
+>
 > **SQLite 作为「可选增强」单独立项（Phase 6+，迁移完成后）：** 仅在「命令历史分页查询」「profile 突破千级」「需要全文检索」等真实需求出现时再引入。届时路径为：JSON → SQLite 一次性导入 + 双读兼容期 → 切换。这样把「语言迁移」和「存储格式迁移」彻底分开，符合最小风险原则。
 
 ### 4.3 Rust 存储实现
@@ -539,7 +539,7 @@ graph LR
 
 新增 bridge 目录（与现有路线图一致）：
 
-```
+```text
 apps/tauri/src/bridge/
 └── tauri-api.ts         # 调用 @tauri-apps/api 的 invoke/listen
 ```
@@ -591,7 +591,7 @@ export const tauriApi: FileTermDesktopApi = {
 
 为保证 bridge 与 Rust command 的「形状一致」，建立 contract test 套件：
 
-```
+```text
 apps/tauri/src-tauri/tests/
 └── contract.rs              # 对 FileTermDesktopApi 关键 command 做形状/错误/返回值断言
 ```

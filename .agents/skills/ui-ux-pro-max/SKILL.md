@@ -49,7 +49,7 @@ UI/UX design intelligence for web, mobile, and desktop. This skill should be use
 *供人工/AI 查阅：按 1→10 决定先关注哪类规则；需要细则时用 `--domain <Domain>` 查询。脚本不读取本表。*
 
 | Priority | Category | Impact | Domain | Key Checks (Must Have) | Anti-Patterns (Avoid) |
-|----------|----------|--------|--------|------------------------|------------------------|
+| ---------- | ---------- | -------- | -------- | ------------------------ | ------------------------ |
 | 1 | Accessibility | CRITICAL | `ux` | Contrast 4.5:1, Alt text, Keyboard nav, Aria-labels | Removing focus rings, Icon-only buttons without labels |
 | 2 | Touch & Interaction | CRITICAL | `ux` | Min size 44×44px, 8px+ spacing, Loading feedback | Reliance on hover only, Instant state changes (0ms) |
 | 3 | Performance | HIGH | `ux` | WebP/AVIF, Lazy loading, Reserve space (CLS &lt; 0.1) | Layout thrashing, Cumulative Layout Shift |
@@ -320,7 +320,7 @@ Search specific domains using the CLI tool below.
 
 ---
 
-# Prerequisites
+## Prerequisites
 
 The bundled scripts require Python 3 (standard library only — no third-party packages, no network access). Check if it is available:
 
@@ -341,7 +341,7 @@ If the user prefers not to install Python, skip the CLI searches and rely on the
 Use this skill when the user requests any of the following:
 
 | Scenario | Trigger Examples | Start From |
-|----------|-----------------|------------|
+| ---------- | ----------------- | ------------ |
 | **New project / page** | "做一个 landing page"、"Build a dashboard" | Step 1 → Step 2 (design system) |
 | **New component** | "Create a pricing card"、"Fix modal focus" | Step 3 (one focused domain search) |
 | **Choose style / color / font** | "What style fits a fintech app?"、"推荐配色" | Step 2 (design system) |
@@ -376,6 +376,7 @@ This skill handles UI/UX design intelligence and implementation guidance. It doe
 ### Step 1: Analyze User Requirements
 
 Extract key information from user request:
+
 - **Product type**: Entertainment (social, video, music, gaming), Tool (scanner, editor, converter), Productivity (task manager, notes, calendar), or hybrid
 - **Target audience**: C-end consumer users; consider age group, usage context (commute, leisure, work)
 - **Style keywords**: playful, vibrant, minimal, dark mode, content-first, immersive, etc.
@@ -395,12 +396,14 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<product_type> <industry
 ```
 
 This command:
+
 1. Aggregates product, style, color, landing, and typography matches
 2. Applies reasoning rules from `ui-reasoning.csv` to select best matches
 3. Returns complete design system: pattern, style, colors, typography, effects
 4. Includes anti-patterns to avoid
 
 **Example:**
+
 ```bash
 python3 .agents/skills/ui-ux-pro-max/scripts/search.py "beauty spa wellness service" --design-system -p "Serenity Spa"
 ```
@@ -414,26 +417,31 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system
 ```
 
 This creates:
+
 - `design-system/<project-slug>/MASTER.md` — Global Source of Truth with all design rules
 - `design-system/<project-slug>/pages/` — Folder for page-specific overrides
 
 **With page-specific override:**
+
 ```bash
 python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name" --page "dashboard" --output-dir "<project-root>"
 ```
 
 This also creates:
+
 - `design-system/<project-slug>/pages/dashboard.md` — Page-specific deviations from Master
 
 If Master already exists, a new page file is created without changing Master. Existing Master and page files are skipped by default. Read an existing `MASTER.md` before deciding whether `--force` is justified; without explicit user authorization, keep existing files unchanged.
 
 **How hierarchical retrieval works:**
+
 1. Read `design-system/<project-slug>/MASTER.md`
 2. When building a specific page (e.g., "Checkout"), check `design-system/<project-slug>/pages/checkout.md`
 3. If the page file exists, its rules **override** the Master file; otherwise use Master exclusively
 
 **Context-aware retrieval prompt:**
-```
+
+```text
 I am building the [Page Name] page. Please read design-system/[project-slug]/MASTER.md.
 Also check if design-system/[project-slug]/pages/[page-name].md exists.
 If the page file exists, prioritize its rules.
@@ -450,7 +458,7 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system
 ```
 
 | Dial | Low (1-3) | Mid (4-7) | High (8-10) |
-|------|-----------|-----------|-------------|
+| ------ | ----------- | ----------- | ------------- |
 | `--variance` | Centered / minimal (biases toward Minimalism-style categories) | Balanced / modern | Bold / asymmetric (biases toward Brutalism, Bento Grids) |
 | `--motion` | Subtle micro-interactions | Standard scroll/stagger motion | Complex choreography (pin, Flip, SplitText) |
 | `--density` | Spacious (24-96px spacing scale) | Standard (16-64px, current default) | Dense/dashboard (8-32px spacing scale) |
@@ -460,6 +468,7 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system
 - Leaving a dial unset keeps that part of the output exactly as it was before (no behavior change).
 
 **Example:**
+
 ```bash
 python3 .agents/skills/ui-ux-pro-max/scripts/search.py "internal analytics dashboard" --design-system --variance 8 --motion 7 --density 8 -p "Ops Console"
 ```
@@ -475,7 +484,7 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain <dom
 **When to use detailed searches:**
 
 | Need | Domain | Example |
-|------|--------|---------|
+| ------ | -------- | --------- |
 | Product type patterns | `product` | `"entertainment social" --domain product` |
 | More style options | `style` | `"glassmorphism dark" --domain style` |
 | Color palettes | `color` | `"entertainment vibrant" --domain color` |
@@ -510,7 +519,7 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "virtualized list" --stac
 ### Available Domains
 
 | Domain | Use For | Example Keywords |
-|--------|---------|------------------|
+| -------- | --------- | ------------------ |
 | `product` | Product type recommendations | SaaS, e-commerce, portfolio, healthcare, beauty, service |
 | `style` | UI styles, colors, effects | glassmorphism, minimalism, dark mode, brutalism |
 | `typography` | Font pairings, Google Fonts | elegant, playful, professional, modern |
@@ -542,6 +551,7 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "enterprise tableview den
 **User request:** "Make an AI search homepage。"
 
 ### Step 1: Analyze Requirements
+
 - Product type: Tool (AI search engine)
 - Target audience: C-end users looking for fast, intelligent search
 - Style keywords: modern, minimal, content-first, dark mode
@@ -601,7 +611,7 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py "fintech crypto" --design
 ### Common Sticking Points
 
 | Problem | What to Do |
-|---------|------------|
+| --------- | ------------ |
 | Can't decide on style/color | Verify the category, then retry once with one product and one tone |
 | Dark mode contrast issues | Quick Reference §6: `color-dark-mode` + `color-accessible-pairs` |
 | Animations feel unnatural | Quick Reference §7: `spring-physics` + `easing` + `exit-faster-than-enter` |
@@ -636,7 +646,7 @@ Scope notice: The rules below are for App UI (iOS/Android/React Native/Flutter),
   - 如果 Phosphor 也没有理想选项，可以使用 **Heroicons (`@heroicons/react`)** 作为备选，注意保持风格一致（线性/填充、笔画粗细、圆角风格）。
 
 | Rule | Standard | Avoid | Why It Matters |
-|------|----------|--------|----------------|
+| ------ | ---------- | -------- | ---------------- |
 | **No Emoji as Structural Icons** | Use vector-based icons (e.g., Phosphor `@phosphor-icons/react`, Heroicons `@heroicons/react`, react-native-vector-icons, @expo/vector-icons). | Using emojis (🎨 🚀 ⚙️) for navigation, settings, or system controls. | Emojis are font-dependent, inconsistent across platforms, and cannot be controlled via design tokens. |
 | **Vector-Only Assets** | Use SVG or platform vector icons that scale cleanly and support theming. | Raster PNG icons that blur or pixelate. | Ensures scalability, crisp rendering, and dark/light mode adaptability. |
 | **Contextual Semantics** | Choose semantics from use, not glyph: use `aria-hidden="true"` for decorative icons beside visible text; give meaningful standalone icons a text alternative; give icon controls an accessible name and expose selected/pressed/expanded state when applicable. | Treating one icon name as permanently decorative, meaningful, or interactive. | The same glyph can serve different purposes in different components. |
@@ -649,11 +659,10 @@ Scope notice: The rules below are for App UI (iOS/Android/React Native/Flutter),
 | **Icon Alignment** | Align icons to text baseline and maintain consistent padding. | Misaligned icons or inconsistent spacing around them. | Prevents subtle visual imbalance that reduces perceived quality. |
 | **Icon Contrast** | Meaningful icons and control boundaries need at least 3:1 against adjacent colors; decorative icons must not carry information. | Low-contrast icons that carry meaning or state. | Applies the non-text contrast role instead of a text-size rule. |
 
-
 ### Interaction (App)
 
 | Rule | Do | Don't |
-|------|----|----- |
+| ------ | ---- | ----- |
 | **Tap feedback** | Provide clear pressed feedback (ripple/opacity/elevation) within 80-150ms | No visual response on tap |
 | **Animation timing** | Use shared tokens chosen for distance, complexity, platform, and user context | One duration/easing copied to every transition |
 | **Accessibility focus** | Ensure screen reader focus order matches visual order and labels are descriptive | Unlabeled controls or confusing focus traversal |
@@ -665,7 +674,7 @@ Scope notice: The rules below are for App UI (iOS/Android/React Native/Flutter),
 ### Light/Dark Mode Contrast
 
 | Rule | Do | Don't |
-|------|----|----- |
+| ------ | ---- | ----- |
 | **Surface readability (light)** | Keep cards/surfaces clearly separated from background with sufficient opacity/elevation | Overly transparent surfaces that blur hierarchy |
 | **Text contrast (light)** | Maintain body text contrast >=4.5:1 against light surfaces | Low-contrast gray body text |
 | **Text contrast (dark)** | Maintain normal text contrast >=4.5:1 on dark surfaces; 3:1 is only for large text or non-text UI | Muted normal text that falls below the text threshold |
@@ -677,7 +686,7 @@ Scope notice: The rules below are for App UI (iOS/Android/React Native/Flutter),
 ### Layout & Spacing
 
 | Rule | Do | Don't |
-|------|----|----- |
+| ------ | ---- | ----- |
 | **Safe-area compliance** | Respect top/bottom safe areas for all fixed headers, tab bars, and CTA bars | Placing fixed UI under notch, status bar, or gesture area |
 | **System bar clearance** | Add spacing for status/navigation bars and gesture home indicator | Let tappable content collide with OS chrome |
 | **Consistent content width** | Keep predictable content width per device class (phone/tablet) | Mixing arbitrary widths between screens |
@@ -695,6 +704,7 @@ Before delivering UI code, verify these items:
 Scope notice: This checklist is for App UI (iOS/Android/React Native/Flutter).
 
 ### Visual Quality
+
 - [ ] No emojis used as icons (use SVG instead)
 - [ ] All icons come from a consistent icon family and style
 - [ ] Official brand assets are used with correct proportions and clear space
@@ -702,6 +712,7 @@ Scope notice: This checklist is for App UI (iOS/Android/React Native/Flutter).
 - [ ] Semantic theme tokens are used consistently (no ad-hoc per-screen hardcoded colors)
 
 ### Interaction
+
 - [ ] All tappable elements provide clear pressed feedback (ripple/opacity/elevation)
 - [ ] Touch targets meet minimum size (>=44x44pt iOS, >=48x48dp Android)
 - [ ] Micro-interaction timing uses shared, platform-appropriate tokens and remains responsive in context
@@ -710,6 +721,7 @@ Scope notice: This checklist is for App UI (iOS/Android/React Native/Flutter).
 - [ ] Gesture regions avoid nested/conflicting interactions (tap/drag/back-swipe conflicts)
 
 ### Light/Dark Mode
+
 - [ ] Primary text contrast >=4.5:1 in both light and dark mode
 - [ ] Normal primary and secondary text contrast >=4.5:1 in both light and dark mode
 - [ ] Dividers/borders and interaction states are distinguishable in both modes
@@ -717,6 +729,7 @@ Scope notice: This checklist is for App UI (iOS/Android/React Native/Flutter).
 - [ ] Both themes are tested before delivery (not inferred from a single theme)
 
 ### Layout
+
 - [ ] Safe areas are respected for headers, tab bars, and bottom CTA bars
 - [ ] Scroll content is not hidden behind fixed/sticky bars
 - [ ] Verified on small phone, large phone, and tablet (portrait + landscape)
@@ -725,6 +738,7 @@ Scope notice: This checklist is for App UI (iOS/Android/React Native/Flutter).
 - [ ] Long-form text measure remains readable on larger devices (no edge-to-edge paragraphs)
 
 ### Accessibility
+
 - [ ] Decorative icons beside visible text are hidden from the accessibility tree (`aria-hidden="true"` on web or the native equivalent)
 - [ ] Meaningful images/icons without equivalent visible text have a text alternative
 - [ ] Icon controls have an accessible name and announce applicable selected/pressed/expanded state

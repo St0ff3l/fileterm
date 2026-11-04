@@ -91,7 +91,7 @@
 - ✅ M3.7 SSH `-L/-R/-D` 隧道：Tauri bridge + command + SSH worker，`TcpListener` / `tcpip-forward` / SOCKS5 listener，断线/重连/关闭 tab 自动回收；本地 OpenSSH 已回归 `-L` 与 `-D` 的 direct-tcpip 字节转发
 
 > 注：Phase 3 的本地自动化已执行 Rust 编译与 contract test；发行候选仍需完成真实服务、真实账户和 renderer/UI 手测，不能以本机夹具替代。
-
+>
 > 2026-07-14 回归修复：POSIX CWD hook 现在以交互 shell 的 CR 提交执行，并以 CR/LF 兼容的状态机抑制内部命令回显；CWD 事件会在“跟随终端”开启时发布 `remoteFilesLoading`、异步刷新相同路径的 SFTP 文件列表，并在成功或失败后结束 loading。SFTP `read_dir` 不再依赖服务端返回 `..`，会按 迁移前实现 语义为非根目录生成父目录行。POSIX 指标脚本也移除了从 TypeScript 模板误带入 Rust raw string 的双重转义，恢复磁盘、进程和网络行的真实换行解析。
 
 ### Phase 4：其他协议与 Transfer ⚠️ 实现主体完成，真实服务与设备验收未完成
@@ -183,6 +183,9 @@
 
 ## 3. 后续推进优先级
 
+<!-- Numbering intentionally continues across the P0-P4 sections. -->
+<!-- markdownlint-disable MD029 -->
+
 ### P0（阻塞日常使用）
 
 1. ~~**Transfer 系统**：上传/下载是文件管理器的核心能力，当前完全缺失~~ ✅ 已完成
@@ -223,6 +226,8 @@
 24. ~~自动用户数据迁移 + 文件级回滚~~ ✅；继续完成发行候选迁移演练与安装包回滚保障
 
 ---
+
+<!-- markdownlint-enable MD029 -->
 
 ## 4. 验收标准
 

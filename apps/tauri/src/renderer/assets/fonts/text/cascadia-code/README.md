@@ -1,7 +1,7 @@
 # Cascadia Code
 
 Unmodified variable fonts from Microsoft's official release v2407.24:
-https://github.com/microsoft/cascadia-code/releases/tag/v2407.24
+<https://github.com/microsoft/cascadia-code/releases/tag/v2407.24>
 
 Archive: `CascadiaCode-2407.24.zip`. Files are copied directly from `ttf/`;
 no conversion, subsetting, renaming of font metadata, or static instancing.

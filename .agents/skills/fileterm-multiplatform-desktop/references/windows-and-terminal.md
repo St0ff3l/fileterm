@@ -1,6 +1,6 @@
 # 窗口与终端交互
 
-### 标题栏、窗口与布局
+## 标题栏、窗口与布局
 
 - **macOS**：保留系统 decorations 与 traffic lights，renderer 只为左上角控件留出避让空间。不要渲染 Windows/Linux 的菜单栏或自绘关闭按钮；不要把 traffic lights 当作普通 React button。
 - **Windows/Linux**：主窗口由 renderer 提供紧凑的 `WindowMenubar` 与窗口控制。拖拽区必须使用 `data-tauri-drag-region`，菜单、关闭/最小化/最大化按钮及其他可点击控件必须排除拖拽行为。
