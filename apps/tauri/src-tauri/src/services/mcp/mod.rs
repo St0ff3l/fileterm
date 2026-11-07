@@ -107,7 +107,9 @@ mod bridge;
 use bridge::{BridgeClient, BridgeFrame};
 
 include!("types.rs");
-include!("call_log.rs");
+mod call_log;
+pub use call_log::{read_call_log, McpCallLogPage};
+use call_log::McpCallAudit;
 include!("interactions.rs");
 include!("agent_contract.rs");
 include!("background.rs");
