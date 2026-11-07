@@ -47,3 +47,48 @@ test('audit summary uses resolved target and path metadata', () => {
   assert.equal(summarizeParams({ target: null, params: { tab_id: 'tab-1' } }), 'tab-1')
   assert.equal(summarizeParams({ target: null, params: {} }), '')
 })
+
+test('refreshing an empty audit page preserves the empty-state markup', async () => {
+  const React = await import('react')
+  const jsx = await import('react/jsx-runtime')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const source = readFileSync(
+    new URL('../../src/renderer/features/workspace/mcp-call-log-page.tsx', import.meta.url),
+    'utf8'
+  )
+  const output = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 }
+  }).outputText
+  function renderEmptyState(page, loading) {
+    const exports = {}
+    const state = [page, loading, null, null, false, null]
+    const dependencies = {
+      react: {
+        useState: () => [state.shift(), () => {}],
+        useRef: () => ({ current: null }),
+        useCallback: (callback) => callback,
+        useEffect() {}
+      },
+      'react/jsx-runtime': jsx,
+      '../../i18n': { t: new Proxy({}, { get: (_, key) => key }) },
+      '../common/app-icon': { AppIcon: () => React.createElement('svg') },
+      '../common/vertical-scrollbar': { VerticalScrollbar: () => null }
+    }
+    vm.runInNewContext(output, { exports, require: (name) => dependencies[name] ?? {} })
+    const tree = exports.McpCallLogPage({ onTotalChange() {} })
+    function findEmpty(node) {
+      if (!node || typeof node !== 'object') return null
+      if (node.props?.className === 'background-session-empty') return node
+      return React.Children.toArray(node.props?.children).map(findEmpty).find(Boolean)
+    }
+    return renderToStaticMarkup(findEmpty(tree))
+  }
+  const emptyPage = { items: [], total: 0, hasMore: false, nextCursor: null }
+  const ready = renderEmptyState(emptyPage, false)
+  assert.match(ready, /mcpCallRecordsEmptyHint/)
+  assert.equal(renderEmptyState(emptyPage, true), ready)
+  const initial = renderEmptyState(null, true)
+  assert.match(initial, /mcpCallRecordsLoading/)
+  assert.doesNotMatch(initial, /mcpCallRecordsEmptyHint/)
+  assert.equal(renderEmptyState(null, false), initial)
+})

@@ -123,6 +123,7 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
   }, [onTotalChange, page?.total])
 
   const entries = page?.items ?? []
+  const initialLoading = page === null
   const select = (entry: McpCallLogEntry) => {
     setCopyError(null)
     setSelected(entry)
@@ -217,8 +218,8 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
                 {!entries.length && !loadError ? (
                   <div className="background-session-empty">
                     <AppIcon name="call-log" size={24} />
-                    <strong>{loading ? t.mcpCallRecordsLoading : t.mcpCallRecordsEmpty}</strong>
-                    {!loading ? <span>{t.mcpCallRecordsEmptyHint}</span> : null}
+                    <strong>{initialLoading ? t.mcpCallRecordsLoading : t.mcpCallRecordsEmpty}</strong>
+                    {!initialLoading ? <span>{t.mcpCallRecordsEmptyHint}</span> : null}
                   </div>
                 ) : null}
                 {page?.hasMore && page.nextCursor ? (
