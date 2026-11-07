@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { McpCallLogEntry, McpCallLogPage } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
+import { ConfirmActionDialog } from '../../components/common/confirm-action-dialog/confirm-action-dialog'
 import './mcp-call-log.css'
 
 const PAGE_SIZE = 60
@@ -75,6 +76,7 @@ export function McpCallLogPage() {
   const [page, setPage] = useState<McpCallLogPage | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<McpCallLogEntry | null>(null)
 
   const load = useCallback(async (offset: number, append: boolean) => {
     setLoading(true)
@@ -144,6 +146,15 @@ export function McpCallLogPage() {
               className={`manager-row mcp-call-log-row ${entry.ok ? '' : 'is-failed'}`}
               key={`${entry.ts}-${index}`}
               role="row"
+              tabIndex={0}
+              title={t.mcpCallOpenDetail}
+              onClick={() => setSelected(entry)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setSelected(entry)
+                }
+              }}
             >
               <span className="mcp-call-log-time" role="cell">
                 {formatClock(entry.ts)}
@@ -184,6 +195,45 @@ export function McpCallLogPage() {
           ) : null}
         </div>
       </div>
+
+      {selected ? (
+        <ConfirmActionDialog
+          cancelLabel={t.cancel}
+          className="mcp-call-log-dialog"
+          confirmLabel={t.mcpCallCopyJson}
+          confirmVariant="primary"
+          initialFocus="none"
+          onClose={() => setSelected(null)}
+          onConfirm={() => {
+            void navigator.clipboard?.writeText(JSON.stringify(selected, null, 2))
+            setSelected(null)
+          }}
+          title={
+            <span className="mcp-call-log-dialog-title">
+              <span>{t.mcpCallDetailTitle}</span>
+              <span className={`mcp-call-approval-badge ${approvalBadgeClass(selected.approval)}`}>
+                {approvalLabel(selected.approval)}
+              </span>
+            </span>
+          }
+          description={
+            <div className="mcp-call-log-detail-body">
+              <div className="mcp-call-log-detail-grid">
+                <span>{t.mcpCallColumnTime}</span>
+                <span>{formatClock(selected.ts)}</span>
+                <span>{t.mcpCallColumnAction}</span>
+                <span>{selected.action}</span>
+                <span>{t.mcpCallDetailConnection}</span>
+                <span>{selected.clientId ?? '—'}</span>
+                <span>{t.mcpCallColumnResult}</span>
+                <span>{selected.ok ? `${t.mcpCallDetailOk} · ${selected.durationMs} ms` : t.mcpCallResultFailed}</span>
+              </div>
+              {selected.error ? <pre className="mcp-call-log-detail-error">{selected.error}</pre> : null}
+              <pre className="mcp-call-log-detail-json">{JSON.stringify(selected.params ?? {}, null, 2)}</pre>
+            </div>
+          }
+        />
+      ) : null}
 
       <div className="mcp-call-log-footer">
         <small>{formatMessageCount(page?.total ?? 0)}</small>

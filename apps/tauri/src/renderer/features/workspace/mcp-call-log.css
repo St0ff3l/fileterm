@@ -197,3 +197,67 @@
   opacity: 0.55;
   cursor: default;
 }
+
+.mcp-call-log-row {
+  cursor: pointer;
+}
+
+.mcp-call-log-row:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: -2px;
+}
+
+.mcp-call-log-dialog .confirm-action-dialog {
+  width: min(720px, calc(100vw - 48px));
+}
+
+.mcp-call-log-dialog-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mcp-call-log-detail-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mcp-call-log-detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-size: 12px;
+}
+
+.mcp-call-log-detail-grid > span:nth-child(odd) {
+  color: var(--text-muted);
+}
+
+.mcp-call-log-detail-grid > span:nth-child(even) {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.mcp-call-log-detail-json,
+.mcp-call-log-detail-error {
+  margin: 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.mcp-call-log-detail-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
