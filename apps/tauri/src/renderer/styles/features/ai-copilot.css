@@ -3225,18 +3225,6 @@
   -webkit-line-clamp: 2;
 }
 
-.ai-settings-operation-message {
-  color: var(--text-secondary) !important;
-}
-
-.ai-settings-operation-message--success {
-  color: var(--success-text, var(--success)) !important;
-}
-
-.ai-settings-operation-message--error {
-  color: var(--danger-text, var(--danger)) !important;
-}
-
 .ai-settings-footer-actions {
   display: flex;
   flex: 0 0 auto;

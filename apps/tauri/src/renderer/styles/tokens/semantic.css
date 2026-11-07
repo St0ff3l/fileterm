@@ -5,6 +5,8 @@
  */
 
 :root {
+  --feedback-bubble-text: var(--ref-feedback-bubble-text);
+
   /* Surface Semantics */
   --surface-app: var(--ref-surface-canvas);
   --surface-canvas: var(--ref-surface-canvas);

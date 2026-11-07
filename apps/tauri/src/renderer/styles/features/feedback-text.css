@@ -42,16 +42,3 @@
 .feedback-text--loading {
   color: var(--text-muted);
 }
-
-.sync-feedback-text {
-  min-width: 0;
-  max-width: 36ch;
-  flex: 0 1 36ch;
-}
-
-@media (max-width: 720px) {
-  .sync-feedback-text {
-    max-width: 100%;
-    flex-basis: auto;
-  }
-}

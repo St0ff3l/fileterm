@@ -1,3 +1,4 @@
+import { FeedbackBubble } from '../../components/common/feedback-bubble/feedback-bubble'
 import { useEffect, useRef, useState } from 'react'
 import type { FileTermDesktopApi, SecuritySettings } from '@fileterm/core'
 import { t } from '../../i18n'
@@ -509,11 +510,7 @@ export function SecuritySettingsPanel({
               </button>
             ) : null}
             {actionFeedback?.target === 'session' ? (
-              <FeedbackText
-                className="security-inline-feedback"
-                message={actionFeedback.message}
-                tone={actionFeedback.kind}
-              />
+              <FeedbackBubble message={actionFeedback.message} tone={actionFeedback.kind} />
             ) : null}
           </div>
         </div>
@@ -646,11 +643,7 @@ export function SecuritySettingsPanel({
               </button>
             ) : null}
             {actionFeedback?.target === 'backup' ? (
-              <FeedbackText
-                className="security-inline-feedback"
-                message={actionFeedback.message}
-                tone={actionFeedback.kind}
-              />
+              <FeedbackBubble message={actionFeedback.message} tone={actionFeedback.kind} />
             ) : null}
           </div>
         </div>

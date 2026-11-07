@@ -9,6 +9,8 @@
 :root[data-theme='default'] {
   color-scheme: dark;
 
+  --ref-feedback-bubble-text: #f3f3f3;
+
   /* Surfaces & Canvas */
   --ref-surface-canvas: #151515;
   --ref-surface-sidebar: #242424;

@@ -1,3 +1,4 @@
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import type { Dispatch, SetStateAction } from 'react'
 import type {
   BackupDownloadMode,
@@ -212,13 +213,7 @@ export function SyncSettingsPanel() {
                     label={t.webdavTestConnection}
                   />
                 </button>
-                {syncFeedback ? (
-                  <FeedbackText
-                    className="sync-feedback-text"
-                    message={syncFeedback.message}
-                    tone={syncFeedback.kind}
-                  />
-                ) : null}
+                {syncFeedback ? <FeedbackBubble message={syncFeedback.message} tone={syncFeedback.kind} /> : null}
               </div>
 
               {syncConfig.lastSyncedAt ? (
@@ -495,9 +490,7 @@ export function SyncSettingsPanel() {
                     label={t.s3TestConnection}
                   />
                 </button>
-                {s3Feedback ? (
-                  <FeedbackText className="sync-feedback-text" message={s3Feedback.message} tone={s3Feedback.kind} />
-                ) : null}
+                {s3Feedback ? <FeedbackBubble message={s3Feedback.message} tone={s3Feedback.kind} /> : null}
               </div>
 
               {s3Config.lastSyncedAt ? (
