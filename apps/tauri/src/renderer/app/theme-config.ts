@@ -444,6 +444,7 @@ function resolveCompactUiVariables(
     '--traffic-maximize': '#27c93f',
     '--confirm-dialog-text': secondaryText,
     '--dialog-surface': card,
+    '--ref-feedback-bubble-text': isLight ? '#1f2933' : '#f3f3f3',
     '--dialog-border': border,
     '--dialog-shadow': isLight
       ? '0 22px 70px rgba(15, 23, 42, 0.16), 0 1px 0 rgba(255, 255, 255, 0.82) inset'

@@ -1,0 +1,224 @@
+<!doctype html><meta charset="utf-8" /><title>FileTerm 弹窗预览</title
+><style>
+  body {
+    margin: 24px;
+    background: #141414;
+    color: #eee;
+    font: 14px system-ui;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    background: #141414;
+    padding: 12px;
+    z-index: 1;
+  }
+  main {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 24px;
+  }
+  article {
+    background: #252525;
+    padding: 16px;
+    border-radius: 12px;
+  }
+  h2 {
+    font-size: 16px;
+  }
+  img {
+    width: 100%;
+    height: 390px;
+    object-fit: contain;
+  }
+  .light {
+    display: none;
+  }
+  body.light-mode .dark {
+    display: none;
+  }
+  body.light-mode .light {
+    display: block;
+  }
+  button,
+  input {
+    padding: 8px;
+    margin-right: 12px;
+  }
+</style>
+<header>
+  <h1>33 种真实组件弹窗 · 深浅色预览</h1>
+  <p>表单标题栏统一 44px；普通确认提示保留原模板。正文按内容适配。点击截图查看原图。合成数据，不执行连接或保存。</p>
+  <button onclick="document.body.classList.toggle('light-mode')">切换深色 / 浅色</button
+  ><input
+    placeholder="筛选弹窗"
+    oninput="document.querySelectorAll('article').forEach((a) => (a.hidden = !a.innerText.includes(this.value)))"
+  />
+</header>
+<main>
+  <article>
+    <h2>连接 SMB 网络共享</h2>
+    <a class="dark" href="dark/smb-credentials.png"><img loading="lazy" src="dark/smb-credentials.png" /></a
+    ><a class="light" href="light/smb-credentials.png"><img loading="lazy" src="light/smb-credentials.png" /></a>
+  </article>
+  <article>
+    <h2>选择 SMB 共享目录</h2>
+    <a class="dark" href="dark/smb-shares.png"><img loading="lazy" src="dark/smb-shares.png" /></a
+    ><a class="light" href="light/smb-shares.png"><img loading="lazy" src="light/smb-shares.png" /></a>
+  </article>
+  <article>
+    <h2>启用 root 视角</h2>
+    <a class="dark" href="dark/root-access.png"><img loading="lazy" src="dark/root-access.png" /></a
+    ><a class="light" href="light/root-access.png"><img loading="lazy" src="light/root-access.png" /></a>
+  </article>
+  <article>
+    <h2>sudo / su 密码输入</h2>
+    <a class="dark" href="dark/sudo-password.png"><img loading="lazy" src="dark/sudo-password.png" /></a
+    ><a class="light" href="light/sudo-password.png"><img loading="lazy" src="light/sudo-password.png" /></a>
+  </article>
+  <article>
+    <h2>SSH 登录凭据</h2>
+    <a class="dark" href="dark/ssh-login.png"><img loading="lazy" src="dark/ssh-login.png" /></a
+    ><a class="light" href="light/ssh-login.png"><img loading="lazy" src="light/ssh-login.png" /></a>
+  </article>
+  <article>
+    <h2>SSH 多轮认证</h2>
+    <a class="dark" href="dark/ssh-keyboard.png"><img loading="lazy" src="dark/ssh-keyboard.png" /></a
+    ><a class="light" href="light/ssh-keyboard.png"><img loading="lazy" src="light/ssh-keyboard.png" /></a>
+  </article>
+  <article>
+    <h2>SSH 主机指纹确认</h2>
+    <a class="dark" href="dark/host-verification.png"><img loading="lazy" src="dark/host-verification.png" /></a
+    ><a class="light" href="light/host-verification.png"><img loading="lazy" src="light/host-verification.png" /></a>
+  </article>
+  <article>
+    <h2>SSH 主机指纹变化</h2>
+    <a class="dark" href="dark/host-changed.png"><img loading="lazy" src="dark/host-changed.png" /></a
+    ><a class="light" href="light/host-changed.png"><img loading="lazy" src="light/host-changed.png" /></a>
+  </article>
+  <article>
+    <h2>私钥口令</h2>
+    <a class="dark" href="dark/key-passphrase.png"><img loading="lazy" src="dark/key-passphrase.png" /></a
+    ><a class="light" href="light/key-passphrase.png"><img loading="lazy" src="light/key-passphrase.png" /></a>
+  </article>
+  <article>
+    <h2>备份加密密码</h2>
+    <a class="dark" href="dark/backup-password.png"><img loading="lazy" src="dark/backup-password.png" /></a
+    ><a class="light" href="light/backup-password.png"><img loading="lazy" src="light/backup-password.png" /></a>
+  </article>
+  <article>
+    <h2>新建文件</h2>
+    <a class="dark" href="dark/new-file.png"><img loading="lazy" src="dark/new-file.png" /></a
+    ><a class="light" href="light/new-file.png"><img loading="lazy" src="light/new-file.png" /></a>
+  </article>
+  <article>
+    <h2>重命名</h2>
+    <a class="dark" href="dark/rename-file.png"><img loading="lazy" src="dark/rename-file.png" /></a
+    ><a class="light" href="light/rename-file.png"><img loading="lazy" src="light/rename-file.png" /></a>
+  </article>
+  <article>
+    <h2>文件权限</h2>
+    <a class="dark" href="dark/file-permissions.png"><img loading="lazy" src="dark/file-permissions.png" /></a
+    ><a class="light" href="light/file-permissions.png"><img loading="lazy" src="light/file-permissions.png" /></a>
+  </article>
+  <article>
+    <h2>文件冲突处理</h2>
+    <a class="dark" href="dark/file-conflict.png"><img loading="lazy" src="dark/file-conflict.png" /></a
+    ><a class="light" href="light/file-conflict.png"><img loading="lazy" src="light/file-conflict.png" /></a>
+  </article>
+  <article>
+    <h2>路径收藏</h2>
+    <a class="dark" href="dark/bookmarks.png"><img loading="lazy" src="dark/bookmarks.png" /></a
+    ><a class="light" href="light/bookmarks.png"><img loading="lazy" src="light/bookmarks.png" /></a>
+  </article>
+  <article>
+    <h2>新增运行时隧道</h2>
+    <a class="dark" href="dark/runtime-tunnel.png"><img loading="lazy" src="dark/runtime-tunnel.png" /></a
+    ><a class="light" href="light/runtime-tunnel.png"><img loading="lazy" src="light/runtime-tunnel.png" /></a>
+  </article>
+  <article>
+    <h2>新增代理配置</h2>
+    <a class="dark" href="dark/proxy-profile.png"><img loading="lazy" src="dark/proxy-profile.png" /></a
+    ><a class="light" href="light/proxy-profile.png"><img loading="lazy" src="light/proxy-profile.png" /></a>
+  </article>
+  <article>
+    <h2>新增隧道配置</h2>
+    <a class="dark" href="dark/tunnel-profile.png"><img loading="lazy" src="dark/tunnel-profile.png" /></a
+    ><a class="light" href="light/tunnel-profile.png"><img loading="lazy" src="light/tunnel-profile.png" /></a>
+  </article>
+  <article>
+    <h2>新建命令模板</h2>
+    <a class="dark" href="dark/command-editor.png"><img loading="lazy" src="dark/command-editor.png" /></a
+    ><a class="light" href="light/command-editor.png"><img loading="lazy" src="light/command-editor.png" /></a>
+  </article>
+  <article>
+    <h2>新建连接</h2>
+    <a class="dark" href="dark/connection-editor.png"><img loading="lazy" src="dark/connection-editor.png" /></a
+    ><a class="light" href="light/connection-editor.png"><img loading="lazy" src="light/connection-editor.png" /></a>
+  </article>
+  <article>
+    <h2>连接导入预览</h2>
+    <a class="dark" href="dark/connection-import.png"><img loading="lazy" src="dark/connection-import.png" /></a
+    ><a class="light" href="light/connection-import.png"><img loading="lazy" src="light/connection-import.png" /></a>
+  </article>
+  <article>
+    <h2>导入 SSH 密钥</h2>
+    <a class="dark" href="dark/key-import.png"><img loading="lazy" src="dark/key-import.png" /></a
+    ><a class="light" href="light/key-import.png"><img loading="lazy" src="light/key-import.png" /></a>
+  </article>
+  <article>
+    <h2>编辑 SSH 密钥备注</h2>
+    <a class="dark" href="dark/key-note.png"><img loading="lazy" src="dark/key-note.png" /></a
+    ><a class="light" href="light/key-note.png"><img loading="lazy" src="light/key-note.png" /></a>
+  </article>
+  <article>
+    <h2>调用详情</h2>
+    <a class="dark" href="dark/call-detail.png"><img loading="lazy" src="dark/call-detail.png" /></a
+    ><a class="light" href="light/call-detail.png"><img loading="lazy" src="light/call-detail.png" /></a>
+  </article>
+  <article>
+    <h2>MCP 操作审批</h2>
+    <a class="dark" href="dark/mcp-approval.png"><img loading="lazy" src="dark/mcp-approval.png" /></a
+    ><a class="light" href="light/mcp-approval.png"><img loading="lazy" src="light/mcp-approval.png" /></a>
+  </article>
+  <article>
+    <h2>删除确认</h2>
+    <a class="dark" href="dark/delete-confirm.png"><img loading="lazy" src="dark/delete-confirm.png" /></a
+    ><a class="light" href="light/delete-confirm.png"><img loading="lazy" src="light/delete-confirm.png" /></a>
+  </article>
+  <article>
+    <h2>关闭窗口确认</h2>
+    <a class="dark" href="dark/close-confirm.png"><img loading="lazy" src="dark/close-confirm.png" /></a
+    ><a class="light" href="light/close-confirm.png"><img loading="lazy" src="light/close-confirm.png" /></a>
+  </article>
+  <article>
+    <h2>便携版更新提示</h2>
+    <a class="dark" href="dark/portable-update.png"><img loading="lazy" src="dark/portable-update.png" /></a
+    ><a class="light" href="light/portable-update.png"><img loading="lazy" src="light/portable-update.png" /></a>
+  </article>
+  <article>
+    <h2>文件编辑器</h2>
+    <a class="dark" href="dark/file-editor.png"><img loading="lazy" src="dark/file-editor.png" /></a
+    ><a class="light" href="light/file-editor.png"><img loading="lazy" src="light/file-editor.png" /></a>
+  </article>
+  <article>
+    <h2>连接管理器弹窗</h2>
+    <a class="dark" href="dark/connection-manager.png"><img loading="lazy" src="dark/connection-manager.png" /></a
+    ><a class="light" href="light/connection-manager.png"><img loading="lazy" src="light/connection-manager.png" /></a>
+  </article>
+  <article>
+    <h2>命令管理器弹窗</h2>
+    <a class="dark" href="dark/command-manager.png"><img loading="lazy" src="dark/command-manager.png" /></a
+    ><a class="light" href="light/command-manager.png"><img loading="lazy" src="light/command-manager.png" /></a>
+  </article>
+  <article>
+    <h2>设置弹窗</h2>
+    <a class="dark" href="dark/settings.png"><img loading="lazy" src="dark/settings.png" /></a
+    ><a class="light" href="light/settings.png"><img loading="lazy" src="light/settings.png" /></a>
+  </article>
+  <article>
+    <h2>异常详情</h2>
+    <a class="dark" href="dark/error-dialog.png"><img loading="lazy" src="dark/error-dialog.png" /></a
+    ><a class="light" href="light/error-dialog.png"><img loading="lazy" src="light/error-dialog.png" /></a>
+  </article>
+</main>

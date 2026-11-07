@@ -191,7 +191,7 @@ async fn handle_runtime_connection(
         &mut writer,
         BridgeFrame::HelloAck {
             protocol_version: MCP_PROTOCOL_VERSION,
-            session_id,
+            session_id: session_id.clone(),
             error: None,
         },
     )
@@ -231,8 +231,11 @@ async fn handle_runtime_connection(
         match frame {
             BridgeFrame::Request {
                 request_id,
-                request,
+                mut request,
             } => {
+                // The Hello client_id is self-reported. Audit the desktop-issued
+                // session identity instead, never an identity supplied by the caller.
+                request.client_id = Some(session_id.clone());
                 if !valid_bridge_request_id(&request_id) {
                     let _ = writer_sender
                         .send(BridgeFrame::Response {
@@ -327,61 +330,78 @@ async fn run_bridge_request(
     _request_permit: tokio::sync::OwnedSemaphorePermit,
 ) {
     let request_timeout = bridge_request_timeout(&request);
-    let (progress_sender, mut progress_receiver) =
-        mpsc::channel(MCP_BRIDGE_PROGRESS_QUEUE_SIZE);
-    let dispatch = dispatch_bridge_request(
-        &app,
-        request,
-        Some(progress_sender),
-        Some(cancellation.clone()),
+    let (progress_sender, mut progress_receiver) = mpsc::channel(MCP_BRIDGE_PROGRESS_QUEUE_SIZE);
+    let mut audit = McpCallAudit::begin(
+        crate::storage::workspace_file(&app, "mcp-calls.jsonl"),
+        &request,
     );
-    tokio::pin!(dispatch);
     let mut interaction_history = Vec::new();
-    let result = timeout(request_timeout, async {
-        let mut progress_open = true;
-        loop {
-            tokio::select! {
-                result = &mut dispatch => {
-                    return Some(match result {
-                        Ok(result) => BridgeResponse::success(result),
-                        Err(error) => BridgeResponse::error(error),
-                    });
-                }
-                progress = progress_receiver.recv(), if progress_open => {
-                    match progress {
-                        Some(progress) => {
-                            if progress.is_interaction() {
-                                interaction_history.push(progress.clone());
+    let result = {
+        let dispatch = dispatch_bridge_request(
+            &app,
+            request,
+            Some(progress_sender),
+            Some(cancellation.clone()),
+            &mut audit,
+        );
+        tokio::pin!(dispatch);
+        timeout(request_timeout, async {
+            let mut progress_open = true;
+            loop {
+                tokio::select! {
+                    result = &mut dispatch => {
+                        return Some(match result {
+                            Ok(result) => BridgeResponse::success(result),
+                            Err(error) => BridgeResponse::error(error),
+                        });
+                    }
+                    progress = progress_receiver.recv(), if progress_open => {
+                        match progress {
+                            Some(progress) => {
+                                if progress.is_interaction() {
+                                    interaction_history.push(progress.clone());
+                                }
+                                match writer_sender.try_send(BridgeFrame::Progress {
+                                request_id: request_id.clone(),
+                                progress,
+                            }) {
+                                Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
+                                Err(mpsc::error::TrySendError::Closed(_)) => return None,
                             }
-                            match writer_sender.try_send(BridgeFrame::Progress {
-                            request_id: request_id.clone(),
-                            progress,
-                        }) {
-                            Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
-                            Err(mpsc::error::TrySendError::Closed(_)) => return None,
+                            },
+                            None => progress_open = false,
                         }
-                        },
-                        None => progress_open = false,
+                    }
+                    _ = cancellation.cancelled() => {
+                        cancellation.cancel();
+                        let _ = timeout(MCP_BRIDGE_CANCEL_DRAIN_TIMEOUT, &mut dispatch).await;
+                        return Some(BridgeResponse::error("FileTerm MCP request cancelled"));
                     }
                 }
-                _ = cancellation.cancelled() => {
-                    cancellation.cancel();
-                    let _ = timeout(MCP_BRIDGE_CANCEL_DRAIN_TIMEOUT, &mut dispatch).await;
-                    return Some(BridgeResponse::error("FileTerm MCP request cancelled"));
-                }
             }
-        }
-    })
-    .await
-    .unwrap_or_else(|_| {
-        cancellation.cancel();
-        Some(BridgeResponse::error(
-            "FileTerm MCP request timed out; retry after checking the session",
-        ))
-    });
+        })
+        .await
+        .unwrap_or_else(|_| {
+            cancellation.cancel();
+            Some(BridgeResponse::error(
+                "FileTerm MCP request timed out; retry after checking the session",
+            ))
+        })
+    };
+    if let Some(response) = result.as_ref() {
+        let outcome = match response.result.as_ref() {
+            Some(value) if response.ok => Ok(value),
+            _ => Err(response
+                .error
+                .as_deref()
+                .unwrap_or("FILETERM_OPERATION_FAILED")),
+        };
+        audit.finish(outcome);
+    }
 
     if let Some(response) = result {
-        let response = finalize_bridge_interactions(response, interaction_history, &mut progress_receiver);
+        let response =
+            finalize_bridge_interactions(response, interaction_history, &mut progress_receiver);
         let _ = writer_sender
             .send(BridgeFrame::Response {
                 request_id: request_id.clone(),

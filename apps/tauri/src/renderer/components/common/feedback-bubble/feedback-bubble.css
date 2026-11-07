@@ -1,0 +1,158 @@
+.feedback-bubble {
+  position: fixed;
+  z-index: 10000;
+  right: 40px;
+  bottom: 96px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 280px;
+  max-width: min(400px, calc(100vw - 32px));
+  min-height: 48px;
+  max-height: calc(100dvh - 120px);
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--feedback-bubble-text) 12%, transparent);
+  border-radius: 8px;
+  background: var(--surface-context-menu);
+  box-shadow: var(--shadow-modal);
+  color: var(--feedback-bubble-text);
+  animation: feedback-bubble-enter 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: text;
+}
+
+.feedback-bubble.is-exiting {
+  animation: feedback-bubble-exit 140ms ease-in forwards;
+}
+
+.feedback-bubble__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.feedback-bubble__icon--success {
+  color: var(--status-success);
+}
+
+.feedback-bubble__icon--error {
+  color: var(--status-danger);
+}
+
+.feedback-bubble__icon--warning {
+  color: var(--status-warning);
+}
+
+.feedback-bubble__icon--info {
+  color: var(--status-info);
+}
+
+.feedback-bubble__spinner {
+  width: 16px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.feedback-bubble__body {
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100dvh - 156px);
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.feedback-bubble__body::-webkit-scrollbar {
+  display: none;
+}
+
+.feedback-bubble__title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.feedback-bubble__content {
+  margin-top: 5px;
+}
+
+.feedback-bubble .feedback-text {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.feedback-bubble .feedback-text__message {
+  display: block;
+  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedback-bubble .feedback-text__spinner {
+  display: none;
+}
+
+.feedback-bubble .app-close-button.feedback-bubble__close-button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-top: 0;
+  margin-left: 4px;
+  color: var(--text-muted);
+  opacity: 0.65;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.feedback-bubble .app-close-button.feedback-bubble__close-button:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--danger-surface);
+  color: var(--danger-text);
+}
+
+.feedback-bubble .app-close-button.feedback-bubble__close-button:focus-visible {
+  opacity: 1;
+  outline: 1px solid var(--focus-outline);
+  outline-offset: 1px;
+}
+
+@keyframes feedback-bubble-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes feedback-bubble-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedback-bubble,
+  .feedback-bubble.is-exiting {
+    animation: none;
+  }
+}

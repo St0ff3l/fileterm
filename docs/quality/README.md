@@ -15,6 +15,7 @@
 
 专项记录：
 
+- [弹窗统一样式预览](dialog-previews/README.md)：33 种弹窗的深浅色截图、总览和可筛选索引，记录 SMB 标题栏基准及验证范围。
 - `../integration-inventory.md`：记录当前已接入第三方项目、采用理由、实现位置和维护边界。
 - `.github/workflows/ci.yml`：常规分支 / PR 检查，当前覆盖安装依赖、TypeScript 检查与构建。
 - `git-branch-release-convention.md`：记录 `main / release/* / feat|feature|fix / hotfix/*` 的分支职责、合并流转和 tag 约定。

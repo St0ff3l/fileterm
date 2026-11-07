@@ -1,3 +1,4 @@
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { getThemeControlSurfaces } from '../../../../app/theme-config'
 import './interface-font-settings.css'
 import './interface-settings-panel.css'
@@ -184,12 +185,6 @@ export function InterfaceSettingsPanel() {
                 />
               </button>
             </div>
-            <span
-              aria-live="polite"
-              className={`theme-config-action-status${themeConfigMessage ? ` is-visible is-${themeConfigMessage.kind}` : ''}`}
-            >
-              {themeConfigMessage?.text ?? ''}
-            </span>
           </div>
         </div>
 
@@ -223,6 +218,7 @@ export function InterfaceSettingsPanel() {
             />
           </div>
           <div className="theme-config-actions-control">
+            <FeedbackBubble message={themeConfigMessage?.text} tone={themeConfigMessage?.kind} />
             <button className="primary-button compact theme-config-save-button" onClick={saveCustomTheme} type="button">
               <StableButtonContent
                 icon={<AppIcon name={editingSavedTheme ? 'check' : 'edit'} size={14} />}

@@ -5,3 +5,5 @@
 @import './app.css';
 
 @import '../components/common/input/input-focus.css';
+
+@import '../components/common/dialog/dialog-chrome.css';

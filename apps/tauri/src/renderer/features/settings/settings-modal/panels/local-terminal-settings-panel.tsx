@@ -5,6 +5,7 @@ import type {
   LocalTerminalShellOption,
   LocalTerminalShellPreferences
 } from '@fileterm/core'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { AppIcon } from '../../../common/app-icon'
 import { DropdownSelect } from '../../../common/dropdown-select'
 import { StableButtonContent } from '../../../common/stable-button-content'
@@ -143,7 +144,7 @@ export function LocalTerminalSettingsPanel() {
           )}
         </div>
 
-        {localTerminalShellError ? <p className="modal-error">{localTerminalShellError}</p> : null}
+        <FeedbackBubble message={localTerminalShellError} tone="error" />
         <div className="local-terminal-shell-actions">
           <button
             aria-busy={isSavingLocalTerminalShells}
@@ -158,12 +159,7 @@ export function LocalTerminalSettingsPanel() {
               label={t.localTerminalShellSave}
             />
           </button>
-          <span
-            aria-live="polite"
-            className={`local-terminal-shell-save-message${localTerminalShellMessage ? ' is-visible' : ''}`}
-          >
-            {localTerminalShellMessage ?? ''}
-          </span>
+          <FeedbackBubble message={localTerminalShellMessage} tone="success" />
         </div>
       </section>
     </div>

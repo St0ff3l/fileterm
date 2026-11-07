@@ -55,6 +55,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert_eq!(mcp.source, WorkspaceSessionSource::Mcp);
     }
@@ -440,6 +441,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         let full_access = McpAccessPolicy {
             connection_scope: "selected-connections".to_string(),
@@ -974,6 +976,7 @@ mod tests {
             source: WorkspaceSessionSource::Cli,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
     }
@@ -986,6 +989,7 @@ mod tests {
             source: WorkspaceSessionSource::Cli,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
     }
@@ -1002,6 +1006,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > Duration::from_secs(30));
     }
@@ -1017,6 +1022,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > Duration::from_secs(35));
     }
@@ -1029,6 +1035,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
+            client_id: None,
         };
         let wait = BridgeRequest {
             action: "wait_for_connection".to_string(),
@@ -1036,6 +1043,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&open) > MCP_CONNECTION_WAIT_TIMEOUT);
         assert_eq!(bridge_request_timeout(&wait), MCP_CONNECTION_WAIT_TIMEOUT);
@@ -1162,4 +1170,26 @@ mod tests {
         );
         assert!(!mcp_error_is_retryable(NETWORK_DEVICE_CWD_UNSUPPORTED));
     }
+
+    #[test]
+    fn bridge_request_client_id_is_desktop_injected_and_absent_from_the_wire() {
+        let request = BridgeRequest {
+            action: "list_connections".to_string(),
+            params: json!({}),
+            source: WorkspaceSessionSource::Mcp,
+            requires_approval: true,
+            progress_token: None,
+            client_id: None,
+        };
+        let wire = serde_json::to_string(&request).expect("bridge request serializes");
+        assert!(!wire.contains("client_id"));
+        let injected = format!(
+            "{},\"client_id\":\"abc123\"}}",
+            wire.strip_suffix('}').expect("wire ends with an object brace")
+        );
+        let with_client: BridgeRequest =
+            serde_json::from_str(&injected).expect("desktop can inject a client id");
+        assert_eq!(with_client.client_id.as_deref(), Some("abc123"));
+    }
+
 }

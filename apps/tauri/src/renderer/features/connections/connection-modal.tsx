@@ -1,3 +1,4 @@
+import { FormDialogBody } from '../../components/common/dialog/form-dialog-body'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type {
@@ -394,76 +395,78 @@ export function ConnectionModal({
             disabled={isFormBusy}
             style={{ border: 0, display: 'contents', margin: 0, padding: 0 }}
           >
-            {section === 'ssh' ? (
-              <ConnectionSshSection
-                connectionDefaults={connectionDefaults}
-                form={form}
-                groupOptions={groupOptions}
-                hasSavedPassword={hasSavedPassword}
-                hasSavedOtpSecret={hasSavedOtpSecret}
-                hasSavedSuPassword={hasSavedSuPassword}
-                hasSavedSudoPassword={hasSavedSudoPassword}
-                isMacOs={isMacOs}
-                isLoadingSerialPorts={isLoadingSerialPorts}
-                isNetworkDevice={isNetworkDevice}
-                mode={mode}
-                onClearHostFingerprint={onClearHostFingerprint}
-                refreshSerialPorts={refreshSerialPorts}
-                serialDevicePathPlaceholder={serialDevicePathPlaceholder}
-                serialPortLoadError={serialPortLoadError}
-                serialPortOptions={serialPortOptions}
-                serialPorts={serialPorts}
-                setForm={setForm}
-                showsNetworkDeviceVendor={showsNetworkDeviceVendor}
-                supportsBuiltInRs485={supportsBuiltInRs485}
-                supportsExtendedParity={supportsExtendedParity}
-              />
-            ) : null}
-            {section === 'files' && supportsFilePaneMode ? (
-              <ConnectionFilePaneSection form={form} setForm={setForm} />
-            ) : null}
-            {section === 'network' && supportsNetwork ? (
-              <ConnectionNetworkSection
-                form={form}
-                jumpHosts={jumpHosts}
-                jumpRoute={jumpRoute.jumpHosts}
-                routeError={jumpRouteError}
-                routingMode={routingMode}
-                setForm={setForm}
-              />
-            ) : null}
-            {section === 'terminal' && supportsTerminal ? (
-              <ConnectionTerminalSection form={form} isNetworkDevice={isNetworkDevice} setForm={setForm} />
-            ) : null}
-            {section === 'advanced' && supportsAdvanced ? (
-              <ConnectionSshAdvancedSection
-                connectionDefaults={connectionDefaults}
-                fallbackResourceMonitoringMetrics={fallbackResourceMonitoringMetrics}
-                fallbackResourceMonitoringMetricOrder={fallbackResourceMonitoringMetricOrder}
-                form={form}
-                intervalSettingOptions={intervalSettingOptions}
-                isNetworkDevice={isNetworkDevice}
-                isSubmitting={isSubmitting}
-                setForm={setForm}
-                setSshConnectionSetting={setSshConnectionSetting}
-              />
-            ) : null}
-            {section === 'reliability' && supportsReliability ? (
-              <ConnectionReliabilitySection
-                connectionDefaults={connectionDefaults}
-                form={form}
-                setForm={setForm}
-                setSshConnectionSetting={setSshConnectionSetting}
-              />
-            ) : null}
-            {section === 'session-log' ? (
-              <ConnectionSessionLogSection
-                chooseSessionLogDirectory={chooseSessionLogDirectory}
-                form={form}
-                isSelectingSessionLogDirectory={isSelectingSessionLogDirectory}
-                setForm={setForm}
-              />
-            ) : null}
+            <FormDialogBody>
+              {section === 'ssh' ? (
+                <ConnectionSshSection
+                  connectionDefaults={connectionDefaults}
+                  form={form}
+                  groupOptions={groupOptions}
+                  hasSavedPassword={hasSavedPassword}
+                  hasSavedOtpSecret={hasSavedOtpSecret}
+                  hasSavedSuPassword={hasSavedSuPassword}
+                  hasSavedSudoPassword={hasSavedSudoPassword}
+                  isMacOs={isMacOs}
+                  isLoadingSerialPorts={isLoadingSerialPorts}
+                  isNetworkDevice={isNetworkDevice}
+                  mode={mode}
+                  onClearHostFingerprint={onClearHostFingerprint}
+                  refreshSerialPorts={refreshSerialPorts}
+                  serialDevicePathPlaceholder={serialDevicePathPlaceholder}
+                  serialPortLoadError={serialPortLoadError}
+                  serialPortOptions={serialPortOptions}
+                  serialPorts={serialPorts}
+                  setForm={setForm}
+                  showsNetworkDeviceVendor={showsNetworkDeviceVendor}
+                  supportsBuiltInRs485={supportsBuiltInRs485}
+                  supportsExtendedParity={supportsExtendedParity}
+                />
+              ) : null}
+              {section === 'files' && supportsFilePaneMode ? (
+                <ConnectionFilePaneSection form={form} setForm={setForm} />
+              ) : null}
+              {section === 'network' && supportsNetwork ? (
+                <ConnectionNetworkSection
+                  form={form}
+                  jumpHosts={jumpHosts}
+                  jumpRoute={jumpRoute.jumpHosts}
+                  routeError={jumpRouteError}
+                  routingMode={routingMode}
+                  setForm={setForm}
+                />
+              ) : null}
+              {section === 'terminal' && supportsTerminal ? (
+                <ConnectionTerminalSection form={form} isNetworkDevice={isNetworkDevice} setForm={setForm} />
+              ) : null}
+              {section === 'advanced' && supportsAdvanced ? (
+                <ConnectionSshAdvancedSection
+                  connectionDefaults={connectionDefaults}
+                  fallbackResourceMonitoringMetrics={fallbackResourceMonitoringMetrics}
+                  fallbackResourceMonitoringMetricOrder={fallbackResourceMonitoringMetricOrder}
+                  form={form}
+                  intervalSettingOptions={intervalSettingOptions}
+                  isNetworkDevice={isNetworkDevice}
+                  isSubmitting={isSubmitting}
+                  setForm={setForm}
+                  setSshConnectionSetting={setSshConnectionSetting}
+                />
+              ) : null}
+              {section === 'reliability' && supportsReliability ? (
+                <ConnectionReliabilitySection
+                  connectionDefaults={connectionDefaults}
+                  form={form}
+                  setForm={setForm}
+                  setSshConnectionSetting={setSshConnectionSetting}
+                />
+              ) : null}
+              {section === 'session-log' ? (
+                <ConnectionSessionLogSection
+                  chooseSessionLogDirectory={chooseSessionLogDirectory}
+                  form={form}
+                  isSelectingSessionLogDirectory={isSelectingSessionLogDirectory}
+                  setForm={setForm}
+                />
+              ) : null}
+            </FormDialogBody>
             <div className="form-actions ssh-actions">
               {connectionTestFeedback ? (
                 <FeedbackText
