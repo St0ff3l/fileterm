@@ -79,5 +79,6 @@ include!("tunnel_commands.rs");
 include!("tunnel_profile_commands.rs");
 include!("proxy_commands.rs");
 include!("interaction_commands.rs");
+include!("mcp_record_commands.rs");
 include!("profile_commands.rs");
 include!("tests/mod.rs");

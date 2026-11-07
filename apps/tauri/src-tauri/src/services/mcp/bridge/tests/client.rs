@@ -9,6 +9,7 @@ fn request(value: &str) -> BridgeRequest {
         source: super::super::super::WorkspaceSessionSource::Cli,
         requires_approval: false,
         progress_token: None,
+        client_id: None,
     }
 }
 

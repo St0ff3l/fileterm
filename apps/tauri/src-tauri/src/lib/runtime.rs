@@ -506,6 +506,7 @@ pub fn run() {
             crate::commands::app_get_platform,
             crate::commands::app_get_linux_window_corner_style,
             crate::commands::app_get_mcp_agent_setup,
+            crate::commands::app_read_mcp_call_log,
             crate::commands::app_get_arch,
             crate::commands::app_get_runtime_version,
             crate::commands::app_read_clipboard_text,

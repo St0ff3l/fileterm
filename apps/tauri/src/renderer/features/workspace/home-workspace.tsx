@@ -30,6 +30,7 @@ import { ConnectionManagerModal } from '../connections/connection-manager-modal'
 import { ProxyManagerPage, type ProxyManagerStats } from '../proxies/proxy-manager-page'
 import { CommandManagerModal } from '../commands/command-manager-modal'
 import { SshKeyManagerPage } from '../ssh-keys/ssh-key-manager-page'
+import { McpCallLogPage } from './mcp-call-log-page'
 import { SettingsModal } from '../settings/settings-modal'
 import { TabBar, type TabBarProps } from '../layout/tab-bar'
 import { HostGroupList } from '../layout/host-group-list'
@@ -148,6 +149,7 @@ export function HomeWorkspace({
     | 'command-manager'
     | 'ssh-key-manager'
     | 'background-sessions'
+    | 'mcp-call-log'
     | 'settings'
   >('overview')
   const contentBodyRef = useRef<HTMLDivElement | null>(null)
@@ -176,8 +178,9 @@ export function HomeWorkspace({
     'command-manager': 3,
     'ssh-key-manager': 4,
     'background-sessions': 5,
-    settings: 6,
-    'quick-links': 7
+    'mcp-call-log': 6,
+    settings: 7,
+    'quick-links': 8
   }
   const selectTab = (tab: typeof activeTab) => {
     if (tab === activeTab) return
@@ -352,6 +355,16 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.backgroundSessions}</SidebarAlignedLabel>
           </button>
           <button
+            className={`sidebar-nav-link ${activeTab === 'mcp-call-log' ? 'active' : ''}`}
+            onClick={() => selectTab('mcp-call-log')}
+            aria-label={t.mcpCallRecordsTitle}
+            title={t.mcpCallRecordsTitle}
+            type="button"
+          >
+            <AppIcon name="shield" size={18} />
+            <SidebarAlignedLabel>{t.mcpCallRecordsTitle}</SidebarAlignedLabel>
+          </button>
+          <button
             className="sidebar-nav-link"
             onClick={onOpenFileTransfers}
             aria-label={t.fileTransferWorkspace}
@@ -514,6 +527,11 @@ export function HomeWorkspace({
                 onAttach={onAttachBackgroundSession}
                 onClose={onCloseBackgroundSession}
               />
+            </div>
+          )}
+          {activeTab === 'mcp-call-log' && (
+            <div key="mcp-call-log" className="page-transition" data-nav-direction={navDirection}>
+              <McpCallLogPage />
             </div>
           )}
           {activeTab === 'settings' && (

@@ -95,6 +95,7 @@ import type {
   SummarizeAiConversationTitleInput,
   TestAiProviderInput,
   McpAgentSetup,
+  McpCallLogPage,
   UiPreferences,
   UiPreferencesInput
 } from '@fileterm/core'
@@ -344,6 +345,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     },
     listLocalTerminalShells: () => invoke<LocalTerminalShellOption[]>('app_list_local_terminal_shells'),
     getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
+    readMcpCallLog: (limit?: number, offset?: number) =>
+      invoke<McpCallLogPage>('app_read_mcp_call_log', { limit, offset }),
     listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
     listAiModels: (input: ListAiModelsInput) => invoke<AiModelInfo[]>('app_list_ai_models', { input }),
     saveAiProvider: (input: SaveAiProviderInput) => invoke<AiProviderSummary>('app_save_ai_provider', { input }),

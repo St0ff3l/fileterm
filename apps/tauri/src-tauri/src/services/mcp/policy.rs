@@ -5,19 +5,48 @@ async fn dispatch_bridge_request(
     progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     cancellation: Option<tokio_util::sync::CancellationToken>,
 ) -> Result<Value, String> {
+    let started = std::time::Instant::now();
+    let (result, approval) =
+        dispatch_bridge_request_inner(app, &request, progress_sender, cancellation).await;
+    record_mcp_call(app, &request, approval, started, &result);
+    result
+}
+
+async fn dispatch_bridge_request_inner(
+    app: &AppHandle,
+    request: &BridgeRequest,
+    progress_sender: Option<mpsc::Sender<BridgeProgress>>,
+    cancellation: Option<tokio_util::sync::CancellationToken>,
+) -> (Result<Value, String>, &'static str) {
     let progress_token = request.progress_token.clone();
-    let policy = enforce_mcp_access_policy(app, &request).await?;
-    if should_request_mcp_approval(&policy, &request) {
+    let policy = match enforce_mcp_access_policy(app, request).await {
+        Ok(policy) => policy,
+        Err(error) => return (Err(error), "blocked-by-policy"),
+    };
+    let mut approval = "not-required";
+    if should_request_mcp_approval(&policy, request) {
+        approval = "user";
         if let Some(progress_sender) = progress_sender.as_ref() {
             let _ = progress_sender.try_send(BridgeProgress::action_approval_waiting(
                 &request.action,
                 progress_token.clone(),
             ));
         }
-        request_mcp_approval(app, request.source, &request.action, &request.params, progress_sender.as_ref(), progress_token.clone()).await?;
+        if let Err(error) = request_mcp_approval(
+            app,
+            request.source,
+            &request.action,
+            &request.params,
+            progress_sender.as_ref(),
+            progress_token.clone(),
+        )
+        .await
+        {
+            return (Err(error), approval);
+        }
     }
 
-    match request.action.as_str() {
+    let result = match request.action.as_str() {
         "get_agent_contract" => Ok(agent_contract()),
         "list_connections" => list_connections(app, &request.params).await,
         "get_session_context" => get_session_context(app, &request.params).await,
@@ -91,7 +120,8 @@ async fn dispatch_bridge_request(
         "stop_ssh_tunnel" => tunnel_action(app, &request.params, "stop").await,
         "delete_ssh_tunnel" => tunnel_action(app, &request.params, "delete").await,
         _ => Err("Unsupported FileTerm MCP action".to_string()),
-    }
+    };
+    (result, approval)
 }
 
 /// External Agents never get a wider capability than the policy selected in

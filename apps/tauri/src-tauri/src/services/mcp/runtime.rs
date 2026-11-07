@@ -231,8 +231,12 @@ async fn handle_runtime_connection(
         match frame {
             BridgeFrame::Request {
                 request_id,
-                request,
+                mut request,
             } => {
+                // Bind every request to the authenticated connection identity
+                // from the Hello handshake. Child processes cannot forge this
+                // value: it is overwritten here regardless of what they sent.
+                request.client_id = Some(client_id.clone());
                 if !valid_bridge_request_id(&request_id) {
                     let _ = writer_sender
                         .send(BridgeFrame::Response {

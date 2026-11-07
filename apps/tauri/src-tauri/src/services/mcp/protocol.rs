@@ -109,6 +109,9 @@ where
         source: WorkspaceSessionSource::Mcp,
         requires_approval: true,
         progress_token,
+        // The desktop injects the authenticated connection id; the stdio
+        // process has no authority to claim one.
+        client_id: None,
     };
     let mut history = Vec::new();
     let result = match call_desktop_bridge_with_client(bridge, request, on_progress, cancellation, &mut history) {

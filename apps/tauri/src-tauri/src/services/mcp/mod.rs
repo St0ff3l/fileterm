@@ -107,6 +107,7 @@ mod bridge;
 use bridge::{BridgeClient, BridgeFrame};
 
 include!("types.rs");
+include!("call_log.rs");
 include!("interactions.rs");
 include!("agent_contract.rs");
 include!("background.rs");

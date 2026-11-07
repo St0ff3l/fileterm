@@ -87,6 +87,13 @@ struct BridgeRequest {
     requires_approval: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     progress_token: Option<Value>,
+    /// Loopback bridge connection identity, injected by the desktop runtime
+    /// after the authenticated `Hello` handshake. The stdio/CLI child
+    /// processes never set it: the desktop copies its own view of the client
+    /// id onto every request so approval trust and the audit log bind to one
+    /// verified external connection instead of a caller-supplied value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    client_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

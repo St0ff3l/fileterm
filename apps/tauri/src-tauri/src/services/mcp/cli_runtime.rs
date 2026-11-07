@@ -409,6 +409,8 @@ fn cli_jsonl_bridge_request(request: &CliJsonlRequest) -> BridgeRequest {
         // caller to turn the approval gate off.
         requires_approval: true,
         progress_token: request.progress_token.clone(),
+        // The desktop overwrites this with the authenticated connection id.
+        client_id: None,
     }
 }
 

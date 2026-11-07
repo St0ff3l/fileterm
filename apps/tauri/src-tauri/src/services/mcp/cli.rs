@@ -335,6 +335,8 @@ fn cli_bridge_request(action: &str, params: Value) -> BridgeRequest {
         // same FileTerm approval dialog as MCP and CLI JSONL.
         requires_approval: true,
         progress_token: None,
+        // The desktop injects the authenticated connection id.
+        client_id: None,
     }
 }
 

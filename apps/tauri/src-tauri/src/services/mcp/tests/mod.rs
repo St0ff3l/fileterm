@@ -23,6 +23,7 @@ mod tests {
         NETWORK_DEVICE_COMMAND_INVALID, NETWORK_DEVICE_CWD_UNSUPPORTED,
         NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
         VISIBLE_TERMINAL_COMMAND_INVALID, VISIBLE_TERMINAL_SESSION_NOT_ACTIVE,
+        bound_mcp_call_log_params, redact_mcp_call_log_params,
     };
     use super::{
         cli_bridge_request, cli_exec_action, cli_jsonl_bridge_request, cli_jsonl_request_key,
@@ -55,6 +56,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert_eq!(mcp.source, WorkspaceSessionSource::Mcp);
     }
@@ -440,6 +442,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         let full_access = McpAccessPolicy {
             connection_scope: "selected-connections".to_string(),
@@ -974,6 +977,7 @@ mod tests {
             source: WorkspaceSessionSource::Cli,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
     }
@@ -986,6 +990,7 @@ mod tests {
             source: WorkspaceSessionSource::Cli,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
     }
@@ -1002,6 +1007,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > Duration::from_secs(30));
     }
@@ -1017,6 +1023,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: true,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&request) > Duration::from_secs(35));
     }
@@ -1029,6 +1036,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
+            client_id: None,
         };
         let wait = BridgeRequest {
             action: "wait_for_connection".to_string(),
@@ -1036,6 +1044,7 @@ mod tests {
             source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
+            client_id: None,
         };
         assert!(bridge_request_timeout(&open) > MCP_CONNECTION_WAIT_TIMEOUT);
         assert_eq!(bridge_request_timeout(&wait), MCP_CONNECTION_WAIT_TIMEOUT);
@@ -1162,4 +1171,76 @@ mod tests {
         );
         assert!(!mcp_error_is_retryable(NETWORK_DEVICE_CWD_UNSUPPORTED));
     }
+
+    #[test]
+    fn bridge_request_client_id_is_desktop_injected_and_absent_from_the_wire() {
+        let request = BridgeRequest {
+            action: "list_connections".to_string(),
+            params: json!({}),
+            source: WorkspaceSessionSource::Mcp,
+            requires_approval: true,
+            progress_token: None,
+            client_id: None,
+        };
+        let wire = serde_json::to_string(&request).expect("bridge request serializes");
+        assert!(!wire.contains("client_id"));
+        let injected = format!(
+            "{},\"client_id\":\"abc123\"}}",
+            wire.strip_suffix('}').expect("wire ends with an object brace")
+        );
+        let with_client: BridgeRequest =
+            serde_json::from_str(&injected).expect("desktop can inject a client id");
+        assert_eq!(with_client.client_id.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn mcp_call_log_params_drop_secrets_and_bound_long_values() {
+        let params = json!({
+            "command": "sudo systemctl restart nginx",
+            "sudo_password": "hunter2",
+            "su_password": "hunter3",
+            "nested": { "apiToken": "tok", "keep": "value" },
+            "content": "x".repeat(5_000),
+        });
+        let redacted = redact_mcp_call_log_params(&params);
+        let encoded = serde_json::to_string(&redacted).expect("redacted params serialize");
+        assert!(encoded.contains("sudo systemctl restart nginx"));
+        assert!(!encoded.contains("hunter"));
+        assert!(!encoded.to_lowercase().contains("tok\""));
+        assert!(encoded.contains("\"keep\":\"value\""));
+        // Single strings are already bounded by the redaction pass, so the
+        // params-level cap only triggers with many sizable values at once.
+        let many_fields: serde_json::Map<String, Value> = (0..80)
+            .map(|index| (format!("field{index}"), Value::String("y".repeat(500))))
+            .collect();
+        let bounded_encoded = serde_json::to_string(&bound_mcp_call_log_params(&Value::Object(
+            many_fields,
+        )))
+        .expect("bounds apply");
+        assert!(bounded_encoded.contains("<parameters truncated"));
+        assert!(!bounded_encoded.contains(&"y".repeat(500)));
+    }
+
+    #[test]
+    fn mcp_call_log_params_survive_secret_shaped_nested_keys() {
+        let params = json!({
+            "rule": { "name": "tunnel", "localPassword": "p", "hosts": ["a", "b"] },
+            "tab_id": "tab-1",
+        });
+        let redacted = redact_mcp_call_log_params(&params);
+        assert_eq!(
+            redacted.get("rule").and_then(|rule| rule.get("localPassword")),
+            None
+        );
+        assert_eq!(
+            redacted
+                .get("rule")
+                .and_then(|rule| rule.get("hosts"))
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(redacted.get("tab_id").and_then(Value::as_str), Some("tab-1"));
+    }
+
 }

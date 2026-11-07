@@ -1,0 +1,199 @@
+.mcp-call-log-page .connection-manager-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mcp-call-log-heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mcp-call-log-heading .connection-manager-title {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.mcp-call-log-heading .connection-manager-title .app-icon {
+  color: var(--accent-highlight) !important;
+}
+
+.mcp-call-log-subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mcp-call-log-table {
+  min-height: 0;
+}
+
+/* Five-column grid: time / action / approval / detail / result. Without an
+   explicit template the base .manager-head/.manager-row grid collapses every
+   cell into one squeezed implicit column (wrapped headers and badges). */
+.mcp-call-log-table .manager-head,
+.mcp-call-log-table .manager-row {
+  grid-template-columns:
+    minmax(96px, 0.55fr)
+    minmax(150px, 1.15fr)
+    86px
+    minmax(200px, 2.2fr)
+    minmax(96px, 0.7fr);
+  column-gap: 10px;
+}
+
+.mcp-call-log-row.is-failed {
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+
+.mcp-call-log-time {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.mcp-call-log-action {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+  word-break: break-all;
+  min-width: 0;
+}
+
+.mcp-call-log-source {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.mcp-call-log-detail {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.mcp-call-log-result {
+  white-space: nowrap;
+}
+
+.mcp-call-log-duration {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.mcp-call-log-error-inline {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.mcp-call-approval-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mcp-call-approval-badge.is-user {
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+.mcp-call-approval-badge.is-trust {
+  border-color: #2f9e63;
+  color: #2f9e63;
+}
+
+.mcp-call-approval-badge.is-blocked {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mcp-call-approval-badge.is-passive {
+  color: var(--text-muted);
+}
+
+.mcp-call-log-error {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 5px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.mcp-call-log-empty {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 40px 0;
+  color: var(--text-muted);
+}
+
+.mcp-call-log-empty p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.mcp-call-log-empty small {
+  font-size: 11px;
+}
+
+.mcp-call-log-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.mcp-call-log-more {
+  padding: 5px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mcp-call-log-more:hover:not(:disabled) {
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+.mcp-call-log-more:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

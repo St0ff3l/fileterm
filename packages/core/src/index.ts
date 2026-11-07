@@ -2664,6 +2664,27 @@ export interface SerialPortInfo {
 
 export type LinuxWindowCornerStyle = 'square' | 'rounded'
 
+/** One entry of the local MCP/CLI call audit log (mcp-calls.jsonl). */
+export interface McpCallLogEntry {
+  ts: string
+  source: 'mcp' | 'cli'
+  clientId: string | null
+  action: string
+  approval: 'user' | 'connection-trust' | 'not-required' | 'blocked-by-policy' | string
+  ok: boolean
+  error: string | null
+  params: Record<string, unknown>
+  durationMs: number
+}
+
+/** A page of audit log entries, newest first. */
+export interface McpCallLogPage {
+  items: McpCallLogEntry[]
+  total: number
+  offset: number
+  hasMore: boolean
+}
+
 export interface FileTermDesktopApi {
   platform: string
   /** Conservative native desktop/session policy; absent metadata means square on Linux. */
@@ -2695,6 +2716,7 @@ export interface FileTermDesktopApi {
   resetSecurityBackupPassword(): Promise<SecuritySettings>
   listLocalTerminalShells(): Promise<LocalTerminalShellOption[]>
   getMcpAgentSetup(): Promise<McpAgentSetup>
+  readMcpCallLog(limit?: number, offset?: number): Promise<McpCallLogPage>
   listAiProviders(): Promise<AiProviderSummary[]>
   listAiModels(input: ListAiModelsInput): Promise<AiModelInfo[]>
   saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
