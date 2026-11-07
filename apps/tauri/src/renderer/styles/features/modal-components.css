@@ -995,7 +995,6 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  background-color: var(--bg-main) !important;
 }
 
 .settings-modal .connection-manager-header {
@@ -3015,6 +3014,7 @@
 }
 .connection-import-strategy {
   display: flex;
+  white-space: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;

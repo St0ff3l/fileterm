@@ -2659,7 +2659,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden !important;
-  background-color: var(--bg-main) !important;
+  background-color: var(--bg-main);
   font-family: var(--font-ui);
 }
 

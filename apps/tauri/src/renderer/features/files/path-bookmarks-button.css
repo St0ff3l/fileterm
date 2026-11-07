@@ -40,7 +40,7 @@
 }
 
 .path-bookmarks-dialog > .ft-dialog__header {
-  min-height: 44px;
+  min-height: var(--dialog-header-height);
   padding: 0 16px;
   background: var(--surface-sidebar);
 }
@@ -49,6 +49,12 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 1.4;
+}
+
+.path-bookmarks-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .path-bookmarks-dialog > .ft-dialog__body {

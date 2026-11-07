@@ -1,0 +1,228 @@
+/* Shared application dialog chrome, measured against the SMB credentials form. */
+:root
+  :is(
+    .modal-card:not(.manager-inline):not(.confirm-action-dialog),
+    .ft-dialog,
+    .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  ) {
+  background-color: var(--dialog-content-bg);
+}
+
+:root
+  .modal-card:is(.ssh-modal, .connection-manager-modal, .settings-modal):not(.manager-inline):not(.standalone)
+  > .connection-manager-header {
+  background: var(--surface-sidebar);
+}
+
+:root
+  :is(.modal-card:not(.manager-inline):not(.standalone), .ft-dialog)
+  > :is(
+    .modal-header,
+    .connection-manager-header,
+    .root-access-modal__header,
+    .file-permission-dialog__header,
+    .ssh-tunnel-dialog-header,
+    .ft-dialog__header
+  ),
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__title {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--dialog-header-height);
+  height: var(--dialog-header-height);
+  margin: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--dialog-header-bg);
+  color: var(--dialog-header-text);
+  font-family: var(--font-ui);
+  font-size: var(--dialog-header-font-size);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+
+:root
+  :is(.modal-card:not(.manager-inline):not(.standalone), .ft-dialog)
+  > :is(
+    .modal-header,
+    .connection-manager-header,
+    .root-access-modal__header,
+    .file-permission-dialog__header,
+    .ssh-tunnel-dialog-header,
+    .ft-dialog__header
+  )
+  > :is(span, h2, .file-editor-title, .ssh-tunnel-dialog-title),
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__title
+  > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--dialog-header-text);
+  font-size: var(--dialog-header-font-size);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+
+:root
+  :is(.modal-card:not(.manager-inline):not(.standalone), .ft-dialog)
+  > :is(
+    .modal-header,
+    .connection-manager-header,
+    .root-access-modal__header,
+    .file-permission-dialog__header,
+    .ssh-tunnel-dialog-header,
+    .ft-dialog__header
+  )
+  > :is(span, h2, .file-editor-title, .ssh-tunnel-dialog-title)
+  :is(.app-icon, .material-symbols-outlined),
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__title
+  > span
+  :is(.app-icon, .material-symbols-outlined) {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--dialog-header-icon);
+  font-size: 16px;
+}
+
+:root .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  overflow: hidden;
+}
+
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__header {
+  min-height: 0;
+  gap: 0;
+}
+
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__description {
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog).external-operation-confirmation
+  .confirm-action-dialog__description {
+  padding: 0;
+  overflow: hidden;
+}
+
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__description
+  pre {
+  border-color: var(--border-subtle);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__footer {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 16px 10px;
+}
+
+:root
+  .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog)
+  .confirm-action-dialog__header
+  > .modal-error {
+  margin: 0 16px 16px;
+}
+
+:root
+  :is(.modal-card:not(.manager-inline), .ft-dialog)
+  :is(.ssh-form-page, .command-dialog-body, .file-permission-dialog__scroll) {
+  background-color: var(--dialog-content-bg);
+}
+
+/* Legacy framed dialogs used card padding instead of a separate content region. */
+:root :is(.conflict-resolution-modal, .connection-import-preview) {
+  padding: 0;
+  overflow: hidden;
+}
+
+:root .conflict-resolution-modal > :not(.modal-header) {
+  margin-inline: 16px;
+}
+
+:root .conflict-resolution-modal > .file-action-description {
+  margin-top: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: var(--dialog-content-bg);
+}
+
+:root .conflict-resolution-modal > .conflict-resolution-actions {
+  margin-bottom: 16px;
+}
+
+:root .modal-card.ssh-modal:not(.standalone) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(100dvh - 48px);
+}
+
+:root .modal-card.ssh-modal .form-dialog__body {
+  gap: 0;
+  padding: 0;
+}
+
+:root .modal-card.ssh-modal .form-dialog__body > .ssh-form-page {
+  height: auto;
+  overflow: visible;
+}
+
+.command-dialog-scroll-region {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.command-dialog-body {
+  scrollbar-width: none;
+}
+
+.command-dialog-body::-webkit-scrollbar {
+  display: none;
+}
+
+:root .command-dialog > .command-dialog-actions {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 16px 10px;
+  background: var(--dialog-content-bg);
+}
+
+:root .modal-card.ssh-modal .ssh-form-shell .form-actions.ssh-actions {
+  margin: 0;
+  padding: 8px 0 0;
+}

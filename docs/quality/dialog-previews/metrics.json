@@ -732,7 +732,7 @@
     "title": "新增代理配置",
     "variant": "dark",
     "height": 44,
-    "headerBg": "rgb(30, 30, 30)",
+    "headerBg": "rgb(36, 36, 36)",
     "titleFont": "13px",
     "titleColor": "rgb(231, 231, 231)",
     "icon": "rgb(128, 128, 128)",
@@ -748,7 +748,8 @@
       "left": 190
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "proxy-profile",
@@ -771,14 +772,15 @@
       "left": 210
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "tunnel-profile",
     "title": "新增隧道配置",
     "variant": "dark",
     "height": 44,
-    "headerBg": "rgb(30, 30, 30)",
+    "headerBg": "rgb(36, 36, 36)",
     "titleFont": "13px",
     "titleColor": "rgb(231, 231, 231)",
     "icon": "rgb(128, 128, 128)",
@@ -794,7 +796,8 @@
       "left": 190
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "tunnel-profile",
@@ -817,7 +820,8 @@
       "left": 210
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "command-editor",
@@ -870,7 +874,7 @@
     "title": "新建连接",
     "variant": "dark",
     "height": 44,
-    "headerBg": "rgb(30, 30, 30)",
+    "headerBg": "rgb(36, 36, 36)",
     "titleFont": "13px",
     "titleColor": "rgb(231, 231, 231)",
     "icon": "rgb(128, 128, 128)",
@@ -886,7 +890,8 @@
       "left": 190
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "connection-editor",
@@ -909,7 +914,8 @@
       "left": 190
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "connection-import",
@@ -1258,7 +1264,7 @@
     "title": "连接管理器弹窗",
     "variant": "dark",
     "height": 44,
-    "headerBg": "rgb(30, 30, 30)",
+    "headerBg": "rgb(36, 36, 36)",
     "titleFont": "13px",
     "titleColor": "rgb(231, 231, 231)",
     "icon": "rgb(128, 128, 128)",
@@ -1274,7 +1280,8 @@
       "left": 120
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "connection-manager",
@@ -1297,14 +1304,15 @@
       "left": 120
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "command-manager",
     "title": "命令管理器弹窗",
     "variant": "dark",
     "height": 44,
-    "headerBg": "rgb(30, 30, 30)",
+    "headerBg": "rgb(36, 36, 36)",
     "titleFont": "13px",
     "titleColor": "rgb(231, 231, 231)",
     "icon": "rgb(128, 128, 128)",
@@ -1320,7 +1328,8 @@
       "left": 120
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "command-manager",
@@ -1343,14 +1352,15 @@
       "left": 120
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "settings",
     "title": "设置弹窗",
     "variant": "dark",
     "height": 44,
-    "headerBg": "rgb(30, 30, 30)",
+    "headerBg": "rgb(36, 36, 36)",
     "titleFont": "13px",
     "titleColor": "rgb(231, 231, 231)",
     "icon": "rgb(128, 128, 128)",
@@ -1366,7 +1376,8 @@
       "left": 120
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "settings",
@@ -1389,7 +1400,8 @@
       "left": 120
     },
     "viewport": [1280, 762],
-    "errors": []
+    "errors": [],
+    "headerBackgroundRole": "surface-sidebar"
   },
   {
     "id": "error-dialog",

@@ -1,3 +1,4 @@
+import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@fileterm/core'
@@ -32,13 +33,16 @@ function CommandDialogShell({
   title,
   isSubmitting,
   onClose,
-  children
+  children,
+  footer
 }: {
   title: string
   isSubmitting: boolean
   onClose(): void
   children: ReactNode
+  footer: ReactNode
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
   const dialog = (
     <div className="modal-card command-dialog command-editor-page" onClick={(event) => event.stopPropagation()}>
       <div className="connection-manager-header">
@@ -50,7 +54,13 @@ function CommandDialogShell({
           <CloseButton disabled={isSubmitting} onClick={onClose} />
         </div>
       </div>
-      <div className="command-dialog-body scrollbar-scroll">{children}</div>
+      <div className="command-dialog-scroll-region">
+        <div className="command-dialog-body scrollbar-scroll" ref={scrollRef}>
+          {children}
+        </div>
+        <VerticalScrollbar scrollRef={scrollRef} />
+      </div>
+      {footer}
     </div>
   )
 
@@ -252,9 +262,11 @@ export function CommandEditorModal({
   }
 
   return (
-    <CommandDialogShell title={title} isSubmitting={submitLocked} onClose={onClose}>
-      <div className="command-editor-dialog-form">
-        {editorFields}
+    <CommandDialogShell
+      title={title}
+      isSubmitting={submitLocked}
+      onClose={onClose}
+      footer={
         <div className="form-actions command-dialog-actions">
           <button className="flat-button" disabled={submitLocked} type="button" onClick={onClose}>
             {t.cancel}
@@ -269,6 +281,11 @@ export function CommandEditorModal({
             <StableButtonContent busy={submitLocked} label={t.save} />
           </button>
         </div>
+      }
+    >
+      <div className="command-editor-dialog-form">
+        {editorFields}
+
         {submitError ? <div className="modal-error">{submitError}</div> : null}
       </div>
     </CommandDialogShell>

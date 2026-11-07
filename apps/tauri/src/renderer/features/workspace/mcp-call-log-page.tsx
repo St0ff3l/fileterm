@@ -5,7 +5,9 @@ import { Button } from '../../components/common/button/button'
 import { ConfirmActionDialog } from '../../components/common/confirm-action-dialog/confirm-action-dialog'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
+import { CloseButton } from '../common/close-button'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
+import '../connections/external-operation-confirmation.css'
 import './mcp-call-log.css'
 
 const PAGE_SIZE = 60
@@ -95,6 +97,7 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
   const pendingLoad = useRef(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLDivElement>(null)
+  const paramsRef = useRef<HTMLPreElement>(null)
 
   const load = useCallback(async (before?: string) => {
     if (pendingLoad.current) return
@@ -240,8 +243,8 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
 
       {selected ? (
         <ConfirmActionDialog
-          cancelLabel={t.cancel}
-          className="mcp-call-log-dialog"
+          cancelLabel={t.closeTab}
+          className="external-operation-confirmation mcp-call-log-dialog"
           confirmLabel={t.mcpCallCopyJson}
           confirmVariant="primary"
           errorMessage={copyError}
@@ -259,35 +262,64 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
               setCopying(false)
             }
           }}
-          title={t.mcpCallDetailTitle}
+          title={
+            <>
+              <span className="external-operation-confirmation__title">
+                <AppIcon name="call-log" size={16} />
+                <span>{t.mcpCallDetailTitle}</span>
+              </span>
+              <CloseButton aria-label={t.closeTab} disabled={copying} onClick={() => setSelected(null)} />
+            </>
+          }
           description={
-            <div className="mcp-call-log-detail-scroll">
-              <div className="mcp-call-log-detail-body" ref={detailRef}>
-                <div className="mcp-call-log-detail-grid">
-                  <span>{t.mcpCallColumnTime}</span>
-                  <span>{new Date(selected.ts).toLocaleString()}</span>
-                  <span>{t.mcpCallColumnAction}</span>
-                  <span>{selected.action}</span>
-                  <span>{t.mcpCallColumnApproval}</span>
-                  <span>{approvalLabel(selected.approval)}</span>
-                  <span>{t.mcpCallDetailConnection}</span>
-                  <span>{summarizeParams(selected) || selected.target?.tabId || '—'}</span>
-                  <span>{t.mcpCallDetailBridgeSession}</span>
-                  <span>{selected.bridgeSessionId ?? '—'}</span>
-                  <span>{t.mcpCallColumnResult}</span>
-                  <span>
-                    {resultLabel(selected)} · {selected.durationMs} ms
-                  </span>
-                  {selected.execution?.exitCode != null ? (
-                    <>
-                      <span>{t.mcpCallDetailExitCode}</span>
-                      <span>{selected.execution.exitCode}</span>
-                    </>
-                  ) : null}
-                </div>
-                {selected.error ? <p className="mcp-call-log-error">{selected.error}</p> : null}
-                <p className="mcp-call-log-metadata-hint">{t.mcpCallMetadataHint}</p>
-                <pre>{JSON.stringify(selected.params, null, 2)}</pre>
+            <div className="external-operation-confirmation__body">
+              <div className="external-operation-confirmation__content" ref={detailRef}>
+                <fieldset className="external-operation-confirmation__group">
+                  <legend>{t.general}</legend>
+                  <div className="external-operation-confirmation__source-row">
+                    <span>{t.sessionSource}</span>
+                    <span className={`external-operation-confirmation__source is-${selected.source}`}>
+                      {selected.source.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="mcp-call-log-detail-grid">
+                    <span>{t.mcpCallColumnTime}</span>
+                    <span>{new Date(selected.ts).toLocaleString()}</span>
+                    <span>{t.mcpCallColumnAction}</span>
+                    <span>{selected.action}</span>
+                    <span>{t.mcpCallColumnApproval}</span>
+                    <span>{approvalLabel(selected.approval)}</span>
+                    <span>{t.mcpCallDetailBridgeSession}</span>
+                    <span>{selected.bridgeSessionId ?? '—'}</span>
+                    <span>{t.mcpCallColumnResult}</span>
+                    <span>
+                      {resultLabel(selected)} · {selected.durationMs} ms
+                    </span>
+                    {selected.execution?.exitCode != null ? (
+                      <>
+                        <span>{t.mcpCallDetailExitCode}</span>
+                        <span>{selected.execution.exitCode}</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="external-operation-confirmation__field">
+                    <span>{t.mcpCallDetailConnection}</span>
+                    <div className="external-operation-confirmation__value">
+                      {summarizeParams(selected) || selected.target?.tabId || '—'}
+                    </div>
+                  </div>
+                  {selected.error ? <p className="mcp-call-log-error">{selected.error}</p> : null}
+                </fieldset>
+                <fieldset className="external-operation-confirmation__group">
+                  <legend>{t.mcpCallDetailParams}</legend>
+                  <p className="mcp-call-log-metadata-hint">{t.mcpCallMetadataHint}</p>
+                  <div className="external-operation-confirmation__code">
+                    <pre ref={paramsRef} tabIndex={0} aria-label={t.mcpCallDetailParams}>
+                      {JSON.stringify(selected.params, null, 2)}
+                    </pre>
+                    <VerticalScrollbar ariaLabel={t.mcpCallDetailParams} scrollRef={paramsRef} />
+                  </div>
+                </fieldset>
               </div>
               <VerticalScrollbar ariaLabel={t.mcpCallDetailTitle} scrollRef={detailRef} />
             </div>

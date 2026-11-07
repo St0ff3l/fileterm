@@ -108,7 +108,12 @@ export function PathBookmarksButton({
             ref={dialogRef}
             isOpen={open}
             closeOnEscape={!removing}
-            title={t.pathBookmarks}
+            title={
+              <h2 className="ft-dialog__title path-bookmarks-title">
+                <AppIcon name="star" size={16} />
+                <span>{t.pathBookmarks}</span>
+              </h2>
+            }
             aria-label={t.pathBookmarks}
             size="sm"
             className="path-bookmarks-dialog"

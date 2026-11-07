@@ -29,6 +29,10 @@
   --radius-full: 9999px;
   --window-corner-radius: 14px;
 
+  /* Dialog title bars */
+  --dialog-header-height: 44px;
+  --dialog-header-font-size: 13px;
+
   /* Control Heights & Metrics */
   --control-height-sm: 28px;
   --control-height-md: 36px;

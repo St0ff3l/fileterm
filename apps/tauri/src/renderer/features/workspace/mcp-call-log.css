@@ -14,8 +14,7 @@
   height: 36px;
 }
 
-.mcp-call-log-scroll,
-.mcp-call-log-detail-scroll {
+.mcp-call-log-scroll {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -23,15 +22,13 @@
   overflow: hidden;
 }
 
-.mcp-call-log-body,
-.mcp-call-log-detail-body {
+.mcp-call-log-body {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
 }
 
-.mcp-call-log-body::-webkit-scrollbar,
-.mcp-call-log-detail-body::-webkit-scrollbar {
+.mcp-call-log-body::-webkit-scrollbar {
   display: none;
 }
 
@@ -122,22 +119,15 @@
   text-align: center;
 }
 
-.confirm-action-dialog.mcp-call-log-dialog {
-  width: min(720px, calc(100vw - 48px));
-}
-
-.mcp-call-log-detail-body {
-  display: grid;
-  gap: 12px;
-  max-height: min(480px, 55vh);
-  padding-right: 12px;
+.mcp-call-log-dialog .external-operation-confirmation__content {
+  max-height: min(560px, calc(100dvh - 160px));
 }
 
 .mcp-call-log-detail-grid {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 14px;
-  font-size: 12px;
+  gap: 6px 14px;
+  font-size: 13px;
   white-space: normal;
 }
 
@@ -155,12 +145,6 @@
   color: var(--text-muted);
   font-size: 12px;
   white-space: normal;
-}
-
-.mcp-call-log-dialog .mcp-call-log-detail-body pre {
-  max-height: none;
-  overflow: visible;
-  font-size: 11px;
 }
 
 @media (max-width: 980px) {
