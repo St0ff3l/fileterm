@@ -159,6 +159,7 @@ export function HomeWorkspace({
   const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
   const [activeSshKeyFolderName, setActiveSshKeyFolderName] = useState(t.allKeys)
   const [sshKeyStats, setSshKeyStats] = useState({ keyCount: 0, folderCount: 0 })
+  const [mcpCallCount, setMcpCallCount] = useState(0)
   const [activeProxyFilterLabel, setActiveProxyFilterLabel] = useState(t.allProxiesAndTunnels)
   const [proxyStats, setProxyStats] = useState<ProxyManagerStats>({
     totalCount: 0,
@@ -361,7 +362,7 @@ export function HomeWorkspace({
             title={t.mcpCallRecordsTitle}
             type="button"
           >
-            <AppIcon name="shield" size={18} />
+            <AppIcon name="call-log" size={18} />
             <SidebarAlignedLabel>{t.mcpCallRecordsTitle}</SidebarAlignedLabel>
           </button>
           <button
@@ -531,7 +532,7 @@ export function HomeWorkspace({
           )}
           {activeTab === 'mcp-call-log' && (
             <div key="mcp-call-log" className="page-transition" data-nav-direction={navDirection}>
-              <McpCallLogPage />
+              <McpCallLogPage onTotalChange={setMcpCallCount} />
             </div>
           )}
           {activeTab === 'settings' && (
@@ -627,6 +628,12 @@ export function HomeWorkspace({
                 <span>{t.folderCount.replace('{count}', String(sshKeyStats.folderCount))}</span>
                 <span className="footer-meta-spacer"></span>
                 <span>{activeSshKeyFolderName}</span>
+              </>
+            )}
+            {activeTab === 'mcp-call-log' && (
+              <>
+                <span className="footer-meta-separator">|</span>
+                <span>{t.mcpCallRecordsCount.replace('{count}', String(mcpCallCount))}</span>
               </>
             )}
             {canLockNow ? (

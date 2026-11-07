@@ -287,7 +287,7 @@ Renderer 只显示遮罩、倒计时和操作反馈，`app_retry_monitoring` 只
 
 ## 4.5 MCP / CLI 外部客户端桥接边界
 
-外部调用审计在桌面 bridge 生命周期内记录开始、完成及中断，通过唯一调用 ID 合并。日志为数据目录中的 `mcp-calls.jsonl` 和上一份 `.1`，每份最多 8 MiB；独立锁文件串行化跨进程读写与轮转。仅保存按动作过滤的元数据，省略命令文本、文件正文、模板参数和原始错误消息。旧记录读取时重新过滤，但已有文件中的原始内容不会被追溯删除。桌面生成的 bridge session ID 与 workspace 解析的目标 profile/tab 分开保存，Hello 中的自报 client ID 不作为身份凭据。审批结果、调用是否返回成功和命令退出状态分别记录。查看接口在阻塞工作线程中读取两份日志，提供 `nextCursor` / `before` 稳定分页，游标已超出轮转保留范围时明确要求刷新；旧 `offset` 接口为现有 UI 保留，UI 后续需接入游标。
+外部调用审计在桌面 bridge 生命周期内记录开始、完成及中断，通过唯一调用 ID 合并。日志为数据目录中的 `mcp-calls.jsonl` 和上一份 `.1`，每份最多 8 MiB；独立锁文件串行化跨进程读写与轮转。仅保存按动作过滤的元数据，省略命令文本、文件正文、模板参数和原始错误消息。旧记录读取时重新过滤，但已有文件中的原始内容不会被追溯删除。桌面生成的 bridge session ID 与 workspace 解析的目标 profile/tab 分开保存，Hello 中的自报 client ID 不作为身份凭据。审批结果、调用是否返回成功和命令退出状态分别记录。查看接口在阻塞工作线程中读取两份日志，提供 `nextCursor` / `before` 稳定分页，游标已超出轮转保留范围时明确要求刷新；查看页使用 `before` 游标追加记录，保留旧 `offset` 参数以兼容已有调用。
 
 FileTerm 自带一套面向外部客户端的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review/mod.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；外部客户端的基础安全操作映射到同一桌面审批边界。
 
