@@ -393,11 +393,18 @@
   max-width: 100% !important;
   flex: 1 1 0% !important;
   padding: 0 !important;
-  background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   overflow: hidden !important;
+}
+
+.home-content-body .manager-inline:not(.settings-modal) {
+  background: transparent !important;
+}
+
+.home-content-body .manager-inline.settings-modal {
+  background: var(--surface-canvas);
 }
 
 /* 内嵌版必须完全跟随标签页容器，不能继续使用弹窗的 viewport 宽度 */
