@@ -108,8 +108,8 @@ use bridge::{BridgeClient, BridgeFrame};
 
 include!("types.rs");
 mod call_log;
-pub use call_log::{read_call_log, McpCallLogPage};
 use call_log::McpCallAudit;
+pub use call_log::{read_call_log, McpCallLogPage};
 include!("interactions.rs");
 include!("agent_contract.rs");
 include!("background.rs");
