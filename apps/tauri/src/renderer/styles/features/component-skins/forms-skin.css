@@ -652,9 +652,9 @@
 }
 
 /* Settings standalone and tab pages backgrounds override */
-:root:not([data-theme]) .settings-modal,
-:root:not([data-theme*='light']) .settings-modal,
-:root[data-theme='default'] .settings-modal,
+:root:not([data-theme]) .settings-modal:not(.manager-inline),
+:root:not([data-theme*='light']) .settings-modal:not(.manager-inline),
+:root[data-theme='default'] .settings-modal:not(.manager-inline),
 :root:not([data-theme]) .settings-modal .connection-manager-layout,
 :root:not([data-theme*='light']) .settings-modal .connection-manager-layout,
 :root[data-theme='default'] .settings-modal .connection-manager-layout {
