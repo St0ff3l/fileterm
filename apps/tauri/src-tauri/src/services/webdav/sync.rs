@@ -106,12 +106,12 @@ async fn upload_inner(app: &AppHandle, mode: UploadMode) -> Result<Value, AppErr
     let password = backup_prompt::request(app, "upload", "WebDAV").await?;
     let (payload, content_hash) = if mode == UploadMode::MergeCloud && remote_exists {
         let (remote_bytes, downloaded_etag) = download_payload(&client, &config).await?;
-        remote_etag = Some(downloaded_etag.ok_or_else(|| command_error(
-            "WebDAV 合并需要服务器返回 ETag，已停止上传以避免覆盖其他设备的更新"
-        ))?);
-        merge_bundle_with_local(app, &remote_bytes, &password)?
+        remote_etag = Some(downloaded_etag.ok_or_else(|| {
+            command_error("WebDAV 合并需要服务器返回 ETag，已停止上传以避免覆盖其他设备的更新")
+        })?);
+        merge_bundle_with_local(app, &remote_bytes, &password).await?
     } else {
-        export_bundle(app, &password)?
+        export_bundle(app, &password).await?
     };
     let next_etag = upload_payload(&client, &config, payload, remote_etag.as_deref()).await?;
     config.last_etag = next_etag;
@@ -233,7 +233,8 @@ async fn download_inner(app: &AppHandle, mode: DownloadMode) -> Result<Value, Ap
         &bytes,
         password.as_ref().map(|value| value.as_str()),
         mode,
-    )?;
+    )
+    .await?;
     config.last_etag = remote_etag;
     config.last_synced_at = Some(export_timestamp());
     config.content_hash = Some(sha256_hex(&bytes));
@@ -287,11 +288,7 @@ async fn download_payload(
         return Err(response_error("下载", response.status()));
     }
     let remote_etag = etag(response.headers());
-    let bytes = crate::services::webdav::read_bounded_bundle(
-        response,
-        MAX_BUNDLE_BYTES,
-        "WebDAV",
-    )
-    .await?;
+    let bytes =
+        crate::services::webdav::read_bounded_bundle(response, MAX_BUNDLE_BYTES, "WebDAV").await?;
     Ok((bytes, remote_etag))
 }

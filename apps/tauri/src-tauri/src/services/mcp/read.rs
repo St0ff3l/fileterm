@@ -162,11 +162,12 @@ async fn read_remote_file(app: &AppHandle, params: &Value) -> Result<Value, Stri
     let tab_id = required_string(params, "tab_id", 256)?;
     let path = required_string(params, "path", 4_096)?;
     let encoding = optional_string(params, "encoding", 64)?;
-    let content = crate::commands::app_read_remote_file(
-        app.clone(),
-        tab_id.clone(),
+    let content = crate::commands::read_remote_file_bounded(
+        app,
+        &tab_id,
         path.clone(),
         encoding.clone(),
+        MCP_MAX_FILE_CONTENT_BYTES,
     )
     .await
     .map_err(public_app_error)?;
@@ -186,14 +187,7 @@ async fn list_transfers(app: &AppHandle, params: &Value) -> Result<Value, String
     let snapshot = crate::commands::get_workspace_snapshot(app.clone())
         .await
         .map_err(public_app_error)?;
-    let transfers = snapshot
-        .get("transfers")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "FileTerm returned invalid transfer state".to_string())?;
-    let transfers = transfers
-        .iter()
-        .filter(|transfer| visibility.allows_transfer_value(transfer))
-        .collect::<Vec<_>>();
+    let transfers = visibility.visible_transfers(&snapshot)?;
     let total = transfers.len();
     let items = transfers
         .iter()

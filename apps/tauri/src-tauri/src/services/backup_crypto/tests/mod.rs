@@ -23,6 +23,7 @@ fn v3_round_trip_encrypts_profiles_and_ssh_keys() {
     let (bytes, _) = encrypt_bundle(
         profiles.clone(),
         ssh_keys.clone(),
+        super::BackupDependencies::default(),
         "Backup password 8",
         "now",
     )

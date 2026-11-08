@@ -140,16 +140,14 @@ async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value
             // the exact version returned with the bytes we merged.
             let (remote_bytes, downloaded_etag) = download_payload(&client, &config).await?;
             remote_etag = Some(downloaded_etag.ok_or_else(|| {
-                command_error(
-                    "S3 合并需要服务器返回 ETag，已停止上传以避免覆盖其他设备的更新",
-                )
+                command_error("S3 合并需要服务器返回 ETag，已停止上传以避免覆盖其他设备的更新")
             })?);
-            webdav::merge_bundle_with_local(app, &remote_bytes, &password)?
+            webdav::merge_bundle_with_local(app, &remote_bytes, &password).await?
         } else {
-            webdav::export_bundle(app, &password)?
+            webdav::export_bundle(app, &password).await?
         }
     } else {
-        webdav::export_bundle(app, &password)?
+        webdav::export_bundle(app, &password).await?
     };
     let mut headers = BTreeMap::new();
     headers.insert(
@@ -239,7 +237,8 @@ async fn download_inner(app: &AppHandle, mode: webdav::DownloadMode) -> Result<V
         &bytes,
         password.as_ref().map(|value| value.as_str()),
         mode,
-    )?;
+    )
+    .await?;
     config.last_etag = remote_etag;
     config.last_synced_at = Some(webdav::export_timestamp());
     config.content_hash = Some(sha256_hex(&bytes));
@@ -297,11 +296,8 @@ async fn download_payload(
         return Err(response_error("下载", response.status()));
     }
     let remote_etag = etag(response.headers());
-    let bytes = crate::services::webdav::read_bounded_bundle(
-        response,
-        webdav::MAX_BUNDLE_BYTES,
-        "S3",
-    )
-    .await?;
+    let bytes =
+        crate::services::webdav::read_bounded_bundle(response, webdav::MAX_BUNDLE_BYTES, "S3")
+            .await?;
     Ok((bytes, remote_etag))
 }

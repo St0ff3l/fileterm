@@ -9,7 +9,7 @@ fn root_stat_shell_command(path: &str) -> String {
 
 fn root_editor_write_shell_command(staging_path: &str, expected_size: u64) -> String {
     format!(
-        "set -e\nbase64 -d > {}\ntest \"$(wc -c < {})\" -eq {}",
+        "set -e\numask 077\nbase64 -d > {}\ntest \"$(wc -c < {})\" -eq {}",
         shell_quote(staging_path),
         shell_quote(staging_path),
         expected_size,
@@ -78,7 +78,7 @@ fn root_replace_remote_file_command(
     destination_path: &str,
 ) -> String {
     format!(
-        "set -e\nmkdir -p {parent}\nif [ -L {destination} ]; then\n  target=\"$(readlink -f -- {destination} 2>/dev/null || true)\"\n  if [ -n \"$target\" ] && [ -f \"$target\" ]; then\n    chown --reference=\"$target\" -- {partial} 2>/dev/null || true\n    chmod --reference=\"$target\" -- {partial} 2>/dev/null || true\n    mv -f -- {partial} \"$target\"\n  else\n    cat -- {partial} > {destination}\n    rm -f -- {partial}\n  fi\nelse\n  if [ -e {destination} ]; then\n    chown --reference={destination} -- {partial} 2>/dev/null || true\n    chmod --reference={destination} -- {partial} 2>/dev/null || true\n  fi\n  mv -f -- {partial} {destination}\nfi",
+        "set -e\nmkdir -p {parent}\nif [ -L {destination} ]; then\n  target=\"$(readlink -f -- {destination} 2>/dev/null || true)\"\n  if [ -n \"$target\" ] && [ -f \"$target\" ]; then\n    chown --reference=\"$target\" -- {partial} 2>/dev/null || true\n    chmod --reference=\"$target\" -- {partial} 2>/dev/null || true\n    mv -f -- {partial} \"$target\"\n  else\n    printf '%s\\n' 'Cannot resolve symlink target; original and staging retained' >&2\n    exit 1\n  fi\nelse\n  if [ -e {destination} ]; then\n    chown --reference={destination} -- {partial} 2>/dev/null || true\n    chmod --reference={destination} -- {partial} 2>/dev/null || true\n  fi\n  mv -f -- {partial} {destination}\nfi",
         parent = shell_quote(parent),
         partial = shell_quote(partial_path),
         destination = shell_quote(destination_path),
@@ -540,6 +540,7 @@ async fn exec_read_file_via_shell(
     handle: &Handle<ClientHandler>,
     path: &str,
     encoding: &str,
+    max_bytes: usize,
     access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
@@ -551,6 +552,7 @@ async fn exec_read_file_via_shell(
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&trimmed)
         .map_err(|e| format!("base64 decode failed: {}", e))?;
+    crate::sessions::file_read::check_size(bytes.len(), max_bytes)?;
     decode_bytes(&bytes, encoding)
 }
 

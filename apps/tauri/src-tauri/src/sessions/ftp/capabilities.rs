@@ -226,8 +226,13 @@ async fn client_list(
     ftp_match!(client, ftp => list_files_with_state(ftp, path, state))
 }
 
-async fn client_read(client: &mut FtpClient, path: &str, encoding: &str) -> Result<String, String> {
-    ftp_match!(client, ftp => read_file(ftp, path, encoding))
+async fn client_read(
+    client: &mut FtpClient,
+    path: &str,
+    encoding: &str,
+    max_bytes: usize,
+) -> Result<String, String> {
+    ftp_match!(client, ftp => read_file(ftp, path, encoding, max_bytes))
 }
 
 async fn client_write(
@@ -235,8 +240,20 @@ async fn client_write(
     path: &str,
     content: &str,
     encoding: &str,
+    profile: &Value,
+    cancellation: CancellationToken,
 ) -> Result<(), String> {
-    ftp_match!(client, ftp => write_file(ftp, path, content, encoding))
+    let staging = ftp_with_cancellation(profile, "write", cancellation.clone(), async {
+        ftp_match!(client, ftp => stage_editor_write(ftp, path, content, encoding))
+    })
+    .await?;
+    if cancellation.is_cancelled() {
+        return Err("远程文件操作已取消".to_string());
+    }
+    // Like transfer commits, replacement and rollback must settle before cancellation returns.
+    client_commit(client, &staging, path, true)
+        .await
+        .map(|_| ())
 }
 
 async fn client_ensure_dir(client: &mut FtpClient, path: &str) -> Result<(), String> {

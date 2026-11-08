@@ -232,14 +232,30 @@ pub async fn app_read_remote_file(
     target_path: String,
     encoding: Option<String>,
 ) -> Result<String, AppError> {
+    read_remote_file_bounded(
+        &app,
+        &tab_id,
+        target_path,
+        encoding,
+        crate::sessions::file_read::TEXT_EDITOR_MAX_BYTES,
+    )
+    .await
+}
+
+pub(crate) async fn read_remote_file_bounded(
+    app: &AppHandle,
+    tab_id: &str,
+    target_path: String,
+    encoding: Option<String>,
+    max_bytes: usize,
+) -> Result<String, AppError> {
     let enc = encoding.unwrap_or_else(|| "utf-8".to_string());
-    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
-        WorkerCmd::ReadRemoteFile {
-            path: target_path,
-            encoding: enc,
-            cancellation,
-            respond_to: tx,
-        }
+    send_worker_file_cmd(app, tab_id, |tx, cancellation| WorkerCmd::ReadRemoteFile {
+        path: target_path,
+        encoding: enc,
+        max_bytes,
+        cancellation,
+        respond_to: tx,
     })
     .await
 }

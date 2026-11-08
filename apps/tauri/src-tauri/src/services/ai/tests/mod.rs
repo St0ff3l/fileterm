@@ -568,8 +568,8 @@ mod tests {
     }
 
     #[test]
-    fn external_basic_safe_commands_follow_the_copilot_classifier() {
-        for command in ["pwd", "uname -a", "git status"] {
+    fn automatic_commands_require_complete_allowlist_matches() {
+        for command in ["pwd", "uname -a", "ls -la", "docker network ls"] {
             assert!(
                 is_basic_safe_command(command),
                 "{command} should be automatic"
@@ -581,6 +581,16 @@ mod tests {
             "reboot",
             "mkdir /tmp/fileterm",
             "some-command",
+            "ls ; python3 -c 'print(1)'",
+            "ls$(id)",
+            "pwd\nid",
+            "git log -1 --output=/tmp/output",
+            "git status",
+            "find  /tmp -delete",
+            "journalctl --rotate",
+            "ls --some-future-option",
+            "LS",
+            " ls",
         ] {
             assert!(
                 !is_basic_safe_command(command),

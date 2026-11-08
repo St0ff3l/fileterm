@@ -29,18 +29,35 @@ pub fn export_timestamp() -> String {
 /// Serializes the complete connection bundle for an explicit user-initiated
 /// backup. S3 backup shares this payload format with WebDAV so both targets
 /// preserve the same secret-handling and integrity semantics.
-pub(crate) fn export_bundle(
+async fn local_backup_snapshot(
+    app: &AppHandle,
+) -> Result<(Vec<Value>, Vec<Value>, backup_crypto::BackupDependencies), AppError> {
+    use tauri::Manager;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _guard = state.library_mutation.lock().await;
+    let (profiles, _) = profile_ops::read_and_heal_profiles(app)?;
+    let keys = ssh_keys::export_for_backup(app)?;
+    let root = workspace_file(app, "profiles.json")?;
+    let dependencies = dependencies::export_at(
+        root.parent()
+            .ok_or_else(|| command_error("无法解析备份目录"))?,
+        &profiles,
+    )?;
+    Ok((profiles, keys, dependencies))
+}
+
+pub(crate) async fn export_bundle(
     app: &AppHandle,
     password: &str,
 ) -> Result<(Vec<u8>, String), AppError> {
-    let (profiles, _) = profile_ops::read_and_heal_profiles(app)?;
-    let ssh_keys = ssh_keys::export_for_backup(app)?;
-    build_export_bundle(profiles, ssh_keys, password)
+    let (profiles, keys, dependencies) = local_backup_snapshot(app).await?;
+    build_export_bundle(profiles, keys, dependencies, password)
 }
 
 pub(crate) fn build_export_bundle(
     mut profiles: Vec<Value>,
     mut ssh_keys: Vec<Value>,
+    dependencies: backup_crypto::BackupDependencies,
     password: &str,
 ) -> Result<(Vec<u8>, String), AppError> {
     if let Err(error) = validate_profile_key_references(&profiles, &ssh_keys) {
@@ -51,6 +68,7 @@ pub(crate) fn build_export_bundle(
     let (bytes, hash) = backup_crypto::encrypt_bundle(
         profiles,
         ssh_keys,
+        dependencies,
         password,
         &export_timestamp(),
     )
@@ -89,7 +107,11 @@ fn validate_profile_key_references(profiles: &[Value], ssh_keys: &[Value]) -> Re
 
 fn profile_fingerprint(profile: &Value) -> Option<(String, String, String, u64, String)> {
     let kind = profile.get("type")?.as_str()?.to_ascii_lowercase();
-    let endpoint_field = if kind == "serial" { "devicePath" } else { "host" };
+    let endpoint_field = if kind == "serial" {
+        "devicePath"
+    } else {
+        "host"
+    };
     Some((
         kind,
         profile.get("name")?.as_str()?.trim().to_string(),
@@ -159,7 +181,7 @@ fn sanitize_import_profile(value: &Value) -> Result<Value, String> {
     object
         .entry("username".to_string())
         .or_insert_with(|| Value::String(String::new()));
-    for key in ["id", "parentId", "order", "lastUsedAt"] {
+    for key in ["parentId", "order", "lastUsedAt"] {
         object.remove(key);
     }
     Ok(Value::Object(object))
@@ -178,53 +200,43 @@ fn merge_synced_profile(existing: &Value, incoming: &Value) -> Result<Value, Str
             merged.insert(key.clone(), value.clone());
         }
     }
+    profile_ops::normalize_profile_secret_input(&mut merged, Some(existing));
     Ok(Value::Object(merged))
 }
 
 /// Merge the local profiles into a decoded remote bundle before uploading it
 /// again. Matching connections keep the remote identity while local fields
 /// win; connections that exist on only one side are retained.
-pub(crate) fn merge_bundle_with_local(
+pub(crate) async fn merge_bundle_with_local(
     app: &AppHandle,
     remote_bytes: &[u8],
     password: &str,
 ) -> Result<(Vec<u8>, String), AppError> {
-    let decoded = parse_bundle(remote_bytes, Some(password))?;
-    let (local_profiles, _) = profile_ops::read_and_heal_profiles(app)?;
-    let mut merged = Vec::new();
-    let mut positions = std::collections::HashMap::new();
-
-    for profile in &decoded.profiles {
-        let Ok(sanitized) = sanitize_import_profile(profile) else {
-            continue;
-        };
-        let Some(fingerprint) = profile_fingerprint(&sanitized) else {
-            continue;
-        };
-        if positions.contains_key(&fingerprint) {
-            continue;
-        }
-        positions.insert(fingerprint, merged.len());
-        merged.push(sanitized);
+    let mut decoded = parse_bundle(remote_bytes, Some(password))?;
+    let (local_profiles, local_keys, local_dependencies) = local_backup_snapshot(app).await?;
+    let (mut remote, skipped) =
+        prepare_import_profiles(decoded.profiles.to_vec(), DownloadMode::OverwriteLocal)?;
+    if skipped > 0 {
+        return Err(command_error("云端备份包含无效连接，已停止合并"));
     }
-
-    for profile in local_profiles {
-        let sanitized = sanitize_import_profile(&profile)
-            .map_err(|error| command_error(format!("本地连接配置无效: {error}")))?;
-        let fingerprint = profile_fingerprint(&sanitized)
-            .ok_or_else(|| command_error("本地连接配置缺少有效的连接标识"))?;
-        if let Some(index) = positions.get(&fingerprint).copied() {
-            merged[index] = merge_synced_profile(&merged[index], &sanitized)
-                .map_err(|error| command_error(format!("合并连接配置失败: {error}")))?;
-        } else {
-            positions.insert(fingerprint, merged.len());
-            merged.push(sanitized);
+    for profile in &mut remote {
+        if profile
+            .get("id")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
+        {
+            profile["id"] = Value::String(crate::storage::new_id("profile"));
         }
     }
-
-    let local_ssh_keys = ssh_keys::export_for_backup(app)?;
-    let merged_ssh_keys = ssh_keys::merge_for_upload(decoded.ssh_keys.as_deref(), local_ssh_keys)?;
-    build_export_bundle(merged, merged_ssh_keys, password)
+    let (merged, _, _) = merge_profiles(&remote, local_profiles, DownloadMode::MergeLocal)?;
+    let keys = ssh_keys::merge_for_upload(decoded.ssh_keys.as_deref(), local_keys)?;
+    dependencies::merge(&mut decoded.dependencies, local_dependencies);
+    build_export_bundle(
+        merged,
+        keys,
+        std::mem::take(&mut decoded.dependencies),
+        password,
+    )
 }
 
 fn parse_bundle(
@@ -268,99 +280,44 @@ pub(crate) struct ProfileImportSummary {
 /// Imports a verified FileTerm profile bundle. Transport services call this
 /// only after their own authenticated download has completed, which keeps the
 /// merge and secret persistence rules identical across WebDAV and S3.
-pub(crate) fn import_bundle(
+pub(crate) async fn import_bundle(
     app: &AppHandle,
     bytes: &[u8],
     password: Option<&str>,
     mode: DownloadMode,
 ) -> Result<ProfileImportSummary, AppError> {
+    use tauri::Manager;
     let decoded = parse_bundle(bytes, password)?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _guard = state.library_mutation.lock().await;
     let (existing, _) = profile_ops::read_and_heal_profiles(app)?;
-    let (profiles, mut skipped) =
-        prepare_import_profiles(decoded.profiles.to_vec(), mode)?;
-    let key_summary = if let Some(ssh_keys) = decoded.ssh_keys.as_deref() {
-        validate_profile_key_references(&profiles, ssh_keys)?;
-        ssh_keys::restore_for_backup(app, ssh_keys)?
+    let (mut profiles, skipped) = prepare_import_profiles(decoded.profiles.to_vec(), mode)?;
+    if let Some(keys) = decoded.ssh_keys.as_deref() {
+        validate_profile_key_references(&profiles, keys)?;
+    }
+    for profile in &profiles {
+        if let Some(profile) = profile.as_object() {
+            crate::services::totp::validate_profile(profile)?;
+        }
+    }
+    let mut dependencies = dependencies::restore(app, &decoded.dependencies, &mut profiles)?;
+    let (merged, imported, updated) = merge_profiles(&existing, profiles, mode)?;
+    let persist = || profile_ops::replace_profiles(app, merged);
+    let key_summary = if let Some(keys) = decoded.ssh_keys.as_deref() {
+        ssh_keys::restore_for_backup(app, keys, persist)?
     } else {
+        persist()?;
         ssh_keys::SshKeyRestoreSummary::default()
     };
-
-    if mode == DownloadMode::OverwriteLocal {
-        let replaced = existing.len() as u64;
-        let imported = profiles.len() as u64;
-        let replacement_profiles = profiles
-            .into_iter()
-            .map(|mut profile| {
-                if let Some(fingerprint) = profile_fingerprint(&profile) {
-                    if let Some(existing_profile) = existing.iter().find(|existing_profile| {
-                        profile_fingerprint(existing_profile).as_ref() == Some(&fingerprint)
-                    }) {
-                        if let Some(object) = profile.as_object_mut() {
-                            for key in ["id", "order", "lastUsedAt"] {
-                                if let Some(value) = existing_profile.get(key) {
-                                    object.insert(key.to_string(), value.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-                profile
-            })
-            .collect();
-        profile_ops::replace_profiles(app, replacement_profiles)?;
-        return Ok(ProfileImportSummary {
-            imported,
-            updated: 0,
-            replaced,
-            skipped,
-            ssh_keys_imported: key_summary.imported,
-            ssh_keys_updated: key_summary.updated,
-            legacy_plaintext: decoded.legacy_plaintext,
-        });
-    }
-
-    let mut known = existing
-        .iter()
-        .filter_map(|profile| {
-            profile_fingerprint(profile).map(|fingerprint| (fingerprint, profile.clone()))
-        })
-        .collect::<std::collections::HashMap<_, _>>();
-    let mut imported = 0_u64;
-    let mut updated = 0_u64;
-    for profile in profiles {
-        let Some(fingerprint) = profile_fingerprint(&profile) else {
-            skipped += 1;
-            continue;
-        };
-        if let Some(existing_profile) = known.get(&fingerprint).cloned() {
-            let Some(profile_id) = existing_profile
-                .get("id")
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned)
-            else {
-                skipped += 1;
-                continue;
-            };
-            let merged = match merge_synced_profile(&existing_profile, &profile) {
-                Ok(profile) => profile,
-                Err(_) => {
-                    skipped += 1;
-                    continue;
-                }
-            };
-            let saved = profile_ops::update_profile(app, &profile_id, merged)?;
-            known.insert(fingerprint, saved);
-            updated += 1;
-            continue;
-        }
-        let created = profile_ops::create_profile(app, profile)?;
-        known.insert(fingerprint, created);
-        imported += 1;
-    }
+    dependencies.commit();
     Ok(ProfileImportSummary {
         imported,
         updated,
-        replaced: 0,
+        replaced: if mode == DownloadMode::OverwriteLocal {
+            existing.len() as u64
+        } else {
+            0
+        },
         skipped,
         ssh_keys_imported: key_summary.imported,
         ssh_keys_updated: key_summary.updated,

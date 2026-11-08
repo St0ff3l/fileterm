@@ -15,6 +15,14 @@ pub(crate) use backup::{
     export_for_backup, merge_for_upload, restore_for_backup, SshKeyRestoreSummary,
 };
 
+static KEY_STORE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lock_store() -> Result<std::sync::MutexGuard<'static, ()>, AppError> {
+    KEY_STORE_LOCK
+        .lock()
+        .map_err(|_| AppError::Storage("SSH 密钥存储锁不可用".into()))
+}
+
 const MAX_PRIVATE_KEY_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -86,6 +94,7 @@ impl KeyPaths {
 }
 
 pub fn list(app: &AppHandle) -> Result<Vec<serde_json::Value>, AppError> {
+    let _guard = lock_store()?;
     let paths = ensure_store(app)?;
     let index = read_index(&paths)?;
     let usage = key_usage_counts(app)?;
@@ -106,6 +115,7 @@ pub async fn select_file(app: &AppHandle) -> Result<Option<serde_json::Value>, A
     };
     let source_path = file.path().to_path_buf();
     let inspected = inspect_private_key(&source_path)?;
+    let _guard = lock_store()?;
     let paths = ensure_store(app)?;
     let index = read_index(&paths)?;
     let existing = index
@@ -126,6 +136,7 @@ pub fn import(
     content: Option<String>,
     note: Option<String>,
 ) -> Result<Option<serde_json::Value>, AppError> {
+    let _guard = lock_store()?;
     let note = note.unwrap_or_default().trim().to_string();
     if note.is_empty() {
         return Err(AppError::Command("请输入密钥备注。".to_string()));
@@ -180,6 +191,7 @@ pub fn update_note(
     key_id: &str,
     note: String,
 ) -> Result<serde_json::Value, AppError> {
+    let _guard = lock_store()?;
     let note = note.trim().to_string();
     if note.is_empty() {
         return Err(AppError::Command("密钥备注不能为空。".to_string()));
@@ -199,6 +211,7 @@ pub fn update_note(
 }
 
 pub fn delete(app: &AppHandle, key_id: &str) -> Result<(), AppError> {
+    let _guard = lock_store()?;
     let paths = ensure_store(app)?;
     let mut index = read_index(&paths)?;
     let Some(position) = index.keys.iter().position(|key| key.id == key_id) else {
@@ -238,6 +251,7 @@ pub fn delete(app: &AppHandle, key_id: &str) -> Result<(), AppError> {
 }
 
 pub fn resolve(app: &AppHandle, key_id: &str) -> Result<ManagedSshKey, AppError> {
+    let _guard = lock_store()?;
     let paths = ensure_store(app)?;
     let key = read_index(&paths)?
         .keys
@@ -261,6 +275,7 @@ pub fn set_passphrase(
     key_id: &str,
     passphrase: Option<String>,
 ) -> Result<(), AppError> {
+    let _guard = lock_store()?;
     let paths = ensure_store(app)?;
     if !read_index(&paths)?.keys.iter().any(|key| key.id == key_id) {
         return Err(AppError::Command("SSH 密钥不存在。".to_string()));

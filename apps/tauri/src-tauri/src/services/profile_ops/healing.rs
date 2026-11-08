@@ -180,6 +180,7 @@ pub fn strip_secret_fields_public(profile: &Value) -> Value {
         .is_some_and(|secret| !secret.is_empty());
     let mut public = strip_secret_fields(profile);
     if let Some(object) = public.as_object_mut() {
+        object.remove(BACKUP_IDENTITY_FIELD);
         object.insert(
             "hasSavedPassword".to_string(),
             Value::Bool(has_saved_password),
@@ -208,7 +209,7 @@ fn ensure_object(value: &Value) -> Map<String, Value> {
 /// for edits, retain stored credentials when the renderer only has the
 /// redacted empty placeholders. `null` remains an explicit clear operation
 /// for bridge/import callers that need one.
-fn normalize_profile_secret_input(
+pub(crate) fn normalize_profile_secret_input(
     profile: &mut Map<String, Value>,
     previous: Option<&Value>,
 ) -> bool {

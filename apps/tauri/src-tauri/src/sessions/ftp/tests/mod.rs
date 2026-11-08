@@ -635,6 +635,7 @@ mod tests {
     {
         let mut control = BufReader::new(stream);
         let mut data_listener = None;
+        let mut uploaded_path = String::new();
         if send_greeting {
             control
                 .get_mut()
@@ -683,8 +684,33 @@ mod tests {
                         .await
                         .unwrap();
                 }
+                "MLSD" | "LIST" => {
+                    control
+                        .get_mut()
+                        .write_all(b"150 listing\r\n")
+                        .await
+                        .unwrap();
+                    let (data, _) = data_listener.take().unwrap().accept().await.unwrap();
+                    let mut data = acceptor.accept(data).await.unwrap();
+                    let size = stored.lock().await.len();
+                    let mut listing =
+                        format!("-rw-r--r-- 1 0 0 {size} Jun 18 23:00 roundtrip.txt\r\n");
+                    if !uploaded_path.is_empty() && uploaded_path != "/roundtrip.txt" {
+                        listing.push_str(&format!(
+                            "-rw------- 1 0 0 {size} Jun 18 23:00 {}\r\n",
+                            uploaded_path.trim_start_matches('/')
+                        ));
+                    }
+                    data.write_all(listing.as_bytes()).await.unwrap();
+                    data.shutdown().await.unwrap();
+                    control.get_mut().write_all(b"226 done\r\n").await.unwrap();
+                }
                 "STOR" => {
-                    assert_eq!(argument, "/roundtrip.txt");
+                    uploaded_path = argument.to_owned();
+                    assert!(
+                        argument == "/roundtrip.txt"
+                            || argument.starts_with("/roundtrip.txt.fileterm-edit-")
+                    );
                     control
                         .get_mut()
                         .write_all(b"150 Opening protected data connection\r\n")
@@ -727,6 +753,12 @@ mod tests {
                         .await
                         .unwrap();
                 }
+                "RNFR" => control
+                    .get_mut()
+                    .write_all(b"350 Rename ready\r\n")
+                    .await
+                    .unwrap(),
+                "RNTO" | "DELE" => control.get_mut().write_all(b"250 Done\r\n").await.unwrap(),
                 "QUIT" => {
                     control
                         .get_mut()
@@ -846,11 +878,18 @@ mod tests {
             "securityMode": "none", "username": "fileterm", "password": "test",
         });
         let mut client = connect_ftp(&profile, "127.0.0.1", port).await.unwrap();
-        client_write(&mut client, "/roundtrip.txt", "Tauri FTP", "utf-8")
-            .await
-            .unwrap();
+        client_write(
+            &mut client,
+            "/roundtrip.txt",
+            "Tauri FTP",
+            "utf-8",
+            &profile,
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+        .unwrap();
         assert_eq!(
-            client_read(&mut client, "/roundtrip.txt", "utf-8")
+            client_read(&mut client, "/roundtrip.txt", "utf-8", 1024)
                 .await
                 .unwrap(),
             "Tauri FTP"
@@ -895,11 +934,18 @@ mod tests {
             )
             .await
             .unwrap();
-            client_write(&mut client, "/roundtrip.txt", "Tauri FTPS", "utf-8")
-                .await
-                .unwrap();
+            client_write(
+                &mut client,
+                "/roundtrip.txt",
+                "Tauri FTPS",
+                "utf-8",
+                &profile,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap();
             assert_eq!(
-                client_read(&mut client, "/roundtrip.txt", "utf-8")
+                client_read(&mut client, "/roundtrip.txt", "utf-8", 1024)
                     .await
                     .unwrap(),
                 "Tauri FTPS"
@@ -964,6 +1010,7 @@ mod tests {
         let (reader, mut writer) = control.into_split();
         let mut reader = BufReader::new(reader);
         let mut data_listener = None;
+        let mut uploaded_path = String::new();
         writer
             .write_all(b"220 FileTerm Tauri test FTP\r\n")
             .await
@@ -998,8 +1045,29 @@ mod tests {
                     };
                     writer.write_all(response.as_bytes()).await.unwrap();
                 }
+                "MLSD" => writer.write_all(b"500 unsupported\r\n").await.unwrap(),
+                "LIST" => {
+                    writer.write_all(b"150 listing\r\n").await.unwrap();
+                    let (mut data, _) = data_listener.take().unwrap().accept().await.unwrap();
+                    let size = stored.lock().await.len();
+                    let mut listing =
+                        format!("-rw-r--r-- 1 0 0 {size} Jun 18 23:00 roundtrip.txt\r\n");
+                    if !uploaded_path.is_empty() && uploaded_path != "/roundtrip.txt" {
+                        listing.push_str(&format!(
+                            "-rw------- 1 0 0 {size} Jun 18 23:00 {}\r\n",
+                            uploaded_path.trim_start_matches('/')
+                        ));
+                    }
+                    data.write_all(listing.as_bytes()).await.unwrap();
+                    data.shutdown().await.unwrap();
+                    writer.write_all(b"226 done\r\n").await.unwrap();
+                }
                 "STOR" => {
-                    assert_eq!(argument, "/roundtrip.txt");
+                    uploaded_path = argument.to_owned();
+                    assert!(
+                        argument == "/roundtrip.txt"
+                            || argument.starts_with("/roundtrip.txt.fileterm-edit-")
+                    );
                     writer
                         .write_all(b"150 Opening data connection\r\n")
                         .await
@@ -1025,6 +1093,15 @@ mod tests {
                     data.shutdown().await.unwrap();
                     writer
                         .write_all(b"226 Transfer complete\r\n")
+                        .await
+                        .unwrap();
+                }
+                "RNFR" => writer.write_all(b"350 Rename ready\r\n").await.unwrap(),
+                "RNTO" | "DELE" => writer.write_all(b"250 Done\r\n").await.unwrap(),
+                "SIZE" => {
+                    let size = stored.lock().await.len();
+                    writer
+                        .write_all(format!("213 {size}\r\n").as_bytes())
                         .await
                         .unwrap();
                 }

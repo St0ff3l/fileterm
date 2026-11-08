@@ -4,7 +4,7 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::AppHandle;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use super::{
     ensure_store, inspect_private_key, inspect_private_key_bytes, lock_down_file, read_index,
@@ -40,6 +40,7 @@ pub(crate) struct SshKeyRestoreSummary {
 }
 
 pub(crate) fn export_for_backup(app: &AppHandle) -> Result<Vec<Value>, AppError> {
+    let _guard = super::lock_store()?;
     let paths = ensure_store(app)?;
     let index = read_index(&paths)?;
     let secrets = read_secrets(&paths)?;
@@ -127,12 +128,64 @@ pub(crate) fn merge_for_upload(
 pub(crate) fn restore_for_backup(
     app: &AppHandle,
     incoming: &[Value],
+    commit_profiles: impl FnOnce() -> Result<(), AppError>,
 ) -> Result<SshKeyRestoreSummary, AppError> {
+    let _guard = super::lock_store()?;
     let backups: Vec<BackupSshKey> = serde_json::from_value(Value::Array(incoming.to_vec()))
         .map_err(|error| AppError::Command(format!("备份中的 SSH 密钥格式无效: {error}")))?;
     validate_backup_records(&backups)?;
     let paths = ensure_store(app)?;
-    restore_backup_at(&paths, &backups)
+    restore_and_commit_at(&paths, &backups, commit_profiles)
+}
+
+fn restore_and_commit_at(
+    paths: &KeyPaths,
+    backups: &[BackupSshKey],
+    commit_profiles: impl FnOnce() -> Result<(), AppError>,
+) -> Result<SshKeyRestoreSummary, AppError> {
+    let previous_index =
+        fs::read(&paths.index_path).map_err(|error| AppError::Storage(error.to_string()))?;
+    let previous_secrets = Zeroizing::new(
+        fs::read(&paths.secrets_path).map_err(|error| AppError::Storage(error.to_string()))?,
+    );
+    let new_files = backups
+        .iter()
+        .map(|backup| paths.key_path(&backup.key.id))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|path| !path.exists())
+        .collect::<Vec<_>>();
+    let result = restore_backup_at(paths, backups).and_then(|summary| {
+        commit_profiles()?;
+        Ok(summary)
+    });
+    if let Err(error) = result {
+        let mut failures = Vec::new();
+        for (path, bytes) in [
+            (&paths.index_path, previous_index.as_slice()),
+            (&paths.secrets_path, previous_secrets.as_slice()),
+        ] {
+            if let Err(rollback) = write_bytes_atomic(path, bytes) {
+                failures.push(rollback.to_string());
+            }
+        }
+        for path in new_files {
+            if let Err(rollback) = fs::remove_file(&path) {
+                if rollback.kind() != std::io::ErrorKind::NotFound {
+                    failures.push(rollback.to_string());
+                }
+            }
+        }
+        return if failures.is_empty() {
+            Err(error)
+        } else {
+            Err(AppError::Storage(format!(
+                "{error}；SSH 密钥回滚失败：{}",
+                failures.join("；")
+            )))
+        };
+    }
+    result
 }
 
 fn validate_backup_values(values: &[Value]) -> Result<(), AppError> {

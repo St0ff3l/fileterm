@@ -4,10 +4,20 @@ pub fn app_read_local_file(
     encoding: Option<String>,
 ) -> Result<String, AppError> {
     let enc = encoding.unwrap_or_else(|| "utf-8".to_string());
-    let bytes = fs::read(&file_path).map_err(|error| {
-        crate::services::logging::error_global("local", format!("read failed error={error}"));
-        AppError::Storage(error.to_string())
-    })?;
+    use std::io::Read;
+    let file = fs::File::open(&file_path).map_err(|error| AppError::Storage(error.to_string()))?;
+    let mut bytes = Vec::new();
+    file.take(crate::sessions::file_read::TEXT_EDITOR_MAX_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            crate::services::logging::error_global("local", format!("read failed error={error}"));
+            AppError::Storage(error.to_string())
+        })?;
+    crate::sessions::file_read::check_size(
+        bytes.len(),
+        crate::sessions::file_read::TEXT_EDITOR_MAX_BYTES,
+    )
+    .map_err(AppError::Storage)?;
     crate::services::logging::debug_global(
         "local",
         format!("read file bytes={} encoding={enc}", bytes.len()),
@@ -26,7 +36,7 @@ pub fn app_write_local_file(
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
     let byte_count = bytes.len();
-    let result = fs::write(&file_path, bytes).map_err(|e| AppError::Storage(e.to_string()));
+    let result = write_local_file_safely(Path::new(&file_path), &bytes);
     log_local_result("write file", &result, Some(byte_count));
     result
 }
@@ -136,7 +146,8 @@ pub fn app_move_local_path(source_path: String, destination_path: String) -> Res
     // directories/files need the canonical destination guard.
     if !fs::symlink_metadata(&source_path)
         .map_err(|e| AppError::Storage(e.to_string()))?
-        .file_type().is_symlink()
+        .file_type()
+        .is_symlink()
     {
         validate_copy_destination(Path::new(&source_path), Path::new(&destination_path))?;
     }
