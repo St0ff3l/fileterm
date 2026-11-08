@@ -92,12 +92,15 @@ fn parent_remote_item(dir_path: &str) -> Option<Value> {
     })
 }
 
-async fn read_file(sftp: &SftpSession, path: &str, encoding: &str) -> Result<String, String> {
-    use tokio::io::AsyncReadExt;
-    let mut f = sftp.open(path).await.map_err(|e| e.to_string())?;
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf).await.map_err(|e| e.to_string())?;
-    decode_bytes(&buf, encoding)
+async fn read_file(
+    sftp: &SftpSession,
+    path: &str,
+    encoding: &str,
+    max_bytes: usize,
+) -> Result<String, String> {
+    let mut file = sftp.open(path).await.map_err(|e| e.to_string())?;
+    let bytes = crate::sessions::file_read::read_bounded(&mut file, max_bytes).await?;
+    decode_bytes(&bytes, encoding)
 }
 
 async fn write_file(
@@ -105,7 +108,29 @@ async fn write_file(
     path: &str,
     content: &str,
     encoding: &str,
+    cancellation: &tokio_util::sync::CancellationToken,
+    operation_timeout: Duration,
 ) -> Result<(), String> {
+    let (staging, destination) = tokio::select! {
+        _ = cancellation.cancelled() => return Err("远程文件操作已取消".into()),
+        result = timeout(operation_timeout, stage_editor_file(sftp, path, content, encoding)) =>
+            result.map_err(|_| format!("写入文件{path}超时"))??,
+    };
+    if cancellation.is_cancelled() {
+        return Err("远程文件操作已取消".into());
+    }
+    // Once replacement starts, a caller deadline must not interrupt replacement or rollback.
+    replace_remote_file_with_policy(sftp, &staging, &destination, Some(true))
+        .await
+        .map(|_| ())
+}
+
+async fn stage_editor_file(
+    sftp: &SftpSession,
+    path: &str,
+    content: &str,
+    encoding: &str,
+) -> Result<(String, String), String> {
     use tokio::io::AsyncWriteExt;
     let bytes = encode_text(content, encoding)?;
     let destination_metadata = match sftp.symlink_metadata(path).await {
@@ -137,8 +162,14 @@ async fn write_file(
 
     let write_result = async {
         {
+            let mut attributes = russh_sftp::protocol::FileAttributes::empty();
+            attributes.permissions = Some(0o600);
             let mut file = sftp
-                .create(&staging_path)
+                .open_with_flags_and_attributes(
+                    &staging_path,
+                    OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
+                    attributes,
+                )
                 .await
                 .map_err(|error| format!("无法创建远端编辑临时文件: {error}"))?;
             file.write_all(&bytes)
@@ -147,6 +178,9 @@ async fn write_file(
             file.flush()
                 .await
                 .map_err(|error| format!("刷新远端编辑临时文件失败: {error}"))?;
+            file.shutdown()
+                .await
+                .map_err(|error| format!("关闭远端编辑临时文件失败: {error}"))?;
         }
 
         let written_size = sftp
@@ -172,8 +206,33 @@ async fn write_file(
 
     // Commit the effective target path so a symlink remains intact while its
     // regular-file target still receives the same atomic rename/rollback.
-    replace_remote_file(sftp, &staging_path, &commit_path).await
+    let target = if commit_path == path {
+        destination_metadata
+    } else {
+        Some(
+            sftp.symlink_metadata(&commit_path)
+                .await
+                .map_err(|error| error.to_string())?,
+        )
+    };
+    let staged = sftp
+        .symlink_metadata(&staging_path)
+        .await
+        .map_err(|error| error.to_string())?;
+    if target.as_ref().is_some_and(|target| {
+        target.uid.is_some() && target.uid != staged.uid
+            || target.gid.is_some() && target.gid != staged.gid
+    }) {
+        return Err(format!(
+            "SFTP 无法保留原文件属主或组，已停止替换；临时文件：{staging_path}"
+        ));
+    }
+    Ok((staging_path, commit_path))
 }
+
+#[cfg(test)]
+#[path = "tests/editor_save.rs"]
+mod editor_save_tests;
 
 async fn create_dir(sftp: &SftpSession, path: &str) -> Result<(), String> {
     match sftp.metadata(path).await {

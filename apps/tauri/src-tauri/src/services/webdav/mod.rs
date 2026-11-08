@@ -89,6 +89,8 @@ impl Default for StoredConfig {
 
 include!("config.rs");
 include!("bundle.rs");
+include!("profile_merge.rs");
+mod dependencies;
 include!("download.rs");
 include!("sync.rs");
 include!("tests/mod.rs");

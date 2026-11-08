@@ -56,6 +56,19 @@ impl McpVisibility {
         }
     }
 
+    fn visible_transfers<'a>(&self, snapshot: &'a Value) -> Result<Vec<&'a Value>, String> {
+        snapshot
+            .get("transfers")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "FileTerm returned invalid transfer state".to_string())
+            .map(|transfers| {
+                transfers
+                    .iter()
+                    .filter(|task| self.allows_transfer_value(task))
+                    .collect()
+            })
+    }
+
     fn allows_transfer_task(&self, task: &crate::services::transfers::TransferTask) -> bool {
         match self.scope {
             McpVisibilityScope::AllSavedConnections => true,
@@ -281,7 +294,14 @@ impl BridgeProgress {
     }
 
     fn is_interaction(&self) -> bool {
-        matches!(self.event.as_str(), "privileged-password-prompt" | "action-approval-waiting" | "action-approval-resolved" | "connection-waiting" | "ssh-interaction")
+        matches!(
+            self.event.as_str(),
+            "privileged-password-prompt"
+                | "action-approval-waiting"
+                | "action-approval-resolved"
+                | "connection-waiting"
+                | "ssh-interaction"
+        )
     }
 
     fn ssh_interaction(kind: &str, status: &str, progress_token: Option<Value>) -> Self {

@@ -91,11 +91,28 @@ struct EncryptedBundle {
     content_hash: String,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BackupDependencies {
+    #[serde(default)]
+    pub proxies: Vec<Value>,
+    #[serde(default)]
+    pub tunnels: Vec<Value>,
+}
+
+impl Drop for BackupDependencies {
+    fn drop(&mut self) {
+        zeroize_values(&mut self.proxies);
+        zeroize_values(&mut self.tunnels);
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct DecodedBundle {
     pub profiles: Vec<Value>,
     pub ssh_keys: Option<Vec<Value>>,
     pub legacy_plaintext: bool,
+    pub dependencies: BackupDependencies,
 }
 
 impl Drop for DecodedBundle {
@@ -255,9 +272,11 @@ fn derive_key(
     }
 }
 
-fn extract_bundle(value: Value) -> Result<(Vec<Value>, Option<Vec<Value>>), BackupCryptoError> {
+type ExtractedBundle = (Vec<Value>, Option<Vec<Value>>, BackupDependencies);
+
+fn extract_bundle(value: Value) -> Result<ExtractedBundle, BackupCryptoError> {
     match value {
-        Value::Array(profiles) => Ok((profiles, None)),
+        Value::Array(profiles) => Ok((profiles, None, BackupDependencies::default())),
         Value::Object(mut object) => {
             let mut profiles = match object.remove("profiles") {
                 Some(Value::Array(profiles)) => profiles,
@@ -287,10 +306,24 @@ fn extract_bundle(value: Value) -> Result<(Vec<Value>, Option<Vec<Value>>), Back
                     return Err(BackupCryptoError::InvalidBundle);
                 }
             };
+            let mut raw_dependencies = object
+                .remove("connectionDependencies")
+                .unwrap_or_else(|| serde_json::json!({}));
+            let dependencies = serde_json::from_value(raw_dependencies.clone());
+            zeroize_json(&mut raw_dependencies);
             for value in object.values_mut() {
                 zeroize_json(value);
             }
-            Ok((profiles, ssh_keys))
+            match dependencies {
+                Ok(dependencies) => Ok((profiles, ssh_keys, dependencies)),
+                Err(_) => {
+                    zeroize_values(&mut profiles);
+                    if let Some(mut keys) = ssh_keys {
+                        zeroize_values(&mut keys);
+                    }
+                    Err(BackupCryptoError::InvalidBundle)
+                }
+            }
         }
         mut value => {
             zeroize_json(&mut value);
@@ -301,7 +334,7 @@ fn extract_bundle(value: Value) -> Result<(Vec<Value>, Option<Vec<Value>>), Back
 
 fn decode_legacy(mut value: Value) -> Result<DecodedBundle, BackupCryptoError> {
     // Private keys are only accepted from password-encrypted bundles.
-    if value.get("sshKeys").is_some() {
+    if value.get("sshKeys").is_some() || value.get("connectionDependencies").is_some() {
         zeroize_json(&mut value);
         return Err(BackupCryptoError::InvalidBundle);
     }
@@ -309,7 +342,7 @@ fn decode_legacy(mut value: Value) -> Result<DecodedBundle, BackupCryptoError> {
         .get("contentHash")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
-    let (profiles, _) = extract_bundle(value)?;
+    let (profiles, _, dependencies) = extract_bundle(value)?;
     if let Some(expected_hash) = expected_hash {
         let canonical =
             serde_json::to_vec(&profiles).map_err(|_| BackupCryptoError::InvalidBundle)?;
@@ -321,6 +354,7 @@ fn decode_legacy(mut value: Value) -> Result<DecodedBundle, BackupCryptoError> {
         profiles,
         ssh_keys: None,
         legacy_plaintext: true,
+        dependencies,
     })
 }
 
@@ -363,11 +397,12 @@ fn decrypt_v3(
     let plaintext = Zeroizing::new(plaintext);
     let value: Value = serde_json::from_slice(&plaintext)
         .map_err(|_| BackupCryptoError::InvalidPasswordOrBundle)?;
-    let (profiles, ssh_keys) = extract_bundle(value)?;
+    let (profiles, ssh_keys, dependencies) = extract_bundle(value)?;
     Ok(DecodedBundle {
         profiles,
         ssh_keys,
         legacy_plaintext: false,
+        dependencies,
     })
 }
 
@@ -376,11 +411,13 @@ fn decrypt_v3(
 struct BackupPayload<'a> {
     profiles: &'a [Value],
     ssh_keys: &'a [Value],
+    connection_dependencies: &'a BackupDependencies,
 }
 
 pub(crate) fn encrypt_bundle(
     mut profiles: Vec<Value>,
     mut ssh_keys: Vec<Value>,
+    dependencies: BackupDependencies,
     password: &str,
     generated_at: &str,
 ) -> Result<(Vec<u8>, String), BackupCryptoError> {
@@ -405,6 +442,7 @@ pub(crate) fn encrypt_bundle(
         let payload = BackupPayload {
             profiles: &profiles,
             ssh_keys: &ssh_keys,
+            connection_dependencies: &dependencies,
         };
         let plaintext =
             serde_json::to_vec(&payload).map_err(|_| BackupCryptoError::EncryptionFailed)?;

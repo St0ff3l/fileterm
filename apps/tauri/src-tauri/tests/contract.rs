@@ -30,6 +30,34 @@ use fileterm_lib::commands::OpenWindowInput;
 use fileterm_lib::services::profile_ops::{heal_profiles, strip_secret_fields_public};
 use serde_json::{json, Value};
 
+#[test]
+fn backup_snapshots_share_the_library_lock_without_holding_it_during_upload() {
+    let source = include_str!("../src/services/webdav/bundle.rs");
+    let snapshot = source
+        .split("async fn local_backup_snapshot")
+        .nth(1)
+        .unwrap()
+        .split("pub(crate) async fn export_bundle")
+        .next()
+        .unwrap();
+    let lock = snapshot
+        .find("state.library_mutation.lock().await")
+        .unwrap();
+    assert!(
+        lock < snapshot
+            .find("profile_ops::read_and_heal_profiles")
+            .unwrap()
+    );
+    assert!(lock < snapshot.find("ssh_keys::export_for_backup").unwrap());
+    assert!(lock < snapshot.find("dependencies::export_at").unwrap());
+    for upload in [
+        include_str!("../src/services/webdav/sync.rs"),
+        include_str!("../src/services/s3_backup/sync.rs"),
+    ] {
+        assert!(!upload.contains("library_mutation.lock()"));
+    }
+}
+
 fn folder(id: &str, name: &str) -> Value {
     json!({ "id": id, "name": name, "type": "folder" })
 }

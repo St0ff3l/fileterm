@@ -250,7 +250,9 @@ async fn transfer_action(app: &AppHandle, params: &Value, action: &str) -> Resul
     let snapshot = match action {
         "pause" => crate::commands::app_pause_transfer(app.clone(), transfer_id.clone()).await,
         "resume" => crate::commands::app_resume_transfer(app.clone(), transfer_id.clone()).await,
-        "discard" => crate::commands::app_discard_transfer(app.clone(), transfer_id.clone(), None).await,
+        "discard" => {
+            crate::commands::app_discard_transfer(app.clone(), transfer_id.clone(), None).await
+        }
         _ => return Err("Unsupported transfer action".to_string()),
     }
     .map_err(public_app_error)?;
@@ -269,10 +271,11 @@ async fn clear_transfers(app: &AppHandle, params: &Value) -> Result<Value, Strin
     let snapshot = crate::commands::app_clear_transfers(app.clone(), transfer_ids.clone())
         .await
         .map_err(public_app_error)?;
+    let visibility = mcp_visibility(app).await?;
     Ok(json!({
         "operation": "clear_transfers",
         "transferIds": transfer_ids,
-        "remaining": snapshot.get("transfers").cloned().unwrap_or_else(|| json!([])),
+        "remaining": visibility.visible_transfers(&snapshot)?,
     }))
 }
 

@@ -172,8 +172,7 @@ fn should_request_mcp_approval(policy: &McpAccessPolicy, request: &BridgeRequest
     matches!(
         policy.operation_policy.as_str(),
         "basic-safe-operations" | "approved-operations"
-    ) && request.requires_approval
-        && action_requires_approval(&request.action, &request.params)
+    ) && action_requires_approval(&request.action, &request.params)
 }
 
 async fn enforce_selected_connection_scope(

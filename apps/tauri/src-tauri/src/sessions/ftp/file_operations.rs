@@ -2,41 +2,123 @@ async fn read_file<T: TokioTlsStream + Send>(
     ftp: &mut ImplAsyncFtpStream<T>,
     path: &str,
     encoding: &str,
+    max_bytes: usize,
 ) -> Result<String, String> {
+    if let Ok(size) = ftp.size(path).await {
+        crate::sessions::file_read::check_size(size, max_bytes)?;
+    }
     let mut stream = ftp
         .retr_as_stream(path)
         .await
         .map_err(|error| error.to_string())?;
-    let mut bytes = Vec::new();
-    stream
-        .read_to_end(&mut bytes)
+    let bytes = crate::sessions::file_read::read_bounded(&mut stream, max_bytes)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("FTP connection closed after incomplete read: {error}"))?;
     ftp.finalize_retr_stream(stream)
         .await
         .map_err(|error| error.to_string())?;
     Ok(decode_terminal(&bytes, encoding))
 }
 
-async fn write_file<T: TokioTlsStream + Send>(
+async fn stage_editor_write<T: TokioTlsStream + Send>(
     ftp: &mut ImplAsyncFtpStream<T>,
     path: &str,
     content: &str,
     encoding: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     ensure_dir(ftp, &parent_remote_path(path)).await?;
     let bytes = encode_terminal(content, encoding);
-    let mut stream = ftp
-        .put_with_stream(path)
+    let entries = list_files(ftp, &parent_remote_path(path)).await?;
+    let destination = entries
+        .iter()
+        .find(|entry| entry["path"].as_str() == Some(path));
+    if destination.is_some_and(|entry| entry["isSymlink"] == true || entry["type"] != "file") {
+        return Err("FTP 编辑保存只支持普通文件，已阻止替换目录或符号链接".into());
+    }
+    let mode = destination
+        .and_then(|entry| entry["permission"].as_str())
+        .and_then(editor_file_mode);
+    let staging = format!("{path}.fileterm-edit-{}", uuid::Uuid::new_v4());
+    let uploaded = async {
+        if mode.is_some() {
+            let empty = ftp
+                .put_with_stream(&staging)
+                .await
+                .map_err(|error| error.to_string())?;
+            ftp.finalize_put_stream(empty)
+                .await
+                .map_err(|error| error.to_string())?;
+            chmod_file(ftp, &staging, "600").await?;
+        }
+        let mut stream = ftp
+            .put_with_stream(&staging)
+            .await
+            .map_err(|error| error.to_string())?;
+        stream
+            .write_all(&bytes)
+            .await
+            .map_err(|error| error.to_string())?;
+        ftp.finalize_put_stream(stream)
+            .await
+            .map_err(|error| error.to_string())
+    }
+    .await;
+    uploaded.map_err(|error| format!("FTP connection closed after failed editor upload; staging retained at {staging}: {error}"))?;
+    let size = ftp
+        .size(&staging)
         .await
         .map_err(|error| error.to_string())?;
-    stream
-        .write_all(&bytes)
-        .await
-        .map_err(|error| error.to_string())?;
-    ftp.finalize_put_stream(stream)
-        .await
-        .map_err(|error| error.to_string())
+    if size != bytes.len() {
+        return Err("FTP 编辑临时文件大小校验失败，原文件未修改".into());
+    }
+    if let Some(owner_group) = destination
+        .and_then(|entry| entry["ownerGroup"].as_str())
+        .filter(|owner_group| !owner_group.is_empty())
+    {
+        let staged_entries = list_files(ftp, &parent_remote_path(path)).await?;
+        let staged_owner_group = staged_entries
+            .iter()
+            .find(|entry| entry["path"].as_str() == Some(&staging))
+            .and_then(|entry| entry["ownerGroup"].as_str());
+        // FTP cannot portably preserve another owner/group during replacement.
+        if staged_owner_group != Some(owner_group) {
+            return Err(format!(
+                "FTP 无法保留原文件属主或组，已停止替换，原文件未修改；临时文件：{staging}"
+            ));
+        }
+    }
+    if let Some(mode) = mode {
+        chmod_file(ftp, &staging, &format!("{mode:o}")).await?;
+    }
+    Ok(staging)
+}
+
+fn editor_file_mode(permission: &str) -> Option<u32> {
+    let bits = permission.as_bytes().get(1..10)?;
+    let mut mode = 0;
+    for (index, &bit) in bits.iter().enumerate() {
+        match bit {
+            b'-' | b'S' | b'T' => {}
+            b'r' | b'w' | b'x' | b's' | b't' => mode |= 1 << (8 - index),
+            _ => return None,
+        }
+        if matches!(bit, b's' | b'S') {
+            mode |= if index == 2 {
+                0o4000
+            } else if index == 5 {
+                0o2000
+            } else {
+                return None;
+            };
+        }
+        if matches!(bit, b't' | b'T') {
+            if index != 8 {
+                return None;
+            }
+            mode |= 0o1000;
+        }
+    }
+    Some(mode)
 }
 
 async fn ensure_dir<T: TokioTlsStream + Send>(

@@ -62,47 +62,38 @@ fn classify_command_risk(command: &str) -> AiCommandRisk {
         AiCommandRisk::Destructive
     } else if is_mutating {
         AiCommandRisk::Mutating
-    } else if [
-        "ls",
-        "pwd",
-        "whoami",
-        "id",
-        "ps",
-        "top",
-        "htop",
-        "df",
-        "free",
-        "uname",
-        "cat ",
-        "grep ",
-        "rg ",
-        "find ",
-        "journalctl",
-        "systemctl status",
-        "git status",
-        "git log",
-        "docker version",
-        "docker info",
-        "docker network ls",
-        "docker ps",
-        "docker volume ls",
-        "docker stats --no-stream",
-        "kubectl get",
-    ]
-    .iter()
-    .any(|prefix| lower == *prefix || lower.starts_with(&format!("{prefix} ")))
-    {
+    } else if is_basic_safe_command(command) {
         AiCommandRisk::ReadOnly
     } else {
         AiCommandRisk::Unknown
     }
 }
 
-/// The external bridge uses the same local Copilot classifier when deciding
-/// whether a Basic safe command can run without another FileTerm approval.
-/// Unknown, mutating, destructive, and privileged commands remain gated.
+/// Only these complete commands may bypass approval; prefixes and arbitrary flags are unsafe.
 pub(crate) fn is_basic_safe_command(command: &str) -> bool {
-    matches!(classify_command_risk(command), AiCommandRisk::ReadOnly)
+    matches!(
+        command,
+        "ls" | "ls -l"
+            | "ls -a"
+            | "ls -la"
+            | "ls -al"
+            | "uname -a"
+            | "df -h"
+            | "free -h"
+            | "pwd"
+            | "whoami"
+            | "id"
+            | "ps"
+            | "df"
+            | "free"
+            | "uname"
+            | "docker version"
+            | "docker info"
+            | "docker network ls"
+            | "docker ps"
+            | "docker volume ls"
+            | "docker stats --no-stream",
+    )
 }
 
 fn conservative_command_risk(command: &str, ai_risk: Option<AiCommandRisk>) -> AiCommandRisk {

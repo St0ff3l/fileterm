@@ -289,7 +289,7 @@ fn public_value(
     })
 }
 
-fn validate_forwards(forwards: &[Value]) -> Result<(), AppError> {
+pub(crate) fn validate_forwards(forwards: &[Value]) -> Result<(), AppError> {
     for forward in forwards {
         let object = forward
             .as_object()
@@ -339,7 +339,7 @@ fn validate_forwards(forwards: &[Value]) -> Result<(), AppError> {
     Ok(())
 }
 
-fn validate_script_url(value: &str) -> Result<String, AppError> {
+pub(crate) fn validate_script_url(value: &str) -> Result<String, AppError> {
     let value = value.trim();
     if value.is_empty() {
         return Err(AppError::Command("请输入 HTTP 隧道脚本 URL".to_string()));

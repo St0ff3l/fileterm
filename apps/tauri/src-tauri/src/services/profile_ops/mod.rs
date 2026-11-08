@@ -13,6 +13,7 @@ use serde_json::{Map, Value};
 use tauri::AppHandle;
 
 const DEFAULT_GROUP: &str = "默认";
+pub(crate) const BACKUP_IDENTITY_FIELD: &str = "backupIdentity";
 
 include!("healing.rs");
 include!("profiles.rs");

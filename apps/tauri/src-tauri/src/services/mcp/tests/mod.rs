@@ -2,27 +2,25 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        action_approval_source, action_is_read_only, bridge_request_timeout, compact_session,
-        agent_contract, agent_error_metadata, background_command_agent_metadata,
-        command_start_agent_metadata, handle_jsonrpc_request, initialize_result,
-        mcp_cancel_request_id, mcp_error_code, mcp_error_is_retryable,
-        optional_string, pagination, requested_execution_mode, should_request_mcp_approval,
-        tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
-        visible_command_agent_metadata, synchronous_command_agent_metadata,
-        ActionApprovalSource, BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility,
-        McpVisibilityScope, EXECUTION_MODE_BACKGROUND, EXECUTION_MODE_VISIBLE_TERMINAL,
-        MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
-        FILETERM_AGENT_CONTRACT_VERSION,
-        FILETERM_REQUEST_QUEUE_FULL,
-        FILETERM_MCP_BRIDGE_BACKPRESSURE, FILETERM_MCP_BRIDGE_DISCONNECTED,
-        FILETERM_MCP_BRIDGE_UNAVAILABLE,
+        action_approval_source, action_is_read_only, agent_contract, agent_error_metadata,
+        background_command_agent_metadata, bridge_request_timeout, command_start_agent_metadata,
+        compact_session, handle_jsonrpc_request, initialize_result, mcp_cancel_request_id,
+        mcp_error_code, mcp_error_is_retryable, optional_string, pagination,
+        requested_execution_mode, should_request_mcp_approval, synchronous_command_agent_metadata,
+        tool_definitions, tool_error_result, validate_tool_arguments,
+        visible_command_agent_metadata, write_mcp_progress, ActionApprovalSource, BridgeProgress,
+        BridgeRequest, McpAccessPolicy, McpVisibility, McpVisibilityScope,
         BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED, DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
+        EXECUTION_MODE_BACKGROUND, EXECUTION_MODE_VISIBLE_TERMINAL,
+        FILETERM_AGENT_CONTRACT_VERSION, FILETERM_MCP_BRIDGE_BACKPRESSURE,
+        FILETERM_MCP_BRIDGE_DISCONNECTED, FILETERM_MCP_BRIDGE_UNAVAILABLE,
         FILETERM_REMOTE_COMMAND_LIMIT, FILETERM_REMOTE_COMMAND_NOT_FOUND,
         FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH, FILETERM_REMOTE_COMMAND_SESSION_LIMIT,
-        MAX_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
-        NETWORK_DEVICE_COMMAND_INVALID, NETWORK_DEVICE_CWD_UNSUPPORTED,
-        NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
-        VISIBLE_TERMINAL_COMMAND_INVALID, VISIBLE_TERMINAL_SESSION_NOT_ACTIVE,
+        FILETERM_REQUEST_QUEUE_FULL, MAX_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS, MCP_BRIDGE_TIMEOUT,
+        MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION, NETWORK_DEVICE_COMMAND_INVALID,
+        NETWORK_DEVICE_CWD_UNSUPPORTED, NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED,
+        SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED, VISIBLE_TERMINAL_COMMAND_INVALID,
+        VISIBLE_TERMINAL_SESSION_NOT_ACTIVE,
     };
     use super::{
         cli_bridge_request, cli_exec_action, cli_jsonl_bridge_request, cli_jsonl_request_key,
@@ -33,6 +31,24 @@ mod tests {
     use serde_json::{json, Value};
     use std::collections::HashSet;
     use std::time::Duration;
+
+    #[test]
+    fn desktop_approval_cannot_be_disabled_by_the_bridge_caller() {
+        for request in [
+            json!({"action":"create_remote_file","requires_approval":false}),
+            json!({"action":"create_remote_file"}),
+        ] {
+            let request: BridgeRequest = serde_json::from_value(request).unwrap();
+            for operation_policy in ["basic-safe-operations", "approved-operations"] {
+                let policy = McpAccessPolicy {
+                    operation_policy: operation_policy.into(),
+                    connection_scope: "all-saved-connections".into(),
+                    allowed_profile_ids: HashSet::new(),
+                };
+                assert!(should_request_mcp_approval(&policy, &request));
+            }
+        }
+    }
 
     #[test]
     fn cli_and_mcp_bridge_requests_keep_distinct_session_sources() {
@@ -224,11 +240,15 @@ mod tests {
             assert!(tool["name"].as_str().unwrap().starts_with("fileterm_"));
             assert_eq!(tool["inputSchema"]["additionalProperties"], false);
             assert_eq!(tool["outputSchema"]["type"], "object");
-            assert!(tool["description"]
-                .as_str()
-                .unwrap()
-                .to_ascii_lowercase()
-                .contains("retry"), "{}", tool["name"]);
+            assert!(
+                tool["description"]
+                    .as_str()
+                    .unwrap()
+                    .to_ascii_lowercase()
+                    .contains("retry"),
+                "{}",
+                tool["name"]
+            );
         }
         let read_tool = tool_definitions()
             .into_iter()
@@ -261,8 +281,14 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("never writes to the visible terminal"));
-        assert!(remote_tool["description"].as_str().unwrap().contains("separate command beginning with sudo or su"));
-        assert!(remote_tool["description"].as_str().unwrap().contains("no prompt is waiting"));
+        assert!(remote_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("separate command beginning with sudo or su"));
+        assert!(remote_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("no prompt is waiting"));
         assert_eq!(
             remote_tool["outputSchema"]["required"],
             json!(["tabId", "executionMode", "agent", "result"])
@@ -431,6 +457,76 @@ mod tests {
         assert!(!visibility.allows_tab(Some("tab-2")));
         assert!(visibility.allows_transfer_value(&json!({ "tabId": "tab-1" })));
         assert!(!visibility.allows_transfer_value(&json!({ "tabId": "tab-2" })));
+    }
+
+    #[test]
+    fn transfer_responses_hide_unselected_connections_even_when_nothing_was_cleared() {
+        let selected = McpVisibility {
+            scope: McpVisibilityScope::SelectedConnections,
+            profile_ids: HashSet::from(["allowed".into()]),
+            tab_ids: HashSet::from(["visible-tab".into()]),
+        };
+        let snapshot = json!({"transfers": [
+            {"id":"a", "profileId":"allowed", "remotePath":"/visible"},
+            {"id":"b", "tabId":"visible-tab", "remotePath":"/also-visible"},
+            {"id":"c", "profileId":"hidden", "remotePath":"/private/secret"},
+            {"id":"d", "remotePath":"/local-only"}
+        ]});
+        let visible = selected.visible_transfers(&snapshot).unwrap();
+        assert_eq!(
+            visible
+                .iter()
+                .map(|task| task["id"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert!(!serde_json::to_string(&visible)
+            .unwrap()
+            .contains("/private"));
+        assert_eq!(
+            McpVisibility::all_saved_connections()
+                .visible_transfers(&snapshot)
+                .unwrap()
+                .len(),
+            4
+        );
+        assert!(selected
+            .visible_transfers(&json!({"transfers":[]}))
+            .unwrap()
+            .is_empty());
+        assert!(selected.visible_transfers(&json!({})).is_err());
+    }
+
+    #[test]
+    fn command_prefixes_and_client_flags_cannot_skip_desktop_approval() {
+        let policy = McpAccessPolicy {
+            connection_scope: "all-saved-connections".into(),
+            operation_policy: "basic-safe-operations".into(),
+            allowed_profile_ids: HashSet::new(),
+        };
+        for action in ["execute_remote_command", "start_remote_command"] {
+            for command in [
+                "ls ; python3 -c 'print(1)'",
+                "git log -1 --format=proof --output=/tmp/proof",
+                "find  /tmp -delete",
+                "journalctl --rotate",
+                "pwd\nid",
+                "ls$(id)",
+            ] {
+                let request = BridgeRequest {
+                    action: action.into(),
+                    params: json!({"command":command}),
+                    source: WorkspaceSessionSource::Mcp,
+                    requires_approval: false,
+                    progress_token: None,
+                    client_id: None,
+                };
+                assert!(
+                    should_request_mcp_approval(&policy, &request),
+                    "{action}: {command}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -637,7 +733,10 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("out of order"));
-        assert_eq!(contract["identifiers"]["sessionId"]["argumentName"], "tab_id");
+        assert_eq!(
+            contract["identifiers"]["sessionId"]["argumentName"],
+            "tab_id"
+        );
         assert_eq!(
             contract["identifiers"]["connectionOperationId"]["argumentName"],
             "operation_id"
@@ -646,9 +745,18 @@ mod tests {
             contract["responseShape"]["mcpToolCall"]["successPath"],
             "JSON-RPC result.structuredContent"
         );
-        assert_eq!(contract["transport"]["oneShotCli"]["agentUse"], "manual-or-script-only");
-        assert_eq!(contract["identifiers"]["bridgeIds"]["visibleToAgent"], false);
-        assert_eq!(contract["workflows"]["longCommand"][0]["mcpTool"], "fileterm_start_remote_command");
+        assert_eq!(
+            contract["transport"]["oneShotCli"]["agentUse"],
+            "manual-or-script-only"
+        );
+        assert_eq!(
+            contract["identifiers"]["bridgeIds"]["visibleToAgent"],
+            false
+        );
+        assert_eq!(
+            contract["workflows"]["longCommand"][0]["mcpTool"],
+            "fileterm_start_remote_command"
+        );
         assert!(contract["rules"]
             .as_array()
             .unwrap()
@@ -681,8 +789,14 @@ mod tests {
             "running": true
         });
         let running_agent = background_command_agent_metadata(&running, "read");
-        assert_eq!(running_agent["next"]["mcpTool"], "fileterm_read_remote_command");
-        assert_eq!(running_agent["next"]["cliJsonlAction"], "read_remote_command");
+        assert_eq!(
+            running_agent["next"]["mcpTool"],
+            "fileterm_read_remote_command"
+        );
+        assert_eq!(
+            running_agent["next"]["cliJsonlAction"],
+            "read_remote_command"
+        );
         assert_eq!(running_agent["next"]["arguments"]["offset"], 128);
 
         let finished = json!({
@@ -692,8 +806,14 @@ mod tests {
             "running": false
         });
         let finished_agent = background_command_agent_metadata(&finished, "read");
-        assert_eq!(finished_agent["next"]["mcpTool"], "fileterm_close_remote_command");
-        assert_eq!(finished_agent["next"]["cliJsonlAction"], "close_remote_command");
+        assert_eq!(
+            finished_agent["next"]["mcpTool"],
+            "fileterm_close_remote_command"
+        );
+        assert_eq!(
+            finished_agent["next"]["cliJsonlAction"],
+            "close_remote_command"
+        );
         assert_eq!(finished_agent["replayPolicy"], "never-restart");
 
         let visible = visible_command_agent_metadata(&json!({
@@ -718,8 +838,14 @@ mod tests {
         assert_eq!(uncertain["retryable"], true);
         assert_eq!(uncertain["safeToRetry"], false);
         assert_eq!(uncertain["outcome"], "unknown");
-        assert_eq!(uncertain["recovery"]["mcpTool"], "fileterm_list_remote_commands");
-        assert_eq!(uncertain["recovery"]["cliJsonlAction"], "list_remote_commands");
+        assert_eq!(
+            uncertain["recovery"]["mcpTool"],
+            "fileterm_list_remote_commands"
+        );
+        assert_eq!(
+            uncertain["recovery"]["cliJsonlAction"],
+            "list_remote_commands"
+        );
         assert_eq!(
             uncertain["recovery"]["mustNotCall"][0],
             "fileterm_start_remote_command"
@@ -748,7 +874,10 @@ mod tests {
         assert_eq!(wait["safeToRetry"], true);
         assert_eq!(wait["recovery"]["type"], "wait-same-operation");
         assert_eq!(wait["recovery"]["arguments"]["operation_id"], "operation-1");
-        assert_eq!(wait["recovery"]["mustNotCall"][0], "fileterm_open_connection");
+        assert_eq!(
+            wait["recovery"]["mustNotCall"][0],
+            "fileterm_open_connection"
+        );
 
         let open = agent_error_metadata(
             "open_connection",
@@ -758,7 +887,10 @@ mod tests {
         assert_eq!(open["safeToRetry"], false);
         assert_eq!(open["outcome"], "unknown");
         assert_eq!(open["recovery"]["mcpTool"], "fileterm_get_session_context");
-        assert_eq!(open["recovery"]["mustNotCall"][0], "fileterm_open_connection");
+        assert_eq!(
+            open["recovery"]["mustNotCall"][0],
+            "fileterm_open_connection"
+        );
 
         let input = agent_error_metadata(
             "execute_remote_command",
@@ -768,7 +900,10 @@ mod tests {
         assert_eq!(input["outcome"], "needs-user-input");
         assert_eq!(input["recovery"]["type"], "inspect-before-new-operation");
         assert_eq!(input["safeToRetry"], false);
-        assert!(input["recovery"]["reason"].as_str().unwrap().contains("no prompt is waiting"));
+        assert!(input["recovery"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("no prompt is waiting"));
         let completed = synchronous_command_agent_metadata(&json!({
             "result": { "inputRequired": true }
         }));
@@ -779,7 +914,10 @@ mod tests {
             "result": { "inputRequired": true }
         }));
         assert_eq!(visible["next"]["type"], "finish-input-in-visible-terminal");
-        assert_eq!(input["recovery"]["mustNotCall"][0], "fileterm_execute_remote_command");
+        assert_eq!(
+            input["recovery"]["mustNotCall"][0],
+            "fileterm_execute_remote_command"
+        );
 
         let queue = agent_error_metadata(
             "start_remote_command",
@@ -1129,18 +1267,24 @@ mod tests {
             mcp_error_code("FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH: wrong tab"),
             FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH
         );
-        assert!(!mcp_error_is_retryable(FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH));
+        assert!(!mcp_error_is_retryable(
+            FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH
+        ));
         assert_eq!(
             mcp_error_code("BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED: detached command"),
             BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED
         );
-        assert!(!mcp_error_is_retryable(BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED));
+        assert!(!mcp_error_is_retryable(
+            BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED
+        ));
         assert!(mcp_error_is_retryable(FILETERM_REMOTE_COMMAND_LIMIT));
         assert_eq!(
             mcp_error_code("FILETERM_REMOTE_COMMAND_SESSION_LIMIT: tab is busy"),
             FILETERM_REMOTE_COMMAND_SESSION_LIMIT
         );
-        assert!(mcp_error_is_retryable(FILETERM_REMOTE_COMMAND_SESSION_LIMIT));
+        assert!(mcp_error_is_retryable(
+            FILETERM_REMOTE_COMMAND_SESSION_LIMIT
+        ));
         assert_eq!(
             mcp_error_code("FILETERM_MCP_BRIDGE_DISCONNECTED: bridge session closed"),
             FILETERM_MCP_BRIDGE_DISCONNECTED
@@ -1185,11 +1329,11 @@ mod tests {
         assert!(!wire.contains("client_id"));
         let injected = format!(
             "{},\"client_id\":\"abc123\"}}",
-            wire.strip_suffix('}').expect("wire ends with an object brace")
+            wire.strip_suffix('}')
+                .expect("wire ends with an object brace")
         );
         let with_client: BridgeRequest =
             serde_json::from_str(&injected).expect("desktop can inject a client id");
         assert_eq!(with_client.client_id.as_deref(), Some("abc123"));
     }
-
 }

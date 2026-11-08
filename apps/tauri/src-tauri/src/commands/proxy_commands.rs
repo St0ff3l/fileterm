@@ -1,18 +1,21 @@
 #[tauri::command]
-pub fn app_list_proxy_profiles(app: AppHandle) -> Result<Vec<serde_json::Value>, AppError> {
+pub async fn app_list_proxy_profiles(app: AppHandle) -> Result<Vec<serde_json::Value>, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
     crate::services::proxies::list(&app)
 }
 
 #[tauri::command]
-pub fn app_save_proxy_profile(
+pub async fn app_save_proxy_profile(
     app: AppHandle,
     input: crate::services::proxies::SaveProxyInput,
 ) -> Result<serde_json::Value, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
     crate::services::proxies::save(&app, input)
 }
 
 #[tauri::command]
-pub fn app_delete_proxy_profile(app: AppHandle, id: String) -> Result<(), AppError> {
+pub async fn app_delete_proxy_profile(app: AppHandle, id: String) -> Result<(), AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
     crate::services::proxies::delete(&app, &id)
 }
 

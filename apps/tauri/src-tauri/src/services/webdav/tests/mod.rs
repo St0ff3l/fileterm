@@ -155,7 +155,7 @@ mod tests {
         assert_eq!(profile["password"], "secret");
         assert_eq!(profile["passphrase"], "key-secret");
         assert_eq!(profile["proxy"]["password"], "proxy-secret");
-        assert!(profile.get("id").is_none());
+        assert_eq!(profile["id"], "remote-id");
     }
 
     #[test]
@@ -171,7 +171,13 @@ mod tests {
             "passphrase": "key-secret",
             "proxy": { "type": "http", "password": "proxy-secret" }
         })];
-        let (bytes, _) = build_export_bundle(profiles, Vec::new(), "Backup password 8").unwrap();
+        let (bytes, _) = build_export_bundle(
+            profiles,
+            Vec::new(),
+            crate::services::backup_crypto::BackupDependencies::default(),
+            "Backup password 8",
+        )
+        .unwrap();
         let payload: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(payload["schemaVersion"], 3);
         assert_eq!(payload["containsSecrets"], true);

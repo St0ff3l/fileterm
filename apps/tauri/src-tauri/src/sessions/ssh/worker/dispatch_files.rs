@@ -55,6 +55,21 @@ async fn dispatch_file_cmd(
     _tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
     exec_channel_enabled: bool,
 ) -> Result<bool, String> {
+    let cmd = match cmd {
+        WorkerCmd::CreateRemoteFile {
+            parent_path,
+            name,
+            cancellation,
+            respond_to,
+        } => WorkerCmd::WriteRemoteFile {
+            path: format!("{}/{}", parent_path.trim_end_matches('/'), name),
+            content: String::new(),
+            encoding: "utf-8".into(),
+            cancellation,
+            respond_to,
+        },
+        command => command,
+    };
     match cmd {
         WorkerCmd::ListRemoteFiles {
             path,
@@ -93,6 +108,7 @@ async fn dispatch_file_cmd(
         WorkerCmd::ReadRemoteFile {
             path,
             encoding,
+            max_bytes,
             cancellation,
             respond_to,
         } => {
@@ -106,7 +122,9 @@ async fn dispatch_file_cmd(
                 let res = if fam == "root" {
                     match timeout(
                         operation_timeout,
-                        exec_read_file_via_shell(&handle, &path, &encoding, method, &su, &sp),
+                        exec_read_file_via_shell(
+                            &handle, &path, &encoding, max_bytes, method, &su, &sp,
+                        ),
                     )
                     .await
                     {
@@ -115,7 +133,11 @@ async fn dispatch_file_cmd(
                     }
                 } else {
                     let sftp_guard = sftp.write().await;
-                    match timeout(operation_timeout, read_file(&sftp_guard, &path, &encoding)).await
+                    match timeout(
+                        operation_timeout,
+                        read_file(&sftp_guard, &path, &encoding, max_bytes),
+                    )
+                    .await
                     {
                         Ok(inner) => inner,
                         Err(_) => Err(format!("读取文件{}超时", path)),
@@ -138,32 +160,36 @@ async fn dispatch_file_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
-            spawn_cancellable_file_operation(cancellation, respond_to, async move {
-                let res = if fam == "root" {
-                    match timeout(
-                        operation_timeout,
-                        exec_write_file_via_shell(
+            tokio::spawn(async move {
+                let result = if fam == "root" {
+                    tokio::select! {
+                        _ = cancellation.cancelled() => Err("远程文件操作已取消".to_string()),
+                        result = timeout(operation_timeout, exec_write_file_via_shell(
                             &handle, &path, &content, &encoding, method, &su, &sp,
-                        ),
-                    )
-                    .await
-                    {
-                        Ok(inner) => inner,
-                        Err(_) => Err(format!("写入文件{}超时", path)),
+                        )) => match result {
+                            Ok(inner) => inner,
+                            Err(_) => Err(format!("写入文件{path}超时")),
+                        }
                     }
                 } else {
-                    let sftp_guard = sftp.write().await;
-                    match timeout(
+                    let guard = tokio::select! {
+                        _ = cancellation.cancelled() => {
+                            let _ = respond_to.send(Err("远程文件操作已取消".to_string()));
+                            return;
+                        },
+                        guard = sftp.write() => guard,
+                    };
+                    write_file(
+                        &guard,
+                        &path,
+                        &content,
+                        &encoding,
+                        &cancellation,
                         operation_timeout,
-                        write_file(&sftp_guard, &path, &content, &encoding),
                     )
                     .await
-                    {
-                        Ok(inner) => inner,
-                        Err(_) => Err(format!("写入文件{}超时", path)),
-                    }
                 };
-                res
+                let _ = respond_to.send(result);
             });
             Ok(false)
         }
@@ -202,48 +228,6 @@ async fn dispatch_file_cmd(
                     match timeout(operation_timeout, create_dir(&sftp_guard, &full_path)).await {
                         Ok(inner) => inner,
                         Err(_) => Err(format!("创建目录{}超时", full_path)),
-                    }
-                };
-                res
-            });
-            Ok(false)
-        }
-        WorkerCmd::CreateRemoteFile {
-            parent_path,
-            name,
-            cancellation,
-            respond_to,
-        } => {
-            let handle = Arc::clone(handle);
-            let sftp = Arc::clone(sftp);
-            let fam = file_access_mode.clone();
-            let method = *root_file_access_method;
-            let su = sudo_user.clone();
-            let sp = sudo_password.clone();
-            spawn_cancellable_file_operation(cancellation, respond_to, async move {
-                let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), name);
-                let res = if fam == "root" {
-                    match timeout(
-                        operation_timeout,
-                        exec_write_file_via_shell(
-                            &handle, &full_path, "", "utf-8", method, &su, &sp,
-                        ),
-                    )
-                    .await
-                    {
-                        Ok(inner) => inner,
-                        Err(_) => Err(format!("创建文件{}超时", full_path)),
-                    }
-                } else {
-                    let sftp_guard = sftp.write().await;
-                    match timeout(
-                        operation_timeout,
-                        write_file(&sftp_guard, &full_path, "", "utf-8"),
-                    )
-                    .await
-                    {
-                        Ok(inner) => inner,
-                        Err(_) => Err(format!("创建文件{}超时", full_path)),
                     }
                 };
                 res

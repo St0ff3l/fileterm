@@ -556,7 +556,7 @@ where
     F: Future<Output = Result<T, String>>,
 {
     tokio::select! {
-        _ = cancellation.cancelled() => Err("远程文件操作已取消".to_string()),
+        _ = cancellation.cancelled() => Err(format!("远程文件操作已取消；FTP connection closed after canceled {operation}")),
         result = ftp_with_timeout(profile, operation, future) => result,
     }
 }

@@ -202,3 +202,100 @@ fn cloud_merge_keeps_the_union_and_prefers_local_metadata() {
     let mut merged = merged;
     zeroize_values(&mut merged);
 }
+
+#[test]
+fn failed_profile_commit_restores_key_metadata_passphrases_and_created_files() {
+    for validation_failure in [true, false] {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-key-transaction-{}", uuid::Uuid::new_v4()));
+        let paths = KeyPaths {
+            storage_root: root.clone(),
+            keys_dir: root.join("ssh-keys"),
+            index_path: root.join("ssh-keys.json"),
+            secrets_path: root.join("ssh-key-secrets.json"),
+        };
+        fs::create_dir_all(&paths.keys_dir).unwrap();
+        super::write_index(
+            &paths,
+            &StoredSshKeyIndex {
+                version: 1,
+                keys: Vec::new(),
+            },
+        )
+        .unwrap();
+        super::write_secrets(&paths, &StoredSshKeySecrets::default()).unwrap();
+        let make_backup = || {
+            let key = russh::keys::PrivateKey::random(
+                &mut rand::rng(),
+                russh::keys::ssh_key::Algorithm::Ed25519,
+            )
+            .unwrap();
+            let private_key = key
+                .to_openssh(russh::keys::ssh_key::LineEnding::LF)
+                .unwrap();
+            let inspected = inspect_private_key_text(&private_key).unwrap();
+            BackupSshKey {
+                key: StoredSshKey {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    name: "original".into(),
+                    note: None,
+                    algorithm: inspected.algorithm.clone(),
+                    fingerprint: inspected.fingerprint.clone(),
+                    encrypted: inspected.encrypted,
+                    imported_at: 123,
+                },
+                private_key: private_key.to_string(),
+                passphrase: Some("current saved passphrase".into()),
+            }
+        };
+        let mut existing = make_backup();
+        restore_backup_at(&paths, std::slice::from_ref(&existing)).unwrap();
+        let previous_index = fs::read(&paths.index_path).unwrap();
+        let previous_secrets = fs::read(&paths.secrets_path).unwrap();
+        let previous_key = fs::read(paths.key_path(&existing.key.id).unwrap()).unwrap();
+        existing.key.name = "older backup name".into();
+        existing.passphrase = None;
+        let incoming = [existing, make_backup()];
+        let blocked_profile = root.join("profiles.json");
+        fs::create_dir(&blocked_profile).unwrap();
+        let result = super::restore_and_commit_at(&paths, &incoming, || {
+            assert_eq!(super::read_index(&paths).unwrap().keys.len(), 2);
+            assert!(!read_secrets(&paths)
+                .unwrap()
+                .passphrases
+                .contains_key(&incoming[0].key.id));
+            if validation_failure {
+                crate::services::totp::validate_profile(
+                    serde_json::json!({"otpSecret":"invalid!"})
+                        .as_object()
+                        .unwrap(),
+                )
+            } else {
+                fs::write(&blocked_profile, b"profile data")
+                    .map_err(|error| crate::AppError::Storage(error.to_string()))
+            }
+        });
+        assert!(result.is_err());
+        assert_eq!(fs::read(&paths.index_path).unwrap(), previous_index);
+        assert_eq!(fs::read(&paths.secrets_path).unwrap(), previous_secrets);
+        assert_eq!(
+            fs::read(paths.key_path(&incoming[0].key.id).unwrap()).unwrap(),
+            previous_key
+        );
+        assert!(!paths.key_path(&incoming[1].key.id).unwrap().exists());
+        assert_eq!(
+            read_secrets(&paths).unwrap().passphrases[&incoming[0].key.id],
+            "current saved passphrase"
+        );
+        let success = super::restore_and_commit_at(&paths, &incoming, || Ok(())).unwrap();
+        assert_eq!(success.imported, 1);
+        assert_eq!(success.updated, 1);
+        assert!(paths.key_path(&incoming[1].key.id).unwrap().exists());
+        assert_eq!(super::read_index(&paths).unwrap().keys.len(), 2);
+        assert!(!read_secrets(&paths)
+            .unwrap()
+            .passphrases
+            .contains_key(&incoming[0].key.id));
+        fs::remove_dir_all(root).unwrap();
+    }
+}

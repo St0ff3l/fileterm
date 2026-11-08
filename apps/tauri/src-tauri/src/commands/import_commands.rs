@@ -238,8 +238,8 @@ pub async fn app_download_webdav_sync(
     app: AppHandle,
     mode: Option<String>,
 ) -> Result<serde_json::Value, AppError> {
-    let _guard = lock_library_after_transfer_hydration(&app).await?;
     let result = crate::services::webdav::download(&app, mode.as_deref()).await?;
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
     if changed > 0 || result.get("mode").and_then(Value::as_str) == Some("overwrite-local") {
@@ -281,8 +281,8 @@ pub async fn app_download_s3_backup(
     app: AppHandle,
     mode: Option<String>,
 ) -> Result<serde_json::Value, AppError> {
-    let _guard = lock_library_after_transfer_hydration(&app).await?;
     let result = crate::services::s3_backup::download(&app, mode.as_deref()).await?;
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
     if changed > 0 || result.get("mode").and_then(Value::as_str) == Some("overwrite-local") {

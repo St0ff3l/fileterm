@@ -78,6 +78,7 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
 
     let id = new_id("profile");
     let mut profile = ensure_object(&input);
+    profile.remove(BACKUP_IDENTITY_FIELD);
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, None);
     profile.insert("id".to_string(), Value::String(id.clone()));
@@ -162,6 +163,7 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
         .unwrap_or(Value::Null);
 
     let mut profile = ensure_object(&input);
+    profile.remove(BACKUP_IDENTITY_FIELD);
     preserve_trusted_host_fingerprint(&mut profile, Some(&previous));
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, Some(&previous));
@@ -169,8 +171,8 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
     profile.insert("group".to_string(), Value::String(group));
     profile.insert("parentId".to_string(), parent_id);
 
-    // Preserve order / lastUsedAt from previous.
-    for key in ["order", "lastUsedAt"] {
+    // Preserve local ordering and private restore identity across renderer edits.
+    for key in ["order", "lastUsedAt", BACKUP_IDENTITY_FIELD] {
         if let Some(v) = previous.get(key) {
             profile.insert(key.to_string(), v.clone());
         }

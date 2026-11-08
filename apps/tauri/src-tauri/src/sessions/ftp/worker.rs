@@ -227,6 +227,7 @@ async fn run_ftp_worker(
             Some(WorkerCmd::ReadRemoteFile {
                 path,
                 encoding,
+                max_bytes,
                 cancellation,
                 respond_to,
                 ..
@@ -235,7 +236,7 @@ async fn run_ftp_worker(
                     profile,
                     "read",
                     cancellation,
-                    client_read(&mut client, &path, &encoding),
+                    client_read(&mut client, &path, &encoding, max_bytes),
                 )
                 .await;
                 respond_ftp_result!(respond_to, result);
@@ -248,11 +249,13 @@ async fn run_ftp_worker(
                 respond_to,
                 ..
             }) => {
-                let result = ftp_with_cancellation(
+                let result = client_write(
+                    &mut client,
+                    &path,
+                    &content,
+                    &encoding,
                     profile,
-                    "write",
                     cancellation,
-                    client_write(&mut client, &path, &content, &encoding),
                 )
                 .await;
                 respond_ftp_result!(respond_to, result);
@@ -282,13 +285,8 @@ async fn run_ftp_worker(
                 ..
             }) => {
                 let path = join_remote_path(&parent_path, &name);
-                let result = ftp_with_cancellation(
-                    profile,
-                    "create file",
-                    cancellation,
-                    client_write(&mut client, &path, "", "utf-8"),
-                )
-                .await;
+                let result =
+                    client_write(&mut client, &path, "", "utf-8", profile, cancellation).await;
                 respond_ftp_result!(respond_to, result);
             }
             Some(WorkerCmd::CopyRemotePath { respond_to, .. }) => {

@@ -338,7 +338,9 @@ async fn replace_remote_file_with_policy(
     {
         let mut metadata = SftpMetadata::empty();
         metadata.permissions = Some(permissions);
-        let _ = sftp.set_metadata(partial_path, metadata).await;
+        sftp.set_metadata(partial_path, metadata)
+            .await
+            .map_err(|error| format!("无法保留远端文件权限，已停止替换: {error}"))?;
     }
 
     let backup_path = format!(

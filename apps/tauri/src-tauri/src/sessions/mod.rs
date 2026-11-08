@@ -1,4 +1,5 @@
 pub(crate) mod file_integrity;
+pub(crate) mod file_read;
 pub mod ftp;
 pub mod local_files;
 pub mod local_terminal;
@@ -69,6 +70,7 @@ pub enum WorkerCmd {
     ReadRemoteFile {
         path: String,
         encoding: String,
+        max_bytes: usize,
         cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<String, String>>,
     },

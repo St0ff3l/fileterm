@@ -19,6 +19,20 @@ impl russh_sftp::server::Handler for DifferentOwners {
         attrs.size = Some(content.len() as u64);
         Ok(Attrs { id, attrs })
     }
+    async fn setstat(
+        &mut self,
+        id: u32,
+        _: String,
+        attrs: SftpMetadata,
+    ) -> Result<Status, Self::Error> {
+        assert_eq!(attrs.permissions, Some(0o100644));
+        Ok(Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: String::new(),
+            language_tag: String::new(),
+        })
+    }
     async fn rename(
         &mut self,
         id: u32,

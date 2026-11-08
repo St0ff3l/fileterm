@@ -14,3 +14,7 @@ include!("tests/mod.rs");
 #[cfg(test)]
 #[path = "tests/commit.rs"]
 mod commit_tests;
+
+#[cfg(test)]
+#[path = "tests/editor_save.rs"]
+mod editor_save_tests;
