@@ -18,10 +18,7 @@ import {
 import { registerImportedFont, unregisterImportedFont } from '../../../../app/imported-fonts'
 import { t } from '../../../../i18n'
 import {
-  THEME_CONFIG_EXPORT_PREFIX,
-  THEME_CONFIG_IMPORT_PREFIXES,
   THEME_PRESETS,
-  clipboardUnavailableError,
   createCustomThemeId,
   findMatchingThemePreset,
   findSavedThemeForConfig,
@@ -60,9 +57,6 @@ export function useThemeSettingsController({
     setFontImportError,
     fontToDelete,
     setFontToDelete,
-    themeConfigOperation,
-    setThemeConfigOperation,
-    themeConfigOperationRef,
     themeConfigMessage,
     setThemeConfigMessage,
     customThemeName,
@@ -341,127 +335,6 @@ export function useThemeSettingsController({
     onSetThemeConfig(nextThemeConfig)
   }
 
-  const parseImportedTheme = (text: string): unknown => {
-    const trimmed = text.trim()
-    const payload = THEME_CONFIG_IMPORT_PREFIXES.reduce(
-      (value, prefix) => (value.startsWith(prefix) ? value.slice(prefix.length) : value),
-      trimmed
-    )
-    const jsonStart = payload.indexOf('{')
-    const jsonEnd = payload.lastIndexOf('}')
-    if (jsonStart < 0 || jsonEnd <= jsonStart) {
-      throw new Error('Theme JSON was not found')
-    }
-    return JSON.parse(payload.slice(jsonStart, jsonEnd + 1)) as unknown
-  }
-
-  const readThemeClipboard = async () => {
-    let lastError: unknown = null
-    if (desktopApi?.readClipboardText) {
-      try {
-        return await desktopApi.readClipboardText()
-      } catch (error) {
-        lastError = error
-      }
-    }
-    if (navigator.clipboard?.readText) {
-      try {
-        return await navigator.clipboard.readText()
-      } catch (error) {
-        lastError = error
-      }
-    }
-    throw clipboardUnavailableError(lastError)
-  }
-
-  const writeThemeClipboard = async (text: string) => {
-    let lastError: unknown = null
-    if (desktopApi?.writeClipboardText) {
-      try {
-        await desktopApi.writeClipboardText(text)
-        return
-      } catch (error) {
-        lastError = error
-      }
-    }
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(text)
-        return
-      } catch (error) {
-        lastError = error
-      }
-    }
-
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.setAttribute('readonly', '')
-    textarea.setAttribute('aria-hidden', 'true')
-    textarea.style.position = 'fixed'
-    textarea.style.top = '0'
-    textarea.style.left = '-9999px'
-    textarea.style.opacity = '0'
-    document.body.appendChild(textarea)
-    textarea.select()
-    try {
-      if (document.execCommand('copy')) return
-    } catch (error) {
-      lastError = error
-    } finally {
-      document.body.removeChild(textarea)
-    }
-    throw clipboardUnavailableError(lastError)
-  }
-
-  const beginThemeConfigOperation = (operation: NonNullable<typeof themeConfigOperation>) => {
-    if (themeConfigOperationRef.current) return false
-    themeConfigOperationRef.current = operation
-    setThemeConfigOperation(operation)
-    setThemeConfigMessage(null)
-    return true
-  }
-
-  const endThemeConfigOperation = () => {
-    themeConfigOperationRef.current = null
-    setThemeConfigOperation(null)
-  }
-
-  const importThemeConfig = async () => {
-    if (!beginThemeConfigOperation('import')) return
-    try {
-      const clipboardText = await readThemeClipboard()
-      const importedTheme = normalizeThemeConfig(parseImportedTheme(clipboardText), themeVariant)
-      onSetThemeConfig(importedTheme)
-      onSetTheme(resolveThemeModeForConfig(importedTheme))
-      setEditingCustomThemeId(null)
-      setCustomThemeName('')
-      setThemeConfigMessage({ text: t.themeImported, kind: 'success' })
-    } catch {
-      setThemeConfigMessage({ text: t.themeImportFailed, kind: 'error' })
-    } finally {
-      endThemeConfigOperation()
-    }
-  }
-
-  const copyThemeConfig = async () => {
-    if (!beginThemeConfigOperation('copy')) return
-    try {
-      const normalizedTheme = normalizeThemeConfig({ ...themeConfig, variant: themeVariant }, themeVariant)
-      const serializedTheme = `${THEME_CONFIG_EXPORT_PREFIX}${JSON.stringify({
-        codeThemeId: normalizedTheme.codeThemeId,
-        baseThemeId: normalizedTheme.baseThemeId,
-        theme: normalizedTheme.theme,
-        variant: normalizedTheme.variant
-      })}`
-      await writeThemeClipboard(serializedTheme)
-      setThemeConfigMessage({ text: t.themeCopied, kind: 'success' })
-    } catch {
-      setThemeConfigMessage({ text: t.themeCopyFailed, kind: 'error' })
-    } finally {
-      endThemeConfigOperation()
-    }
-  }
-
   const selectedThemePreset = findMatchingThemePreset(themeConfig)
   const matchingSavedTheme = findSavedThemeForConfig(customThemes, themeConfig)
   const editingSavedTheme = editingCustomThemeId
@@ -496,9 +369,6 @@ export function useThemeSettingsController({
     normalizedThemeConfig,
     onSetTheme,
     customThemes,
-    themeConfigOperation,
-    importThemeConfig,
-    copyThemeConfig,
     themeConfigMessage,
     themePresetValue,
     themePresetLabel,

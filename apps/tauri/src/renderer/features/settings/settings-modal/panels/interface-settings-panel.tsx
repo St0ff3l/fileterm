@@ -1,3 +1,4 @@
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { getThemeControlSurfaces } from '../../../../app/theme-config'
 import './interface-font-settings.css'
 import './interface-settings-panel.css'
@@ -28,9 +29,6 @@ type InterfaceSettingsPanelContext = {
   themeVariant: ThemePresetVariant
   normalizedThemeConfig: ThemeConfig
   customThemes: SavedTheme[]
-  themeConfigOperation: 'import' | 'copy' | null
-  importThemeConfig(): Promise<void>
-  copyThemeConfig(): Promise<void>
   themeConfigMessage: { text: string; kind: 'success' | 'error' | 'warning' } | null
   themePresetValue: string
   themePresetLabel: string
@@ -69,9 +67,6 @@ export function InterfaceSettingsPanel() {
     themeVariant,
     normalizedThemeConfig,
     customThemes,
-    themeConfigOperation,
-    importThemeConfig,
-    copyThemeConfig,
     themeConfigMessage,
     themePresetValue,
     themePresetLabel,
@@ -153,44 +148,6 @@ export function InterfaceSettingsPanel() {
             <h3>{t.themeCustomization}</h3>
             <p className="settings-tools-hint">{t.themeCustomizationHint}</p>
           </div>
-          <div className="theme-config-action-group">
-            <div className="theme-config-actions">
-              <button
-                aria-busy={themeConfigOperation === 'import'}
-                className="flat-button compact theme-config-action-button"
-                disabled={themeConfigOperation !== null}
-                onClick={() => void importThemeConfig()}
-                type="button"
-              >
-                <StableButtonContent
-                  busy={themeConfigOperation === 'import'}
-                  busyLabel={t.themeWorking}
-                  icon={<AppIcon name="download" size={14} />}
-                  label={t.themeImport}
-                />
-              </button>
-              <button
-                aria-busy={themeConfigOperation === 'copy'}
-                className="flat-button compact theme-config-action-button"
-                disabled={themeConfigOperation !== null}
-                onClick={() => void copyThemeConfig()}
-                type="button"
-              >
-                <StableButtonContent
-                  busy={themeConfigOperation === 'copy'}
-                  busyLabel={t.themeWorking}
-                  icon={<AppIcon name="copy" size={14} />}
-                  label={t.themeCopy}
-                />
-              </button>
-            </div>
-            <span
-              aria-live="polite"
-              className={`theme-config-action-status${themeConfigMessage ? ` is-visible is-${themeConfigMessage.kind}` : ''}`}
-            >
-              {themeConfigMessage?.text ?? ''}
-            </span>
-          </div>
         </div>
 
         <div className="theme-config-toolbar">
@@ -223,6 +180,7 @@ export function InterfaceSettingsPanel() {
             />
           </div>
           <div className="theme-config-actions-control">
+            <FeedbackBubble message={themeConfigMessage?.text} tone={themeConfigMessage?.kind} />
             <button className="primary-button compact theme-config-save-button" onClick={saveCustomTheme} type="button">
               <StableButtonContent
                 icon={<AppIcon name={editingSavedTheme ? 'check' : 'edit'} size={14} />}

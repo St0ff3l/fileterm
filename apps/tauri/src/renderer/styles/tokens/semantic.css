@@ -5,6 +5,8 @@
  */
 
 :root {
+  --feedback-bubble-text: var(--ref-feedback-bubble-text);
+
   /* Surface Semantics */
   --surface-app: var(--ref-surface-canvas);
   --surface-canvas: var(--ref-surface-canvas);
@@ -126,6 +128,10 @@
   --input-border: var(--border-subtle);
   --input-text: var(--text-primary);
   --dialog-surface: var(--surface-modal);
+  --dialog-content-bg: var(--surface-card);
+  --dialog-header-bg: var(--surface-card);
+  --dialog-header-text: var(--text-primary);
+  --dialog-header-icon: var(--text-muted);
   --titlebar-background: var(--surface-titlebar);
   --manager-head-bg: var(--surface-toolbar);
   --command-history-head-bg: var(--surface-canvas);

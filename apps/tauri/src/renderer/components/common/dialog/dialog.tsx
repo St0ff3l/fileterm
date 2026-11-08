@@ -4,7 +4,7 @@ import './dialog.css'
 
 export type DialogSize = 'sm' | 'md' | 'lg' | 'xl'
 
-export type DialogProps = HTMLAttributes<HTMLDivElement> & {
+export type DialogProps = Omit<HTMLAttributes<HTMLDivElement>, 'title'> & {
   ref?: Ref<HTMLDivElement>
   isOpen: boolean
   onClose: () => void

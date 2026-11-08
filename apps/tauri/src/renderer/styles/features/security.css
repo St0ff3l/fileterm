@@ -250,11 +250,6 @@
   visibility: hidden;
 }
 
-.security-inline-feedback {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
 .security-callout {
   display: flex;
   align-items: flex-start;

@@ -87,8 +87,8 @@
 :root:not([data-theme*='light']) .command-form-standalone,
 :root[data-theme='default'] .command-form-standalone {
   width: min(900px, 88vw) !important;
-  min-height: 560px !important;
-  background: var(--bg-sidebar) !important;
+  min-height: min(560px, calc(100dvh - 48px)) !important;
+  background: var(--dialog-content-bg) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 16px !important;
   box-shadow: var(--modal-card-shadow) !important;
@@ -118,15 +118,14 @@
 :root:not([data-theme]) .standalone-shell,
 :root:not([data-theme*='light']) .standalone-shell,
 :root[data-theme='default'] .standalone-shell {
-  background: var(--bg-sidebar) !important;
+  background: var(--dialog-content-bg) !important;
 }
 
 :root:not([data-theme]) .command-editor-page,
 :root:not([data-theme*='light']) .command-editor-page,
 :root[data-theme='default'] .command-editor-page {
   width: min(900px, 88vw) !important;
-  min-height: 560px !important;
-  max-height: none !important;
+  min-height: min(560px, calc(100dvh - 48px)) !important;
 }
 
 /* Headers */
@@ -136,10 +135,10 @@
 :root:not([data-theme]) .command-form-standalone .connection-manager-header,
 :root:not([data-theme*='light']) .command-form-standalone .connection-manager-header,
 :root[data-theme='default'] .command-form-standalone .connection-manager-header {
-  background: var(--bg-sidebar) !important;
+  background: var(--dialog-header-bg) !important;
   border-bottom: 1px solid var(--border-light) !important;
   padding: 0 16px !important;
-  min-height: 48px !important;
+  min-height: var(--dialog-header-height) !important;
 }
 
 :root:not([data-theme]) .command-dialog .connection-manager-title,
@@ -406,8 +405,8 @@
 :root:not([data-theme*='light']) .command-dialog-actions,
 :root[data-theme='default'] .command-dialog-actions {
   background: var(--dialog-surface) !important;
-  margin: 14px -20px -16px -20px !important;
-  padding: 12px 20px !important;
+  margin: 14px -20px -16px -20px;
+  padding: 12px 20px;
   border-top: 1px solid var(--border-light) !important;
 }
 
@@ -552,8 +551,8 @@
 :root:not([data-theme*='light']) .modal-card.ssh-modal,
 :root[data-theme='default'] .modal-card.ssh-modal {
   width: min(900px, 88vw) !important;
-  min-height: 560px !important;
-  background: var(--bg-sidebar) !important;
+  min-height: min(560px, calc(100dvh - 48px)) !important;
+  background: var(--dialog-content-bg) !important;
   border: 1px solid var(--border-light) !important;
   box-shadow: var(--modal-card-shadow) !important;
 }
@@ -647,15 +646,15 @@
 :root:not([data-theme*='light']) .modal-card.ssh-modal .form-actions.ssh-actions,
 :root[data-theme='default'] .modal-card.ssh-modal .form-actions.ssh-actions {
   background: var(--dialog-surface) !important;
-  margin: 20px -24px -20px -24px !important;
-  padding: 16px 24px !important;
+  margin: 20px -24px -20px -24px;
+  padding: 16px 24px;
   border-top: 1px solid var(--border-light) !important;
 }
 
 /* Settings standalone and tab pages backgrounds override */
-:root:not([data-theme]) .settings-modal,
-:root:not([data-theme*='light']) .settings-modal,
-:root[data-theme='default'] .settings-modal,
+:root:not([data-theme]) .settings-modal:not(.manager-inline),
+:root:not([data-theme*='light']) .settings-modal:not(.manager-inline),
+:root[data-theme='default'] .settings-modal:not(.manager-inline),
 :root:not([data-theme]) .settings-modal .connection-manager-layout,
 :root:not([data-theme*='light']) .settings-modal .connection-manager-layout,
 :root[data-theme='default'] .settings-modal .connection-manager-layout {
@@ -702,7 +701,7 @@
 :root:not([data-theme]) .ssh-key-import-dialog .confirm-action-dialog__title,
 :root:not([data-theme*='light']) .ssh-key-import-dialog .confirm-action-dialog__title,
 :root[data-theme='default'] .ssh-key-import-dialog .confirm-action-dialog__title {
-  background: var(--bg-sidebar) !important;
+  background: var(--dialog-header-bg) !important;
 }
 
 :root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field input,
@@ -742,7 +741,7 @@
 :root:not([data-theme]) .ssh-tunnel-dialog-header,
 :root:not([data-theme*='light']) .ssh-tunnel-dialog-header,
 :root[data-theme='default'] .ssh-tunnel-dialog-header {
-  background: var(--bg-sidebar) !important;
+  background: var(--dialog-header-bg) !important;
 }
 
 :root:not([data-theme]) .ssh-tunnel-form input,

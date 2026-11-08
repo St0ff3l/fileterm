@@ -158,6 +158,7 @@ FileTerm 的层级主要靠边界，不靠重装饰。
 ### Lightweight Form Dialogs
 
 - 文件命名、备份密码、SSH 交互认证和共享目录选择等轻量弹窗采用标题栏、带 legend 的分组框和底部操作区，以 1px 语义边框分隔。
+- 应用内弹窗统一以 SMB 凭据窗口为基准：标题栏 `--dialog-header-height: 44px`、标题 13px / 500、图标 16px，左右内边距 16px。标题栏背景、标题文字、图标与正文分别消费 `--dialog-header-bg`、`--dialog-header-text`、`--dialog-header-icon`、`--dialog-content-bg`；背景默认映射卡片表面，图标使用弱化文字色，随主题同步。公共 `dialog-chrome.css` 统一表单、审批/详情、管理器及编辑器弹窗；普通关闭、删除等确认提示继续使用 ConfirmActionDialog 自身的警告提示模板；内容高度按需适配，长表单滚动且操作区可见。44px 是 CSS 逻辑高度，随界面缩放与屏幕倍率呈现。代理/隧道配置、连接编辑器、连接/命令管理器及设置弹窗顶部保留 `--surface-sidebar` 背景。主页内嵌管理器和独立原生窗口标题栏保留各自布局与平台几何。
 - 复用 `components/common/dialog/form-dialog-body.tsx` 的内容布局和公共滚动条；内容间距约 12px、四周 16px，输入/下拉框等高 36px，圆角统一使用 `--radius-sm`。这属于轻量弹窗变体，不改变大型连接编辑器的控件基线。
 - 只有一个名称输入框的文件命名弹窗使用普通 label，不额外套分组边框；标签同时作为输入框的无障碍名称。错误提示使用相同的小圆角；长内容不挤出底部按钮。
 

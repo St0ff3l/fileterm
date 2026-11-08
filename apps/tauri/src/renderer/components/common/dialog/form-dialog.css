@@ -9,7 +9,7 @@
 }
 
 .form-dialog > .modal-header {
-  min-height: 44px;
+  min-height: var(--dialog-header-height);
   height: auto;
   margin: 0;
   padding: 0 16px;

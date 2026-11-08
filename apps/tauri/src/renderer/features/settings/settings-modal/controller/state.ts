@@ -82,8 +82,6 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [isImportingFont, setIsImportingFont] = useState(false)
   const [fontImportError, setFontImportError] = useState<string | null>(null)
   const [fontToDelete, setFontToDelete] = useState<ImportedFont | null>(null)
-  const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
-  const themeConfigOperationRef = useRef<typeof themeConfigOperation>(null)
   const [themeConfigMessage, setThemeConfigMessage] = useState<{
     text: string
     kind: 'success' | 'error' | 'warning'
@@ -241,9 +239,6 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setFontImportError,
     fontToDelete,
     setFontToDelete,
-    themeConfigOperation,
-    setThemeConfigOperation,
-    themeConfigOperationRef,
     themeConfigMessage,
     setThemeConfigMessage,
     customThemeName,

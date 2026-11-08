@@ -4,17 +4,48 @@ async fn dispatch_bridge_request(
     request: BridgeRequest,
     progress_sender: Option<mpsc::Sender<BridgeProgress>>,
     cancellation: Option<tokio_util::sync::CancellationToken>,
+    audit: &mut McpCallAudit,
 ) -> Result<Value, String> {
+    audit.resolve_target(app, &request.params).await;
     let progress_token = request.progress_token.clone();
-    let policy = enforce_mcp_access_policy(app, &request).await?;
+    let policy = match enforce_mcp_access_policy(app, &request).await {
+        Ok(policy) => policy,
+        Err(error) => {
+            audit.approval("blocked-by-policy");
+            return Err(error);
+        }
+    };
+    audit.approval("not-required");
     if should_request_mcp_approval(&policy, &request) {
+        audit.approval("pending");
         if let Some(progress_sender) = progress_sender.as_ref() {
             let _ = progress_sender.try_send(BridgeProgress::action_approval_waiting(
                 &request.action,
                 progress_token.clone(),
             ));
         }
-        request_mcp_approval(app, request.source, &request.action, &request.params, progress_sender.as_ref(), progress_token.clone()).await?;
+        let decision = match request_mcp_approval(
+            app,
+            request.source,
+            &request.action,
+            &request.params,
+            progress_sender.as_ref(),
+            progress_token.clone(),
+        )
+        .await
+        {
+            Ok(decision) => decision,
+            Err(error) => {
+                audit.approval("approval-error");
+                return Err(error);
+            }
+        };
+        audit.approval(mcp_approval_status(decision));
+        if decision != ActionApprovalDecision::Approved {
+            return Err(decision
+                .rejection_message(action_approval_source(request.source))
+                .to_string());
+        }
     }
 
     match request.action.as_str() {
@@ -339,19 +370,17 @@ async fn request_mcp_approval(
     params: &Value,
     progress_sender: Option<&mpsc::Sender<BridgeProgress>>,
     progress_token: Option<Value>,
-) -> Result<(), String> {
+) -> Result<ActionApprovalDecision, String> {
     let approval_source = action_approval_source(source);
     let details = approval_details(app, action, params).await?;
     let decision = request_action_approval(app, approval_source, action, details)
         .await
         .map_err(public_app_error)?;
     if let Some(sender) = progress_sender {
-        let status = match decision {
-            ActionApprovalDecision::Approved => "approved",
-            ActionApprovalDecision::Rejected => "rejected",
-            ActionApprovalDecision::Dismissed => "dismissed",
-            ActionApprovalDecision::TimedOut => "timed-out",
-            ActionApprovalDecision::DelegatedToTerminal => "delegated-to-terminal",
+        let status = if decision == ActionApprovalDecision::Approved {
+            "approved"
+        } else {
+            mcp_approval_status(decision)
         };
         let _ = sender.try_send(BridgeProgress {
             kind: "progress".to_string(),
@@ -362,9 +391,16 @@ async fn request_mcp_approval(
             progress_token,
         });
     }
+    Ok(decision)
+}
+
+fn mcp_approval_status(decision: ActionApprovalDecision) -> &'static str {
     match decision {
-        ActionApprovalDecision::Approved => Ok(()),
-        decision => Err(decision.rejection_message(approval_source).to_string()),
+        ActionApprovalDecision::Approved => "user",
+        ActionApprovalDecision::Rejected => "rejected",
+        ActionApprovalDecision::Dismissed => "dismissed",
+        ActionApprovalDecision::TimedOut => "timed-out",
+        ActionApprovalDecision::DelegatedToTerminal => "delegated-to-terminal",
     }
 }
 

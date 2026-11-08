@@ -7,6 +7,8 @@
 :root[data-theme-base='codex'][data-theme*='light'] {
   color-scheme: light;
 
+  --ref-feedback-bubble-text: #1f2933;
+
   /* Surfaces & Canvas */
   --ref-surface-canvas: #ffffff;
   --ref-surface-sidebar: #f6f6f7;

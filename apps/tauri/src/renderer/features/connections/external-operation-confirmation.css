@@ -19,7 +19,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 44px;
+  min-height: var(--dialog-header-height);
   padding: 0 14px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-sidebar);

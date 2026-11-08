@@ -1,3 +1,4 @@
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { MaterialIcon } from '../../../../components/common/material-icon/material-icon'
 import type { Dispatch, SetStateAction } from 'react'
 import type { AiProviderDraft, AiProviderKind, AiProviderSummary, FileTermDesktopApi } from '@fileterm/core'
@@ -473,14 +474,8 @@ export function AiSettingsPanel() {
         </div>
 
         <div className="ai-settings-footer">
-          <small
-            className={
-              aiMessage ? `ai-settings-operation-message ai-settings-operation-message--${aiMessage.kind}` : undefined
-            }
-            role={aiMessage?.kind === 'error' ? 'alert' : 'status'}
-          >
-            {aiMessage?.message ?? t.aiSettingsConnectionTestHint}
-          </small>
+          <small>{t.aiSettingsConnectionTestHint}</small>
+          <FeedbackBubble message={aiMessage?.message} tone={aiMessage?.kind} />
           <div className="ai-settings-footer-actions">
             {aiDraft.id ? (
               <button

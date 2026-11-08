@@ -7,6 +7,8 @@
 :root[data-theme='default-light'] {
   color-scheme: light;
 
+  --ref-feedback-bubble-text: #1f2933;
+
   /* Surfaces & Canvas */
   --ref-surface-canvas: #f4f4f6;
   --ref-surface-sidebar: #ffffff;

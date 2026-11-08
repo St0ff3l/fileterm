@@ -87,6 +87,10 @@ struct BridgeRequest {
     requires_approval: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     progress_token: Option<Value>,
+    /// Desktop-issued bridge session ID. Hello client IDs are self-reported.
+    /// Incoming request values are ignored and overwritten by the runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    client_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
