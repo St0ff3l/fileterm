@@ -90,8 +90,6 @@ export type ThemePresetFamily = 'fileterm' | 'codex' | Iterm2ThemePresetId
 export type ThemePresetVariant = ThemeConfig['variant']
 
 export const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
-export const THEME_CONFIG_EXPORT_PREFIX = 'fileterm-theme-v1:'
-export const THEME_CONFIG_IMPORT_PREFIXES = [THEME_CONFIG_EXPORT_PREFIX, 'codex-theme-v1:'] as const
 export const FILETERM_CLI_SKILL_URL = 'https://github.com/St0ff3l/fileterm/blob/main/docs/fileterm-cli.md'
 
 export const ANSI_COLOR_NAMES: TerminalAnsiColorName[] = [
@@ -303,10 +301,6 @@ export function ThemeColorField({
       </span>
     </label>
   )
-}
-
-export function clipboardUnavailableError(lastError: unknown) {
-  return lastError instanceof Error ? lastError : new Error('Clipboard is unavailable')
 }
 
 export function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
