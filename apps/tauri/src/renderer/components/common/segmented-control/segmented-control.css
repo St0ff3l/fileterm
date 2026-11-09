@@ -51,14 +51,14 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--surface-canvas);
 }
 
 .ft-segmented-control--neutral > .ft-segmented-control__option {
   min-height: 30px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-weight: 600;
 }
 

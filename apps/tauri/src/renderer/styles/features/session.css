@@ -1837,7 +1837,7 @@
 }
 
 .transfer-filters .transfer-filter-direction > .ft-segmented-control__option {
-  min-height: 20px;
+  min-height: 18px;
 }
 
 .transfer-popover-list {
