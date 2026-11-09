@@ -298,7 +298,7 @@ export function ProxyManagerPage({
           />
         </aside>
 
-        <section className="connection-manager-content">
+        <section className="connection-manager-main">
           <div className="manager-table connection-manager-table proxy-manager-table">
             <div className="manager-head">
               <span>{t.name}</span>
