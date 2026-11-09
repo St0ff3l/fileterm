@@ -631,7 +631,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 .network-routing-modes {
   display: inline-flex;
   padding: 3px;
-  border-radius: calc(var(--radius-md, 6px) + 4px);
+  border-radius: var(--radius-sm, 4px);
   background: var(--surface-canvas, var(--bg-hover));
   border: 1px solid var(--border-subtle);
   gap: 2px;
@@ -641,7 +641,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-width: 80px;
   height: 28px;
   border: 0;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;

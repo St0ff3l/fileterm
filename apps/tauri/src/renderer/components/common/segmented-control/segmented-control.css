@@ -8,7 +8,7 @@
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border-subtle);
-  border-radius: calc(var(--radius-md) + 4px);
+  border-radius: var(--radius-sm);
   background: var(--surface-canvas);
 }
 
@@ -20,7 +20,7 @@
   min-width: 0;
   min-height: 28px;
   padding: 4px 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -57,7 +57,7 @@
 .ft-segmented-control--neutral > .ft-segmented-control__option {
   min-height: 30px;
   padding: 0 10px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font-weight: 600;
 }
 
