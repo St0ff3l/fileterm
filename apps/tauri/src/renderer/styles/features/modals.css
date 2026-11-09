@@ -641,7 +641,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-width: 80px;
   height: 28px;
   border: 0;
-  border-radius: calc(var(--radius-md, 6px) - 2px);
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -654,7 +654,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 
 .network-routing-modes button:hover {
   color: var(--text-primary);
-  background: var(--surface-hover);
+  background: var(--surface-panel);
 }
 
 .network-routing-modes button.is-active {
