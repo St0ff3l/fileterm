@@ -30,3 +30,7 @@
 .ssh-grid-auth {
   align-items: start;
 }
+
+.modal-card.ssh-modal .ssh-fieldset {
+  padding-bottom: 20px;
+}

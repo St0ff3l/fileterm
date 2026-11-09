@@ -262,20 +262,6 @@ export function ConnectionSshAuthSection({
                 />
               </div>
               <div className="span-2 ssh-field-hint">{t.ftpTransferModeHint}</div>
-              <div className="ssh-form-field">
-                <div className="ssh-form-field__header">
-                  <label htmlFor="connection-ftp-encoding">{t.characterEncoding}:</label>
-                </div>
-                <DropdownSelect
-                  id="connection-ftp-encoding"
-                  value={form.encoding ?? 'UTF-8'}
-                  options={[
-                    { value: 'UTF-8', label: 'UTF-8' },
-                    { value: 'GBK', label: 'GBK' }
-                  ]}
-                  onChange={(value) => setForm((prev) => ({ ...prev, encoding: value }))}
-                />
-              </div>
               {form.securityMode !== 'none' ? (
                 <div className="span-2 ssh-form-field">
                   <div className="ssh-form-field__header">
@@ -297,22 +283,6 @@ export function ConnectionSshAuthSection({
                 </div>
               </div>
             </>
-          ) : null}
-          {isSshTransport ? (
-            <div className="ssh-form-field">
-              <div className="ssh-form-field__header">
-                <label htmlFor="connection-sftp-encoding">{t.characterEncoding}:</label>
-              </div>
-              <DropdownSelect
-                id="connection-sftp-encoding"
-                value={form.encoding ?? 'UTF-8'}
-                options={[
-                  { value: 'UTF-8', label: 'UTF-8' },
-                  { value: 'GBK', label: 'GBK' }
-                ]}
-                onChange={(value) => setForm((prev) => ({ ...prev, encoding: value }))}
-              />
-            </div>
           ) : null}
           {isSshTransport && !isNetworkDevice ? (
             <>

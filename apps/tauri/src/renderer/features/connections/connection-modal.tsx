@@ -354,6 +354,15 @@ export function ConnectionModal({
           <button className={section === 'ssh' ? 'active' : ''} type="button" onClick={() => setSection('ssh')}>
             {connectionTabTitle}
           </button>
+          {supportsAdvanced ? (
+            <button
+              className={section === 'advanced' ? 'active' : ''}
+              type="button"
+              onClick={() => setSection('advanced')}
+            >
+              {t.advancedSettings}
+            </button>
+          ) : null}
           {supportsFilePaneMode ? (
             <button className={section === 'files' ? 'active' : ''} type="button" onClick={() => setSection('files')}>
               {t.filePaneSettings}
@@ -375,15 +384,6 @@ export function ConnectionModal({
               onClick={() => setSection('terminal')}
             >
               {t.terminal}
-            </button>
-          ) : null}
-          {supportsAdvanced ? (
-            <button
-              className={section === 'advanced' ? 'active' : ''}
-              type="button"
-              onClick={() => setSection('advanced')}
-            >
-              {t.advancedSettings}
             </button>
           ) : null}
           {supportsReliability ? (

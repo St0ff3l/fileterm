@@ -18,17 +18,19 @@ export function ConnectionTerminalSection({
       <fieldset className="ssh-fieldset narrow">
         <legend>{t.terminal}</legend>
         <div className="ssh-grid single">
-          <label>
-            {t.characterEncoding}:
-            <DropdownSelect
-              value={form.encoding ?? 'UTF-8'}
-              options={[
-                { value: 'UTF-8', label: 'UTF-8' },
-                { value: 'GBK', label: 'GBK' }
-              ]}
-              onChange={(value) => setForm((prev) => ({ ...prev, encoding: value }))}
-            />
-          </label>
+          {form.type !== 'ssh' || isNetworkDevice ? (
+            <label>
+              {t.characterEncoding}:
+              <DropdownSelect
+                value={form.encoding ?? 'UTF-8'}
+                options={[
+                  { value: 'UTF-8', label: 'UTF-8' },
+                  { value: 'GBK', label: 'GBK' }
+                ]}
+                onChange={(value) => setForm((prev) => ({ ...prev, encoding: value }))}
+              />
+            </label>
+          ) : null}
           {form.type === 'serial' ? (
             <>
               <label>
