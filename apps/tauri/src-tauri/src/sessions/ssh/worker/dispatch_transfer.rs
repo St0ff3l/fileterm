@@ -45,15 +45,20 @@ async fn dispatch_transfer_cmd(
                     }
                 } else {
                     let sftp_guard = sftp.write().await;
-                    match timeout(operation_timeout, sftp_guard.metadata(&path)).await {
+                    match timeout(
+                        operation_timeout,
+                        transfer_remote_metadata(&sftp_guard, &path),
+                    )
+                    .await
+                    {
                         Ok(Ok(metadata)) if metadata.is_dir() => Ok(None),
                         Ok(Ok(metadata)) => Ok(Some(TransferFileStat {
                             size: metadata.size.unwrap_or(0),
                             modified_at: metadata.mtime.map(|value| value as u64 * 1000),
                         })),
                         Ok(Err(error)) if is_sftp_not_found(&error) => Ok(None),
-                        Ok(Err(error)) => Err(error.to_string()),
-                        Err(_) => Err(format!("获取文件{}信息超时", path)),
+                        Ok(Err(error)) => Err(sftp_transfer_error("STAT", &path, error)),
+                        Err(_) => Err(sftp_transfer_error("STAT", &path, "timeout")),
                     }
                 };
                 result

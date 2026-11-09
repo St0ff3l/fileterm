@@ -12,29 +12,95 @@ fn transfer_checksum_available(
 
 const TRANSFER_CANCELED: &str = "transfer canceled";
 
+fn sftp_transfer_error(operation: &str, path: &str, error: impl std::fmt::Display) -> String {
+    format!("SFTP {operation} path={path:?}: {error}")
+}
+
+fn is_sftp_permission_denied(error: &SftpError) -> bool {
+    matches!(error, SftpError::Status(status) if status.status_code == StatusCode::PermissionDenied)
+}
+
+async fn transfer_remote_metadata(
+    sftp: &SftpSession,
+    path: &str,
+) -> Result<SftpMetadata, SftpError> {
+    match sftp.metadata(path).await {
+        Err(error) if is_sftp_permission_denied(&error) => {
+            // Older Xlight requires READ for STAT even when LIST is permitted.
+            // https://www.xlightftpd.com/whatsnew.htm (3.8.5.1)
+            let parent = parent_remote_path(path).unwrap_or_else(|| ".".into());
+            let name = path.rsplit('/').next().unwrap_or(path);
+            let entries = match sftp.read_dir(&parent).await {
+                Ok(entries) => entries,
+                Err(listing_error) => {
+                    tracing::warn!(category = "transfer", scope = "transfer", stage = "READDIR", remote_path = %parent, error = %listing_error, "SFTP STAT fallback failed");
+                    return Err(error);
+                }
+            };
+            if let Some(entry) = entries.into_iter().find(|entry| entry.file_name() == name) {
+                let metadata = entry.metadata();
+                // READDIR does not follow links like STAT does.
+                if metadata.file_type().is_file() && metadata.size.is_some() {
+                    tracing::warn!(
+                        category = "transfer",
+                        scope = "transfer",
+                        stage = "STAT",
+                        remote_path = path,
+                        "SFTP STAT denied; using listed file attributes"
+                    );
+                    return Ok(metadata);
+                }
+            }
+            // An omitted/filtered entry does not prove the checkpoint is absent.
+            Err(error)
+        }
+        result => result,
+    }
+}
+
+async fn transfer_directory_exists(sftp: &SftpSession, path: &str) -> Result<bool, String> {
+    match sftp.metadata(path).await {
+        Ok(metadata) if metadata.is_dir() => Ok(true),
+        Ok(_) => Err(format!("传输目标父路径不是目录: {path}")),
+        Err(error) if is_sftp_permission_denied(&error) => {
+            // A successful directory listing confirms a virtual directory without STAT.
+            sftp.read_dir(path).await.map_err(|listing_error| {
+                sftp_transfer_error(
+                    "STAT",
+                    path,
+                    format!(
+                        "{error}; {}",
+                        sftp_transfer_error("READDIR directory fallback", path, listing_error)
+                    ),
+                )
+            })?;
+            tracing::warn!(
+                category = "transfer",
+                scope = "transfer",
+                stage = "STAT",
+                remote_path = path,
+                "SFTP STAT denied; directory confirmed by listing"
+            );
+            Ok(true)
+        }
+        Err(error) if is_sftp_not_found(&error) => Ok(false),
+        Err(error) => Err(sftp_transfer_error("STAT", path, error)),
+    }
+}
+
 async fn ensure_transfer_parent_dir(sftp: &SftpSession, path: &str) -> Result<(), String> {
     let parent = parent_remote_path(path).unwrap_or_else(|| "/".to_string());
-    if parent == "/" {
+    if parent == "/" || transfer_directory_exists(sftp, &parent).await? {
         return Ok(());
-    }
-    // Fast path: if the parent directory already exists, all ancestors exist.
-    match sftp.metadata(&parent).await {
-        Ok(metadata) if metadata.is_dir() => return Ok(()),
-        Ok(_) => return Err(format!("传输目标父路径不是目录: {parent}")),
-        Err(_) => {}
     }
     let mut current = String::new();
     for segment in parent.split('/').filter(|segment| !segment.is_empty()) {
         current.push('/');
         current.push_str(segment);
-        match sftp.metadata(&current).await {
-            Ok(metadata) if metadata.is_dir() => {}
-            Ok(_) => return Err(format!("传输目标父路径不是目录: {current}")),
-            Err(_) => {
-                sftp.create_dir(&current)
-                    .await
-                    .map_err(|error| format!("无法创建远端传输目录 {current}: {error}"))?;
-            }
+        if !transfer_directory_exists(sftp, &current).await? {
+            sftp.create_dir(&current)
+                .await
+                .map_err(|error| sftp_transfer_error("MKDIR", &current, error))?;
         }
     }
     Ok(())
@@ -119,7 +185,7 @@ async fn upload_local_file(
         let mut checkpoint = sftp
             .open(remote_path)
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| sftp_transfer_error("OPEN resume-read", remote_path, error))?;
         crate::sessions::upload_source::verify_resume_prefix(
             &mut checkpoint,
             resume_offset,
@@ -127,7 +193,14 @@ async fn upload_local_file(
             &cancel,
             io_timeout,
         )
-        .await?;
+        .await
+        .map_err(|error| {
+            if error == TRANSFER_CANCELED {
+                error
+            } else {
+                sftp_transfer_error("READ resume-verify", remote_path, error)
+            }
+        })?;
         if resume_offset == total {
             return Ok(source.hash());
         }
@@ -140,11 +213,17 @@ async fn upload_local_file(
     let mut destination = sftp
         .open_with_flags(remote_path, flags)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            sftp_transfer_error(
+                "OPEN write",
+                remote_path,
+                format!("flags={flags:?} offset={resume_offset}: {error}"),
+            )
+        })?;
     destination
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| sftp_transfer_error("SEEK", remote_path, error))?;
     let mut transferred = resume_offset;
     let mut buffer = vec![0_u8; crate::sessions::TRANSFER_IO_BUFFER_BYTES];
     if let Some(app) = app {
@@ -155,7 +234,19 @@ async fn upload_local_file(
         if read == 0 {
             break;
         }
-        write_remote_transfer_chunk(&mut destination, &buffer[..read], &cancel).await?;
+        write_remote_transfer_chunk(&mut destination, &buffer[..read], &cancel)
+            .await
+            .map_err(|error| {
+                if error == TRANSFER_CANCELED {
+                    error
+                } else {
+                    sftp_transfer_error(
+                        "WRITE",
+                        remote_path,
+                        format!("offset={transferred} bytes={read}: {error}"),
+                    )
+                }
+            })?;
         transferred += read as u64;
         if let Some(app) = app {
             crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
@@ -165,11 +256,10 @@ async fn upload_local_file(
         biased;
         _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
         result = timeout(io_timeout, async {
-            destination.flush().await?;
-            destination.shutdown().await
+            destination.flush().await.map_err(|error| sftp_transfer_error("WRITE/FLUSH", remote_path, error))?;
+            destination.shutdown().await.map_err(|error| sftp_transfer_error("CLOSE", remote_path, error))
         }) => {
-            result.map_err(|_| "完成远端上传文件超时".to_string())?
-                .map_err(|error| format!("完成远端上传文件失败: {error}"))?;
+            result.map_err(|_| sftp_transfer_error("WRITE/FLUSH/CLOSE", remote_path, "timeout"))??;
         }
     }
     Ok(source.hash())
@@ -270,11 +360,17 @@ async fn replace_remote_file_with_policy(
     let partial_metadata = sftp
         .symlink_metadata(partial_path)
         .await
-        .map_err(|error| format!("无法读取远端断点文件属性: {error}"))?;
+        .map_err(|error| sftp_transfer_error("LSTAT checkpoint", partial_path, error))?;
     let destination_metadata = match sftp.symlink_metadata(destination_path).await {
         Ok(metadata) => Some(metadata),
         Err(error) if is_sftp_not_found(&error) => None,
-        Err(error) => return Err(format!("无法读取远端目标文件属性: {error}")),
+        Err(error) => {
+            return Err(sftp_transfer_error(
+                "LSTAT destination",
+                destination_path,
+                error,
+            ))
+        }
     };
 
     if let Some(replace) = replace_existing {
@@ -299,25 +395,25 @@ async fn replace_remote_file_with_policy(
         let mut source = sftp
             .open(partial_path)
             .await
-            .map_err(|error| format!("无法打开远端断点文件: {error}"))?;
+            .map_err(|error| sftp_transfer_error("OPEN checkpoint-read", partial_path, error))?;
         let mut destination = sftp
             .open_with_flags(
                 destination_path,
                 OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE,
             )
             .await
-            .map_err(|error| format!("无法写回远端目标文件: {error}"))?;
+            .map_err(|error| sftp_transfer_error("OPEN destination-write", destination_path, error))?;
         tokio::io::copy(&mut source, &mut destination)
             .await
-            .map_err(|error| format!("写回远端目标文件失败: {error}"))?;
+            .map_err(|error| sftp_transfer_error("WRITE destination-copy", destination_path, error))?;
         destination
             .flush()
             .await
-            .map_err(|error| format!("刷新远端目标文件失败: {error}"))?;
+            .map_err(|error| sftp_transfer_error("FLUSH destination", destination_path, error))?;
         let committed_size = sftp
             .metadata(destination_path)
             .await
-            .map_err(|error| format!("无法校验远端目标文件: {error}"))?
+            .map_err(|error| sftp_transfer_error("STAT destination-verify", destination_path, error))?
             .size
             .unwrap_or(0);
         if committed_size != partial_metadata.size.unwrap_or(0) {
@@ -328,7 +424,7 @@ async fn replace_remote_file_with_policy(
         }
         sftp.remove_file(partial_path)
             .await
-            .map_err(|error| format!("无法清理远端断点文件: {error}"))?;
+            .map_err(|error| sftp_transfer_error("REMOVE checkpoint", partial_path, error))?;
         return Ok(true);
     }
 
@@ -350,7 +446,13 @@ async fn replace_remote_file_with_policy(
     let moved_destination = if destination_metadata.is_some() {
         sftp.rename(destination_path, &backup_path)
             .await
-            .map_err(|error| format!("无法备份远端目标文件: {error}"))?;
+            .map_err(|error| {
+                sftp_transfer_error(
+                    "RENAME backup",
+                    destination_path,
+                    format!("to={backup_path:?}: {error}"),
+                )
+            })?;
         true
     } else {
         false
@@ -359,11 +461,13 @@ async fn replace_remote_file_with_policy(
         if moved_destination {
             if let Err(rollback_error) = sftp.rename(&backup_path, destination_path).await {
                 return Err(format!(
-                    "远端文件替换失败，旧文件保留在 {backup_path}：{error}；回滚失败：{rollback_error}"
+                    "SFTP RENAME path={partial_path:?} to={destination_path:?} 失败：{error}；ROLLBACK path={backup_path:?} to={destination_path:?} 失败：{rollback_error}"
                 ));
             }
         }
-        return Err(format!("远端文件替换失败，断点已保留：{error}"));
+        return Err(format!(
+            "SFTP RENAME path={partial_path:?} to={destination_path:?} 失败，断点已保留：{error}"
+        ));
     }
     if moved_destination {
         let _ = sftp.remove_file(&backup_path).await;
