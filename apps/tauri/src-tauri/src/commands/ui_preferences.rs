@@ -75,6 +75,8 @@ pub struct UiPreferences {
     pub local_terminal_shells: LocalTerminalShellPreferences,
     #[serde(default = "default_file_panel_remember_ratio")]
     pub file_panel_remember_ratio: bool,
+    #[serde(default = "default_transfer_sidebar_collapsed_by_default")]
+    pub transfer_sidebar_collapsed_by_default: bool,
     #[serde(default = "default_resource_monitoring_metrics")]
     pub resource_monitoring_metrics: Vec<String>,
     #[serde(default = "default_resource_monitoring_metric_order")]
@@ -118,6 +120,7 @@ pub struct UiPreferencesInput {
     pub compact_tab_bar: Option<bool>,
     pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
     pub file_panel_remember_ratio: Option<bool>,
+    pub transfer_sidebar_collapsed_by_default: Option<bool>,
     pub resource_monitoring_metrics: Option<Vec<String>>,
     pub resource_monitoring_metric_order: Option<Vec<String>>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
@@ -233,6 +236,10 @@ fn default_local_terminal_shells() -> LocalTerminalShellPreferences {
 }
 
 fn default_file_panel_remember_ratio() -> bool {
+    true
+}
+
+fn default_transfer_sidebar_collapsed_by_default() -> bool {
     true
 }
 

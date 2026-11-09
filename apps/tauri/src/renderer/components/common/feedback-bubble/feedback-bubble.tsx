@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { AppIcon } from '../../../features/common/app-icon'
 import { CloseButton } from '../../../features/common/close-button'
@@ -6,6 +6,41 @@ import { FeedbackText, type FeedbackTextTone } from '../../../features/common/fe
 import { VerticalScrollbar } from '../../../features/common/vertical-scrollbar'
 import { t } from '../../../i18n'
 import './feedback-bubble.css'
+
+type FeedbackBubbleNotice = {
+  id: number
+  duration?: number
+  message: string
+  onClose?: () => void
+  title?: string | null
+  tone: FeedbackTextTone
+}
+
+let notices: FeedbackBubbleNotice[] = []
+let nextNoticeId = 0
+const noticeListeners = new Set<() => void>()
+const lastNoticeKeysBySource = new Map<string, string>()
+
+function subscribeToNotices(listener: () => void) {
+  noticeListeners.add(listener)
+  return () => noticeListeners.delete(listener)
+}
+
+function publishNotices() {
+  for (const listener of noticeListeners) listener()
+}
+
+function enqueueNotice(notice: Omit<FeedbackBubbleNotice, 'id'>) {
+  notices = [{ ...notice, id: ++nextNoticeId }, ...notices]
+  publishNotices()
+}
+
+function dismissNotice(id: number) {
+  const remaining = notices.filter((notice) => notice.id !== id)
+  if (remaining.length === notices.length) return
+  notices = remaining
+  publishNotices()
+}
 
 function FeedbackBubbleIcon({ tone }: { tone: FeedbackTextTone }) {
   if (tone === 'loading') {
@@ -49,85 +84,96 @@ function resolveDefaultTitle(tone: FeedbackTextTone): string | null {
 
 export function FeedbackBubble({
   duration,
+  eventId,
   message,
   onClose,
+  sourceKey,
   title,
   tone = 'info'
 }: {
   duration?: number
+  eventId?: number | string
   message?: string | null
   onClose?: () => void
+  sourceKey?: string
   title?: string | null
   tone?: FeedbackTextTone
 }) {
-  const [dismissedMessage, setDismissedMessage] = useState<string | null>(null)
-  const [isExiting, setIsExiting] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const isVisible = Boolean(message && dismissedMessage !== message)
-
-  const clearTimers = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    if (exitTimerRef.current) {
-      clearTimeout(exitTimerRef.current)
-      exitTimerRef.current = null
-    }
-  }, [])
-
-  const triggerDismiss = useCallback(() => {
-    if (!message) return
-    setIsExiting(true)
-    clearTimers()
-    exitTimerRef.current = setTimeout(() => {
-      setDismissedMessage(message)
-      setIsExiting(false)
-      onClose?.()
-    }, 140)
-  }, [clearTimers, message, onClose])
-
-  const autoDismissDelay = duration ?? (tone === 'success' || tone === 'info' ? 4000 : 0)
-
-  const startAutoDismiss = useCallback(() => {
-    if (autoDismissDelay > 0 && isVisible && !isExiting) {
-      clearTimers()
-      timerRef.current = setTimeout(() => {
-        triggerDismiss()
-      }, autoDismissDelay)
-    }
-  }, [autoDismissDelay, clearTimers, isExiting, isVisible, triggerDismiss])
+  const lastNoticeKeyRef = useRef<string | null>(null)
+  const onCloseRef = useRef(onClose)
 
   useEffect(() => {
-    if (isVisible) {
-      startAutoDismiss()
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    if (!message) {
+      lastNoticeKeyRef.current = null
+      if (sourceKey) lastNoticeKeysBySource.delete(sourceKey)
+      return
     }
-    return clearTimers
-  }, [isVisible, startAutoDismiss, clearTimers])
 
-  if (!isVisible) return null
+    const key = JSON.stringify([eventId, message, tone, title, duration])
+    if (lastNoticeKeyRef.current === key) return
+    lastNoticeKeyRef.current = key
+    if (sourceKey && lastNoticeKeysBySource.get(sourceKey) === key) return
+    if (sourceKey) lastNoticeKeysBySource.set(sourceKey, key)
+    enqueueNotice({ duration, message, onClose: onCloseRef.current, title, tone })
+  }, [duration, eventId, message, sourceKey, title, tone])
 
-  const displayTitle = title !== undefined ? title : resolveDefaultTitle(tone)
+  return null
+}
 
-  const resolvedClassName = ['feedback-bubble', `feedback-bubble--${tone}`, isExiting ? 'is-exiting' : '']
+function FeedbackBubbleItem({ notice }: { notice: FeedbackBubbleNotice }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isExitingRef = useRef(false)
+  const [isExiting, setIsExiting] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const autoDismissDelay = notice.duration ?? (notice.tone === 'loading' ? 0 : 4000)
+
+  const triggerDismiss = useCallback(() => {
+    if (isExitingRef.current) return
+    isExitingRef.current = true
+    setIsExiting(true)
+    exitTimerRef.current = setTimeout(() => {
+      exitTimerRef.current = null
+      dismissNotice(notice.id)
+      notice.onClose?.()
+    }, 180)
+  }, [notice])
+
+  useEffect(() => {
+    if (autoDismissDelay <= 0 || isHovered || isExiting) return
+    const timer = setTimeout(triggerDismiss, autoDismissDelay)
+    return () => clearTimeout(timer)
+  }, [autoDismissDelay, isExiting, isHovered, triggerDismiss])
+
+  useEffect(
+    () => () => {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current)
+    },
+    []
+  )
+
+  const displayTitle = notice.title !== undefined ? notice.title : resolveDefaultTitle(notice.tone)
+  const resolvedClassName = ['feedback-bubble', `feedback-bubble--${notice.tone}`, isExiting ? 'is-exiting' : '']
     .filter(Boolean)
     .join(' ')
 
-  return createPortal(
+  return (
     <div
       className={resolvedClassName}
-      onMouseEnter={clearTimers}
-      onMouseLeave={startAutoDismiss}
-      role={tone === 'error' ? 'alert' : 'status'}
+      data-feedback-notice-id={notice.id}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      role={notice.tone === 'error' ? 'alert' : 'status'}
     >
-      <FeedbackBubbleIcon tone={tone} />
+      <FeedbackBubbleIcon tone={notice.tone} />
       <div ref={scrollRef} className="feedback-bubble__body">
         {displayTitle ? <div className="feedback-bubble__title">{displayTitle}</div> : null}
         <div className="feedback-bubble__content">
-          <FeedbackText message={message} tone={tone} />
+          <FeedbackText message={notice.message} tone={notice.tone} />
         </div>
       </div>
       <VerticalScrollbar scrollRef={scrollRef} />
@@ -137,6 +183,53 @@ export function FeedbackBubble({
         onClick={triggerDismiss}
         size="compact"
       />
+    </div>
+  )
+}
+
+export function FeedbackBubbleViewport() {
+  const currentNotices = useSyncExternalStore(
+    subscribeToNotices,
+    () => notices,
+    () => notices
+  )
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const previousTopsRef = useRef(new Map<number, number>())
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    const viewportTop = viewport.getBoundingClientRect().top
+    const nextTops = new Map<number, number>()
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    for (const item of viewport.querySelectorAll<HTMLElement>('[data-feedback-notice-id]')) {
+      const id = Number(item.dataset.feedbackNoticeId)
+      const top = viewportTop + item.offsetTop
+      const previousTop = previousTopsRef.current.get(id)
+
+      if (!reduceMotion && previousTop !== undefined && previousTop !== top) {
+        item.animate([{ translate: `0px ${previousTop - top}px` }, { translate: '0px 0px' }], {
+          composite: 'add',
+          duration: 240,
+          easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)'
+        })
+      }
+
+      nextTops.set(id, top)
+    }
+
+    previousTopsRef.current = nextTops
+  }, [currentNotices])
+
+  if (currentNotices.length === 0 || typeof document === 'undefined') return null
+
+  return createPortal(
+    <div ref={viewportRef} className="feedback-bubble-viewport">
+      {currentNotices.map((notice) => (
+        <FeedbackBubbleItem key={notice.id} notice={notice} />
+      ))}
     </div>,
     document.body
   )

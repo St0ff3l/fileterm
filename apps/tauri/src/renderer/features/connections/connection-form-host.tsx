@@ -12,6 +12,7 @@ export function ConnectionFormHost({
   editingProfileId,
   errorMessage,
   form,
+  defaultTransferSidebarCollapsedByDefault,
   connectionDefaults,
   fallbackResourceMonitoringMetrics,
   fallbackResourceMonitoringMetricOrder,
@@ -29,6 +30,7 @@ export function ConnectionFormHost({
   editingProfileId: string | null
   errorMessage: string | null
   form: CreateProfileInput
+  defaultTransferSidebarCollapsedByDefault: boolean
   connectionDefaults: SshConnectionDefaults
   fallbackResourceMonitoringMetrics?: ResourceMonitoringMetric[]
   fallbackResourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
@@ -63,6 +65,7 @@ export function ConnectionFormHost({
       isSubmitting={isSubmitting}
       mode={mode}
       form={form}
+      defaultTransferSidebarCollapsedByDefault={defaultTransferSidebarCollapsedByDefault}
       hasSavedPassword={editingProfile?.hasSavedPassword === true}
       hasSavedOtpSecret={editingProfile?.hasSavedOtpSecret === true}
       hasSavedSudoPassword={editingProfile?.hasSavedSudoPassword === true}

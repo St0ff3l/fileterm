@@ -40,6 +40,7 @@ export function useSettingsModalEffects({
     setUiZoomPercent,
     setMcpAgentPreferences,
     setConnectionDefaults,
+    setTransferSidebarCollapsedByDefault,
     setOverviewShowStats,
     setOverviewShowRecent,
     setOverviewShowAllConnections,
@@ -141,6 +142,7 @@ export function useSettingsModalEffects({
       setUiZoomPercent(preferences.uiZoomPercent)
       setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
+      setTransferSidebarCollapsedByDefault(preferences.transferSidebarCollapsedByDefault)
       setOverviewShowStats(preferences.overviewShowStats)
       setOverviewShowRecent(preferences.overviewShowRecent)
       setOverviewShowAllConnections(preferences.overviewShowAllConnections)

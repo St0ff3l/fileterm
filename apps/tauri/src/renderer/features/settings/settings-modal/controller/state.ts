@@ -83,6 +83,7 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [fontImportError, setFontImportError] = useState<string | null>(null)
   const [fontToDelete, setFontToDelete] = useState<ImportedFont | null>(null)
   const [themeConfigMessage, setThemeConfigMessage] = useState<{
+    id: number
     text: string
     kind: 'success' | 'error' | 'warning'
   } | null>(null)
@@ -102,6 +103,9 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   }))
   const [isSavingConnectionDefaults, setIsSavingConnectionDefaults] = useState(false)
   const [connectionDefaultsError, setConnectionDefaultsError] = useState<string | null>(null)
+  const [transferSidebarCollapsedByDefault, setTransferSidebarCollapsedByDefault] = useState(true)
+  const [isSavingTransferSidebarPreference, setIsSavingTransferSidebarPreference] = useState(false)
+  const [transferSidebarPreferenceError, setTransferSidebarPreferenceError] = useState<string | null>(null)
   const [overviewShowStats, setOverviewShowStats] = useState(true)
   const [overviewShowRecent, setOverviewShowRecent] = useState(true)
   const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(true)
@@ -265,6 +269,12 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsSavingConnectionDefaults,
     connectionDefaultsError,
     setConnectionDefaultsError,
+    transferSidebarCollapsedByDefault,
+    setTransferSidebarCollapsedByDefault,
+    isSavingTransferSidebarPreference,
+    setIsSavingTransferSidebarPreference,
+    transferSidebarPreferenceError,
+    setTransferSidebarPreferenceError,
     overviewShowStats,
     setOverviewShowStats,
     overviewShowRecent,

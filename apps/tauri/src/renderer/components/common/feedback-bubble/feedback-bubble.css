@@ -1,8 +1,18 @@
-.feedback-bubble {
+.feedback-bubble-viewport {
   position: fixed;
   z-index: 10000;
   right: 40px;
-  bottom: 96px;
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: min(400px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.feedback-bubble {
+  position: relative;
   box-sizing: border-box;
   display: flex;
   align-items: flex-start;
@@ -17,12 +27,14 @@
   background: var(--surface-context-menu);
   box-shadow: var(--shadow-modal);
   color: var(--feedback-bubble-text);
-  animation: feedback-bubble-enter 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: feedback-bubble-enter 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  pointer-events: auto;
   user-select: text;
 }
 
 .feedback-bubble.is-exiting {
-  animation: feedback-bubble-exit 140ms ease-in forwards;
+  will-change: opacity, transform;
+  animation: feedback-bubble-exit 180ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .feedback-bubble__icon {
@@ -118,8 +130,8 @@
 
 .feedback-bubble .app-close-button.feedback-bubble__close-button:hover:not(:disabled) {
   opacity: 1;
-  background: var(--danger-surface);
-  color: var(--danger-text);
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
 }
 
 .feedback-bubble .app-close-button.feedback-bubble__close-button:focus-visible {
@@ -142,15 +154,16 @@
 @keyframes feedback-bubble-exit {
   from {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0);
   }
   to {
     opacity: 0;
-    transform: translateY(6px) scale(0.98);
+    transform: translate3d(0, 4px, 0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .feedback-bubble-viewport,
   .feedback-bubble,
   .feedback-bubble.is-exiting {
     animation: none;

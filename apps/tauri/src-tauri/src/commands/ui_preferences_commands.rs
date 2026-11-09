@@ -32,6 +32,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             legacy_file_list_font_size: None,
             local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: default_file_panel_remember_ratio(),
+            transfer_sidebar_collapsed_by_default: default_transfer_sidebar_collapsed_by_default(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
@@ -146,6 +147,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(file_panel_remember_ratio) = input.file_panel_remember_ratio {
         preferences.file_panel_remember_ratio = file_panel_remember_ratio;
+    }
+    if let Some(transfer_sidebar_collapsed_by_default) = input.transfer_sidebar_collapsed_by_default {
+        preferences.transfer_sidebar_collapsed_by_default = transfer_sidebar_collapsed_by_default;
     }
     if let Some(resource_monitoring_metrics) = input.resource_monitoring_metrics {
         preferences.resource_monitoring_metrics = resource_monitoring_metrics;
@@ -372,6 +376,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             compact_tab_bar: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
+            transfer_sidebar_collapsed_by_default: None,
             resource_monitoring_metrics: None,
             resource_monitoring_metric_order: None,
             connection_defaults: None,
@@ -412,6 +417,7 @@ pub fn app_toggle_ui_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError
             compact_tab_bar: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
+            transfer_sidebar_collapsed_by_default: None,
             resource_monitoring_metrics: None,
             resource_monitoring_metric_order: None,
             connection_defaults: None,
@@ -459,6 +465,7 @@ pub fn app_adjust_ui_zoom(app: AppHandle, operation: &str) -> Result<UiPreferenc
             compact_tab_bar: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
+            transfer_sidebar_collapsed_by_default: None,
             resource_monitoring_metrics: None,
             resource_monitoring_metric_order: None,
             connection_defaults: None,

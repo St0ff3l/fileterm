@@ -227,6 +227,7 @@ export function AppModalPortals({ model }: { model: AppViewModel }) {
                 editingProfileId,
                 errorMessage: formError,
                 connectionDefaults,
+                defaultTransferSidebarCollapsedByDefault: shell.transferSidebarCollapsedByDefault,
                 groupOptions: connectionGroupOptions,
                 mode: editingProfileId ? 'edit' : 'create',
                 form,

@@ -75,6 +75,7 @@ export function useWorkspaceIpcSync({
   uiZoomPercent,
   rememberWindowSize,
   filePanelRememberRatio,
+  transferSidebarCollapsedByDefault,
   resourceMonitoringMetrics,
   resourceMonitoringMetricOrder,
   overviewShowStats,
@@ -93,6 +94,7 @@ export function useWorkspaceIpcSync({
   onUiZoomPercentChange,
   onRememberWindowSizeChange,
   onFilePanelRememberRatioChange,
+  onTransferSidebarCollapsedByDefaultChange,
   onResourceMonitoringMetricsChange,
   onResourceMonitoringMetricOrderChange,
   onOverviewShowStatsChange,
@@ -132,6 +134,7 @@ export function useWorkspaceIpcSync({
   const onUiZoomPercentChangeRef = useLatestRef(onUiZoomPercentChange)
   const onRememberWindowSizeChangeRef = useLatestRef(onRememberWindowSizeChange)
   const onFilePanelRememberRatioChangeRef = useLatestRef(onFilePanelRememberRatioChange)
+  const onTransferSidebarCollapsedByDefaultChangeRef = useLatestRef(onTransferSidebarCollapsedByDefaultChange)
   const onResourceMonitoringMetricsChangeRef = useLatestRef(onResourceMonitoringMetricsChange)
   const onResourceMonitoringMetricOrderChangeRef = useLatestRef(onResourceMonitoringMetricOrderChange)
   const onOverviewShowStatsChangeRef = useLatestRef(onOverviewShowStatsChange)
@@ -271,6 +274,7 @@ export function useWorkspaceIpcSync({
       onUiZoomPercentChangeRef.current(preferences.uiZoomPercent)
       onRememberWindowSizeChangeRef.current(preferences.rememberWindowSize)
       onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
+      onTransferSidebarCollapsedByDefaultChangeRef.current(preferences.transferSidebarCollapsedByDefault)
       onResourceMonitoringMetricsChangeRef.current(preferences.resourceMonitoringMetrics)
       onResourceMonitoringMetricOrderChangeRef.current(preferences.resourceMonitoringMetricOrder)
       onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
@@ -314,6 +318,7 @@ export function useWorkspaceIpcSync({
         onUiZoomPercentChangeRef.current(preferences.uiZoomPercent)
         onRememberWindowSizeChangeRef.current(preferences.rememberWindowSize)
         onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
+        onTransferSidebarCollapsedByDefaultChangeRef.current(preferences.transferSidebarCollapsedByDefault)
         onResourceMonitoringMetricsChangeRef.current(preferences.resourceMonitoringMetrics)
         onResourceMonitoringMetricOrderChangeRef.current(preferences.resourceMonitoringMetricOrder)
         onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
@@ -355,6 +360,7 @@ export function useWorkspaceIpcSync({
       uiZoomPercent,
       rememberWindowSize,
       filePanelRememberRatio,
+      transferSidebarCollapsedByDefault,
       resourceMonitoringMetrics,
       resourceMonitoringMetricOrder,
       overviewShowStats,
@@ -403,6 +409,7 @@ export function useWorkspaceIpcSync({
     uiZoomPercent,
     rememberWindowSize,
     filePanelRememberRatio,
+    transferSidebarCollapsedByDefault,
     resourceMonitoringMetrics,
     resourceMonitoringMetricOrder,
     customThemes,

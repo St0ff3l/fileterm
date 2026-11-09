@@ -77,6 +77,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     tabBarLayout: shell.tabBarLayout,
     connectionDefaults: shell.connectionDefaults,
     filePanelRememberRatio: shell.filePanelRememberRatio,
+    transferSidebarCollapsedByDefault: shell.transferSidebarCollapsedByDefault,
     hasLoadedFilePanelRatios: shell.hasLoadedFilePanelRatios,
     filePanelHeights: shell.filePanelHeights,
     setFilePanelHeights: shell.setFilePanelHeights,

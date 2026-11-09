@@ -43,6 +43,7 @@ export type UseWorkspaceIpcSyncOptions = {
   uiZoomPercent: number
   rememberWindowSize: boolean
   filePanelRememberRatio: boolean
+  transferSidebarCollapsedByDefault: boolean
   resourceMonitoringMetrics: ResourceMonitoringMetric[]
   resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
   overviewShowStats: boolean
@@ -61,6 +62,7 @@ export type UseWorkspaceIpcSyncOptions = {
   onUiZoomPercentChange(value: number): void
   onRememberWindowSizeChange(value: boolean): void
   onFilePanelRememberRatioChange(value: boolean): void
+  onTransferSidebarCollapsedByDefaultChange(value: boolean): void
   onResourceMonitoringMetricsChange(value: ResourceMonitoringMetric[]): void
   onResourceMonitoringMetricOrderChange(value: ResourceMonitoringMetric[]): void
   onOverviewShowStatsChange(value: boolean): void

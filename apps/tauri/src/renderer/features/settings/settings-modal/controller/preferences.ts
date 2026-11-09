@@ -89,7 +89,13 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     isSavingConnectionDefaults,
     setIsSavingConnectionDefaults,
     connectionDefaultsError,
-    setConnectionDefaultsError
+    setConnectionDefaultsError,
+    transferSidebarCollapsedByDefault,
+    setTransferSidebarCollapsedByDefault,
+    isSavingTransferSidebarPreference,
+    setIsSavingTransferSidebarPreference,
+    transferSidebarPreferenceError,
+    setTransferSidebarPreferenceError
   } = state
 
   const platformLabel = (() => {
@@ -302,6 +308,25 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
       .finally(() => setIsSavingFilePanelPreference(false))
   }
 
+  const setTransferSidebarCollapsedByDefaultPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingTransferSidebarPreference || nextValue === transferSidebarCollapsedByDefault) {
+      return
+    }
+
+    const previousValue = transferSidebarCollapsedByDefault
+    setTransferSidebarCollapsedByDefault(nextValue)
+    setTransferSidebarPreferenceError(null)
+    setIsSavingTransferSidebarPreference(true)
+    void desktopApi
+      .setUiPreferences({ transferSidebarCollapsedByDefault: nextValue })
+      .then((preferences) => setTransferSidebarCollapsedByDefault(preferences.transferSidebarCollapsedByDefault))
+      .catch(() => {
+        setTransferSidebarCollapsedByDefault(previousValue)
+        setTransferSidebarPreferenceError(t.transferSidebarPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingTransferSidebarPreference(false))
+  }
+
   const setRememberWindowSizePreference = (nextValue: boolean) => {
     if (!desktopApi || isSavingWindowSizePreference || nextValue === rememberWindowSize) {
       return
@@ -414,6 +439,10 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     isSavingConnectionDefaults,
     setConnectionDefault,
     connectionDefaultsError,
+    transferSidebarCollapsedByDefault,
+    isSavingTransferSidebarPreference,
+    transferSidebarPreferenceError,
+    setTransferSidebarCollapsedByDefaultPreference,
     terminalZoomLocked,
     terminalRenderer,
     isSavingTerminalRendererPreference,

@@ -144,7 +144,7 @@ export function LocalTerminalSettingsPanel() {
           )}
         </div>
 
-        <FeedbackBubble message={localTerminalShellError} tone="error" />
+        <FeedbackBubble message={localTerminalShellError} sourceKey="settings.local-terminal.error" tone="error" />
         <div className="local-terminal-shell-actions">
           <button
             aria-busy={isSavingLocalTerminalShells}
@@ -159,7 +159,11 @@ export function LocalTerminalSettingsPanel() {
               label={t.localTerminalShellSave}
             />
           </button>
-          <FeedbackBubble message={localTerminalShellMessage} tone="success" />
+          <FeedbackBubble
+            message={localTerminalShellMessage}
+            sourceKey="settings.local-terminal.success"
+            tone="success"
+          />
         </div>
       </section>
     </div>

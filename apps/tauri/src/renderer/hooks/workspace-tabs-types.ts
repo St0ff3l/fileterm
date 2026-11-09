@@ -58,6 +58,7 @@ export type UseWorkspaceTabsOptions = {
   isMainWorkspaceWindow: boolean
   hasLoadedInitialSnapshot: boolean
   locale: AppLocale
+  transferSidebarCollapsedByDefault: boolean
   isBusy: boolean
   closeActiveRequestVersion: number
   newTabRequestVersion: number

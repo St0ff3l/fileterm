@@ -213,7 +213,11 @@ export function SyncSettingsPanel() {
                     label={t.webdavTestConnection}
                   />
                 </button>
-                {syncFeedback ? <FeedbackBubble message={syncFeedback.message} tone={syncFeedback.kind} /> : null}
+                <FeedbackBubble
+                  message={syncFeedback?.message}
+                  sourceKey="settings.sync.webdav"
+                  tone={syncFeedback?.kind}
+                />
               </div>
 
               {syncConfig.lastSyncedAt ? (
@@ -490,7 +494,7 @@ export function SyncSettingsPanel() {
                     label={t.s3TestConnection}
                   />
                 </button>
-                {s3Feedback ? <FeedbackBubble message={s3Feedback.message} tone={s3Feedback.kind} /> : null}
+                <FeedbackBubble message={s3Feedback?.message} sourceKey="settings.sync.s3" tone={s3Feedback?.kind} />
               </div>
 
               {s3Config.lastSyncedAt ? (

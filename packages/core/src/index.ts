@@ -97,6 +97,8 @@ export interface BaseProfile extends BaseEntity {
   username: string
   remotePath: string
   filePaneMode?: FilePaneMode
+  /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
+  transferSidebarCollapsedByDefault?: boolean
   group: string
   lastUsedAt?: number
   /** Persisted per-device terminal output logging preference. */
@@ -1301,6 +1303,8 @@ export interface CreateProfileInput {
   group: string
   remotePath: string
   filePaneMode?: FilePaneMode
+  /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
+  transferSidebarCollapsedByDefault?: boolean
   note?: string
   sessionLogEnabled?: boolean
   sessionLogDirectory?: string
@@ -2214,6 +2218,7 @@ export interface UiPreferences {
   compactTabBar: boolean
   localTerminalShells: LocalTerminalShellPreferences
   filePanelRememberRatio: boolean
+  transferSidebarCollapsedByDefault: boolean
   resourceMonitoringMetrics: ResourceMonitoringMetric[]
   resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
   connectionDefaults: SshConnectionDefaults
@@ -2246,6 +2251,7 @@ export interface UiPreferencesInput {
   compactTabBar?: boolean
   localTerminalShells?: Partial<LocalTerminalShellPreferences>
   filePanelRememberRatio?: boolean
+  transferSidebarCollapsedByDefault?: boolean
   resourceMonitoringMetrics?: ResourceMonitoringMetric[]
   resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   connectionDefaults?: Partial<SshConnectionDefaults>

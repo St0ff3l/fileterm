@@ -1581,6 +1581,11 @@ const zhCN = {
   connectionDefaults: '连接默认值',
   connectionDefaultsHint: 'SSH 默认值只对新建连接生效；文件区域显示模式是工作区偏好，适用于所有连接标签。',
   connectionDefaultsSaveFailed: '无法保存连接默认值。',
+  transferSidebarCollapsedByDefault: 'FTP/SFTP 默认收起侧边栏',
+  transferSidebarCollapsedByDefaultHint: 'FTP/SFTP 会话默认收起左侧侧边栏；手动调整过的会话保持当前状态。',
+  connectionTransferSidebarCollapsedByDefault: '此连接默认收起左侧侧边栏',
+  connectionTransferSidebarCollapsedByDefaultHint: '未单独修改时跟随全局 FTP/SFTP 默认；会话手动调整后的状态仍优先。',
+  transferSidebarPreferenceSaveFailed: '无法保存 FTP/SFTP 侧边栏显示设置。',
   securitySettings: '会话安全',
   securitySettingsHint:
     '用主密码保护当前工作区，并统一管理 WebDAV / S3 远程备份密码；配置主密码后可从左下角随时手动锁屏。',
@@ -3850,6 +3855,13 @@ const enUS: typeof zhCN = {
   connectionDefaultsHint:
     'SSH defaults apply to new connections. The file area display mode is a workspace preference shared across connection tabs.',
   connectionDefaultsSaveFailed: 'Unable to save connection defaults.',
+  transferSidebarCollapsedByDefault: 'Collapse FTP/SFTP sidebar by default',
+  transferSidebarCollapsedByDefaultHint:
+    'FTP/SFTP sessions start with the left sidebar collapsed. Sessions you adjust manually keep their current state.',
+  connectionTransferSidebarCollapsedByDefault: 'Collapse the left sidebar by default for this connection',
+  connectionTransferSidebarCollapsedByDefaultHint:
+    'If unchanged, follows the global FTP/SFTP default. A manual per-session choice still takes precedence.',
+  transferSidebarPreferenceSaveFailed: 'Unable to save the FTP/SFTP sidebar display setting.',
   securitySettings: 'Session Security',
   securitySettingsHint:
     'Protect the current workspace with a master password and manage the shared WebDAV / S3 backup password. Once configured, you can lock the session anytime from the lower-left corner.',

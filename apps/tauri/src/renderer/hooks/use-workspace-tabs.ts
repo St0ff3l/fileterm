@@ -43,6 +43,7 @@ export function useWorkspaceTabs({
   isMainWorkspaceWindow,
   hasLoadedInitialSnapshot,
   locale,
+  transferSidebarCollapsedByDefault,
   isBusy,
   closeActiveRequestVersion,
   newTabRequestVersion,
@@ -352,36 +353,49 @@ export function useWorkspaceTabs({
   const activeTab = displayedSessionTabId
     ? (visibleWorkspaceTabs.find((tab) => tab.id === displayedSessionTabId) ?? null)
     : null
+  const activeProfile = activeTab
+    ? (workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null)
+    : null
   const activeSession = activeTab ? (workspace.sessions[activeTab.id] ?? null) : null
   const activePaneTabId = activeTab?.paneRoot
     ? (workspace.activePaneTabIdByRoot?.[activeTab.id] ?? activeTab.id)
     : activeTab?.id
   const activePaneTab = activePaneTabId ? (workspace.tabs.find((tab) => tab.id === activePaneTabId) ?? activeTab) : null
   const activePaneSession = activePaneTab ? (workspace.sessions[activePaneTab.id] ?? null) : null
-  const isSystemSidebarCollapsed = activeTab ? (systemSidebarCollapsedByTabId[activeTab.id] ?? false) : false
+  const supportsTransferSidebar =
+    activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'sftp' || activeTab?.sessionType === 'ftp'
+  const defaultSidebarCollapsed =
+    activeTab && supportsTransferSidebar
+      ? (activeProfile?.transferSidebarCollapsedByDefault ??
+        (transferSidebarCollapsedByDefault && (activeTab.sessionType === 'sftp' || activeTab.sessionType === 'ftp')))
+      : false
+  const isSystemSidebarCollapsed = activeTab
+    ? (systemSidebarCollapsedByTabId[activeTab.id] ?? defaultSidebarCollapsed)
+    : false
   const setIsSystemSidebarCollapsed = (nextCollapsed: boolean) => {
     if (!activeTab) {
       return
     }
 
     const tabId = activeTab.id
+    const defaultCollapsed = defaultSidebarCollapsed
     writeDiagnosticLog(
       'INFO',
       DIAGNOSTIC_SCOPES.monitoring,
-      `sidebar collapse requested tab_id=${tabId} previous_user_collapsed=${isSystemSidebarCollapsed} requested_collapsed=${nextCollapsed}`,
+      `sidebar collapse requested tab_id=${tabId} previous_collapsed=${isSystemSidebarCollapsed} requested_collapsed=${nextCollapsed}`,
       desktopApi
     )
     setSystemSidebarCollapsedByTabId((currentByTabId) => {
-      const currentCollapsed = currentByTabId[tabId] ?? false
+      const currentCollapsed = currentByTabId[tabId] ?? defaultCollapsed
       if (currentCollapsed === nextCollapsed) {
         return currentByTabId
       }
-      if (!nextCollapsed) {
+      if (nextCollapsed === defaultCollapsed) {
         const nextByTabId = { ...currentByTabId }
         delete nextByTabId[tabId]
         return nextByTabId
       }
-      return { ...currentByTabId, [tabId]: true }
+      return { ...currentByTabId, [tabId]: nextCollapsed }
     })
   }
   const workspaceStageKind: WorkspaceStageKind =
@@ -398,9 +412,6 @@ export function useWorkspaceTabs({
     activeLocalTab?.kind !== 'transfers' && activeTab !== null && activeSession !== null && !isHomeWorkspaceVisible
   const effectiveActiveLocalTabId =
     activeLocalTab?.id ?? (isHomeWorkspaceVisible ? resolveFallbackHomeTabId(localTabs, tabOrder) : null)
-  const activeProfile = activeTab
-    ? (workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null)
-    : null
   const activePaneProfile = activePaneTab
     ? (workspace.profiles.find((profile) => profile.id === activePaneTab.profileId) ?? null)
     : null
