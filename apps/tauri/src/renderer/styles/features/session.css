@@ -1836,6 +1836,10 @@
   font-size: 11px;
 }
 
+.transfer-segments-sub {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .transfer-popover-list {
   min-height: 0;
   overflow: auto;

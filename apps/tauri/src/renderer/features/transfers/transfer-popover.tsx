@@ -30,7 +30,7 @@ export function TransferPopover({
   onResumeTransfer(transferId: string): Promise<void> | void
   transfers: TransferTask[]
 }) {
-  const [statusFilter, setStatusFilter] = useState<'running' | 'completed' | 'all'>('running')
+  const [statusFilter, setStatusFilter] = useState<'running' | 'completed' | 'all'>('all')
   const [directionFilter, setDirectionFilter] = useState<'all' | 'download' | 'upload' | 'copy'>('all')
   const [pendingActions, setPendingActions] = useState<Record<string, 'pause' | 'resume' | 'discard'>>({})
   const [isClearing, setIsClearing] = useState(false)

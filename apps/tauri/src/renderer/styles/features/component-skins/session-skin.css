@@ -238,7 +238,7 @@
 :root:not([data-theme]) .transfer-segments button.active,
 :root:not([data-theme*='light']) .transfer-segments button.active,
 :root[data-theme='default'] .transfer-segments button.active {
-  background: var(--selection-bg);
+  background: var(--surface-hover);
   color: var(--text-main);
   border-color: var(--border-dark);
 }
