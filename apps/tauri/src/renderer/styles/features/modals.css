@@ -641,7 +641,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-width: 80px;
   height: 28px;
   border: 0;
-  border-radius: calc(var(--radius-sm, 4px) - 4px);
+  border-radius: calc(var(--radius-sm, 4px) - 2px);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
