@@ -70,7 +70,11 @@ export function useThemeSettingsController({
   const themeVariant = themeVariantForMode(theme)
   const normalizedThemeConfig = normalizeThemeConfig(themeConfig, themeVariant)
   const syncedPresetKeyRef = useRef<string | null>(null)
+  const themeFeedbackEventIdRef = useRef(0)
   const presetSyncKey = `${themeConfig.codeThemeId}:${themeVariant}:${themeConfig.theme.overrides ? 'overridden' : 'base'}`
+  const showThemeConfigFeedback = (text: string, kind: 'success' | 'error' | 'warning') => {
+    setThemeConfigMessage({ id: ++themeFeedbackEventIdRef.current, text, kind })
+  }
 
   useEffect(() => {
     if (syncedPresetKeyRef.current === presetSyncKey) return
@@ -214,7 +218,7 @@ export function useThemeSettingsController({
       onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
       setEditingCustomThemeId(null)
       setCustomThemeName('')
-      setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
+      showThemeConfigFeedback(t.themePresetApplied, 'success')
       return
     }
 
@@ -227,7 +231,7 @@ export function useThemeSettingsController({
       onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
       setEditingCustomThemeId(savedTheme.id)
       setCustomThemeName(savedTheme.name)
-      setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
+      showThemeConfigFeedback(t.themePresetApplied, 'success')
       return
     }
 
@@ -239,13 +243,13 @@ export function useThemeSettingsController({
     onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
     setEditingCustomThemeId(null)
     setCustomThemeName('')
-    setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
+    showThemeConfigFeedback(t.themePresetApplied, 'success')
   }
 
   const saveCustomTheme = () => {
     const name = customThemeName.trim()
     if (!name) {
-      setThemeConfigMessage({ text: t.themeNameRequired, kind: 'warning' })
+      showThemeConfigFeedback(t.themeNameRequired, 'warning')
       return
     }
 
@@ -279,7 +283,7 @@ export function useThemeSettingsController({
     onSetTheme(resolveThemeModeForConfig(nextThemeConfig))
     setEditingCustomThemeId(id)
     setCustomThemeName(name)
-    setThemeConfigMessage({ text: existingTheme ? t.themeUpdated : t.themeSaved, kind: 'success' })
+    showThemeConfigFeedback(existingTheme ? t.themeUpdated : t.themeSaved, 'success')
   }
 
   const deleteCustomTheme = () => {
@@ -290,7 +294,7 @@ export function useThemeSettingsController({
     setEditingCustomThemeId(null)
     setCustomThemeName('')
     applyThemePreset('fileterm')
-    setThemeConfigMessage({ text: t.themeDeleted, kind: 'success' })
+    showThemeConfigFeedback(t.themeDeleted, 'success')
     setShowDeleteThemeConfirm(false)
   }
 

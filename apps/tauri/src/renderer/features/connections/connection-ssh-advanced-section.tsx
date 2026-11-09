@@ -8,6 +8,7 @@ import {
   type ConnectionFormSetter,
   type SshConnectionSettingKey
 } from './connection-modal-utils'
+import { TransferSidebarSettingControl } from '../../components/common/transfer-sidebar-setting-control'
 
 export function ConnectionSshAdvancedSection({
   connectionDefaults,
@@ -125,6 +126,16 @@ export function ConnectionSshAdvancedSection({
                 </label>
                 <p className="advanced-toggle-hint">{t.sftpEnabledHint}</p>
               </div>
+              {form.sftpEnabled !== false ? (
+                <TransferSidebarSettingControl
+                  checked={form.transferSidebarCollapsedByDefault ?? false}
+                  hint={t.connectionTransferSidebarCollapsedByDefaultHint}
+                  label={t.connectionTransferSidebarCollapsedByDefault}
+                  onChange={(value) =>
+                    setForm((previous) => ({ ...previous, transferSidebarCollapsedByDefault: value }))
+                  }
+                />
+              ) : null}
             </>
           ) : (
             <div className="advanced-toggle-row">

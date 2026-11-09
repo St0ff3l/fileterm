@@ -49,6 +49,7 @@ export function AppStandaloneWindows({ model }: { model: AppViewModel }) {
     closeCurrentWindow,
     isBusy,
     connectionDefaults,
+    transferSidebarCollapsedByDefault,
     resourceMonitoringMetrics,
     resourceMonitoringMetricOrder,
     connectionImportPlan,
@@ -138,6 +139,7 @@ export function AppStandaloneWindows({ model }: { model: AppViewModel }) {
           {workspaceState.showConnectionForm ? (
             <ConnectionModal
               connectionDefaults={connectionDefaults}
+              defaultTransferSidebarCollapsedByDefault={transferSidebarCollapsedByDefault}
               errorMessage={formError}
               groupOptions={connectionGroupOptions}
               fallbackResourceMonitoringMetrics={resourceMonitoringMetrics}
@@ -254,6 +256,7 @@ export function AppStandaloneWindows({ model }: { model: AppViewModel }) {
       >
         <ConnectionFormHost
           connectionDefaults={connectionDefaults}
+          defaultTransferSidebarCollapsedByDefault={transferSidebarCollapsedByDefault}
           editingProfileId={editingProfileId}
           errorMessage={formError}
           fallbackResourceMonitoringMetrics={resourceMonitoringMetrics}

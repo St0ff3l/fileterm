@@ -59,6 +59,7 @@ export type AppWorkspaceOptions = {
   locale: AppLocale
   connectionDefaults: SshConnectionDefaults
   filePanelRememberRatio: boolean
+  transferSidebarCollapsedByDefault: boolean
   hasLoadedFilePanelRatios: boolean
   filePanelHeights: Record<string, number>
   setFilePanelHeights: Dispatch<SetStateAction<Record<string, number>>>
@@ -115,6 +116,7 @@ export function useAppWorkspace({
   locale,
   connectionDefaults,
   filePanelRememberRatio,
+  transferSidebarCollapsedByDefault,
   hasLoadedFilePanelRatios,
   filePanelHeights,
   setFilePanelHeights,
@@ -215,6 +217,7 @@ export function useAppWorkspace({
     isMainWorkspaceWindow,
     hasLoadedInitialSnapshot,
     locale,
+    transferSidebarCollapsedByDefault,
     isBusy,
     closeActiveRequestVersion,
     newTabRequestVersion,

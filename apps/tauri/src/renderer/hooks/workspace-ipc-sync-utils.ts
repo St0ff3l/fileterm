@@ -20,6 +20,7 @@ export type SyncedUiPreferences = Pick<
   | 'uiZoomPercent'
   | 'rememberWindowSize'
   | 'filePanelRememberRatio'
+  | 'transferSidebarCollapsedByDefault'
   | 'resourceMonitoringMetrics'
   | 'resourceMonitoringMetricOrder'
   | 'overviewShowStats'
@@ -40,6 +41,7 @@ export function sameSyncedUiPreferences(left: SyncedUiPreferences, right: Synced
     left.uiZoomPercent === right.uiZoomPercent &&
     left.rememberWindowSize === right.rememberWindowSize &&
     left.filePanelRememberRatio === right.filePanelRememberRatio &&
+    left.transferSidebarCollapsedByDefault === right.transferSidebarCollapsedByDefault &&
     JSON.stringify(left.resourceMonitoringMetrics) === JSON.stringify(right.resourceMonitoringMetrics) &&
     JSON.stringify(left.resourceMonitoringMetricOrder) === JSON.stringify(right.resourceMonitoringMetricOrder) &&
     left.connectionDefaults.useEmptyPassword === right.connectionDefaults.useEmptyPassword &&
@@ -71,6 +73,7 @@ export function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPre
     uiZoomPercent: preferences.uiZoomPercent,
     rememberWindowSize: preferences.rememberWindowSize,
     filePanelRememberRatio: preferences.filePanelRememberRatio,
+    transferSidebarCollapsedByDefault: preferences.transferSidebarCollapsedByDefault,
     resourceMonitoringMetrics: [...preferences.resourceMonitoringMetrics],
     resourceMonitoringMetricOrder: [...preferences.resourceMonitoringMetricOrder],
     overviewShowStats: preferences.overviewShowStats,

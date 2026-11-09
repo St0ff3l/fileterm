@@ -475,7 +475,7 @@ export function AiSettingsPanel() {
 
         <div className="ai-settings-footer">
           <small>{t.aiSettingsConnectionTestHint}</small>
-          <FeedbackBubble message={aiMessage?.message} tone={aiMessage?.kind} />
+          <FeedbackBubble message={aiMessage?.message} sourceKey="settings.ai" tone={aiMessage?.kind} />
           <div className="ai-settings-footer-actions">
             {aiDraft.id ? (
               <button

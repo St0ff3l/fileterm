@@ -190,6 +190,7 @@ export function profileToForm(
     group: profile.group,
     remotePath: profile.remotePath,
     filePaneMode: profile.filePaneMode ?? 'local',
+    transferSidebarCollapsedByDefault: profile.transferSidebarCollapsedByDefault,
     note: profile.note ?? '',
     sessionLogEnabled: profile.sessionLogEnabled ?? false,
     sessionLogDirectory: profile.sessionLogDirectory ?? '',

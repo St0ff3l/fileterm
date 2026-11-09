@@ -7,12 +7,17 @@ import ts from 'typescript'
 
 const exports = {}
 const body = {}
+let runEffects = false
 const dependencies = {
   react: {
     useRef: (val) => ({ current: val ?? null }),
     useState: (init) => [typeof init === 'function' ? init() : init, () => {}],
-    useEffect: () => {},
-    useCallback: (fn) => fn
+    useEffect: (effect) => {
+      if (runEffects) effect()
+    },
+    useLayoutEffect: () => {},
+    useCallback: (fn) => fn,
+    useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot()
   },
   'react/jsx-runtime': jsx,
   'react-dom': { createPortal: (node, container) => ({ node, container }) },
@@ -52,6 +57,7 @@ vm.runInNewContext(
 const findChild = (node, predicate) => {
   if (!node) return null
   if (predicate(node)) return node
+  if (typeof node.type === 'function') return findChild(node.type(node.props), predicate)
   const list = Array.isArray(node.props?.children) ? node.props.children.flat() : [node.props?.children]
   for (const child of list) {
     const found = findChild(child, predicate)
@@ -68,21 +74,24 @@ test('operation feedback is absent when there is no result', () => {
 test('floating feedback stays outside the panel and preserves full text and status', () => {
   for (const tone of ['success', 'warning', 'error']) {
     const message = 'A complete operation result with detailed information. '.repeat(20)
-    const portal = exports.FeedbackBubble({ message, tone })
+    runEffects = true
+    exports.FeedbackBubble({ message, tone })
+    runEffects = false
+    const portal = exports.FeedbackBubbleViewport()
     assert.equal(portal.container, body)
-    assert.ok(portal.node.props.className.includes('feedback-bubble'))
-    assert.ok(portal.node.props.className.includes(`feedback-bubble--${tone}`))
+    const bubble = findChild(portal.node, (c) => c?.props?.className?.includes(`feedback-bubble--${tone}`))
+    assert.ok(bubble, `feedback-bubble--${tone} should exist`)
 
-    const content = findChild(portal.node, (c) => c?.props?.className === 'feedback-bubble__content')
+    const content = findChild(bubble, (c) => c?.props?.className === 'feedback-bubble__content')
     assert.ok(content, 'feedback-bubble__content should exist')
     const feedback = content.props.children
     assert.equal(feedback.props.message, message)
     assert.equal(feedback.props.tone, tone)
 
-    const titleNode = findChild(portal.node, (c) => c?.props?.className === 'feedback-bubble__title')
+    const titleNode = findChild(bubble, (c) => c?.props?.className === 'feedback-bubble__title')
     assert.ok(titleNode, 'feedback-bubble__title should exist')
 
-    const closeBtn = findChild(portal.node, (c) => c?.props?.className?.includes('feedback-bubble__close-button'))
+    const closeBtn = findChild(bubble, (c) => c?.props?.className?.includes('feedback-bubble__close-button'))
     assert.ok(closeBtn, 'CloseButton should exist')
   }
 })

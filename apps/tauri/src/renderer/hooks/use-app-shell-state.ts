@@ -50,6 +50,7 @@ export type InitialUiPreferences = Pick<
   | 'tabBarLayout'
   | 'compactTabBar'
   | 'filePanelRememberRatio'
+  | 'transferSidebarCollapsedByDefault'
   | 'resourceMonitoringMetrics'
   | 'resourceMonitoringMetricOrder'
   | 'overviewShowStats'
@@ -150,6 +151,9 @@ export function useAppShellState({
   }, [uiZoomPercent])
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(
     () => initialUiPreferences?.filePanelRememberRatio ?? true
+  )
+  const [transferSidebarCollapsedByDefault, setTransferSidebarCollapsedByDefault] = useState(
+    () => initialUiPreferences?.transferSidebarCollapsedByDefault ?? true
   )
   const [resourceMonitoringMetrics, setResourceMonitoringMetrics] = useState<ResourceMonitoringMetric[]>(() => [
     ...(initialUiPreferences?.resourceMonitoringMetrics ?? DEFAULT_RESOURCE_MONITORING_METRICS)
@@ -343,6 +347,7 @@ export function useAppShellState({
     uiZoomPercent,
     rememberWindowSize,
     filePanelRememberRatio,
+    transferSidebarCollapsedByDefault,
     resourceMonitoringMetrics,
     resourceMonitoringMetricOrder,
     overviewShowStats,
@@ -366,6 +371,7 @@ export function useAppShellState({
     onUiZoomPercentChange: setUiZoomPercent,
     onRememberWindowSizeChange: setRememberWindowSize,
     onFilePanelRememberRatioChange: setFilePanelRememberRatio,
+    onTransferSidebarCollapsedByDefaultChange: setTransferSidebarCollapsedByDefault,
     onResourceMonitoringMetricsChange: setResourceMonitoringMetrics,
     onResourceMonitoringMetricOrderChange: (nextOrder) => {
       setResourceMonitoringMetricOrder((currentOrder) =>
@@ -512,6 +518,8 @@ export function useAppShellState({
     compactTabBar,
     filePanelRememberRatio,
     setFilePanelRememberRatio,
+    transferSidebarCollapsedByDefault,
+    setTransferSidebarCollapsedByDefault,
     resourceMonitoringMetrics,
     setResourceMonitoringMetrics,
     resourceMonitoringMetricOrder,

@@ -29,7 +29,7 @@ type InterfaceSettingsPanelContext = {
   themeVariant: ThemePresetVariant
   normalizedThemeConfig: ThemeConfig
   customThemes: SavedTheme[]
-  themeConfigMessage: { text: string; kind: 'success' | 'error' | 'warning' } | null
+  themeConfigMessage: { id: number; text: string; kind: 'success' | 'error' | 'warning' } | null
   themePresetValue: string
   themePresetLabel: string
   themePresetCode: string
@@ -180,7 +180,12 @@ export function InterfaceSettingsPanel() {
             />
           </div>
           <div className="theme-config-actions-control">
-            <FeedbackBubble message={themeConfigMessage?.text} tone={themeConfigMessage?.kind} />
+            <FeedbackBubble
+              eventId={themeConfigMessage?.id}
+              message={themeConfigMessage?.text}
+              sourceKey="settings.theme"
+              tone={themeConfigMessage?.kind}
+            />
             <button className="primary-button compact theme-config-save-button" onClick={saveCustomTheme} type="button">
               <StableButtonContent
                 icon={<AppIcon name={editingSavedTheme ? 'check' : 'edit'} size={14} />}

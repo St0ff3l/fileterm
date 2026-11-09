@@ -21,6 +21,7 @@ import { ConnectionFilePaneSection } from './connection-file-pane-section'
 import { ConnectionReliabilitySection } from './connection-reliability-section'
 import { ConnectionSessionLogSection } from './connection-session-log-section'
 import { ConnectionSshAdvancedSection } from './connection-ssh-advanced-section'
+import { ConnectionTransferAdvancedSection } from './connection-transfer-advanced-section'
 import { ConnectionSshSection } from './connection-ssh-section'
 import { ConnectionTerminalSection } from './connection-terminal-section'
 import { isValidFtpCertificateFingerprint, type SshConnectionSettingKey } from './connection-modal-utils'
@@ -33,6 +34,7 @@ export function ConnectionModal({
   connectionDefaults,
   fallbackResourceMonitoringMetrics,
   fallbackResourceMonitoringMetricOrder,
+  defaultTransferSidebarCollapsedByDefault,
   isSubmitting = false,
   mode,
   form,
@@ -55,6 +57,7 @@ export function ConnectionModal({
   /** Values shown when the profile has no per-connection sidebar metrics yet. */
   fallbackResourceMonitoringMetrics?: ResourceMonitoringMetric[]
   fallbackResourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
+  defaultTransferSidebarCollapsedByDefault: boolean
   isSubmitting?: boolean
   mode: ConnectionFormMode
   form: CreateProfileInput
@@ -89,7 +92,7 @@ export function ConnectionModal({
     form.type === 'ftp' || form.type === 'sftp' || (form.type === 'ssh' && form.deviceMode !== 'network-device')
   const supportsTerminal = form.type !== 'ftp' && form.type !== 'sftp'
   const supportsSessionLogs = form.type !== 'ftp' && form.type !== 'sftp'
-  const supportsAdvanced = form.type === 'ssh'
+  const supportsAdvanced = form.type === 'ssh' || form.type === 'ftp' || form.type === 'sftp'
   const supportsReliability =
     form.type === 'ssh' || form.type === 'sftp' || form.type === 'telnet' || form.type === 'ftp'
   const isNetworkDevice = form.type === 'ssh' && form.deviceMode === 'network-device'
@@ -453,7 +456,7 @@ export function ConnectionModal({
               {section === 'terminal' && supportsTerminal ? (
                 <ConnectionTerminalSection form={form} isNetworkDevice={isNetworkDevice} setForm={setForm} />
               ) : null}
-              {section === 'advanced' && supportsAdvanced ? (
+              {section === 'advanced' && form.type === 'ssh' ? (
                 <ConnectionSshAdvancedSection
                   connectionDefaults={connectionDefaults}
                   fallbackResourceMonitoringMetrics={fallbackResourceMonitoringMetrics}
@@ -464,6 +467,13 @@ export function ConnectionModal({
                   isSubmitting={isSubmitting}
                   setForm={setForm}
                   setSshConnectionSetting={setSshConnectionSetting}
+                />
+              ) : null}
+              {section === 'advanced' && (form.type === 'ftp' || form.type === 'sftp') ? (
+                <ConnectionTransferAdvancedSection
+                  defaultTransferSidebarCollapsedByDefault={defaultTransferSidebarCollapsedByDefault}
+                  form={form}
+                  setForm={setForm}
                 />
               ) : null}
               {section === 'reliability' && supportsReliability ? (

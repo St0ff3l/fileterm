@@ -4,6 +4,7 @@ import type { FileTermDesktopApi, SshConnectionDefaults } from '@fileterm/core'
 import { DropdownSelect } from '../../../common/dropdown-select'
 import { ResourceMonitoringMetricsEditor } from '../../../common/resource-monitoring-metrics-editor'
 import { SelectionControl } from '../../../common/selection-control'
+import { TransferSidebarSettingControl } from '../../../../components/common/transfer-sidebar-setting-control'
 import { type LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
 
@@ -14,6 +15,10 @@ type ConnectionsSettingsPanelContext = {
   isSavingConnectionDefaults: boolean
   setConnectionDefault<K extends keyof SshConnectionDefaults>(key: K, value: SshConnectionDefaults[K]): void
   connectionDefaultsError: string | null
+  transferSidebarCollapsedByDefault: boolean
+  isSavingTransferSidebarPreference: boolean
+  setTransferSidebarCollapsedByDefaultPreference(value: boolean): void
+  transferSidebarPreferenceError: string | null
 }
 
 export function ConnectionsSettingsPanel() {
@@ -23,7 +28,11 @@ export function ConnectionsSettingsPanel() {
     connectionDefaults,
     isSavingConnectionDefaults,
     setConnectionDefault,
-    connectionDefaultsError
+    connectionDefaultsError,
+    transferSidebarCollapsedByDefault,
+    isSavingTransferSidebarPreference,
+    setTransferSidebarCollapsedByDefaultPreference,
+    transferSidebarPreferenceError
   } = useSettingsModalContext<ConnectionsSettingsPanelContext>()
   // Commit the socket path on blur/Enter instead of saving every keystroke.
   const [agentSocketDraft, setAgentSocketDraft] = useState(connectionDefaults.sshAgentSocketPath)
@@ -41,8 +50,8 @@ export function ConnectionsSettingsPanel() {
         <fieldset
           className="settings-connection-defaults"
           disabled={!desktopApi}
-          inert={isSavingConnectionDefaults}
-          aria-busy={isSavingConnectionDefaults}
+          inert={isSavingConnectionDefaults || isSavingTransferSidebarPreference}
+          aria-busy={isSavingConnectionDefaults || isSavingTransferSidebarPreference}
           style={{ border: 0, margin: 0, padding: 0 }}
         >
           <div className="settings-connection-defaults__group">
@@ -109,6 +118,13 @@ export function ConnectionsSettingsPanel() {
                   onOrderChange={(next) => setConnectionDefault('resourceMonitoringMetricOrder', next)}
                 />
               </div>
+              <TransferSidebarSettingControl
+                checked={transferSidebarCollapsedByDefault}
+                disabled={!desktopApi || isSavingTransferSidebarPreference}
+                hint={t.transferSidebarCollapsedByDefaultHint}
+                label={t.transferSidebarCollapsedByDefault}
+                onChange={setTransferSidebarCollapsedByDefaultPreference}
+              />
               <div className="advanced-toggle-row">
                 <label className="ssh-checkbox advanced-toggle-label">
                   <SelectionControl
@@ -186,6 +202,7 @@ export function ConnectionsSettingsPanel() {
           </div>
         </fieldset>
         {connectionDefaultsError ? <p className="modal-error">{connectionDefaultsError}</p> : null}
+        {transferSidebarPreferenceError ? <p className="modal-error">{transferSidebarPreferenceError}</p> : null}
       </section>
     </div>
   )
