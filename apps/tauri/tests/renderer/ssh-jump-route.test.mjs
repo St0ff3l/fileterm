@@ -101,6 +101,7 @@ test('connection settings show the complete route and explain invalid references
     {
       '../../i18n': { t: new Proxy({}, { get: (_target, key) => key }) },
       '../../app/ssh-jump-route': exports,
+      '../../components/common/segmented-control/segmented-control': { SegmentedControl: () => null },
       '../common/app-icon': { AppIcon: () => null },
       '../common/dropdown-select': {
         DropdownSelect: ({ options }) => createElement('span', null, options.map((option) => option.label).join(' | '))
