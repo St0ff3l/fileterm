@@ -47,6 +47,38 @@
   background: var(--action-primary-hover);
 }
 
+.ft-segmented-control--neutral {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9px;
+  background: var(--surface-canvas);
+}
+
+.ft-segmented-control--neutral > .ft-segmented-control__option {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.ft-segmented-control--neutral .ft-segmented-control__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ft-segmented-control--neutral > .ft-segmented-control__option:hover:not(.is-selected) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.ft-segmented-control--neutral > .ft-segmented-control__option.is-selected,
+.ft-segmented-control--neutral > .ft-segmented-control__option.is-selected:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
 .ft-segmented-control .selection-control {
   position: absolute;
   width: 1px;

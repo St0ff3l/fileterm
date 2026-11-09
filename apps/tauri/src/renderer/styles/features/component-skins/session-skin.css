@@ -224,31 +224,6 @@
   box-shadow: var(--shadow-lg);
 }
 
-:root:not([data-theme]) .transfer-segments button,
-:root:not([data-theme*='light']) .transfer-segments button,
-:root[data-theme='default'] .transfer-segments button {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-sidebar);
-  color: var(--text-muted);
-}
-
-:root:not([data-theme]) .transfer-segments button:hover,
-:root:not([data-theme*='light']) .transfer-segments button:hover,
-:root[data-theme='default'] .transfer-segments button:hover,
-:root:not([data-theme]) .transfer-segments button.active,
-:root:not([data-theme*='light']) .transfer-segments button.active,
-:root[data-theme='default'] .transfer-segments button.active {
-  background: var(--surface-hover);
-  color: var(--text-main);
-  border-color: var(--border-dark);
-}
-
-:root:not([data-theme]) .transfer-segments-sub button,
-:root:not([data-theme*='light']) .transfer-segments-sub button,
-:root[data-theme='default'] .transfer-segments-sub button {
-  background: var(--bg-card);
-}
-
 :root:not([data-theme]) .transfer-row,
 :root:not([data-theme*='light']) .transfer-row,
 :root[data-theme='default'] .transfer-row {

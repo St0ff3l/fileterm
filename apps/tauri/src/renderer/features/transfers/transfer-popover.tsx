@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { TransferTask } from '@fileterm/core'
 import { CloseButton } from '../common/close-button'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
+import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { StableButtonContent, StableButtonLabel } from '../common/stable-button-content'
 import {
   formatTransferBytes,
@@ -160,59 +161,31 @@ export function TransferPopover({
         </div>
       </div>
       <div className="transfer-filters">
-        <div className="transfer-segments">
-          <button
-            className={statusFilter === 'all' ? 'active' : ''}
-            onClick={() => setStatusFilter('all')}
-            type="button"
-          >
-            {t.all}
-          </button>
-          <button
-            className={statusFilter === 'running' ? 'active' : ''}
-            onClick={() => setStatusFilter('running')}
-            type="button"
-          >
-            {t.inProgress}
-          </button>
-          <button
-            className={statusFilter === 'completed' ? 'active' : ''}
-            onClick={() => setStatusFilter('completed')}
-            type="button"
-          >
-            {t.completed}
-          </button>
-        </div>
-        <div className="transfer-segments transfer-segments-sub">
-          <button
-            className={directionFilter === 'all' ? 'active' : ''}
-            onClick={() => setDirectionFilter('all')}
-            type="button"
-          >
-            {t.all}
-          </button>
-          <button
-            className={directionFilter === 'download' ? 'active' : ''}
-            onClick={() => setDirectionFilter('download')}
-            type="button"
-          >
-            {t.download}
-          </button>
-          <button
-            className={directionFilter === 'upload' ? 'active' : ''}
-            onClick={() => setDirectionFilter('upload')}
-            type="button"
-          >
-            {t.upload}
-          </button>
-          <button
-            className={directionFilter === 'copy' ? 'active' : ''}
-            onClick={() => setDirectionFilter('copy')}
-            type="button"
-          >
-            {t.fileTransferCopy}
-          </button>
-        </div>
+        <SegmentedControl<'running' | 'completed' | 'all'>
+          ariaLabel={t.transferStatusFilterLabel}
+          className="transfer-filter-status"
+          variant="neutral"
+          value={statusFilter}
+          options={[
+            { value: 'all', label: t.all },
+            { value: 'running', label: t.inProgress },
+            { value: 'completed', label: t.completed }
+          ]}
+          onChange={setStatusFilter}
+        />
+        <SegmentedControl<'all' | 'download' | 'upload' | 'copy'>
+          ariaLabel={t.transferDirectionFilterLabel}
+          className="transfer-filter-direction"
+          variant="neutral"
+          value={directionFilter}
+          options={[
+            { value: 'all', label: t.all },
+            { value: 'download', label: t.download },
+            { value: 'upload', label: t.upload },
+            { value: 'copy', label: t.fileTransferCopy }
+          ]}
+          onChange={setDirectionFilter}
+        />
         <small className="transfer-hint">{t.transferUploadHint}</small>
       </div>
       <div className="transfer-popover-list">

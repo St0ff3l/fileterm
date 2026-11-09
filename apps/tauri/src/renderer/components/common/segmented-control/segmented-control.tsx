@@ -1,21 +1,30 @@
 import { useId } from 'react'
+import type { ReactNode } from 'react'
 import { SelectionControl } from '../../../features/common/selection-control'
 import './segmented-control.css'
 
 export function SegmentedControl<Value extends string>({
   ariaLabel,
+  className,
+  variant = 'primary',
   value,
   options,
   onChange
 }: {
   ariaLabel: string
+  className?: string
+  variant?: 'primary' | 'neutral'
   value: Value
-  options: readonly { value: Value; label: string }[]
+  options: readonly { value: Value; label: ReactNode }[]
   onChange(value: Value): void
 }) {
   const groupId = useId()
   return (
-    <div className="ft-segmented-control" role="radiogroup" aria-label={ariaLabel}>
+    <div
+      className={`ft-segmented-control${variant === 'neutral' ? ' ft-segmented-control--neutral' : ''}${className ? ` ${className}` : ''}`}
+      role="radiogroup"
+      aria-label={ariaLabel}
+    >
       {options.map((option) => (
         <label
           key={option.value}
@@ -28,7 +37,7 @@ export function SegmentedControl<Value extends string>({
             checked={value === option.value}
             onChange={() => onChange(option.value)}
           />
-          <span>{option.label}</span>
+          <span className="ft-segmented-control__label">{option.label}</span>
         </label>
       ))}
     </div>

@@ -293,7 +293,6 @@
 
 :root[data-theme*='light'] .file-tabs button,
 :root[data-theme*='light'] .file-tab-actions button,
-:root[data-theme*='light'] .transfer-segments button,
 :root[data-theme*='light'] .network-select,
 :root[data-theme*='light'] .ssh-grid input:not(.selection-control),
 :root[data-theme*='light'] .ssh-grid .dropdown-select-trigger,
@@ -350,8 +349,6 @@
 }
 
 :root[data-theme*='light'] .file-tabs button.active,
-:root[data-theme*='light'] .transfer-segments button.active,
-:root[data-theme*='light'] .transfer-segments button:hover,
 :root[data-theme*='light'] .quick-row:hover,
 :root[data-theme*='light'] .manager-row:hover,
 :root[data-theme*='light'] .fs-file-table tbody tr:hover,
@@ -738,23 +735,6 @@
 :root[data-theme*='light'] .transfer-popover {
   background: var(--surface-card);
   box-shadow: var(--shadow-lg);
-}
-
-:root[data-theme*='light'] .transfer-segments button {
-  border: 1px solid var(--border-light);
-  background: var(--surface-card);
-  color: var(--text-muted);
-}
-
-:root[data-theme*='light'] .transfer-segments button:hover,
-:root[data-theme*='light'] .transfer-segments button.active {
-  background: var(--surface-hover);
-  color: var(--text-main);
-  border-color: var(--border-dark);
-}
-
-:root[data-theme*='light'] .transfer-segments-sub button {
-  background: var(--surface-hover);
 }
 
 :root[data-theme*='light'] .transfer-row {
