@@ -309,7 +309,7 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
       setIsRootAccessSubmitting(false)
       setRootAccessDialog({
         tabId: activeTab.id,
-        sshUser: activeProfile?.type === 'ssh' ? activeProfile.username : undefined,
+        sshUser: activeProfile?.type === 'ssh' || activeProfile?.type === 'sftp' ? activeProfile.username : undefined,
         rootAccessMethod: 'sudo',
         sudoUser: 'root',
         hasSavedSudoPassword:

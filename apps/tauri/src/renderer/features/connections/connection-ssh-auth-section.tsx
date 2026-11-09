@@ -32,36 +32,34 @@ export function ConnectionSshAuthSection({
 }) {
   const isKeyboardInteractiveAuth = form.authType === 'keyboard-interactive' || form.authType === 'jumpserver-koko-mfa'
   const isPasswordAuth = form.authType === 'password' || form.authType === 'kubernetes'
+  const isSshTransport = form.type === 'ssh' || form.type === 'sftp'
   const hasPasswordField = form.type === 'ftp' || isPasswordAuth || isKeyboardInteractiveAuth
-  const usernameHint =
-    form.type !== 'ssh'
-      ? undefined
-      : form.authType === 'sshConfig'
-        ? t.sshConfigUsernamePlaceholder
+  const usernameHint = !isSshTransport
+    ? undefined
+    : form.authType === 'sshConfig'
+      ? t.sshConfigUsernamePlaceholder
+      : isPasswordAuth
+        ? t.sshUsernameOnConnectHint
+        : t.sshUsernameRequiredHint
+  const passwordHint = !isSshTransport
+    ? undefined
+    : form.authType === 'jumpserver-koko-mfa'
+      ? t.sshKokoPasswordHint
+      : isKeyboardInteractiveAuth
+        ? t.sshKeyboardPasswordHint
         : isPasswordAuth
-          ? t.sshUsernameOnConnectHint
-          : t.sshUsernameRequiredHint
-  const passwordHint =
-    form.type !== 'ssh'
-      ? undefined
-      : form.authType === 'jumpserver-koko-mfa'
-        ? t.sshKokoPasswordHint
-        : isKeyboardInteractiveAuth
-          ? t.sshKeyboardPasswordHint
-          : isPasswordAuth
-            ? effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
-              ? t.useEmptyPasswordHint
-              : t.sshPasswordOnConnectHint
-            : undefined
+          ? effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
+            ? t.useEmptyPasswordHint
+            : t.sshPasswordOnConnectHint
+          : undefined
 
-  const usernameAnnotation =
-    form.type !== 'ssh'
-      ? undefined
-      : form.authType === 'sshConfig'
-        ? t.sshConfigUsernameAnnotation
-        : isPasswordAuth
-          ? t.sshCredentialAskAnnotation
-          : t.sshCredentialRequiredAnnotation
+  const usernameAnnotation = !isSshTransport
+    ? undefined
+    : form.authType === 'sshConfig'
+      ? t.sshConfigUsernameAnnotation
+      : isPasswordAuth
+        ? t.sshCredentialAskAnnotation
+        : t.sshCredentialRequiredAnnotation
   const passwordAnnotation = !passwordHint
     ? undefined
     : isPasswordAuth && effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
@@ -79,7 +77,7 @@ export function ConnectionSshAuthSection({
       <fieldset className="ssh-fieldset">
         <legend>{t.auth}</legend>
         <div className="ssh-grid ssh-grid-auth">
-          {form.type === 'ssh' && form.authType !== 'sshConfig' ? (
+          {(form.type === 'ssh' || form.type === 'sftp') && form.authType !== 'sshConfig' ? (
             <label className="span-2">
               {t.method}:
               <DropdownSelect
@@ -140,7 +138,7 @@ export function ConnectionSshAuthSection({
               hasSavedValue={hasSavedPassword}
               canClear={mode === 'edit'}
               disabled={
-                form.type === 'ssh' &&
+                isSshTransport &&
                 isPasswordAuth &&
                 effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
               }
@@ -155,7 +153,7 @@ export function ConnectionSshAuthSection({
               onUndo={() => setForm((prev) => ({ ...prev, password: '' }))}
             />
           ) : null}
-          {form.type === 'ssh' && form.authType === 'privateKey' ? (
+          {(form.type === 'ssh' || form.type === 'sftp') && form.authType === 'privateKey' ? (
             <SshPrivateKeyField
               privateKeyId={form.privateKeyId}
               privateKeyPath={form.privateKeyPath}
@@ -176,7 +174,8 @@ export function ConnectionSshAuthSection({
               </div>
             </div>
           ) : null}
-          {form.type === 'ssh' && (isKeyboardInteractiveAuth || form.authType === 'kubernetes') ? (
+          {(form.type === 'ssh' || form.type === 'sftp') &&
+          (isKeyboardInteractiveAuth || form.authType === 'kubernetes') ? (
             <div className="span-2 ssh-auth-hint">
               <AppIcon name="info" size={15} className="ssh-auth-hint__icon" />
               <div className="ssh-auth-hint__content">
@@ -285,7 +284,7 @@ export function ConnectionSshAuthSection({
               </div>
             </>
           ) : null}
-          {form.type === 'ssh' && !isNetworkDevice ? (
+          {isSshTransport && !isNetworkDevice ? (
             <>
               <ConnectionSecretField
                 id="connection-sudo-password"
@@ -311,7 +310,7 @@ export function ConnectionSshAuthSection({
               />
             </>
           ) : null}
-          {form.type === 'ssh' && mode === 'edit' && form.trustedHostFingerprint ? (
+          {isSshTransport && mode === 'edit' && form.trustedHostFingerprint ? (
             <div className="span-2 saved-fingerprint-card">
               <MaterialIcon
                 name="fingerprint"
@@ -334,7 +333,7 @@ export function ConnectionSshAuthSection({
           ) : null}
         </div>
       </fieldset>
-      {form.type === 'ssh' ? (
+      {isSshTransport ? (
         <fieldset className="ssh-fieldset">
           <legend>{t.sshSecondFactor}</legend>
           <div className="ssh-grid ssh-grid-auth">

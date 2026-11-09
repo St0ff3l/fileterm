@@ -184,7 +184,7 @@ async fn find_connected_tab(app: &AppHandle, profile_id: &str) -> Option<String>
     let sessions = state.sessions.read().await;
     tabs.into_iter().find_map(|tab| {
         (tab.profile_id == profile_id
-            && matches!(tab.session_type.as_str(), "ssh" | "ftp")
+            && matches!(tab.session_type.as_str(), "ssh" | "sftp" | "ftp")
             && sessions
                 .get(&tab.id)
                 .map(|session| session.connected)

@@ -411,6 +411,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
           sessionLogEnabled: input.sessionLogEnabled,
           sessionLogDirectory: input.sessionLogDirectory,
           password: input.password ?? undefined,
+          encoding: input.encoding ?? 'UTF-8',
           secure: (input.securityMode ?? (input.secure ? 'explicit' : 'none')) !== 'none',
           securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),
           group: input.group,

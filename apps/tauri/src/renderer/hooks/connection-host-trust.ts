@@ -3,7 +3,7 @@ import { normalizeConnectionHost } from '@fileterm/shared'
 
 function sshEndpointMatches(form: CreateProfileInput, host: string, port: number): boolean {
   return (
-    form.type === 'ssh' &&
+    (form.type === 'ssh' || form.type === 'sftp') &&
     normalizeConnectionHost(form.host) === normalizeConnectionHost(host) &&
     (Number(form.port) || 22) === port
   )
@@ -34,7 +34,7 @@ export function invalidateChangedConnectionHostTrust(
   next: CreateProfileInput
 ): CreateProfileInput {
   if (
-    previous.type === 'ssh' &&
+    (previous.type === 'ssh' || previous.type === 'sftp') &&
     previous.trustedHostFingerprint &&
     next.trustedHostFingerprint === previous.trustedHostFingerprint &&
     (!sshEndpointMatches(next, previous.host, Number(previous.port) || 22) ||

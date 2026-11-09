@@ -1,4 +1,4 @@
-export type SessionType = 'ssh' | 'ftp' | 'telnet' | 'serial'
+export type SessionType = 'ssh' | 'sftp' | 'ftp' | 'telnet' | 'serial'
 
 /** Runtime workspace sessions may also be a local shell; connection profiles never are. */
 export type WorkspaceSessionType = SessionType | 'local'
@@ -466,6 +466,10 @@ export interface SshProfile extends NetworkProfile {
   legacyAlgorithms?: boolean
 }
 
+export interface SftpProfile extends Omit<SshProfile, 'type'> {
+  type: 'sftp'
+}
+
 export interface FtpProfile extends NetworkProfile {
   type: 'ftp'
   username: string
@@ -478,6 +482,8 @@ export interface FtpProfile extends NetworkProfile {
   proxyProfileId?: string
   /** Optional SHA-256 pin for the FTPS server certificate. CA validation remains required. */
   certificateFingerprint?: string
+  /** Encoding used for FTP command paths and directory listings. Defaults to UTF-8. */
+  encoding?: string
   remotePath: string
 }
 
@@ -592,7 +598,7 @@ export interface SerialTransferProgress {
   message?: string
 }
 
-export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
+export type ConnectionProfile = SshProfile | SftpProfile | FtpProfile | TelnetProfile | SerialProfile
 
 export const getConnectionCapabilities = (profile: {
   type: SessionType
@@ -618,7 +624,7 @@ export const getConnectionCapabilities = (profile: {
       tunnels: true
     }
   }
-  if (profile.type === 'ftp') {
+  if (profile.type === 'ftp' || profile.type === 'sftp') {
     return {
       terminal: false,
       files: true,
@@ -3114,10 +3120,18 @@ export interface SshSessionController extends ShellSessionController, FileSessio
   readonly type: 'ssh'
 }
 
+export interface SftpSessionController extends FileSessionController {
+  readonly type: 'sftp'
+}
+
 export interface FtpSessionController extends FileSessionController {
   readonly type: 'ftp'
 }
 
 export const createTabLayout = (profile: ConnectionProfile): TabLayout => {
-  return profile.type === 'ssh' ? 'terminal-file' : profile.type === 'ftp' ? 'file-only' : 'terminal-only'
+  return profile.type === 'ssh'
+    ? 'terminal-file'
+    : profile.type === 'ftp' || profile.type === 'sftp'
+      ? 'file-only'
+      : 'terminal-only'
 }

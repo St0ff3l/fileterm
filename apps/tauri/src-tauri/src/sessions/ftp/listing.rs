@@ -26,7 +26,16 @@ async fn remove_file<T: TokioTlsStream + Send>(
     match ftp.rm(path).await {
         Ok(()) => Ok(()),
         Err(error) if is_ftp_file_not_found(&error) => Ok(()),
-        Err(error) => Err(error.to_string()),
+        Err(error) => {
+            if ftp_path_is_missing(ftp, path, &error)
+                .await
+                .map_err(|probe| format!("FTP DELE path={path:?}: {error}; {probe}"))?
+            {
+                Ok(())
+            } else {
+                Err(format!("FTP DELE path={path:?}: {error}"))
+            }
+        }
     }
 }
 
@@ -73,11 +82,11 @@ async fn list_files<T: TokioTlsStream + Send>(
     list_files_with_state(ftp, path, &mut state).await
 }
 
-async fn list_files_with_state<T: TokioTlsStream + Send>(
+async fn read_ftp_listing_lines<T: TokioTlsStream + Send>(
     ftp: &mut ImplAsyncFtpStream<T>,
     path: &str,
     state: &mut FtpListingState,
-) -> Result<Vec<Value>, String> {
+) -> Result<Vec<String>, String> {
     let lines = if state.mlsd_disabled {
         ftp.list(Some(path))
             .await
@@ -100,6 +109,63 @@ async fn list_files_with_state<T: TokioTlsStream + Send>(
             }
         }
     };
+    Ok(lines)
+}
+
+fn is_ftp_navigation_entry(line: &str) -> bool {
+    let facts = line
+        .trim_start()
+        .split_once(' ')
+        .map(|value| value.0)
+        .unwrap_or("");
+    facts.split(';').any(|fact| {
+        fact.split_once('=').is_some_and(|(key, value)| {
+            key.eq_ignore_ascii_case("type")
+                && (value.eq_ignore_ascii_case("cdir") || value.eq_ignore_ascii_case("pdir"))
+        })
+    })
+}
+
+async fn ftp_path_is_missing<T: TokioTlsStream + Send>(
+    ftp: &mut ImplAsyncFtpStream<T>,
+    path: &str,
+    error: &FtpError,
+) -> Result<bool, String> {
+    if is_ftp_file_not_found(error) {
+        return Ok(true);
+    }
+    if !matches!(error, FtpError::UnexpectedResponse(response) if response.status == Status::FileUnavailable)
+    {
+        return Ok(false);
+    }
+    // Xlight uses generic 550 replies for missing files as well as denied access.
+    let parent = parent_remote_path(path);
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let lines = read_ftp_listing_lines(ftp, &parent, &mut FtpListingState::default())
+        .await
+        .map_err(|error| format!("FTP LIST parent={parent:?}: {error}"))?;
+    for line in lines {
+        if is_ftp_navigation_entry(&line) {
+            continue;
+        }
+        let parsed = parse_ftp_listing_line(&line)
+            .filter(|parsed| parsed.type_is_trusted && !line.contains('\u{fffd}'))
+            .ok_or_else(|| {
+                format!("FTP LIST parent={parent:?}: 无法可靠解析目录条目，保留原始错误")
+            })?;
+        if parsed.entry.name() == name || parsed.entry.name() == path {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+async fn list_files_with_state<T: TokioTlsStream + Send>(
+    ftp: &mut ImplAsyncFtpStream<T>,
+    path: &str,
+    state: &mut FtpListingState,
+) -> Result<Vec<Value>, String> {
+    let lines = read_ftp_listing_lines(ftp, path, state).await?;
     let mut files = Vec::new();
     if path != "/" {
         files.push(serde_json::json!({
@@ -108,6 +174,10 @@ async fn list_files_with_state<T: TokioTlsStream + Send>(
         }));
     }
     for line in lines {
+        // Xlight may label cdir/pdir with absolute paths instead of dots.
+        if is_ftp_navigation_entry(&line) {
+            continue;
+        }
         // `File::from_str` deliberately tries POSIX and DOS LIST formats
         // before MLSD. Some embedded FTP servers accept MLSD but still send
         // classic Unix LIST rows; parsing those as MLSD first succeeds with

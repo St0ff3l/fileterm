@@ -38,6 +38,23 @@ export function ConnectionFilePaneSection({
           </div>
         </div>
       </fieldset>
+      <fieldset className="ssh-fieldset narrow">
+        <legend>{t.characterEncoding}</legend>
+        <div className="ssh-grid single">
+          <div className="span-2 ssh-form-field">
+            <DropdownSelect
+              ariaLabel={t.characterEncoding}
+              id="connection-file-encoding"
+              value={form.encoding ?? 'UTF-8'}
+              options={[
+                { value: 'UTF-8', label: 'UTF-8' },
+                { value: 'GBK', label: 'GBK' }
+              ]}
+              onChange={(value) => setForm((previous) => ({ ...previous, encoding: value }))}
+            />
+          </div>
+        </div>
+      </fieldset>
     </div>
   )
 }

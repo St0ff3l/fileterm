@@ -514,7 +514,31 @@ const zhCN = {
   terminalDisconnected: '连接已断开',
   terminalConnectionClosed: '[连接已关闭]',
   sshConnectionFailedPrefix: 'SSH 连接失败：',
+  sshAuthenticationFailedAt: 'SSH 身份验证被服务器拒绝（{endpoint}，认证方式：{method}）',
+  sshDhGroupOutOfRange:
+    '服务器提供的 DH 素数为 {bits} 位，超出本连接请求的 {min}–{max} 位范围。请调整服务器 DH 参数，或对可信的旧服务器启用“兼容旧服务器算法”。',
+  sshAlgorithmMismatchHint:
+    'SSH 客户端与服务器没有共同支持的算法。请检查服务端 SSH 算法配置；旧服务器可在确认信任后启用兼容旧算法。',
+  sshHandshakeFailureHint:
+    'TCP 已连接，但 SSH 握手未完成。请确认目标端口提供的是 SSH 服务，并检查服务端日志及算法兼容性。',
   sshAuthenticationFailed: 'SSH 认证失败',
+  ftpConnectionFailedPrefix: 'FTP 连接失败：',
+  ftpLoginFailedPrefix: 'FTP 登录失败：',
+  telnetConnectionFailedPrefix: 'Telnet 连接失败：',
+  connectionErrorDiagnostic: '{hint} 详细错误：{error}',
+  connectionRefusedHint:
+    '目标服务器或代理拒绝了 TCP 连接。请核对主机/IP 和端口、确认对应服务正在监听；若使用代理，也请检查代理到目标的转发规则。',
+  connectionTimeoutHint: '连接等待响应超时。请检查目标地址和端口、网络/VPN/路由、防火墙，以及服务器是否繁忙。',
+  connectionDnsHint: '无法解析目标或代理的主机名。请检查拼写和本机 DNS 配置，或尝试使用 IP 地址。',
+  connectionRouteHint: '本机或代理无法到达目标网络。请检查网络连接、VPN、路由和防火墙规则。',
+  connectionClosedHint:
+    '服务器或代理在连接过程中关闭/重置了连接。请确认目标端口运行的是所选协议，并查看服务器或代理日志。',
+  connectionTlsHint:
+    'TLS/证书协商失败。请核对 FTP/FTPS 安全模式（无、显式或隐式）、证书有效期/主机名/信任链及服务端 TLS 配置。',
+  connectionAuthenticationHint: '服务器拒绝了身份验证。请检查用户名、密码/密钥/口令，以及服务器允许的认证方式。',
+  proxyAuthenticationHint: '代理拒绝了身份验证。请检查代理用户名、密码和代理支持的认证方式。',
+  ftpSecurityModeHint: 'FTP 服务器返回了无法解析的响应。请核对端口和安全模式是否匹配（FTP、显式 FTPS 或隐式 FTPS）。',
+  connectionFailureFallbackHint: '请核对所选协议、主机/IP、端口、服务端状态和代理设置。',
   connectionDisconnected: '连接已断开',
   telnetReconnectScheduled: '[Telnet] 将在 {seconds} 秒后自动重连（第 {attempt} 次）',
   telnetReconnectLimit: '[Telnet] 自动重连已停止：{error}',
@@ -1367,7 +1391,9 @@ const zhCN = {
   uiZoomPercent: '界面缩放',
   uiZoomPercentSaveFailed: '无法保存界面缩放。',
   windowMenuCloseWindow: '关闭窗口',
-  transferUploadHint: '单文件和目录传输都使用 .fileterm-part 断点，校验成功后再替换目标；断线或重启后可继续。',
+  transferUploadHint: '文件传输使用 .fileterm-part 断点续传，校验后替换目标。',
+  transferStatusFilterLabel: '传输状态',
+  transferDirectionFilterLabel: '传输方向',
   inProgress: '进行中',
   completed: '已完成/终止',
   all: '全部',
@@ -2714,7 +2740,37 @@ const enUS: typeof zhCN = {
   terminalDisconnected: 'Connection closed',
   terminalConnectionClosed: '[connection closed]',
   sshConnectionFailedPrefix: 'SSH connection failed: ',
+  sshAuthenticationFailedAt: 'SSH authentication was rejected by the server ({endpoint}, method: {method})',
+  sshDhGroupOutOfRange:
+    'The server offered a {bits}-bit DH prime, outside this connection’s requested {min}–{max}-bit range. Update the server DH parameters, or enable “Legacy server algorithms” for a trusted old server.',
+  sshAlgorithmMismatchHint:
+    'The SSH client and server have no common algorithms. Check the server SSH algorithm configuration; for a trusted old server, enable legacy algorithms.',
+  sshHandshakeFailureHint:
+    'TCP connected, but the SSH handshake did not complete. Confirm the target port runs SSH and check the server logs and algorithm compatibility.',
   sshAuthenticationFailed: 'SSH authentication failed',
+  ftpConnectionFailedPrefix: 'FTP connection failed: ',
+  ftpLoginFailedPrefix: 'FTP login failed: ',
+  telnetConnectionFailedPrefix: 'Telnet connection failed: ',
+  connectionErrorDiagnostic: '{hint} Details: {error}',
+  connectionRefusedHint:
+    'The target server or proxy refused the TCP connection. Check the host/IP, port, and whether the service is listening; if using a proxy, check its route to the target.',
+  connectionTimeoutHint:
+    'The connection timed out waiting for a response. Check the target address and port, network/VPN/routes, firewall, and server load.',
+  connectionDnsHint:
+    'The target or proxy host name could not be resolved. Check its spelling and local DNS, or try the IP address.',
+  connectionRouteHint:
+    'This computer or proxy cannot reach the target network. Check the network, VPN, routes, and firewall rules.',
+  connectionClosedHint:
+    'The server or proxy closed/reset the connection. Confirm the target port serves the selected protocol and check server or proxy logs.',
+  connectionTlsHint:
+    'TLS or certificate negotiation failed. Check the FTP/FTPS mode (plain, explicit, or implicit), certificate validity/host name/trust chain, and server TLS settings.',
+  connectionAuthenticationHint:
+    'The server rejected authentication. Check the username, password/key/passphrase, and authentication methods allowed by the server.',
+  proxyAuthenticationHint:
+    'The proxy rejected authentication. Check its username, password, and supported authentication methods.',
+  ftpSecurityModeHint:
+    'The FTP server returned an unreadable response. Check that the port and security mode match (FTP, explicit FTPS, or implicit FTPS).',
+  connectionFailureFallbackHint: 'Check the selected protocol, host/IP, port, server status, and proxy settings.',
   connectionDisconnected: 'Connection closed',
   telnetReconnectScheduled: '[Telnet] Automatic reconnect in {seconds} seconds (attempt {attempt})',
   telnetReconnectLimit: '[Telnet] Automatic reconnect stopped: {error}',
@@ -3598,8 +3654,9 @@ const enUS: typeof zhCN = {
   uiZoomPercent: 'Interface Zoom',
   uiZoomPercentSaveFailed: 'Unable to save the interface zoom.',
   windowMenuCloseWindow: 'Close Window',
-  transferUploadHint:
-    'Files and folders use .fileterm-part checkpoints, replace targets after verification, and can resume after disconnects or restarts.',
+  transferUploadHint: 'File transfers resume from .fileterm-part and replace targets after verification.',
+  transferStatusFilterLabel: 'Transfer status',
+  transferDirectionFilterLabel: 'Transfer direction',
   inProgress: 'In Progress',
   completed: 'Completed/Stopped',
   all: 'All',
@@ -4597,13 +4654,89 @@ export function localizeErrorScope(scope: string, locale: AppLocale = activeLoca
 }
 
 export function localizeConnectionErrorText(value: string) {
-  return value
+  const detailedDhFailure = /DH prime size \(\d+ bits\) not within requested range \(\d+-\d+ bits\)/i.test(value)
+  const sshHandshakeDisconnected = /SSH connect failed:\s*Disconnected$/i.test(value)
+  const localized = value
     .replace(/^(?:command|storage|serialization|window|clipboard) error:\s*/i, '')
-    .replace(/^SSH connect failed:\s*Disconnected$/i, t.sshServerClosedDuringHandshake)
-    .replace(/^SSH connect failed:\s*/i, t.sshConnectionFailedPrefix)
+    .replace(
+      /DH prime size \((\d+) bits\) not within requested range \((\d+)-(\d+) bits\)/i,
+      (_match, bits: string, min: string, max: string) => formatMessage(t.sshDhGroupOutOfRange, { bits, min, max })
+    )
+    .replace(/SSH connect failed:\s*Disconnected$/i, t.sshServerClosedDuringHandshake)
+    .replace(/SSH connect failed:\s*/gi, t.sshConnectionFailedPrefix)
+    .replace(/FTP (?:connect|control handshake) failed:\s*/gi, t.ftpConnectionFailedPrefix)
+    .replace(
+      /FTPS (?:control stream setup|TLS handshake|implicit connect\/handshake) failed:\s*/gi,
+      t.ftpConnectionFailedPrefix
+    )
+    .replace(
+      /SSH Authentication failed at (.+?)(?: \(configured method: ([^)]+)\))?$/i,
+      (_match, endpoint: string, method?: string) =>
+        formatMessage(t.sshAuthenticationFailedAt, { endpoint, method: method ?? 'unknown' })
+    )
+    .replace(/FTP login failed:\s*/gi, t.ftpLoginFailedPrefix)
+    .replace(/Telnet connect failed:\s*/gi, t.telnetConnectionFailedPrefix)
     .replace(/^SSH Authentication failed(?: \(via jump host\))?$/i, t.sshAuthenticationFailed)
     .replace(/^Connection test cooldown active; please wait before retrying$/i, t.connectionTestCooldown)
     .replace(/\bDisconnected\b/gi, t.connectionDisconnected)
+
+  if (detailedDhFailure || sshHandshakeDisconnected) return localized
+
+  const lower = value.toLowerCase()
+  let hint: string | undefined
+  if (/socks5 proxy authentication failed|proxy authentication (?:failed|required)|\b407\b/.test(lower)) {
+    hint = t.proxyAuthenticationHint
+  } else if (
+    /ssh authentication failed at|ftp login failed|\b530\b.*(?:login|user|password)|login incorrect|authentication rejected/.test(
+      lower
+    )
+  ) {
+    hint = t.connectionAuthenticationHint
+  } else if (/no common (?:kex|key|cipher|compression|mac) algorithm/.test(lower)) {
+    hint = t.sshAlgorithmMismatchHint
+  } else if (/certificate|unknown ca|certificate verify|bad certificate|证书/.test(lower)) {
+    hint = t.connectionTlsHint
+  } else if (
+    /(?:connection refused|actively refused|refused to connect|econnrefused|wsaeconnrefused|os error 10061|积极拒绝|拒绝连接)/.test(
+      lower
+    )
+  ) {
+    hint = t.connectionRefusedHint
+  } else if (/timed out|timeout|etimedout|os error (?:10060|110)\b|超时/.test(lower)) {
+    hint = t.connectionTimeoutHint
+  } else if (
+    /failed to lookup|name or service not known|no such host|nodename nor servname|temporary failure in name resolution|eai_noname|os error (?:11001|11002|11004)|无法解析主机|找不到主机|名称解析失败/.test(
+      lower
+    )
+  ) {
+    hint = t.connectionDnsHint
+  } else if (
+    /network is unreachable|no route to host|host is unreachable|wsae(?:net|host)unreach|os error (?:10051|10065|65|101|113)|网络不可达|无法到达目标网络/.test(
+      lower
+    )
+  ) {
+    hint = t.connectionRouteHint
+  } else if (
+    /connection reset|reset by peer|connection aborted|broken pipe|unexpected eof|connection closed|disconnected|远程主机强迫关闭|连接被重置|对端关闭/.test(
+      lower
+    )
+  ) {
+    hint = t.connectionClosedHint
+  } else if (/\b(?:tls|ssl)\b|secure error/.test(lower)) {
+    hint = t.connectionTlsHint
+  } else if (/key exchange init failed|key exchange failed/.test(lower)) {
+    hint = t.sshHandshakeFailureHint
+  } else if (/ftp .*control handshake failed|ftp .*invalid response|ftp .*malformed response/.test(lower)) {
+    hint = t.ftpSecurityModeHint
+  } else if (
+    /connect(?:ion)? failed|connect timed out|failed to connect|(?:ssh|ftp|ftps).*(?:handshake|control stream setup).*failed|握手失败|连接失败/.test(
+      lower
+    )
+  ) {
+    hint = t.connectionFailureFallbackHint
+  }
+
+  return hint ? formatMessage(t.connectionErrorDiagnostic, { hint, error: localized }) : localized
 }
 
 export const t = new Proxy({} as LocaleMessages, {

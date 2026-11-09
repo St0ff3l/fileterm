@@ -764,7 +764,11 @@ export function FileManager({
             canDownloadContextItems={canDownloadContextItems}
             canOpenContextItem={canOpenContextItem}
             canPasteIntoContextPane={canPasteIntoContextPane}
-            canQuickDelete={canUseRemoteFiles && contextMenu.pane === 'remote' && activeTab?.sessionType === 'ssh'}
+            canQuickDelete={
+              canUseRemoteFiles &&
+              contextMenu.pane === 'remote' &&
+              (activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'sftp')
+            }
             canRenameContextItem={canRenameContextItem}
             canUploadContextItems={canUploadContextItems}
             contextLocalItem={contextLocalItem}

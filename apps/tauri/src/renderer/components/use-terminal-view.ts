@@ -15,6 +15,7 @@ import {
   hydrateTerminalFontSizes,
   subscribeTerminalFontSizes
 } from '../app/terminal-font-size-store'
+import type { SessionType } from '@fileterm/core'
 import { normalizeLocalTerminalStartupTranscript, type SplitPaneDirection } from './terminal-view-utils'
 import { useTerminalLifecycle } from './use-terminal-lifecycle'
 import { useTerminalViewActions } from './terminal-view-actions'
@@ -23,7 +24,7 @@ export type TerminalViewProps = {
   profileId: string
   tabId: string
   bootText: string
-  sessionType?: 'ssh' | 'ftp' | 'telnet' | 'serial' | 'local'
+  sessionType?: SessionType | 'local'
   connected?: boolean
   connecting?: boolean
   isActive?: boolean

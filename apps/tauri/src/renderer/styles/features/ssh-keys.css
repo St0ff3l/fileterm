@@ -69,8 +69,8 @@
 }
 
 .ssh-key-manager-table .manager-row {
-  min-height: 36px;
-  height: 36px;
+  min-height: var(--connection-manager-row-height);
+  height: var(--connection-manager-row-height);
   border-bottom: 0;
   padding-top: 0;
   padding-bottom: 0;
@@ -322,52 +322,6 @@
 .ssh-key-note-dialog__field small {
   color: var(--text-muted);
   font-size: 12px;
-}
-
-.ssh-key-import-dialog__source-switch {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border-light);
-  border-radius: 9px;
-  background: var(--bg-main);
-}
-
-.ssh-key-import-dialog__source-switch button {
-  display: inline-flex;
-  min-height: 30px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ssh-key-import-dialog__source-switch button:hover {
-  color: var(--text-main);
-}
-
-.ssh-key-import-dialog__source-switch button.is-active {
-  background: var(--bg-active);
-  color: var(--text-main);
-  box-shadow: var(--shadow-xs);
-}
-
-.ssh-key-import-dialog__source-switch button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
-}
-
-.ssh-key-import-dialog__source-switch .app-icon {
-  color: currentColor;
 }
 
 .ssh-key-import-dialog__file-row {

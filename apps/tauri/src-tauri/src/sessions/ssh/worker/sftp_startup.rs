@@ -70,7 +70,7 @@ let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
     emit_terminal_data(app, tab_id, &format!("\r\n[files] {reason}\r\n")).await;
     (None, Some(reason))
 } else {
-    match open_sftp_session(handle, operation_timeout).await {
+    match open_sftp_session(handle, operation_timeout, sftp_filename_encoding(profile)).await {
         Ok(sftp) => {
             crate::services::logging::session(
                 app,

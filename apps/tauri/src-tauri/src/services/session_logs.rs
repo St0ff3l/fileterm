@@ -153,7 +153,7 @@ pub async fn start_for_tab(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let session_type = profile.get("type").and_then(Value::as_str).unwrap_or("");
-    if !enabled || session_type == "ftp" {
+    if !enabled || matches!(session_type, "ftp" | "sftp") {
         return Ok(());
     }
 
@@ -338,8 +338,8 @@ pub async fn save_current_session(
         .cloned()
         .filter(|handle| handle.options.serial);
 
-    if session_type == "ftp" {
-        return Err(AppError::Command("FTP 会话没有终端日志".to_string()));
+    if matches!(session_type.as_str(), "ftp" | "sftp") {
+        return Err(AppError::Command("文件会话没有终端日志".to_string()));
     }
 
     let default_directory = crate::storage::read_json_array(app, "profiles.json")?

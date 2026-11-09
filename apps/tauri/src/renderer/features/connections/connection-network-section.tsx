@@ -1,4 +1,5 @@
 import type { CreateProfileInput, SshProfile } from '@fileterm/core'
+import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { t } from '../../i18n'
 import './ssh-jump-route.css'
 import { AppIcon } from '../common/app-icon'
@@ -23,7 +24,7 @@ export function ConnectionNetworkSection({
   setForm: ConnectionFormSetter
 }) {
   const supportsRouting = form.type === 'ssh'
-  const supportsProxy = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
+  const supportsProxy = form.type === 'ssh' || form.type === 'sftp' || form.type === 'telnet' || form.type === 'ftp'
   const supportsTunnel = form.type === 'ssh'
   const selectedJumpProfileIds =
     form.jumpProfileIds ?? (form.jumpProfileId ? jumpRoute.map((profile) => profile.id) : [])
@@ -67,30 +68,22 @@ export function ConnectionNetworkSection({
             <div className="network-setting-row">
               <span className="network-setting-row__label">{t.route}</span>
               <div className="network-setting-row__control">
-                <div className="network-routing-modes" role="radiogroup" aria-label={t.route}>
-                  <button
-                    aria-checked={routingMode === 'direct'}
-                    className={routingMode === 'direct' ? 'is-active' : undefined}
-                    onClick={() => {
+                <SegmentedControl<'direct' | 'jump'>
+                  ariaLabel={t.route}
+                  className="network-routing-modes"
+                  value={routingMode}
+                  options={[
+                    { value: 'direct', label: t.direct },
+                    { value: 'jump', label: t.viaJumpHost }
+                  ]}
+                  onChange={(value) => {
+                    if (value === 'direct') {
                       setForm((prev) => ({ ...prev, jumpProfileId: undefined, jumpProfileIds: undefined }))
-                    }}
-                    role="radio"
-                    type="button"
-                  >
-                    {t.direct}
-                  </button>
-                  <button
-                    aria-checked={routingMode === 'jump'}
-                    className={routingMode === 'jump' ? 'is-active' : undefined}
-                    onClick={() => {
-                      if (!selectedJumpProfileIds.length) updateJumpProfileIds([''])
-                    }}
-                    role="radio"
-                    type="button"
-                  >
-                    {t.viaJumpHost}
-                  </button>
-                </div>
+                    } else if (!selectedJumpProfileIds.length) {
+                      updateJumpProfileIds([''])
+                    }
+                  }}
+                />
               </div>
             </div>
 

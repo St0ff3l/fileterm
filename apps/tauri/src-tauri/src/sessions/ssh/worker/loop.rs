@@ -2,10 +2,15 @@ async fn run_worker_loop(
     tab_id: &str,
     profile: &Value,
     cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
-    terminal_input_rx: &mut mpsc::UnboundedReceiver<TerminalInput<String>>,
+    terminal_input_rx: Option<&mut mpsc::UnboundedReceiver<TerminalInput<String>>>,
     app: &AppHandle,
     cancellation: CancellationToken,
 ) -> Result<SshWorkerExit, String> {
+    if profile.get("type").and_then(Value::as_str) == Some("sftp") {
+        return run_sftp_only_worker_loop(tab_id, profile, cmd_rx, app, cancellation).await;
+    }
+    let terminal_input_rx =
+        terminal_input_rx.ok_or_else(|| "SSH worker requires a terminal input channel".to_string())?;
     // Every detached channel task belongs to this connection attempt. Drop
     // cancels pending listings/writers even when the remote shell exits first.
     let cancellation = cancellation.child_token();

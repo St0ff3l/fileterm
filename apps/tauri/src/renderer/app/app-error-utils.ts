@@ -35,8 +35,9 @@ export function formatAppError(scope: string, err: unknown, locale: AppLocale, d
     ? ` (${t.permission}: ${details.item.permission || '-'}, ${t.ownerGroup}: ${details.item.ownerGroup || '-'})`
     : ''
   const pathText = details?.targetPath ? ` ${details.targetPath}` : ''
+  const isConnectionAttempt = scope === '测试连接' || scope === '连接 SMB 网络共享' || scope === '打开 SMB 共享文件夹'
 
-  if (likelyDisconnectedSession) {
+  if (likelyDisconnectedSession && !isConnectionAttempt) {
     return t.remoteSessionDisconnectedAction
   }
 

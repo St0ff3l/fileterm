@@ -47,7 +47,7 @@ async fn connect_transport(
             .await
             .map_err(|_| {
                 format!(
-                    "Telnet connect timed out after {} seconds",
+                    "Telnet connect timed out: host={host:?} port={port} after {} seconds",
                     connect_timeout.as_secs()
                 )
             })?
@@ -110,7 +110,7 @@ async fn connect_transport(
     .await
     .map_err(|_| {
         format!(
-            "Telnet proxy connect timed out after {} seconds",
+            "Telnet proxy route to host={host:?} port={port} timed out after {} seconds",
             connect_timeout.as_secs()
         )
     })?

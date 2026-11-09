@@ -38,6 +38,17 @@ async fn connect_ftp_with_tls_connector(
     port: u16,
     tls_connector: AsyncNativeTlsConnector,
 ) -> Result<FtpClient, String> {
+    let filename_encoding = match profile
+        .get("encoding")
+        .and_then(Value::as_str)
+        .unwrap_or("UTF-8")
+        .to_ascii_uppercase()
+        .as_str()
+    {
+        "UTF-8" | "UTF8" => encoding_rs::UTF_8,
+        "GBK" => encoding_rs::GBK,
+        other => return Err(format!("不支持的 FTP 文件名编码: {other}")),
+    };
     let username = profile
         .get("username")
         .and_then(Value::as_str)
@@ -93,14 +104,19 @@ async fn connect_ftp_with_tls_connector(
                     let mut client = configure_ftp_data_transport(
                         AsyncFtpStream::connect_with_stream(stream)
                             .await
-                            .map_err(|error| error.to_string())?,
+                            .map_err(|error| {
+                                format!("FTP control handshake failed: host={host:?} port={port}: {error}")
+                            })?,
                         profile,
                     )?;
                     configure_ftp_mode(&mut client, profile);
+                    client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTP login failed: host={host:?} port={port}: {error}")
+                        })?;
                     Ok(FtpClient::Plain(client))
                 }
                 "explicit" => {
@@ -110,18 +126,25 @@ async fn connect_ftp_with_tls_connector(
                     let client = configure_ftp_data_transport(
                         AsyncNativeTlsFtpStream::connect_with_stream(stream)
                             .await
-                            .map_err(|error| error.to_string())?,
+                            .map_err(|error| {
+                                format!("FTPS control stream setup failed: host={host:?} port={port}: {error}")
+                            })?,
                         profile,
                     )?;
                     let mut client = client
                         .into_secure(tls_connector, host)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTPS TLS handshake failed: host={host:?} port={port}: {error}")
+                        })?;
                     configure_ftp_mode(&mut client, profile);
+                    client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTP login failed: host={host:?} port={port}: {error}")
+                        })?;
                     Ok(FtpClient::Secure(client))
                 }
                 "implicit" => {
@@ -137,15 +160,24 @@ async fn connect_ftp_with_tls_connector(
                         host,
                     )
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| {
+                        format!("FTPS implicit connect/handshake failed: host={host:?} port={port}: {error}")
+                    })?;
                     configure_ftp_mode(&mut client, profile);
+                    client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTP login failed: host={host:?} port={port}: {error}")
+                        })?;
                     Ok(FtpClient::Secure(client))
                 }
                 other => Err(format!("Unsupported FTP security mode: {other}")),
+            }?;
+            match &mut client {
+                FtpClient::Plain(ftp) => configure_ftp_encoding(ftp, filename_encoding).await,
+                FtpClient::Secure(ftp) => configure_ftp_encoding(ftp, filename_encoding).await,
             }?;
             // Preserve byte offsets and log line endings for uploads and resume reads.
             match &mut client {
@@ -159,8 +191,8 @@ async fn connect_ftp_with_tls_connector(
     .await
     .map_err(|_| {
         format!(
-            "FTP connect/login timed out after {} seconds",
-            connect_timeout.as_secs()
+            "FTP connect/login timed out: host={host:?} port={port} after {} seconds",
+            connect_timeout.as_secs(),
         )
     })?
 }
@@ -349,7 +381,7 @@ async fn connect_ftp_tcp(profile: &Value, host: &str, port: u16) -> Result<TcpSt
     if proxy_type == "none" {
         return TcpStream::connect((host, port))
             .await
-            .map_err(|error| format!("FTP connect failed: {error}"));
+            .map_err(|error| format!("FTP connect failed: host={host:?} port={port}: {error}"));
     }
 
     validate_ftp_proxy_value(host, "FTP target host")?;
@@ -579,4 +611,25 @@ where
             )
         })?
         .map_err(|error| error.to_string())
+}
+
+async fn configure_ftp_encoding<T: TokioTlsStream + Send>(
+    ftp: &mut ImplAsyncFtpStream<T>,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<(), String> {
+    let option = if encoding == encoding_rs::GBK {
+        "OFF"
+    } else {
+        "ON"
+    };
+    match ftp.opts("UTF8", Some(option)).await {
+        Ok(()) => Ok(()),
+        Err(FtpError::UnexpectedResponse(response))
+            if matches!(response.status as u32, 202 | 500 | 501 | 502 | 504) =>
+        {
+            tracing::warn!(category = "connection", scope = "ftp", status = %response.status, encoding = encoding.name(), "FTP server does not support UTF8 option; using configured filename encoding");
+            Ok(())
+        }
+        Err(error) => Err(format!("FTP UTF-8 协商失败: {error}")),
+    }
 }

@@ -4,6 +4,7 @@ import type { SshKeyFileSelection, SshKeyImportSource } from '@fileterm/core'
 import { AppIcon } from '../common/app-icon'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 import { DropdownSelect } from '../common/dropdown-select'
+import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { StableButtonContent } from '../common/stable-button-content'
 import { formatMessage, t } from '../../i18n'
 
@@ -117,28 +118,32 @@ export function SshKeyNoteDialog({
           ) : null}
           {mode === 'import' ? (
             <>
-              <div aria-label={t.sshKeyNoteInputMode} className="ssh-key-import-dialog__source-switch" role="tablist">
-                <button
-                  aria-selected={inputMode === 'file'}
-                  className={inputMode === 'file' ? 'is-active' : ''}
-                  onClick={() => selectInputMode('file')}
-                  role="tab"
-                  type="button"
-                >
-                  <AppIcon name="folder" size={14} />
-                  <span>{t.sshKeyNoteInputFile}</span>
-                </button>
-                <button
-                  aria-selected={inputMode === 'text'}
-                  className={inputMode === 'text' ? 'is-active' : ''}
-                  onClick={() => selectInputMode('text')}
-                  role="tab"
-                  type="button"
-                >
-                  <AppIcon name="edit" size={14} />
-                  <span>{t.sshKeyNoteInputText}</span>
-                </button>
-              </div>
+              <SegmentedControl
+                ariaLabel={t.sshKeyNoteInputMode}
+                variant="neutral"
+                value={inputMode}
+                options={[
+                  {
+                    value: 'file',
+                    label: (
+                      <>
+                        <AppIcon name="folder" size={14} />
+                        {t.sshKeyNoteInputFile}
+                      </>
+                    )
+                  },
+                  {
+                    value: 'text',
+                    label: (
+                      <>
+                        <AppIcon name="edit" size={14} />
+                        {t.sshKeyNoteInputText}
+                      </>
+                    )
+                  }
+                ]}
+                onChange={selectInputMode}
+              />
               {inputMode === 'file' ? (
                 <div className="ssh-key-note-dialog__field">
                   <span>{t.sshKeyNoteChooseFile}</span>

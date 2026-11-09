@@ -292,7 +292,9 @@ async fn find_refreshable_tab(
     let sessions = state.sessions.read().await;
     let mut fallback = None;
     for tab in tabs {
-        if tab.profile_id != profile_id || !matches!(tab.session_type.as_str(), "ssh" | "ftp") {
+        if tab.profile_id != profile_id
+            || !matches!(tab.session_type.as_str(), "ssh" | "sftp" | "ftp")
+        {
             continue;
         }
         let Some(session) = sessions.get(&tab.id) else {

@@ -84,11 +84,14 @@ export function ConnectionModal({
   const [connectionTestSucceeded, setConnectionTestSucceeded] = useState(false)
   const routingMode = getSshRoutingMode(form)
   const serialPortRefreshInFlightRef = useRef(false)
-  const supportsNetwork = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
-  const supportsFilePaneMode = form.type === 'ftp' || (form.type === 'ssh' && form.deviceMode !== 'network-device')
-  const supportsTerminal = form.type !== 'ftp'
+  const supportsNetwork = form.type === 'ssh' || form.type === 'sftp' || form.type === 'telnet' || form.type === 'ftp'
+  const supportsFilePaneMode =
+    form.type === 'ftp' || form.type === 'sftp' || (form.type === 'ssh' && form.deviceMode !== 'network-device')
+  const supportsTerminal = form.type !== 'ftp' && form.type !== 'sftp'
+  const supportsSessionLogs = form.type !== 'ftp' && form.type !== 'sftp'
   const supportsAdvanced = form.type === 'ssh'
-  const supportsReliability = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
+  const supportsReliability =
+    form.type === 'ssh' || form.type === 'sftp' || form.type === 'telnet' || form.type === 'ftp'
   const isNetworkDevice = form.type === 'ssh' && form.deviceMode === 'network-device'
   const showsNetworkDeviceVendor = form.type === 'ssh' && (isNetworkDevice || form.deviceMode === 'auto')
   const platform = window.fileterm?.platform
@@ -131,20 +134,31 @@ export function ConnectionModal({
       (section === 'files' && !supportsFilePaneMode) ||
       (section === 'terminal' && !supportsTerminal) ||
       (section === 'advanced' && !supportsAdvanced) ||
-      (section === 'reliability' && !supportsReliability)
+      (section === 'reliability' && !supportsReliability) ||
+      (section === 'session-log' && !supportsSessionLogs)
     ) {
       setSection('ssh')
     }
-  }, [section, supportsFilePaneMode, supportsNetwork, supportsTerminal, supportsAdvanced, supportsReliability])
+  }, [
+    section,
+    supportsFilePaneMode,
+    supportsNetwork,
+    supportsTerminal,
+    supportsAdvanced,
+    supportsReliability,
+    supportsSessionLogs
+  ])
 
   const connectionTabTitle =
-    form.type === 'ftp'
-      ? t.ftpConnection
-      : form.type === 'telnet'
-        ? t.telnetConnection
-        : form.type === 'serial'
-          ? t.serialConnection
-          : t.sshConnection
+    form.type === 'sftp'
+      ? 'SFTP'
+      : form.type === 'ftp'
+        ? t.ftpConnection
+        : form.type === 'telnet'
+          ? t.telnetConnection
+          : form.type === 'serial'
+            ? t.serialConnection
+            : t.sshConnection
 
   const isFormBusy = isSubmitting || isTestingConnection
   const isTestBusy = isFormBusy || isTestRetryCoolingDown
@@ -340,6 +354,15 @@ export function ConnectionModal({
           <button className={section === 'ssh' ? 'active' : ''} type="button" onClick={() => setSection('ssh')}>
             {connectionTabTitle}
           </button>
+          {supportsAdvanced ? (
+            <button
+              className={section === 'advanced' ? 'active' : ''}
+              type="button"
+              onClick={() => setSection('advanced')}
+            >
+              {t.advancedSettings}
+            </button>
+          ) : null}
           {supportsFilePaneMode ? (
             <button className={section === 'files' ? 'active' : ''} type="button" onClick={() => setSection('files')}>
               {t.filePaneSettings}
@@ -363,15 +386,6 @@ export function ConnectionModal({
               {t.terminal}
             </button>
           ) : null}
-          {supportsAdvanced ? (
-            <button
-              className={section === 'advanced' ? 'active' : ''}
-              type="button"
-              onClick={() => setSection('advanced')}
-            >
-              {t.advancedSettings}
-            </button>
-          ) : null}
           {supportsReliability ? (
             <button
               className={section === 'reliability' ? 'active' : ''}
@@ -381,13 +395,15 @@ export function ConnectionModal({
               {t.reliability}
             </button>
           ) : null}
-          <button
-            className={section === 'session-log' ? 'active' : ''}
-            type="button"
-            onClick={() => setSection('session-log')}
-          >
-            {t.sessionLogs}
-          </button>
+          {supportsSessionLogs ? (
+            <button
+              className={section === 'session-log' ? 'active' : ''}
+              type="button"
+              onClick={() => setSection('session-log')}
+            >
+              {t.sessionLogs}
+            </button>
+          ) : null}
         </aside>
         <form aria-busy={isFormBusy} className="ssh-form-shell" onSubmit={handleSubmit}>
           <fieldset
@@ -458,7 +474,7 @@ export function ConnectionModal({
                   setSshConnectionSetting={setSshConnectionSetting}
                 />
               ) : null}
-              {section === 'session-log' ? (
+              {section === 'session-log' && supportsSessionLogs ? (
                 <ConnectionSessionLogSection
                   chooseSessionLogDirectory={chooseSessionLogDirectory}
                   form={form}

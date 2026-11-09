@@ -249,7 +249,11 @@ impl ClientKex {
                         "DH prime size ({} bits) not within requested range",
                         group.bit_size()
                     );
-                    return Err(Error::KexInit);
+                    return Err(Error::DhGroupOutOfRange {
+                        bits: group.bit_size(),
+                        min_bits: self.gex.min_group_size,
+                        max_bits: self.gex.max_group_size,
+                    });
                 }
 
                 let exchange = &mut self.exchange;

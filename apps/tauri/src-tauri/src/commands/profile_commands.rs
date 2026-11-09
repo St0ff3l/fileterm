@@ -154,6 +154,15 @@ pub async fn app_test_connection(
             )
             .await
         }
+        "sftp" => {
+            crate::sessions::ssh::test_sftp_connection(
+                &app,
+                &resolved_profile,
+                &test_tab_id,
+                interaction_window_label,
+            )
+            .await
+        }
         "ftp" => crate::sessions::ftp::test_connection(&resolved_profile).await,
         "telnet" => crate::sessions::telnet::test_connection(&resolved_profile).await,
         "serial" => {

@@ -34,12 +34,97 @@ fn delete_remote_path_command(
     command
 }
 
+async fn remove_remote_path_sftp(
+    sftp: &SftpSession,
+    path: &str,
+    target_type: &str,
+    target_is_symlink: bool,
+) -> Result<(), String> {
+    let normalized = path.trim_matches('/');
+    if normalized.is_empty() || normalized == "." || normalized == ".." {
+        return Err("拒绝删除 SFTP 根目录".to_string());
+    }
+    let metadata = sftp
+        .symlink_metadata(path)
+        .await
+        .map_err(|error| error.to_string())?;
+    if target_is_symlink || metadata.is_symlink() || !metadata.is_dir() || target_type != "folder" {
+        return sftp.remove_file(path).await.map_err(|error| error.to_string());
+    }
+    let mut pending = vec![(path.to_string(), false)];
+    while let Some((current_path, visited)) = pending.pop() {
+        let metadata = sftp
+            .symlink_metadata(&current_path)
+            .await
+            .map_err(|error| error.to_string())?;
+        if metadata.is_dir() && !metadata.is_symlink() {
+            if visited {
+                sftp.remove_dir(&current_path)
+                    .await
+                    .map_err(|error| error.to_string())?;
+            } else {
+                pending.push((current_path.clone(), true));
+                let entries = sftp
+                    .read_dir(&current_path)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                pending.extend(entries.map(|entry| (entry.path(), false)));
+            }
+        } else {
+            sftp.remove_file(&current_path)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+async fn set_remote_permissions_sftp(
+    sftp: &SftpSession,
+    path: &str,
+    permissions: u32,
+    recursive: bool,
+    apply_to: &str,
+) -> Result<(), String> {
+    let mut pending = vec![path.to_string()];
+    let mut paths = Vec::new();
+    while let Some(current_path) = pending.pop() {
+        let metadata = sftp
+            .symlink_metadata(&current_path)
+            .await
+            .map_err(|error| error.to_string())?;
+        let is_directory = metadata.is_dir() && !metadata.is_symlink();
+        paths.push((current_path.clone(), is_directory));
+        if recursive && is_directory {
+            let entries = sftp
+                .read_dir(&current_path)
+                .await
+                .map_err(|error| error.to_string())?;
+            pending.extend(entries.map(|entry| entry.path()));
+        }
+    }
+    for (current_path, is_directory) in paths.into_iter().rev() {
+        let should_set = !recursive
+            || apply_to == "all"
+            || (apply_to == "files" && !is_directory)
+            || (apply_to == "directories" && is_directory)
+            || !matches!(apply_to, "files" | "directories" | "all");
+        if should_set {
+            let mut attributes = russh_sftp::protocol::FileAttributes::empty();
+            attributes.permissions = Some(permissions);
+            sftp.set_metadata(&current_path, attributes)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 /// Dispatch the SSH worker commands owned by the file group.
 #[allow(clippy::too_many_arguments)]
 async fn dispatch_file_cmd(
     cmd: WorkerCmd,
     handle: &Arc<Handle<ClientHandler>>,
-    _shell_writer: &SshShellWriteHalf,
     sftp: &SharedSftpSession,
     _transfer_sftp_slot: &TransferSftpSlot,
     operation_timeout: Duration,
@@ -271,6 +356,9 @@ async fn dispatch_file_cmd(
                         Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
                         Err(_) => Err("复制超时".to_string()),
                     }
+                } else if !exec_channel_enabled {
+                    // shortcut: standalone SFTP remote copy has no streaming implementation; add one if needed.
+                    Err("独立 SFTP 模式不支持服务器端复制".to_string())
                 } else {
                     match timeout(
                         operation_timeout,
@@ -380,7 +468,7 @@ async fn dispatch_file_cmd(
         WorkerCmd::DeleteRemotePath {
             target_path,
             target_type,
-            target_is_symlink: _,
+            target_is_symlink,
             cancellation,
             respond_to,
         } => {
@@ -397,6 +485,7 @@ async fn dispatch_file_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
+            let sftp = Arc::clone(sftp);
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
                 let res = if fam == "root" {
                     match timeout(
@@ -406,6 +495,17 @@ async fn dispatch_file_cmd(
                     .await
                     {
                         Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("删除超时".to_string()),
+                    }
+                } else if !exec_channel_enabled {
+                    let sftp = sftp.write().await;
+                    match timeout(
+                        operation_timeout,
+                        remove_remote_path_sftp(&sftp, &target_path, &target_type, target_is_symlink),
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
                         Err(_) => Err("删除超时".to_string()),
                     }
                 } else {
@@ -457,6 +557,7 @@ async fn dispatch_file_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
+            let sftp = Arc::clone(sftp);
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
                 let mode_str = format!("{:o}", permissions);
                 let cmd_str = if !recursive {
@@ -490,6 +591,23 @@ async fn dispatch_file_cmd(
                     .await
                     {
                         Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("修改权限超时".to_string()),
+                    }
+                } else if !exec_channel_enabled {
+                    let sftp = sftp.write().await;
+                    match timeout(
+                        operation_timeout,
+                        set_remote_permissions_sftp(
+                            &sftp,
+                            &target_path,
+                            permissions,
+                            recursive,
+                            &apply_to,
+                        ),
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
                         Err(_) => Err("修改权限超时".to_string()),
                     }
                 } else {

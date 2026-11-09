@@ -10,6 +10,7 @@ import type {
   SshConnectionDefaults,
   SshConnectionOverrides,
   SshProfile,
+  SftpProfile,
   WorkspaceSnapshot
 } from '@fileterm/core'
 import { t } from '../i18n'
@@ -125,7 +126,7 @@ export const defaultForm: CreateProfileInput = {
   sessionLogRaw: false
 }
 
-function connectionOverridesForProfile(profile: SshProfile): SshConnectionOverrides {
+function connectionOverridesForProfile(profile: SshProfile | SftpProfile): SshConnectionOverrides {
   if (profile.connectionOverrides) {
     return { ...profile.connectionOverrides }
   }
@@ -147,7 +148,10 @@ function connectionOverridesForProfile(profile: SshProfile): SshConnectionOverri
   return overrides
 }
 
-function connectionSettingsForProfile(profile: SshProfile, defaults: SshConnectionDefaults): SshConnectionDefaults {
+function connectionSettingsForProfile(
+  profile: SshProfile | SftpProfile,
+  defaults: SshConnectionDefaults
+): SshConnectionDefaults {
   const overrides = connectionOverridesForProfile(profile)
   return {
     useEmptyPassword: overrides.useEmptyPassword ?? profile.useEmptyPassword ?? defaults.useEmptyPassword,
@@ -172,8 +176,10 @@ export function profileToForm(
   profile: ConnectionProfile,
   connectionDefaults: SshConnectionDefaults = DEFAULT_SSH_CONNECTION_DEFAULTS
 ): CreateProfileInput {
-  const sshConnectionSettings =
-    profile.type === 'ssh' ? connectionSettingsForProfile(profile, connectionDefaults) : DEFAULT_SSH_CONNECTION_DEFAULTS
+  const isSshTransport = profile.type === 'ssh' || profile.type === 'sftp'
+  const sshConnectionSettings = isSshTransport
+    ? connectionSettingsForProfile(profile, connectionDefaults)
+    : DEFAULT_SSH_CONNECTION_DEFAULTS
   const isNetworkDevice = profile.type === 'ssh' && profile.deviceMode === 'network-device'
   return {
     type: profile.type,
@@ -188,31 +194,30 @@ export function profileToForm(
     sessionLogEnabled: profile.sessionLogEnabled ?? false,
     sessionLogDirectory: profile.sessionLogDirectory ?? '',
     otpSecret: '',
-    otpPrompt: profile.type === 'ssh' ? (profile.otpPrompt ?? '') : '',
-    password: profile.type === 'ssh' || profile.type === 'ftp' ? (profile.password ?? '') : '',
-    useEmptyPassword: profile.type === 'ssh' ? sshConnectionSettings.useEmptyPassword : false,
-    trustedHostFingerprint: profile.type === 'ssh' ? (profile.trustedHostFingerprint ?? '') : '',
-    authType: profile.type === 'ssh' ? (profile.authType === 'system' ? 'password' : profile.authType) : 'password',
+    otpPrompt: isSshTransport ? (profile.otpPrompt ?? '') : '',
+    password: isSshTransport || profile.type === 'ftp' ? (profile.password ?? '') : '',
+    useEmptyPassword: isSshTransport ? sshConnectionSettings.useEmptyPassword : false,
+    trustedHostFingerprint: isSshTransport ? (profile.trustedHostFingerprint ?? '') : '',
+    authType: isSshTransport ? (profile.authType === 'system' ? 'password' : profile.authType) : 'password',
     deviceMode: profile.type === 'ssh' ? (profile.deviceMode ?? 'server') : undefined,
     networkDeviceVendor: profile.type === 'ssh' ? (profile.networkDeviceVendor ?? 'auto') : undefined,
-    privateKeyId: profile.type === 'ssh' ? (profile.privateKeyId ?? '') : '',
-    privateKeyPath: profile.type === 'ssh' ? (profile.privateKeyPath ?? '') : '',
-    passphrase: profile.type === 'ssh' ? (profile.passphrase ?? '') : '',
-    encoding:
-      profile.type === 'ssh' || profile.type === 'telnet' || profile.type === 'serial'
-        ? (profile.encoding ?? 'UTF-8')
-        : 'UTF-8',
+    privateKeyId: isSshTransport ? (profile.privateKeyId ?? '') : '',
+    privateKeyPath: isSshTransport ? (profile.privateKeyPath ?? '') : '',
+    passphrase: isSshTransport ? (profile.passphrase ?? '') : '',
+    encoding: profile.encoding ?? 'UTF-8',
     backspaceKey: profile.type === 'ssh' ? (profile.backspaceKey ?? 'ASCII') : 'ASCII',
     deleteKey: profile.type === 'ssh' ? (profile.deleteKey ?? 'VT220') : 'VT220',
-    enableExecChannel: profile.type === 'ssh' ? sshConnectionSettings.enableExecChannel : true,
-    enableResourceMonitoring: profile.type === 'ssh' ? sshConnectionSettings.enableResourceMonitoring : true,
+    enableExecChannel:
+      profile.type === 'sftp' ? false : profile.type === 'ssh' ? sshConnectionSettings.enableExecChannel : true,
+    enableResourceMonitoring:
+      profile.type === 'sftp' ? false : profile.type === 'ssh' ? sshConnectionSettings.enableResourceMonitoring : true,
     resourceMonitoringIntervalSeconds:
       profile.type === 'ssh' ? sshConnectionSettings.resourceMonitoringIntervalSeconds : 1,
     // Sidebar metrics stay pass-through: a profile without saved values keeps
     // its legacy fallback instead of being rewritten with current defaults.
     resourceMonitoringMetrics: profile.type === 'ssh' ? profile.resourceMonitoringMetrics : undefined,
     resourceMonitoringMetricOrder: profile.type === 'ssh' ? profile.resourceMonitoringMetricOrder : undefined,
-    reconnectMode: profile.type === 'ssh' ? sshConnectionSettings.reconnectMode : (profile.reconnectMode ?? 'none'),
+    reconnectMode: isSshTransport ? sshConnectionSettings.reconnectMode : (profile.reconnectMode ?? 'none'),
     reconnectMaxAttempts: profile.reconnectMaxAttempts ?? 0,
     reconnectInitialDelayMs: profile.reconnectInitialDelayMs ?? 2000,
     reconnectMaxDelayMs: profile.reconnectMaxDelayMs ?? 30000,
@@ -221,8 +226,8 @@ export function profileToForm(
     keepaliveMaxMisses: profile.keepaliveMaxMisses ?? 3,
     connectTimeoutSeconds: profile.connectTimeoutSeconds ?? 30,
     operationTimeoutSeconds: profile.operationTimeoutSeconds ?? 60,
-    sftpEnabled: profile.type === 'ssh' ? (profile.sftpEnabled ?? true) : false,
-    legacyAlgorithms: profile.type === 'ssh' ? sshConnectionSettings.legacyAlgorithms : false,
+    sftpEnabled: profile.type === 'sftp' ? true : profile.type === 'ssh' ? (profile.sftpEnabled ?? true) : false,
+    legacyAlgorithms: isSshTransport ? sshConnectionSettings.legacyAlgorithms : false,
     secure: profile.type === 'ftp' ? profile.secure : false,
     securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none',
     transferMode: profile.type === 'ftp' ? (profile.transferMode ?? 'passive') : 'passive',
@@ -238,17 +243,13 @@ export function profileToForm(
     crNul: profile.type === 'telnet' ? (profile.crNul ?? true) : true,
     loginScript: profile.type === 'telnet' ? (profile.loginScript ?? '') : '',
     proxy:
-      profile.type === 'ssh' || profile.type === 'telnet' || profile.type === 'ftp'
+      isSshTransport || profile.type === 'telnet' || profile.type === 'ftp'
         ? (profile.proxy ?? { type: 'none', host: '', port: 1080 })
         : { type: 'none', host: '', port: 1080 },
     proxyPassword:
-      profile.type === 'ssh' || profile.type === 'telnet' || profile.type === 'ftp'
-        ? (profile.proxy?.password ?? '')
-        : '',
+      isSshTransport || profile.type === 'telnet' || profile.type === 'ftp' ? (profile.proxy?.password ?? '') : '',
     proxyProfileId:
-      profile.type === 'ssh' || profile.type === 'telnet' || profile.type === 'ftp'
-        ? profile.proxyProfileId
-        : undefined,
+      isSshTransport || profile.type === 'telnet' || profile.type === 'ftp' ? profile.proxyProfileId : undefined,
     tunnelProfileId: profile.type === 'ssh' ? profile.tunnelProfileId : undefined,
     sudoPassword: '',
     suPassword: '',

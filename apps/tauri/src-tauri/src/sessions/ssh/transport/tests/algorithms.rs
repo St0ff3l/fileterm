@@ -105,7 +105,14 @@ async fn handshake(
     if expect_success {
         assert!(result.expect("GEX handshake should succeed"));
     } else {
-        assert!(matches!(result, Err(russh::Error::KexInit)), "{result:?}");
+        assert!(matches!(
+            result,
+            Err(russh::Error::DhGroupOutOfRange {
+                min_bits,
+                max_bits,
+                ..
+            }) if min_bits == expected_request.0 && max_bits == expected_request.2
+        ), "{result:?}");
     }
     assert_eq!(*request.lock().unwrap(), Some(expected_request));
 }

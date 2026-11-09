@@ -1805,7 +1805,7 @@
 
 .transfer-filters {
   display: grid;
-  gap: 7px;
+  gap: 4px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-light);
 }
@@ -1818,22 +1818,26 @@
   opacity: 0.72;
 }
 
-.transfer-segments {
+.transfer-filters .transfer-filter-status,
+.transfer-filters .transfer-filter-direction {
   display: grid;
+  width: 100%;
+}
+
+.transfer-filters .transfer-filter-status {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
 }
 
-.transfer-segments button {
-  height: 25px;
-  min-width: 0;
-  border-radius: 5px;
-  font-size: 12px;
+.transfer-filters .transfer-filter-status > .ft-segmented-control__option {
+  min-height: 25px;
 }
 
-.transfer-segments-sub button {
-  height: 23px;
-  font-size: 11px;
+.transfer-filters .transfer-filter-direction {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.transfer-filters .transfer-filter-direction > .ft-segmented-control__option {
+  min-height: 18px;
 }
 
 .transfer-popover-list {
@@ -2912,6 +2916,7 @@
 }
 
 .connection-manager-table {
+  --connection-manager-row-height: 36px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   align-self: stretch;
@@ -3008,7 +3013,7 @@
 }
 
 .connection-manager-table .manager-row {
-  height: 36px;
+  height: var(--connection-manager-row-height);
   border-top: 0;
   border-bottom: 1px solid var(--border-light);
   background: transparent;

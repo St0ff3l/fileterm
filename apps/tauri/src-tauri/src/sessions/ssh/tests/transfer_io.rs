@@ -227,3 +227,171 @@ async fn sftp_download_finishes_when_the_server_denies_reads_past_eof() {
     assert_eq!(*reads.lock().unwrap(), vec![(0, 3), (3, 1)]);
     server.abort();
 }
+
+struct ListOnlyServer {
+    entry: Option<russh_sftp::protocol::FileAttributes>,
+    listed: bool,
+    deny_list: bool,
+    deny_open: bool,
+}
+
+impl russh_sftp::server::Handler for ListOnlyServer {
+    type Error = StatusCode;
+    fn unimplemented(&self) -> StatusCode {
+        StatusCode::OpUnsupported
+    }
+    async fn stat(&mut self, _: u32, _: String) -> Result<russh_sftp::protocol::Attrs, StatusCode> {
+        Err(StatusCode::PermissionDenied)
+    }
+    async fn opendir(
+        &mut self,
+        id: u32,
+        path: String,
+    ) -> Result<russh_sftp::protocol::Handle, StatusCode> {
+        if self.deny_list {
+            return Err(StatusCode::PermissionDenied);
+        }
+        assert_eq!(path, "/dir");
+        self.listed = false;
+        Ok(russh_sftp::protocol::Handle { id, handle: path })
+    }
+    async fn readdir(
+        &mut self,
+        id: u32,
+        _: String,
+    ) -> Result<russh_sftp::protocol::Name, StatusCode> {
+        if self.listed {
+            return Err(StatusCode::Eof);
+        }
+        self.listed = true;
+        Ok(russh_sftp::protocol::Name {
+            id,
+            files: self
+                .entry
+                .clone()
+                .map(|attrs| russh_sftp::protocol::File::new("file", attrs))
+                .into_iter()
+                .collect(),
+        })
+    }
+    async fn close(
+        &mut self,
+        id: u32,
+        _: String,
+    ) -> Result<russh_sftp::protocol::Status, StatusCode> {
+        Ok(russh_sftp::protocol::Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: String::new(),
+            language_tag: String::new(),
+        })
+    }
+    async fn open(
+        &mut self,
+        id: u32,
+        path: String,
+        _: OpenFlags,
+        _: russh_sftp::protocol::FileAttributes,
+    ) -> Result<russh_sftp::protocol::Handle, StatusCode> {
+        if self.deny_open {
+            return Err(StatusCode::PermissionDenied);
+        }
+        Ok(russh_sftp::protocol::Handle { id, handle: path })
+    }
+    async fn write(
+        &mut self,
+        _: u32,
+        _: String,
+        _: u64,
+        _: Vec<u8>,
+    ) -> Result<russh_sftp::protocol::Status, StatusCode> {
+        Err(StatusCode::PermissionDenied)
+    }
+}
+
+#[tokio::test]
+async fn stat_permission_fallback_requires_a_confirmed_non_symlink_checkpoint() {
+    for (mode, size, present, deny_list, succeeds) in [
+        (0o100600, Some(3), true, false, true),
+        (0o120777, Some(3), true, false, false),
+        (0o100600, None, true, false, false),
+        (0o100600, Some(3), false, false, false),
+        (0o100600, Some(3), true, true, false),
+    ] {
+        let mut attrs = russh_sftp::protocol::FileAttributes::empty();
+        attrs.permissions = Some(mode);
+        attrs.size = size;
+        let (client, server) = tokio::io::duplex(4096);
+        let server = tokio::spawn(russh_sftp::server::run(
+            server,
+            ListOnlyServer {
+                entry: present.then_some(attrs),
+                listed: false,
+                deny_list,
+                deny_open: false,
+            },
+        ));
+        let sftp = SftpSession::new(client).await.unwrap();
+        let result = transfer_remote_metadata(&sftp, "/dir/file").await;
+        if succeeds {
+            assert_eq!(result.unwrap().size, Some(3));
+            // STAT denial must not cause MKDIR on this existing virtual directory.
+            ensure_transfer_parent_dir(&sftp, "/dir/new-file")
+                .await
+                .unwrap();
+        } else {
+            let error = result.unwrap_err();
+            assert!(is_sftp_permission_denied(&error));
+            assert!(!is_sftp_not_found(&error));
+        }
+        server.abort();
+    }
+}
+
+#[tokio::test]
+async fn upload_errors_identify_open_or_write_and_remote_path() {
+    let local = std::env::temp_dir().join(format!("fileterm-upload-{}", uuid::Uuid::new_v4()));
+    tokio::fs::write(&local, b"abc").await.unwrap();
+    for deny_open in [true, false] {
+        let (client, server) = tokio::io::duplex(4096);
+        let server = tokio::spawn(russh_sftp::server::run(
+            server,
+            ListOnlyServer {
+                entry: None,
+                listed: false,
+                deny_list: false,
+                deny_open,
+            },
+        ));
+        let sftp = SftpSession::new(client).await.unwrap();
+        let error = upload_local_file(
+            &sftp,
+            local.to_str().unwrap(),
+            3,
+            "/dir/file",
+            0,
+            "test",
+            CancellationToken::new(),
+            None,
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error.contains(if deny_open {
+                "SFTP OPEN write"
+            } else {
+                "SFTP WRITE"
+            }),
+            "{error}"
+        );
+        assert!(error.contains("path=\"/dir/file\""), "{error}");
+        assert!(error.contains("Permission denied"), "{error}");
+        server.abort();
+    }
+    tokio::fs::remove_file(local).await.unwrap();
+    assert_eq!(
+        sftp_transfer_error("STAT", "/dir/a\nb", "denied"),
+        "SFTP STAT path=\"/dir/a\\nb\": denied"
+    );
+}

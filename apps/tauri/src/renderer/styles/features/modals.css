@@ -628,43 +628,8 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   flex: 0 0 auto;
 }
 
-.network-routing-modes {
-  display: inline-flex;
-  padding: 3px;
-  border-radius: var(--radius-md, 6px);
-  background: var(--surface-canvas, var(--bg-hover));
-  border: 1px solid var(--border-subtle);
-  gap: 2px;
-}
-
-.network-routing-modes button {
+.network-routing-modes > .ft-segmented-control__option {
   min-width: 80px;
-  height: 28px;
-  border: 0;
-  border-radius: calc(var(--radius-md, 6px) - 2px);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 0 12px;
-  transition: all 0.15s ease;
-}
-
-.network-routing-modes button:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-
-.network-routing-modes button.is-active {
-  background: var(--action-primary-bg);
-  color: var(--action-primary-text);
-  box-shadow: var(--control-shadow);
-}
-
-.network-routing-modes button.is-active:hover {
-  background: var(--action-primary-hover);
 }
 
 .network-setting-subgroup {
@@ -796,10 +761,6 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   .network-routing-row .dropdown-select-trigger {
     justify-self: start;
     width: 100%;
-  }
-
-  .network-routing-modes button {
-    flex: 1;
   }
 }
 

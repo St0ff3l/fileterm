@@ -2,7 +2,7 @@ pub fn start_ssh_worker(
     tab_id: String,
     profile: Value,
     mut cmd_rx: mpsc::Receiver<WorkerCmd>,
-    mut terminal_input_rx: mpsc::UnboundedReceiver<TerminalInput<String>>,
+    mut terminal_input_rx: Option<mpsc::UnboundedReceiver<TerminalInput<String>>>,
     app: AppHandle,
     cancellation: CancellationToken,
 ) {
@@ -35,7 +35,7 @@ pub fn start_ssh_worker(
                 &tab_id,
                 &worker_profile,
                 &mut cmd_rx,
-                &mut terminal_input_rx,
+                terminal_input_rx.as_mut(),
                 &worker_app,
                 worker_cancellation,
             )
@@ -229,6 +229,16 @@ pub fn start_ssh_worker(
             }
         }
     });
+}
+
+pub fn start_sftp_worker(
+    tab_id: String,
+    profile: Value,
+    cmd_rx: mpsc::Receiver<WorkerCmd>,
+    app: AppHandle,
+    cancellation: CancellationToken,
+) {
+    start_ssh_worker(tab_id, profile, cmd_rx, None, app, cancellation);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
