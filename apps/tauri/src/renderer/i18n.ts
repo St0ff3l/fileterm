@@ -1391,7 +1391,7 @@ const zhCN = {
   uiZoomPercent: '界面缩放',
   uiZoomPercentSaveFailed: '无法保存界面缩放。',
   windowMenuCloseWindow: '关闭窗口',
-  transferUploadHint: '单文件和目录传输都使用 .fileterm-part 断点，校验成功后再替换目标；断线或重启后可继续。',
+  transferUploadHint: '文件传输使用 .fileterm-part 断点续传，校验后替换目标。',
   inProgress: '进行中',
   completed: '已完成/终止',
   all: '全部',
@@ -3652,8 +3652,7 @@ const enUS: typeof zhCN = {
   uiZoomPercent: 'Interface Zoom',
   uiZoomPercentSaveFailed: 'Unable to save the interface zoom.',
   windowMenuCloseWindow: 'Close Window',
-  transferUploadHint:
-    'Files and folders use .fileterm-part checkpoints, replace targets after verification, and can resume after disconnects or restarts.',
+  transferUploadHint: 'File transfers resume from .fileterm-part and replace targets after verification.',
   inProgress: 'In Progress',
   completed: 'Completed/Stopped',
   all: 'All',

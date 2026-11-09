@@ -162,6 +162,13 @@ export function TransferPopover({
       <div className="transfer-filters">
         <div className="transfer-segments">
           <button
+            className={statusFilter === 'all' ? 'active' : ''}
+            onClick={() => setStatusFilter('all')}
+            type="button"
+          >
+            {t.all}
+          </button>
+          <button
             className={statusFilter === 'running' ? 'active' : ''}
             onClick={() => setStatusFilter('running')}
             type="button"
@@ -174,13 +181,6 @@ export function TransferPopover({
             type="button"
           >
             {t.completed}
-          </button>
-          <button
-            className={statusFilter === 'all' ? 'active' : ''}
-            onClick={() => setStatusFilter('all')}
-            type="button"
-          >
-            {t.all}
           </button>
         </div>
         <div className="transfer-segments transfer-segments-sub">
