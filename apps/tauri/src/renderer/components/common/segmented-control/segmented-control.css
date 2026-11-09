@@ -8,7 +8,7 @@
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: calc(var(--radius-md) + 4px);
   background: var(--surface-canvas);
 }
 
@@ -33,7 +33,7 @@
 }
 
 .ft-segmented-control > .ft-segmented-control__option:hover {
-  background: var(--surface-panel);
+  background: var(--surface-section);
   color: var(--text-primary);
 }
 
@@ -51,7 +51,6 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: var(--radius-md);
   background: var(--surface-canvas);
 }
 
@@ -75,7 +74,7 @@
 
 .ft-segmented-control--neutral > .ft-segmented-control__option.is-selected,
 .ft-segmented-control--neutral > .ft-segmented-control__option.is-selected:hover {
-  background: var(--surface-panel);
+  background: var(--surface-section);
   color: var(--text-primary);
 }
 
