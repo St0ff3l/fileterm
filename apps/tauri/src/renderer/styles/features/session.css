@@ -2912,6 +2912,7 @@
 }
 
 .connection-manager-table {
+  --connection-manager-row-height: 36px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   align-self: stretch;
@@ -3008,7 +3009,7 @@
 }
 
 .connection-manager-table .manager-row {
-  height: 36px;
+  height: var(--connection-manager-row-height);
   border-top: 0;
   border-bottom: 1px solid var(--border-light);
   background: transparent;

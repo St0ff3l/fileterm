@@ -69,8 +69,8 @@
 }
 
 .ssh-key-manager-table .manager-row {
-  min-height: 36px;
-  height: 36px;
+  min-height: var(--connection-manager-row-height);
+  height: var(--connection-manager-row-height);
   border-bottom: 0;
   padding-top: 0;
   padding-bottom: 0;
