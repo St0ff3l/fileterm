@@ -32,20 +32,20 @@
 .monitoring-overlay-message p {
   margin: 0;
 }
-.monitoring-overlay[data-phase='failed'] strong {
-  color: var(--status-danger);
-}
 .monitoring-collapsed {
   position: absolute;
   top: 64px;
   left: 8px;
   z-index: 3;
   font-weight: 700;
-  color: var(--status-warning-text);
+  color: var(--text-primary);
 }
 
 .monitoring-overlay-message p {
   color: var(--text-secondary);
+}
+.monitoring-overlay-message p[role='alert'] {
+  color: var(--status-danger);
 }
 .monitoring-overlay-message .monitoring-overlay-last-update {
   margin-top: 4px;
@@ -58,12 +58,6 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-}
-.monitoring-overlay[data-phase='paused'] strong,
-.monitoring-overlay[data-phase='waiting'] strong,
-.monitoring-overlay[data-phase='disconnected'] strong,
-.monitoring-overlay[data-phase='unsupported'] strong {
-  color: var(--status-warning-text);
 }
 .monitoring-overlay-spinner {
   box-sizing: border-box;
