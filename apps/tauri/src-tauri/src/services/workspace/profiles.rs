@@ -3,7 +3,7 @@
 /// reconnect action; local sessions deliberately have no network policy.
 pub fn reconnect_mode_for_profile(profile: &serde_json::Value) -> Option<String> {
     let profile_type = profile.get("type").and_then(serde_json::Value::as_str);
-    if !matches!(profile_type, Some("ssh" | "ftp" | "telnet" | "serial")) {
+    if !matches!(profile_type, Some("ssh" | "sftp" | "ftp" | "telnet" | "serial")) {
         return None;
     }
 
@@ -50,7 +50,7 @@ pub fn initial_remote_path_for_profile(profile: &serde_json::Value) -> String {
         .and_then(serde_json::Value::as_str)
         .unwrap_or("ssh")
     {
-        "ssh" => ".".to_string(),
+        "ssh" | "sftp" => ".".to_string(),
         "ftp" => "/".to_string(),
         _ => String::new(),
     }

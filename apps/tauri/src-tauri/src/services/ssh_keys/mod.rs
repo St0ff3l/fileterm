@@ -220,7 +220,12 @@ pub fn delete(app: &AppHandle, key_id: &str) -> Result<(), AppError> {
     let profiles = crate::storage::read_json_array(app, "profiles.json")?;
     let users: Vec<String> = profiles
         .iter()
-        .filter(|profile| profile.get("type").and_then(|value| value.as_str()) == Some("ssh"))
+        .filter(|profile| {
+            matches!(
+                profile.get("type").and_then(|value| value.as_str()),
+                Some("ssh" | "sftp")
+            )
+        })
         .filter(|profile| {
             profile.get("privateKeyId").and_then(|value| value.as_str()) == Some(key_id)
         })
@@ -411,7 +416,10 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 fn key_usage_counts(app: &AppHandle) -> Result<HashMap<String, usize>, AppError> {
     let mut usage = HashMap::new();
     for profile in crate::storage::read_json_array(app, "profiles.json")? {
-        if profile.get("type").and_then(|value| value.as_str()) == Some("ssh") {
+        if matches!(
+            profile.get("type").and_then(|value| value.as_str()),
+            Some("ssh" | "sftp")
+        ) {
             if let Some(key_id) = profile.get("privateKeyId").and_then(|value| value.as_str()) {
                 *usage.entry(key_id.to_string()).or_insert(0) += 1;
             }

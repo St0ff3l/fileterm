@@ -56,7 +56,7 @@ async fn copy_session(app: &AppHandle, tab_id: &str) -> Result<(String, String, 
         .ok_or_else(|| transfer_error("连接标签不存在"))?;
     if !session.connected
         || session.file_access_mode != "user"
-        || !matches!(tab.session_type.as_str(), "ssh" | "ftp")
+        || !matches!(tab.session_type.as_str(), "ssh" | "sftp" | "ftp")
     {
         return Err(transfer_error("请选择已连接的普通用户 SFTP/FTP 会话"));
     }

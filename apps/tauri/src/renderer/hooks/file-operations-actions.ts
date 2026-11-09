@@ -205,7 +205,9 @@ export function createFileOperationsActions(context: FileOperationsActionContext
         permission: item.permission,
         ownerGroup: item.ownerGroup
       },
-      supportsRecursive: item.type === 'folder' && (pane === 'local' || activeTab?.sessionType === 'ssh')
+      supportsRecursive:
+        item.type === 'folder' &&
+        (pane === 'local' || activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'sftp')
     })
   }
 

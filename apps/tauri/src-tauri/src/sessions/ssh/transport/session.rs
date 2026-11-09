@@ -309,3 +309,60 @@ pub async fn test_connection(
     );
     Ok(())
 }
+
+/// Verify a standalone SFTP profile by opening the SSH transport and the SFTP
+/// subsystem directly, without requesting a PTY, shell, or terminal channel.
+pub async fn test_sftp_connection(
+    app: &AppHandle,
+    profile: &Value,
+    tab_id: &str,
+    interaction_window_label: String,
+) -> Result<(), String> {
+    let mut transport_profile = profile.clone();
+    transport_profile["type"] = Value::String("ssh".to_string());
+    let flow = SshInteractionFlow::new();
+    let cancellation = CancellationToken::new();
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "sftp",
+        tab_id,
+        format!("connection test started flow_id={}", flow.flow_id),
+    );
+    let session_result = open_session(
+        &transport_profile,
+        app,
+        tab_id,
+        SSH_CONNECTION_TEST_INTERACTION_TIMEOUT,
+        Some(interaction_window_label),
+        flow.clone(),
+        cancellation.clone(),
+    )
+    .await;
+    cancellation.cancel();
+    let session = session_result?;
+    let result = match open_sftp_session(
+        &session.handle,
+        file_operation_timeout(profile),
+        sftp_filename_encoding(profile),
+    )
+    .await
+    {
+        Ok(sftp) => sftp.close().await.map_err(|error| error.to_string()),
+        Err(error) => Err(error),
+    };
+    let _ = timeout(
+        Duration::from_secs(3),
+        session.handle.disconnect(Disconnect::ByApplication, "SFTP connection test complete", "en"),
+    )
+    .await;
+    result?;
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "sftp",
+        tab_id,
+        format!("connection test completed flow_id={}", flow.flow_id),
+    );
+    Ok(())
+}

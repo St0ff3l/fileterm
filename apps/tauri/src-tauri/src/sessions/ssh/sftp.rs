@@ -11,6 +11,7 @@ fn file_operation_timeout(profile: &Value) -> Duration {
 async fn open_sftp_session(
     handle: &Handle<ClientHandler>,
     request_timeout: Duration,
+    filename_encoding: &str,
 ) -> Result<SftpSession, String> {
     let sftp_channel = timeout(SFTP_INIT_STEP_TIMEOUT, handle.channel_open_session())
         .await
@@ -31,6 +32,7 @@ async fn open_sftp_session(
     let sftp_config = SftpConfig {
         request_timeout_secs: request_timeout.as_secs().max(1),
         max_concurrent_writes: 16,
+        filename_encoding: filename_encoding.to_owned(),
         ..SftpConfig::default()
     };
     timeout(
@@ -40,6 +42,19 @@ async fn open_sftp_session(
     .await
     .map_err(|_| "SFTP init failed: 协议握手超时".to_string())?
     .map_err(|error| format!("SFTP init failed: {error}"))
+}
+
+fn sftp_filename_encoding(profile: &Value) -> &'static str {
+    match profile
+        .get("encoding")
+        .and_then(Value::as_str)
+        .map(str::trim)
+    {
+        Some(value) if value.eq_ignore_ascii_case("gbk") || value.eq_ignore_ascii_case("cp936") => {
+            "GBK"
+        }
+        _ => "UTF-8",
+    }
 }
 
 type SharedSftpSession = Arc<RwLock<SftpSession>>;
@@ -142,11 +157,12 @@ async fn acquire_transfer_sftp(
     tab_id: &str,
     request_timeout: Duration,
 ) -> SharedSftpSession {
+    let filename_encoding = primary.read().await.filename_encoding().to_owned();
     let mut slot_guard = slot.lock().await;
     if let Some(session) = slot_guard.as_ref() {
         return Arc::clone(session);
     }
-    match open_sftp_session(handle, request_timeout).await {
+    match open_sftp_session(handle, request_timeout, &filename_encoding).await {
         Ok(session) => {
             let session = Arc::new(RwLock::new(session));
             *slot_guard = Some(Arc::clone(&session));

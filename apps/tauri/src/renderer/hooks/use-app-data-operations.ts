@@ -95,7 +95,8 @@ export function useAppDataOperations({
   const buildProfilePayload = (requireSaveFields: boolean): CreateProfileInput | null => {
     const normalizedHost = normalizeConnectionHost(form.host)
     const requiresHost = form.type !== 'serial'
-    const requiresRemotePath = form.type === 'ftp' || (form.type === 'ssh' && form.deviceMode !== 'network-device')
+    const requiresRemotePath =
+      form.type === 'ftp' || form.type === 'sftp' || (form.type === 'ssh' && form.deviceMode !== 'network-device')
 
     if (
       (requireSaveFields && (!form.name || !form.group)) ||
@@ -110,13 +111,34 @@ export function useAppDataOperations({
       setFormError(t.invalidHost)
       return null
     }
-    if (form.type === 'ssh' && form.authType === 'privateKey' && !form.privateKeyId && !form.privateKeyPath) {
+    if (
+      (form.type === 'ssh' || form.type === 'sftp') &&
+      form.authType === 'privateKey' &&
+      !form.privateKeyId &&
+      !form.privateKeyPath
+    ) {
       setFormError(t.missingPrivateKeyPath)
       return null
     }
 
     const defaultPort = form.type === 'ftp' ? 21 : form.type === 'telnet' ? 23 : form.type === 'serial' ? 0 : 22
-    return { ...form, host: normalizedHost, port: Number(form.port) || defaultPort }
+    return {
+      ...form,
+      host: normalizedHost,
+      port: Number(form.port) || defaultPort,
+      ...(form.type === 'sftp'
+        ? {
+            enableExecChannel: false,
+            enableResourceMonitoring: false,
+            sftpEnabled: true,
+            sessionLogEnabled: false,
+            jumpProfileId: undefined,
+            jumpProfileIds: [],
+            tunnelProfileId: undefined,
+            forwards: []
+          }
+        : {})
+    }
   }
 
   const handleSaveProfile = async (event: FormEvent<HTMLFormElement>) => {

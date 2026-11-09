@@ -323,6 +323,14 @@ impl ConnectionCapabilities {
                 file_access: false,
                 tunnels: false,
             },
+            "sftp" => Self {
+                terminal: false,
+                files: true,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: false,
+            },
             "local" => Self {
                 terminal: true,
                 files: false,

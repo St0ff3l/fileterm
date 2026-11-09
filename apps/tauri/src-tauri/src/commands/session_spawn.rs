@@ -52,7 +52,7 @@ async fn spawn_session_for_profile(
         .or_else(|| profile.get("devicePath").and_then(Value::as_str))
         .unwrap_or("127.0.0.1");
     let port = match profile_type {
-        "ssh" => crate::sessions::reconnect::port_from_profile(profile, 22, "SSH")
+        "ssh" | "sftp" => crate::sessions::reconnect::port_from_profile(profile, 22, "SSH")
             .map_err(AppError::Command)?,
         "ftp" => crate::sessions::reconnect::port_from_profile(profile, 21, "FTP")
             .map_err(AppError::Command)?,

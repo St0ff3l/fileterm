@@ -53,10 +53,10 @@ export function FileTransferWorkspace({
   const options = [
     { value: 'local', label: t.localComputer },
     ...tabs
-      .filter((tab) => tab.sessionType === 'ssh' || tab.sessionType === 'ftp')
+      .filter((tab) => tab.sessionType === 'ssh' || tab.sessionType === 'sftp' || tab.sessionType === 'ftp')
       .map((tab) => ({
         value: tab.id,
-        label: `${tab.title} · ${tab.sessionType === 'ssh' ? 'SFTP' : 'FTP'}`,
+        label: `${tab.title} · ${tab.sessionType === 'ftp' ? 'FTP' : 'SFTP'}`,
         disabled: !sessions[tab.id]?.connected || sessions[tab.id]?.fileAccessMode === 'root'
       }))
   ]

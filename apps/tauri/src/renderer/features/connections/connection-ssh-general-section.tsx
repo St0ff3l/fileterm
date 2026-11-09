@@ -70,6 +70,7 @@ export function ConnectionSshGeneralSection({
             value={usesSshConfigAlias ? SSH_CONFIG_CONNECTION_TYPE : form.type}
             options={[
               { value: 'ssh', label: 'SSH / SFTP' },
+              { value: 'sftp', label: 'SFTP' },
               { value: SSH_CONFIG_CONNECTION_TYPE, label: t.sshConfigConnectionType },
               { value: 'ftp', label: 'FTP / FTPS' },
               { value: 'telnet', label: 'Telnet' },
@@ -79,7 +80,7 @@ export function ConnectionSshGeneralSection({
               // "SSH Config" is an SSH profile whose host is an OpenSSH alias.
               const pickedSshConfig = value === SSH_CONFIG_CONNECTION_TYPE
               const nextType = (pickedSshConfig ? 'ssh' : value) as SessionType
-              const defaults: Record<SessionType, number> = { ssh: 22, ftp: 21, telnet: 23, serial: 0 }
+              const defaults: Record<SessionType, number> = { ssh: 22, sftp: 22, ftp: 21, telnet: 23, serial: 0 }
               setForm((prev) => ({
                 ...prev,
                 type: nextType,
@@ -89,12 +90,14 @@ export function ConnectionSshGeneralSection({
                     : prev.port,
                 authType: pickedSshConfig
                   ? 'sshConfig'
-                  : nextType === 'ssh'
+                  : nextType === 'ssh' || nextType === 'sftp'
                     ? prev.authType && prev.authType !== 'sshConfig'
                       ? prev.authType
-                      : 'system'
+                      : nextType === 'ssh'
+                        ? 'system'
+                        : 'password'
                     : 'password',
-                useEmptyPassword: nextType === 'ssh' ? prev.useEmptyPassword : false,
+                useEmptyPassword: nextType === 'ssh' || nextType === 'sftp' ? prev.useEmptyPassword : false,
                 deviceMode:
                   nextType === 'ssh' ? (prev.type === 'ssh' ? (prev.deviceMode ?? 'server') : 'server') : undefined,
                 networkDeviceVendor:
@@ -114,15 +117,33 @@ export function ConnectionSshGeneralSection({
                         : 'xterm-256color'
                       : undefined,
                 remotePath:
-                  nextType === 'ssh'
-                    ? prev.type === 'ssh'
+                  nextType === 'ssh' || nextType === 'sftp'
+                    ? prev.type === 'ssh' || prev.type === 'sftp'
                       ? prev.remotePath || '.'
                       : '.'
                     : nextType === 'ftp'
                       ? prev.type === 'ftp'
                         ? prev.remotePath || '/'
                         : '/'
-                      : ''
+                      : '',
+                ...(nextType === 'sftp'
+                  ? {
+                      jumpProfileId: undefined,
+                      jumpProfileIds: [],
+                      tunnelProfileId: undefined,
+                      forwards: [],
+                      enableExecChannel: false,
+                      enableResourceMonitoring: false,
+                      sftpEnabled: true,
+                      sessionLogEnabled: false
+                    }
+                  : nextType === 'ssh' && prev.type === 'sftp'
+                    ? {
+                        enableExecChannel: connectionDefaults.enableExecChannel,
+                        enableResourceMonitoring: connectionDefaults.enableResourceMonitoring,
+                        sftpEnabled: true
+                      }
+                    : {})
               }))
             }}
           />
@@ -351,7 +372,7 @@ export function ConnectionSshGeneralSection({
             />
           </label>
         ) : null}
-        {form.type === 'ftp' || (form.type === 'ssh' && !isNetworkDevice) ? (
+        {form.type === 'ftp' || form.type === 'sftp' || (form.type === 'ssh' && !isNetworkDevice) ? (
           <label>
             {t.remotePath}:
             <input

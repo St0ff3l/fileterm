@@ -162,4 +162,5 @@ rand = "0.10"
 
 [patch.crates-io]
 russh = { path = "../../../vendor/russh" }
+russh-sftp = { path = "../../../vendor/russh-sftp" }
 suppaftp = { path = "../../../vendor/suppaftp" }

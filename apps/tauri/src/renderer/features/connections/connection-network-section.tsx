@@ -23,7 +23,7 @@ export function ConnectionNetworkSection({
   setForm: ConnectionFormSetter
 }) {
   const supportsRouting = form.type === 'ssh'
-  const supportsProxy = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
+  const supportsProxy = form.type === 'ssh' || form.type === 'sftp' || form.type === 'telnet' || form.type === 'ftp'
   const supportsTunnel = form.type === 'ssh'
   const selectedJumpProfileIds =
     form.jumpProfileIds ?? (form.jumpProfileId ? jumpRoute.map((profile) => profile.id) : [])

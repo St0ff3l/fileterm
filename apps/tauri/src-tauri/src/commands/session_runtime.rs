@@ -437,7 +437,7 @@ fn create_tab_layout(profile: &serde_json::Value) -> String {
             "terminal-only".to_string()
         }
         "ssh" => "terminal-file".to_string(),
-        "ftp" => "file-only".to_string(),
+        "ftp" | "sftp" => "file-only".to_string(),
         _ => "terminal-only".to_string(),
     }
 }
@@ -454,6 +454,7 @@ fn start_session_worker(
         "ftp" => {
             crate::sessions::ftp::start_ftp_worker(tab_id, profile, receiver, app, cancellation)
         }
+        "sftp" => crate::sessions::ssh::start_sftp_worker(tab_id, profile, receiver, app, cancellation),
         "telnet" => crate::sessions::telnet::start_telnet_worker(
             tab_id,
             profile,
@@ -472,7 +473,7 @@ fn start_session_worker(
             tab_id,
             profile,
             receiver,
-            terminal_input_receiver.expect("SSH worker requires a terminal input channel"),
+            Some(terminal_input_receiver.expect("SSH worker requires a terminal input channel")),
             app,
             cancellation,
         ),

@@ -221,8 +221,3 @@
   padding: 8px 16px 10px;
   background: var(--dialog-content-bg);
 }
-
-:root .modal-card.ssh-modal .ssh-form-shell .form-actions.ssh-actions {
-  margin: 0;
-  padding: 8px 0 0;
-}

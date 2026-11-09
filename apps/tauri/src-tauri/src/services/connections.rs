@@ -19,7 +19,9 @@ fn command_error(message: impl Into<String>) -> AppError {
 
 fn profile_type(value: Option<&str>) -> String {
     let value = value.unwrap_or("ssh").to_ascii_lowercase();
-    if value.contains("ftp") {
+    if value.contains("sftp") {
+        "sftp".to_string()
+    } else if value.contains("ftp") {
         "ftp".to_string()
     } else if value.contains("telnet") {
         "telnet".to_string()
@@ -188,11 +190,15 @@ fn normalize_external_profile(raw: &Value, fallback_name: &str) -> Result<Value,
                 .get("remotePath")
                 .or_else(|| source.get("remote_path"))
                 .and_then(Value::as_str)
-                .unwrap_or("/")
+                .unwrap_or(if kind == "ssh" || kind == "sftp" {
+                    "."
+                } else {
+                    "/"
+                })
                 .to_string(),
         ),
     );
-    if kind == "ssh" {
+    if kind == "ssh" || kind == "sftp" {
         let auth = source
             .get("authType")
             .or_else(|| source.get("authentication_type"));

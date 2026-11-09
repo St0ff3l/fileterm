@@ -3,7 +3,6 @@
 async fn dispatch_transfer_cmd(
     cmd: WorkerCmd,
     handle: &Arc<Handle<ClientHandler>>,
-    shell_writer: &SshShellWriteHalf,
     sftp: &SharedSftpSession,
     transfer_sftp_slot: &TransferSftpSlot,
     operation_timeout: Duration,
@@ -521,7 +520,6 @@ async fn dispatch_transfer_cmd(
             dispatch_file_cmd(
                 cmd,
                 handle,
-                shell_writer,
                 sftp,
                 transfer_sftp_slot,
                 operation_timeout,

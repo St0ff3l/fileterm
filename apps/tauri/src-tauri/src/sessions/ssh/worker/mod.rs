@@ -17,6 +17,7 @@ include!("metrics_diagnostics.rs");
 include!("metrics/mod.rs");
 include!("session_snapshot.rs");
 include!("sftp_startup.rs");
+include!("sftp_only.rs");
 include!("remote_exec.rs");
 include!("without_sftp.rs");
 include!("dispatch_terminal.rs");

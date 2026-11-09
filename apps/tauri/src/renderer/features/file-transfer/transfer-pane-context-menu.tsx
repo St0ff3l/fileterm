@@ -157,7 +157,7 @@ export function TransferPaneContextMenu({
           canCreate={items.length <= 1}
           canRename={Boolean(item)}
           canChangePermissions={Boolean(item)}
-          canQuickDelete={!local && tab?.sessionType === 'ssh'}
+          canQuickDelete={!local && (tab?.sessionType === 'ssh' || tab?.sessionType === 'sftp')}
           canPaste={Boolean(
             clipboard && clipboardConnected && (clipboard.operation === 'copy' || clipboard.endpoint === pane.endpoint)
           )}

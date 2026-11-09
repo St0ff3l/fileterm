@@ -8,4 +8,7 @@ mod session;
 pub(crate) use session::{
     effective_remote_file_type, is_sftp_path_not_found_message, shell_cwd_sftp_path_candidates,
 };
-pub use session::{format_unix_ts, list_dir, start_ssh_worker, test_connection};
+pub use session::{
+    format_unix_ts, list_dir, start_sftp_worker, start_ssh_worker, test_connection,
+    test_sftp_connection,
+};

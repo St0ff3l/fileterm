@@ -141,7 +141,7 @@ fn sanitize_import_profile(value: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .unwrap_or("ssh")
         .to_ascii_lowercase();
-    if !matches!(kind.as_str(), "ssh" | "ftp" | "telnet" | "serial") {
+    if !matches!(kind.as_str(), "ssh" | "sftp" | "ftp" | "telnet" | "serial") {
         return Err("不支持的连接类型".to_string());
     }
     let name = object
