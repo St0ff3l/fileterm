@@ -18,7 +18,7 @@ async fn connect_ssh_transport(
         // 此处无需再加内层 timeout。
         let stream = TcpStream::connect((host, port))
             .await
-            .map_err(|error| format!("SSH connect failed: {error}"))?;
+            .map_err(|error| format!("SSH connect failed: host={host:?} port={port}: {error}"))?;
         let _ = stream.set_nodelay(true);
         return Ok(Box::new(stream));
     }

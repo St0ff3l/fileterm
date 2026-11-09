@@ -1,6 +1,12 @@
 import type { Terminal } from '@xterm/xterm'
 import { stripClinkAutosuggestPrompt } from '../app/terminal-transcript'
-import { formatMessage, localizeLocalTerminalText, localizeSerialTerminalText, t } from '../i18n'
+import {
+  formatMessage,
+  localizeConnectionErrorText,
+  localizeLocalTerminalText,
+  localizeSerialTerminalText,
+  t
+} from '../i18n'
 
 export function localizeTerminalText(value: string, options: { preserveUnknownTerminalOutput?: boolean } = {}) {
   return localizeSerialTerminalText(localizeLocalTerminalText(value), {
@@ -15,8 +21,13 @@ export function localizeTerminalText(value: string, options: { preserveUnknownTe
     .replaceAll('连接已断开', t.terminalDisconnected)
     .replaceAll('[connection closed]', t.terminalConnectionClosed)
     .replaceAll('Shell closed', t.terminalDisconnected)
-    .replace(/连接失败:\s*/g, t.connectionFailedPrefix)
-    .replace(/Connection error:\s*/g, t.connectionFailedPrefix)
+    .replace(/(?:连接失败:|Connection error:)\s*([^\r\n]*)/g, (_match, error: string) => {
+      const localizedError = localizeConnectionErrorText(error).replace(
+        /^(?:SSH 连接失败：|FTP 连接失败：|FTP 登录失败：|Telnet 连接失败：)\s*/,
+        ''
+      )
+      return `${t.connectionFailedPrefix}${localizedError}`
+    })
     .replace(/Disconnected from\s*/g, t.disconnectedFromPrefix)
     .replace(/\bDisconnected\b/g, t.disconnected)
     .replace(/\[Telnet\] reconnect-scheduled: (\d+) (\d+)/g, (_match, seconds: string, attempt: string) =>

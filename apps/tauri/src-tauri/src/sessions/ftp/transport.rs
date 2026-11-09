@@ -104,7 +104,9 @@ async fn connect_ftp_with_tls_connector(
                     let mut client = configure_ftp_data_transport(
                         AsyncFtpStream::connect_with_stream(stream)
                             .await
-                            .map_err(|error| error.to_string())?,
+                            .map_err(|error| {
+                                format!("FTP control handshake failed: host={host:?} port={port}: {error}")
+                            })?,
                         profile,
                     )?;
                     configure_ftp_mode(&mut client, profile);
@@ -112,7 +114,9 @@ async fn connect_ftp_with_tls_connector(
                     client
                         .login(username, password)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTP login failed: host={host:?} port={port}: {error}")
+                        })?;
                     Ok(FtpClient::Plain(client))
                 }
                 "explicit" => {
@@ -122,19 +126,25 @@ async fn connect_ftp_with_tls_connector(
                     let client = configure_ftp_data_transport(
                         AsyncNativeTlsFtpStream::connect_with_stream(stream)
                             .await
-                            .map_err(|error| error.to_string())?,
+                            .map_err(|error| {
+                                format!("FTPS control stream setup failed: host={host:?} port={port}: {error}")
+                            })?,
                         profile,
                     )?;
                     let mut client = client
                         .into_secure(tls_connector, host)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTPS TLS handshake failed: host={host:?} port={port}: {error}")
+                        })?;
                     configure_ftp_mode(&mut client, profile);
                     client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTP login failed: host={host:?} port={port}: {error}")
+                        })?;
                     Ok(FtpClient::Secure(client))
                 }
                 "implicit" => {
@@ -150,13 +160,17 @@ async fn connect_ftp_with_tls_connector(
                         host,
                     )
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| {
+                        format!("FTPS implicit connect/handshake failed: host={host:?} port={port}: {error}")
+                    })?;
                     configure_ftp_mode(&mut client, profile);
                     client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| {
+                            format!("FTP login failed: host={host:?} port={port}: {error}")
+                        })?;
                     Ok(FtpClient::Secure(client))
                 }
                 other => Err(format!("Unsupported FTP security mode: {other}")),
@@ -177,8 +191,8 @@ async fn connect_ftp_with_tls_connector(
     .await
     .map_err(|_| {
         format!(
-            "FTP connect/login timed out after {} seconds",
-            connect_timeout.as_secs()
+            "FTP connect/login timed out: host={host:?} port={port} after {} seconds",
+            connect_timeout.as_secs(),
         )
     })?
 }
@@ -367,7 +381,7 @@ async fn connect_ftp_tcp(profile: &Value, host: &str, port: u16) -> Result<TcpSt
     if proxy_type == "none" {
         return TcpStream::connect((host, port))
             .await
-            .map_err(|error| format!("FTP connect failed: {error}"));
+            .map_err(|error| format!("FTP connect failed: host={host:?} port={port}: {error}"));
     }
 
     validate_ftp_proxy_value(host, "FTP target host")?;

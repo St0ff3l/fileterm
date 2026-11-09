@@ -89,6 +89,14 @@ pub enum Error {
     #[error("Key exchange init failed")]
     KexInit,
 
+    /// The server offered a DH group outside the range requested by the client.
+    #[error("DH prime size ({bits} bits) not within requested range ({min_bits}-{max_bits} bits)")]
+    DhGroupOutOfRange {
+        bits: usize,
+        min_bits: usize,
+        max_bits: usize,
+    },
+
     /// Unknown algorithm name.
     #[error("Unknown algorithm")]
     UnknownAlgo,

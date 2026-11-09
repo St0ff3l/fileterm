@@ -186,7 +186,7 @@ async fn open_session_hop(
         .await?
     } else {
         let stream = wait_for_ssh_stage(
-            "SSH transport connection",
+            &format!("SSH transport connection host={host:?} port={port}"),
             connect_timeout,
             connect_ssh_transport(profile, &host, port),
         )
@@ -232,7 +232,9 @@ async fn open_session_hop(
         }
         Ok((remote_sshid, disconnect_reason))
     } else {
-        Err(format!("SSH Authentication failed at {host}:{port}"))
+        Err(format!(
+            "SSH Authentication failed at {host}:{port} (configured method: {auth_type})"
+        ))
     }
 }
 
