@@ -142,7 +142,7 @@ export function TransferPopover({
       <div className="transfer-popover-head">
         <strong>{t.transferDetails}</strong>
         <div className="transfer-popover-actions">
-          {statusFilter === 'completed' ? (
+          {statusFilter !== 'running' ? (
             <button
               aria-busy={isClearing}
               className="transfer-clear-button"
