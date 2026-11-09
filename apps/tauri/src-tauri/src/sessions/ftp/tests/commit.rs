@@ -21,7 +21,7 @@ async fn strict_ftp_commit_skips_conflicts_and_restores_old_file_when_final_rena
             let response = match verb {
                 "USER" => "331 password\r\n".to_string(),
                 "PASS" => "230 logged in\r\n".to_string(),
-                "TYPE" => "200 binary\r\n".to_string(),
+                "TYPE" | "OPTS" => "200 binary\r\n".to_string(),
                 "EPSV" | "PASV" => {
                     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
                     let port = listener.local_addr().unwrap().port();

@@ -38,6 +38,17 @@ async fn connect_ftp_with_tls_connector(
     port: u16,
     tls_connector: AsyncNativeTlsConnector,
 ) -> Result<FtpClient, String> {
+    let filename_encoding = match profile
+        .get("encoding")
+        .and_then(Value::as_str)
+        .unwrap_or("UTF-8")
+        .to_ascii_uppercase()
+        .as_str()
+    {
+        "UTF-8" | "UTF8" => encoding_rs::UTF_8,
+        "GBK" => encoding_rs::GBK,
+        other => return Err(format!("不支持的 FTP 文件名编码: {other}")),
+    };
     let username = profile
         .get("username")
         .and_then(Value::as_str)
@@ -97,6 +108,7 @@ async fn connect_ftp_with_tls_connector(
                         profile,
                     )?;
                     configure_ftp_mode(&mut client, profile);
+                    client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
@@ -118,6 +130,7 @@ async fn connect_ftp_with_tls_connector(
                         .await
                         .map_err(|error| error.to_string())?;
                     configure_ftp_mode(&mut client, profile);
+                    client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
@@ -139,6 +152,7 @@ async fn connect_ftp_with_tls_connector(
                     .await
                     .map_err(|error| error.to_string())?;
                     configure_ftp_mode(&mut client, profile);
+                    client.set_encoding(filename_encoding);
                     client
                         .login(username, password)
                         .await
@@ -146,6 +160,10 @@ async fn connect_ftp_with_tls_connector(
                     Ok(FtpClient::Secure(client))
                 }
                 other => Err(format!("Unsupported FTP security mode: {other}")),
+            }?;
+            match &mut client {
+                FtpClient::Plain(ftp) => configure_ftp_encoding(ftp, filename_encoding).await,
+                FtpClient::Secure(ftp) => configure_ftp_encoding(ftp, filename_encoding).await,
             }?;
             // Preserve byte offsets and log line endings for uploads and resume reads.
             match &mut client {
@@ -579,4 +597,25 @@ where
             )
         })?
         .map_err(|error| error.to_string())
+}
+
+async fn configure_ftp_encoding<T: TokioTlsStream + Send>(
+    ftp: &mut ImplAsyncFtpStream<T>,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<(), String> {
+    let option = if encoding == encoding_rs::GBK {
+        "OFF"
+    } else {
+        "ON"
+    };
+    match ftp.opts("UTF8", Some(option)).await {
+        Ok(()) => Ok(()),
+        Err(FtpError::UnexpectedResponse(response))
+            if matches!(response.status as u32, 202 | 500 | 501 | 502 | 504) =>
+        {
+            tracing::warn!(category = "connection", scope = "ftp", status = %response.status, encoding = encoding.name(), "FTP server does not support UTF8 option; using configured filename encoding");
+            Ok(())
+        }
+        Err(error) => Err(format!("FTP UTF-8 协商失败: {error}")),
+    }
 }

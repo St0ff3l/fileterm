@@ -18,3 +18,7 @@ mod commit_tests;
 #[cfg(test)]
 #[path = "tests/editor_save.rs"]
 mod editor_save_tests;
+
+#[cfg(test)]
+#[path = "tests/xlight.rs"]
+mod xlight_tests;

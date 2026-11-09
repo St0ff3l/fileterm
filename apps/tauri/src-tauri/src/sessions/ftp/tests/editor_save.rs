@@ -29,7 +29,7 @@ async fn editor_save_preserves_original_on_failure_and_finishes_commit_after_can
                 let response = match verb {
                     "USER" => "331 password\r\n".to_owned(),
                     "PASS" => "230 logged in\r\n".to_owned(),
-                    "TYPE" => "200 binary\r\n".to_owned(),
+                    "TYPE" | "OPTS" => "200 binary\r\n".to_owned(),
                     "EPSV" | "PASV" => {
                         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
                         let port = listener.local_addr().unwrap().port();

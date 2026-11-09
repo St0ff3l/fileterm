@@ -478,6 +478,8 @@ export interface FtpProfile extends NetworkProfile {
   proxyProfileId?: string
   /** Optional SHA-256 pin for the FTPS server certificate. CA validation remains required. */
   certificateFingerprint?: string
+  /** Encoding used for FTP command paths and directory listings. Defaults to UTF-8. */
+  encoding?: string
   remotePath: string
 }
 

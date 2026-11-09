@@ -198,10 +198,7 @@ export function profileToForm(
     privateKeyId: profile.type === 'ssh' ? (profile.privateKeyId ?? '') : '',
     privateKeyPath: profile.type === 'ssh' ? (profile.privateKeyPath ?? '') : '',
     passphrase: profile.type === 'ssh' ? (profile.passphrase ?? '') : '',
-    encoding:
-      profile.type === 'ssh' || profile.type === 'telnet' || profile.type === 'serial'
-        ? (profile.encoding ?? 'UTF-8')
-        : 'UTF-8',
+    encoding: profile.encoding ?? 'UTF-8',
     backspaceKey: profile.type === 'ssh' ? (profile.backspaceKey ?? 'ASCII') : 'ASCII',
     deleteKey: profile.type === 'ssh' ? (profile.deleteKey ?? 'VT220') : 'VT220',
     enableExecChannel: profile.type === 'ssh' ? sshConnectionSettings.enableExecChannel : true,

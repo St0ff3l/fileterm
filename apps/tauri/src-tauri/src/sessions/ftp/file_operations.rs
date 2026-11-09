@@ -132,7 +132,20 @@ async fn ensure_dir<T: TokioTlsStream + Send>(
         match ftp.mkdir(&current).await {
             Ok(()) => {}
             Err(error) if is_ftp_existing_path(&error) => {}
-            Err(error) => return Err(error.to_string()),
+            Err(error @ FtpError::UnexpectedResponse(_)) => {
+                // Xlight returns 521 for existing directories, without an "exists" message.
+                let previous = ftp
+                    .pwd()
+                    .await
+                    .map_err(|probe| format!("FTP MKD path={current:?}: {error}; PWD: {probe}"))?;
+                ftp.cwd(&current).await.map_err(|probe| {
+                    format!("FTP MKD path={current:?}: {error}; CWD verification: {probe}")
+                })?;
+                ftp.cwd(&previous)
+                    .await
+                    .map_err(|restore| format!("FTP CWD restore path={previous:?}: {restore}"))?;
+            }
+            Err(error) => return Err(format!("FTP MKD path={current:?}: {error}")),
         }
     }
     Ok(())
@@ -204,7 +217,16 @@ async fn stat_file<T: TokioTlsStream + Send>(
             modified_at: None,
         })),
         Err(error) if is_ftp_file_not_found(&error) => Ok(None),
-        Err(error) => Err(error.to_string()),
+        Err(error) => {
+            if ftp_path_is_missing(ftp, path, &error)
+                .await
+                .map_err(|probe| format!("FTP SIZE path={path:?}: {error}; {probe}"))?
+            {
+                Ok(None)
+            } else {
+                Err(format!("FTP SIZE path={path:?}: {error}"))
+            }
+        }
     }
 }
 
@@ -470,13 +492,13 @@ async fn replace_file_with_policy<T: TokioTlsStream + Send>(
     let backup = format!("{destination}.fileterm-backup-{}", uuid::Uuid::new_v4());
     let moved_destination = match ftp.rename(destination, backup.as_str()).await {
         Ok(()) => true,
-        Err(rename_error) => match ftp.size(destination).await {
-            Ok(_) => {
+        Err(rename_error) => match stat_file(ftp, destination).await {
+            Ok(Some(_)) => {
                 return Err(format!(
                     "FTP 无法备份现有目标文件，已保留断点：{rename_error}"
                 ));
             }
-            Err(size_error) if is_ftp_file_not_found(&size_error) => false,
+            Ok(None) => false,
             Err(size_error) => {
                 return Err(format!(
                     "FTP 无法确认目标文件是否存在，为避免覆盖现有文件已保留断点：{rename_error}；检查失败：{size_error}"
