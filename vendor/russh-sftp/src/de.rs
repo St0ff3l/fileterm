@@ -8,6 +8,7 @@ use crate::{buf::TryBuf, error::Error};
 pub struct Deserializer<'a> {
     input: &'a mut Bytes,
     encoding: &'static Encoding,
+    strict: bool,
 }
 
 /// Converting bytes to protocol-compliant type
@@ -29,8 +30,23 @@ where
     let mut deserializer = Deserializer {
         input: bytes,
         encoding,
+        strict: false,
     };
     T::deserialize(&mut deserializer)
+}
+
+pub(crate) fn from_bytes_with_strict_encoding<'a, T>(
+    bytes: &'a mut Bytes,
+    encoding: &'static Encoding,
+) -> Result<T, Error>
+where
+    T: serde::Deserialize<'a>,
+{
+    T::deserialize(&mut Deserializer {
+        input: bytes,
+        encoding,
+        strict: true,
+    })
 }
 
 /// Deserilization of a [`Vec`] without length. Usually reads until the end byte
@@ -165,7 +181,17 @@ impl<'de> serde::Deserializer<'de> for &mut Deserializer<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        visitor.visit_str(&self.input.try_get_string_with_encoding(self.encoding)?)
+        if self.strict {
+            let bytes = self.input.try_get_bytes()?;
+            let (text, had_errors) = self.encoding.decode_without_bom_handling(&bytes);
+            let (encoded, _, encode_errors) = self.encoding.encode(&text);
+            if had_errors || encode_errors || encoded.as_ref() != bytes.as_slice() {
+                return Err(Error::BadMessage("invalid filename encoding".into()));
+            }
+            visitor.visit_str(&text)
+        } else {
+            visitor.visit_str(&self.input.try_get_string_with_encoding(self.encoding)?)
+        }
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>

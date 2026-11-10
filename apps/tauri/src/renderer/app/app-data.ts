@@ -191,6 +191,7 @@ export function profileToForm(
     remotePath: profile.remotePath,
     filePaneMode: profile.filePaneMode ?? 'local',
     transferSidebarCollapsedByDefault: profile.transferSidebarCollapsedByDefault,
+    sftpNoDelete: profile.sftpNoDelete ?? false,
     note: profile.note ?? '',
     sessionLogEnabled: profile.sessionLogEnabled ?? false,
     sessionLogDirectory: profile.sessionLogDirectory ?? '',

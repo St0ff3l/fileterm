@@ -395,3 +395,280 @@ async fn upload_errors_identify_open_or_write_and_remote_path() {
         "SFTP STAT path=\"/dir/a\\nb\": denied"
     );
 }
+
+struct DeleteDeniedServer {
+    metadata_error: Option<StatusCode>,
+    removes: Arc<StdMutex<usize>>,
+}
+
+impl russh_sftp::server::Handler for DeleteDeniedServer {
+    type Error = StatusCode;
+    fn unimplemented(&self) -> StatusCode {
+        StatusCode::OpUnsupported
+    }
+    async fn lstat(
+        &mut self,
+        id: u32,
+        path: String,
+    ) -> Result<russh_sftp::protocol::Attrs, StatusCode> {
+        if path == "/dir/final" {
+            return Err(StatusCode::NoSuchFile);
+        }
+        if let Some(error) = self.metadata_error {
+            return Err(error);
+        }
+        let mut attrs = russh_sftp::protocol::FileAttributes::empty();
+        attrs.permissions = Some(0o100600);
+        attrs.size = Some(3);
+        Ok(russh_sftp::protocol::Attrs { id, attrs })
+    }
+    async fn stat(
+        &mut self,
+        id: u32,
+        _: String,
+    ) -> Result<russh_sftp::protocol::Attrs, StatusCode> {
+        let mut attrs = russh_sftp::protocol::FileAttributes::empty();
+        attrs.permissions = Some(0o040755);
+        Ok(russh_sftp::protocol::Attrs { id, attrs })
+    }
+    async fn open(
+        &mut self,
+        id: u32,
+        path: String,
+        _: OpenFlags,
+        _: russh_sftp::protocol::FileAttributes,
+    ) -> Result<russh_sftp::protocol::Handle, StatusCode> {
+        self.metadata_error = None;
+        Ok(russh_sftp::protocol::Handle { id, handle: path })
+    }
+    async fn write(
+        &mut self,
+        id: u32,
+        _: String,
+        offset: u64,
+        data: Vec<u8>,
+    ) -> Result<russh_sftp::protocol::Status, StatusCode> {
+        assert_eq!(offset, 0);
+        assert_eq!(data, b"abc");
+        Ok(russh_sftp::protocol::Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: String::new(),
+            language_tag: String::new(),
+        })
+    }
+    async fn close(
+        &mut self,
+        id: u32,
+        _: String,
+    ) -> Result<russh_sftp::protocol::Status, StatusCode> {
+        Ok(russh_sftp::protocol::Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: String::new(),
+            language_tag: String::new(),
+        })
+    }
+    async fn rename(
+        &mut self,
+        id: u32,
+        old: String,
+        new: String,
+    ) -> Result<russh_sftp::protocol::Status, StatusCode> {
+        assert_eq!(old, "/dir/probe.txt.fileterm-part");
+        assert_eq!(new, "/dir/final");
+        Ok(russh_sftp::protocol::Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: String::new(),
+            language_tag: String::new(),
+        })
+    }
+    async fn remove(
+        &mut self,
+        _: u32,
+        _: String,
+    ) -> Result<russh_sftp::protocol::Status, StatusCode> {
+        *self.removes.lock().unwrap() += 1;
+        Err(StatusCode::PermissionDenied)
+    }
+}
+
+#[tokio::test]
+async fn cleanup_skips_missing_checkpoint_and_reports_existing_or_uninspectable_paths() {
+    for (metadata_error, expected_removes, expected_stage) in [
+        (Some(StatusCode::NoSuchFile), 0, None),
+        (None, 1, Some("REMOVE cleanup")),
+        (Some(StatusCode::PermissionDenied), 0, Some("LSTAT cleanup")),
+    ] {
+        let removes = Arc::new(StdMutex::new(0));
+        let (client, server) = tokio::io::duplex(4096);
+        let server = tokio::spawn(russh_sftp::server::run(
+            server,
+            DeleteDeniedServer {
+                metadata_error,
+                removes: removes.clone(),
+            },
+        ));
+        let sftp = SftpSession::new(client).await.unwrap();
+        let path = "/dir/probe.txt.fileterm-part";
+        let result = remove_transfer_file_if_present(&sftp, path).await;
+        if let Some(stage) = expected_stage {
+            let error = result.unwrap_err();
+            assert!(error.contains(stage), "{error}");
+            assert!(error.contains(path), "{error}");
+            assert!(error.contains("Permission denied"), "{error}");
+        } else {
+            result.unwrap();
+        }
+        assert_eq!(*removes.lock().unwrap(), expected_removes);
+        server.abort();
+    }
+}
+
+#[tokio::test]
+async fn new_upload_commits_without_delete_permission() {
+    let removes = Arc::new(StdMutex::new(0));
+    let (client, server) = tokio::io::duplex(4096);
+    let server = tokio::spawn(russh_sftp::server::run(
+        server,
+        DeleteDeniedServer {
+            metadata_error: Some(StatusCode::NoSuchFile),
+            removes: removes.clone(),
+        },
+    ));
+    let sftp = SftpSession::new(client).await.unwrap();
+    let path = "/dir/probe.txt.fileterm-part";
+    remove_transfer_file_if_present(&sftp, path).await.unwrap();
+    let root = std::env::temp_dir().join(format!(
+        "fileterm-upload-no-delete-{}",
+        uuid::Uuid::new_v4()
+    ));
+    tokio::fs::write(&root, b"abc").await.unwrap();
+    upload_local_file(
+        &sftp,
+        root.to_str().unwrap(),
+        3,
+        path,
+        0,
+        "test",
+        CancellationToken::new(),
+        None,
+        Duration::from_secs(1),
+    )
+    .await
+    .unwrap();
+    replace_remote_file(&sftp, path, "/dir/final")
+        .await
+        .unwrap();
+    assert_eq!(*removes.lock().unwrap(), 0);
+    tokio::fs::remove_file(root).await.unwrap();
+    server.abort();
+}
+
+#[test]
+fn permission_errors_identify_operation_path_and_action() {
+    for (operation, expected) in [
+        ("OPEN resume-read", "读取权限"),
+        ("OPEN write", "追加/覆盖权限"),
+        ("MKDIR", "创建目录权限"),
+        ("REMOVE cleanup", "删除权限"),
+        ("RENAME", "重命名及覆盖权限"),
+        ("READDIR", "列表权限"),
+        ("STAT download", "属性查询权限"),
+        ("SETSTAT preserve-permissions", "原目标未替换"),
+    ] {
+        let result = sftp_transfer_error(operation, "/restricted/file", "Permission denied");
+        assert!(result.contains(operation), "{result}");
+        assert!(result.contains("/restricted/file"), "{result}");
+        assert!(result.contains("Permission denied"), "{result}");
+        assert!(result.contains(expected), "{result}");
+    }
+}
+
+struct ResumeWriteDeniedServer;
+
+impl russh_sftp::server::Handler for ResumeWriteDeniedServer {
+    type Error = StatusCode;
+    fn unimplemented(&self) -> StatusCode {
+        StatusCode::OpUnsupported
+    }
+    async fn stat(
+        &mut self,
+        id: u32,
+        _: String,
+    ) -> Result<russh_sftp::protocol::Attrs, StatusCode> {
+        let mut attrs = SftpMetadata::empty();
+        attrs.permissions = Some(0o040755);
+        Ok(russh_sftp::protocol::Attrs { id, attrs })
+    }
+    async fn open(
+        &mut self,
+        id: u32,
+        path: String,
+        flags: OpenFlags,
+        _: SftpMetadata,
+    ) -> Result<russh_sftp::protocol::Handle, StatusCode> {
+        if flags.contains(OpenFlags::WRITE) {
+            return Err(StatusCode::PermissionDenied);
+        }
+        Ok(russh_sftp::protocol::Handle { id, handle: path })
+    }
+    async fn read(
+        &mut self,
+        id: u32,
+        _: String,
+        offset: u64,
+        len: u32,
+    ) -> Result<russh_sftp::protocol::Data, StatusCode> {
+        let start = offset as usize;
+        let end = (start + len as usize).min(3);
+        if start >= end {
+            return Err(StatusCode::Eof);
+        }
+        Ok(russh_sftp::protocol::Data {
+            id,
+            data: b"abc"[start..end].to_vec(),
+        })
+    }
+    async fn close(
+        &mut self,
+        id: u32,
+        _: String,
+    ) -> Result<russh_sftp::protocol::Status, StatusCode> {
+        Ok(russh_sftp::protocol::Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: String::new(),
+            language_tag: String::new(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn denied_resume_write_reports_append_permission_and_preserves_checkpoint() {
+    let (client, server) = tokio::io::duplex(4096);
+    let server = tokio::spawn(russh_sftp::server::run(server, ResumeWriteDeniedServer));
+    let sftp = SftpSession::new(client).await.unwrap();
+    let local =
+        std::env::temp_dir().join(format!("fileterm-resume-denied-{}", uuid::Uuid::new_v4()));
+    tokio::fs::write(&local, b"abcdef").await.unwrap();
+    let error = upload_local_file(
+        &sftp,
+        local.to_str().unwrap(),
+        6,
+        "/dir/file.fileterm-part",
+        3,
+        "test",
+        CancellationToken::new(),
+        None,
+        Duration::from_secs(1),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.contains("OPEN write"), "{error}");
+    assert!(error.contains("offset=3"), "{error}");
+    assert!(error.contains("追加/覆盖权限"), "{error}");
+    tokio::fs::remove_file(local).await.unwrap();
+    server.abort();
+}

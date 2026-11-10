@@ -8,6 +8,7 @@ import {
   type ConnectionFormSetter,
   type SshConnectionSettingKey
 } from './connection-modal-utils'
+import { ConnectionNoDeleteSetting } from './connection-no-delete-setting'
 import { TransferSidebarSettingControl } from '../../components/common/transfer-sidebar-setting-control'
 
 export function ConnectionSshAdvancedSection({
@@ -136,6 +137,7 @@ export function ConnectionSshAdvancedSection({
                   }
                 />
               ) : null}
+              {form.sftpEnabled !== false ? <ConnectionNoDeleteSetting form={form} setForm={setForm} /> : null}
             </>
           ) : (
             <div className="advanced-toggle-row">

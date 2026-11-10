@@ -13,7 +13,42 @@ fn transfer_checksum_available(
 const TRANSFER_CANCELED: &str = "transfer canceled";
 
 fn sftp_transfer_error(operation: &str, path: &str, error: impl std::fmt::Display) -> String {
-    format!("SFTP {operation} path={path:?}: {error}")
+    let detail = error.to_string();
+    let lowered = detail.to_ascii_lowercase();
+    let hint = if lowered.contains("permission denied") || lowered.contains("access denied") {
+        match operation {
+            "OPEN resume-read" | "READ resume-verify" | "OPEN checkpoint-read" | "OPEN download" | "READ download" =>
+                "; 请检查远端文件读取权限；续传需要读取已有断点以校验内容",
+            "OPEN write" | "OPEN destination-write" | "WRITE" | "WRITE/FLUSH" | "WRITE/FLUSH/CLOSE" | "WRITE destination-copy" | "CLOSE" =>
+                "; 请检查远端写入权限；续传或覆盖已有文件还可能需要追加/覆盖权限",
+            "MKDIR" => "; 请检查目标目录的创建目录权限",
+            "REMOVE cleanup" | "REMOVE checkpoint" | "REMOVE backup" =>
+                "; 请检查删除权限；保留的文件可在有权限时清理",
+            "RENAME backup" | "RENAME" => "; 请检查目标路径的重命名及覆盖权限",
+            "LSTAT cleanup" | "LSTAT checkpoint" | "LSTAT destination" | "STAT" | "STAT download" | "STAT destination-verify" =>
+                "; 请检查目标路径的读取、列目录和属性查询权限",
+            "READDIR" | "READDIR directory fallback" => "; 请检查目标目录的列表权限",
+            "SETSTAT preserve-permissions" => "; 请检查修改目标文件权限属性的权限；原目标未替换",
+            _ => "",
+        }
+    } else {
+        ""
+    };
+    format!("SFTP {operation} path={path:?}: {detail}{hint}")
+}
+
+async fn remove_transfer_file_if_present(sftp: &SftpSession, path: &str) -> Result<(), String> {
+    // Some servers check DELETE permission before reporting a missing file.
+    match sftp.symlink_metadata(path).await {
+        Ok(_) => {}
+        Err(error) if is_sftp_not_found(&error) => return Ok(()),
+        Err(error) => return Err(sftp_transfer_error("LSTAT cleanup", path, error)),
+    }
+    match sftp.remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if is_sftp_not_found(&error) => Ok(()),
+        Err(error) => Err(sftp_transfer_error("REMOVE cleanup", path, error)),
+    }
 }
 
 fn is_sftp_permission_denied(error: &SftpError) -> bool {
@@ -277,10 +312,9 @@ async fn download_remote_file(
     io_timeout: Duration,
 ) -> Result<(), String> {
     tracing::info!(category = "transfer", scope = "transfer", %transfer_id, stage = "download-metadata", "SFTP download stage started");
-    let metadata = sftp
-        .metadata(remote_path)
+    let metadata = transfer_remote_metadata(sftp, remote_path)
         .await
-        .map_err(|error| format!("读取远端下载文件属性失败: {error}"))?;
+        .map_err(|error| sftp_transfer_error("STAT download", remote_path, error))?;
     let total = metadata.size.ok_or("远端未返回下载文件大小")?;
     if resume_offset > total {
         return Err("下载断点大于源文件".to_string());
@@ -289,7 +323,7 @@ async fn download_remote_file(
     let mut source = sftp
         .open(remote_path)
         .await
-        .map_err(|error| format!("打开远端下载文件失败: {error}"))?;
+        .map_err(|error| sftp_transfer_error("OPEN download", remote_path, error))?;
     source
         .seek(std::io::SeekFrom::Start(resume_offset))
         .await
@@ -319,7 +353,11 @@ async fn download_remote_file(
         )
         .await
         .map_err(|error| {
-            format!("{error} (transferred_bytes={transferred} total_bytes={total})")
+            if error == TRANSFER_CANCELED {
+                error
+            } else {
+                sftp_transfer_error("READ download", remote_path, format!("{error} (transferred_bytes={transferred} total_bytes={total})"))
+            }
         })?;
         if read == 0 {
             break;
@@ -357,6 +395,16 @@ async fn replace_remote_file_with_policy(
     destination_path: &str,
     replace_existing: Option<bool>,
 ) -> Result<bool, String> {
+    replace_remote_file_with_policy_mode(sftp, partial_path, destination_path, replace_existing, false).await
+}
+
+async fn replace_remote_file_with_policy_mode(
+    sftp: &SftpSession,
+    partial_path: &str,
+    destination_path: &str,
+    replace_existing: Option<bool>,
+    no_delete: bool,
+) -> Result<bool, String> {
     let partial_metadata = sftp
         .symlink_metadata(partial_path)
         .await
@@ -372,6 +420,10 @@ async fn replace_remote_file_with_policy(
             ))
         }
     };
+
+    if no_delete && destination_metadata.is_some() {
+        return Err(format!("SFTP COMMIT path={destination_path:?}: 已启用服务器禁止删除模式，不能安全覆盖已有目标；原文件未更改，断点保留于 {partial_path:?}"));
+    }
 
     if let Some(replace) = replace_existing {
         if !partial_metadata.file_type().is_file() {
@@ -436,7 +488,7 @@ async fn replace_remote_file_with_policy(
         metadata.permissions = Some(permissions);
         sftp.set_metadata(partial_path, metadata)
             .await
-            .map_err(|error| format!("无法保留远端文件权限，已停止替换: {error}"))?;
+            .map_err(|error| sftp_transfer_error("SETSTAT preserve-permissions", partial_path, error))?;
     }
 
     let backup_path = format!(
@@ -465,12 +517,21 @@ async fn replace_remote_file_with_policy(
                 ));
             }
         }
-        return Err(format!(
-            "SFTP RENAME path={partial_path:?} to={destination_path:?} 失败，断点已保留：{error}"
+        return Err(sftp_transfer_error(
+            "RENAME",
+            partial_path,
+            format!("to={destination_path:?} 失败，断点已保留：{error}"),
         ));
     }
     if moved_destination {
-        let _ = sftp.remove_file(&backup_path).await;
+        if let Err(error) = sftp.remove_file(&backup_path).await {
+            tracing::warn!(category = "transfer", scope = "transfer", stage = "REMOVE backup", remote_path = %backup_path, error = %error, "SFTP upload committed; backup cleanup failed");
+            return Err(sftp_transfer_error(
+                "REMOVE backup",
+                &backup_path,
+                format!("{error}; 上传已完成且目标已更新，旧文件备份仍保留；请勿重试上传，请联系管理员清理备份"),
+            ));
+        }
     }
     Ok(true)
 }

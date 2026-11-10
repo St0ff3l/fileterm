@@ -52,3 +52,10 @@ test('new connections default to local files and saved profile modes restore whe
   assert.equal(exports.profileToForm(profile).filePaneMode, 'local')
   assert.equal(exports.profileToForm({ ...profile, filePaneMode: 'remote-tree' }).filePaneMode, 'remote-tree')
 })
+
+test('no-delete mode survives opening a saved SSH or SFTP profile for editing', () => {
+  for (const type of ['ssh', 'sftp']) {
+    assert.equal(exports.profileToForm({ ...profile, type, sftpNoDelete: true }).sftpNoDelete, true)
+    assert.equal(exports.profileToForm({ ...profile, type }).sftpNoDelete, false)
+  }
+})

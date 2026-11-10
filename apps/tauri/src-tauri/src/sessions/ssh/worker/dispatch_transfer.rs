@@ -372,16 +372,19 @@ async fn dispatch_transfer_cmd(
         } => {
             let sftp = Arc::clone(sftp);
             let root = file_access_mode == "root";
+            let no_delete = state.sessions.read().await.get(tab_id).map(|session| session.sftp_no_delete);
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
                 if root {
                     return Err("严格提交不支持 root 文件模式".into());
                 }
+                let no_delete = no_delete.ok_or("会话已关闭，无法确认 SFTP 安全设置")?;
                 let guard = sftp.write().await;
-                replace_remote_file_with_policy(
+                replace_remote_file_with_policy_mode(
                     &guard,
                     &partial_path,
                     &destination_path,
                     Some(replace_existing),
+                    no_delete,
                 )
                 .await
             });
@@ -404,8 +407,11 @@ async fn dispatch_transfer_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
+            let no_delete = state.sessions.read().await.get(&tab_id).map(|session| session.sftp_no_delete);
             spawn_cancellable_file_operation(cancellation, respond_to, async move {
+                let no_delete = no_delete.ok_or("会话已关闭，无法确认 SFTP 安全设置")?;
                 let result = if fam == "root" {
+                    if no_delete { return Err("禁止删除模式不支持 root 文件提交，请切换为普通文件访问模式".into()); }
                     replace_root_remote_file(
                         &handle,
                         &partial_path,
@@ -426,8 +432,13 @@ async fn dispatch_transfer_cmd(
                     )
                     .await;
                     let sftp_guard = transfer_sftp.write().await;
-                    let result =
-                        replace_remote_file(&sftp_guard, &partial_path, &destination_path).await;
+                    let result = if no_delete {
+                        replace_remote_file_with_policy_mode(
+                            &sftp_guard, &partial_path, &destination_path, None, true,
+                        ).await.map(|_| ())
+                    } else {
+                        replace_remote_file(&sftp_guard, &partial_path, &destination_path).await
+                    };
                     drop(sftp_guard);
                     if result.is_err() {
                         invalidate_transfer_sftp(&transfer_sftp, &sftp, &transfer_sftp_slot).await;
@@ -499,17 +510,9 @@ async fn dispatch_transfer_cmd(
                     }
                 } else {
                     let sftp_guard = sftp.write().await;
-                    match timeout(operation_timeout, async {
-                        match sftp_guard.remove_file(&path).await {
-                            Ok(()) => Ok(()),
-                            Err(error) if is_sftp_not_found(&error) => Ok(()),
-                            Err(error) => Err(error.to_string()),
-                        }
-                    })
-                    .await
-                    {
+                    match timeout(operation_timeout, remove_transfer_file_if_present(&sftp_guard, &path)).await {
                         Ok(inner) => inner,
-                        Err(_) => Err(format!("删除{}超时", path)),
+                        Err(_) => Err(sftp_transfer_error("REMOVE cleanup", &path, "timeout")),
                     }
                 };
                 result

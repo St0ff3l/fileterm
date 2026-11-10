@@ -99,6 +99,8 @@ export interface BaseProfile extends BaseEntity {
   filePaneMode?: FilePaneMode
   /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
   transferSidebarCollapsedByDefault?: boolean
+  /** Protect existing remote targets when the server denies deletion. */
+  sftpNoDelete?: boolean
   group: string
   lastUsedAt?: number
   /** Persisted per-device terminal output logging preference. */
@@ -1305,6 +1307,8 @@ export interface CreateProfileInput {
   filePaneMode?: FilePaneMode
   /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
   transferSidebarCollapsedByDefault?: boolean
+  /** Protect existing remote targets when the server denies deletion. */
+  sftpNoDelete?: boolean
   note?: string
   sessionLogEnabled?: boolean
   sessionLogDirectory?: string

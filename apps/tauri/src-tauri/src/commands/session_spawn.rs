@@ -87,6 +87,7 @@ async fn spawn_session_for_profile(
         sessions.insert(
             tab_id.clone(),
             crate::services::SessionSnapshot {
+                sftp_no_delete: profile.get("sftpNoDelete").and_then(serde_json::Value::as_bool).unwrap_or(false),
                 transfer_endpoint: None,
                 profile_id: profile_id.to_string(),
                 ai_session_revision: "0".to_string(),
@@ -214,6 +215,7 @@ async fn spawn_local_terminal_tab(
         sessions.insert(
             tab_id.clone(),
             crate::services::SessionSnapshot {
+                sftp_no_delete: false,
                 transfer_endpoint: None,
                 profile_id: "__local_terminal__".to_string(),
                 ai_session_revision: "0".to_string(),

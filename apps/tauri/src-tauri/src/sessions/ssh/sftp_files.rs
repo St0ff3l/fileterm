@@ -3,7 +3,7 @@ fn editor_staging_path(path: &str) -> String {
 }
 
 pub async fn list_dir(sftp: &SftpSession, dir_path: &str) -> Result<Vec<Value>, String> {
-    let entries = sftp.read_dir(dir_path).await.map_err(|e| e.to_string())?;
+    let entries = sftp.read_dir(dir_path).await.map_err(|e| sftp_transfer_error("READDIR", dir_path, e))?;
     let mut items = Vec::new();
     // SFTP servers commonly omit `..` from read_dir. Keep the file pane
     // navigation consistent with Electron by creating the parent row ourselves.

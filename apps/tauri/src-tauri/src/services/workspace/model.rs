@@ -355,6 +355,8 @@ impl ConnectionCapabilities {
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
     #[serde(skip)]
+    pub sftp_no_delete: bool,
+    #[serde(skip)]
     pub transfer_endpoint: Option<String>,
     pub profile_id: String,
     /// Monotonic terminal-target identity. This must not change for ordinary

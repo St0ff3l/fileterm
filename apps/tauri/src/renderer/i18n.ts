@@ -1349,7 +1349,12 @@ const zhCN = {
   reconnectEnterHint: '断线后在终端按回车手动触发重新连接。',
   reconnectNone: '不自动重连',
   reconnectNoneHint: '断线后不做任何操作，需手动点击重连按鈕。',
+  sftpNoDelete: '此账号没有删除权限',
+  sftpNoDeleteHint:
+    '开启后，上传不会覆盖已有文件；目标文件保持不变，断点文件保留。适用于没有删除权限的 SFTP 账号，保存后重新连接生效。',
   characterEncoding: '字符编码',
+  sftpFilenameEncodingHint:
+    'SFTP 优先使用 UTF-8，无法无损解码时自动回退 GBK；手动选择 GBK 时固定使用。自动识别仅影响当前会话，不改写此设置。',
   keySequence: '按键序列(解决退格/删除键失效,乱码问题):',
   backspaceKey: 'Backspace退格键',
   deleteKey: 'Delete删除键',
@@ -1414,8 +1419,7 @@ const zhCN = {
   transferFinalizing: '正在替换目标文件',
   noTransferTasks: '暂无传输任务',
   uploadFailed: '上传失败',
-  uploadPermissionDenied:
-    '上传失败：当前账号没有向目标目录写入的权限。请切换到有写入权限的目录，或使用 root 文件访问模式后重试。',
+  uploadPermissionDenied: '上传失败：文件操作被拒绝，请检查对应路径的读取、写入、删除或重命名权限。',
   downloadFailed: '下载失败',
   uploadCanceled: '上传已终止',
   downloadCanceled: '下载已终止',
@@ -3617,7 +3621,12 @@ const enUS: typeof zhCN = {
   reconnectEnterHint: 'After a disconnect, press Enter in the terminal to manually trigger a reconnect.',
   reconnectNone: 'No auto-reconnect',
   reconnectNoneHint: 'Does nothing on disconnect. Use the reconnect button to reconnect manually.',
+  sftpNoDelete: 'This account has no delete permission',
+  sftpNoDeleteHint:
+    'Existing remote files are protected from upload replacement. Checkpoints are retained. Use this for SFTP accounts without delete permission; reconnect after saving.',
   characterEncoding: 'Character Encoding',
+  sftpFilenameEncodingHint:
+    'SFTP prefers UTF-8 and falls back to GBK when names cannot be decoded losslessly. Selecting GBK uses it exclusively. Detection only affects the current session and does not change this setting.',
   keySequence: 'Key sequence:',
   backspaceKey: 'Backspace',
   deleteKey: 'Delete',
@@ -3683,7 +3692,7 @@ const enUS: typeof zhCN = {
   noTransferTasks: 'No transfer tasks',
   uploadFailed: 'Upload Failed',
   uploadPermissionDenied:
-    'Upload failed: the current account does not have write permission for the target directory. Choose a writable directory or retry with root file access.',
+    'Upload failed: a file operation was denied. Check read, write, delete or rename permissions for the reported path.',
   downloadFailed: 'Download Failed',
   uploadCanceled: 'Upload Canceled',
   downloadCanceled: 'Download Canceled',
