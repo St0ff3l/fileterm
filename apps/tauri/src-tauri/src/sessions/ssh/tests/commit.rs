@@ -3,6 +3,7 @@ use russh_sftp::protocol::{Attrs, Status};
 
 struct DifferentOwners {
     files: Arc<StdMutex<HashMap<String, (u32, &'static str)>>>,
+    deny_remove: bool,
 }
 
 impl russh_sftp::server::Handler for DifferentOwners {
@@ -53,6 +54,9 @@ impl russh_sftp::server::Handler for DifferentOwners {
         })
     }
     async fn remove(&mut self, id: u32, filename: String) -> Result<Status, Self::Error> {
+        if self.deny_remove {
+            return Err(StatusCode::PermissionDenied);
+        }
         self.files
             .lock()
             .unwrap()
@@ -78,6 +82,7 @@ async fn strict_commit_with_different_owners_uses_rename_without_opening_or_trun
         server,
         DifferentOwners {
             files: files.clone(),
+            deny_remove: false,
         },
     ));
     let sftp = SftpSession::new(client).await.unwrap();
@@ -89,5 +94,91 @@ async fn strict_commit_with_different_owners_uses_rename_without_opening_or_trun
     );
     assert_eq!(files.lock().unwrap().get("/target"), Some(&(1000, "new")));
     assert_eq!(files.lock().unwrap().len(), 1);
+    server.abort();
+}
+
+#[tokio::test]
+async fn no_delete_mode_preserves_existing_target_and_checkpoint() {
+    let files = Arc::new(StdMutex::new(HashMap::from([
+        ("/part".to_string(), (1000, "new")),
+        ("/target".to_string(), (1000, "old")),
+    ])));
+    let (client, server) = tokio::io::duplex(4096);
+    let server = tokio::spawn(russh_sftp::server::run(
+        server,
+        DifferentOwners {
+            files: files.clone(),
+            deny_remove: false,
+        },
+    ));
+    let sftp = SftpSession::new(client).await.unwrap();
+    for policy in [None, Some(true)] {
+        let error = replace_remote_file_with_policy_mode(&sftp, "/part", "/target", policy, true)
+            .await
+            .unwrap_err();
+        assert!(error.contains("原文件未更改"), "{error}");
+        assert!(error.contains("/target"), "{error}");
+        assert_eq!(files.lock().unwrap().get("/target"), Some(&(1000, "old")));
+        assert_eq!(files.lock().unwrap().get("/part"), Some(&(1000, "new")));
+        assert_eq!(files.lock().unwrap().len(), 2);
+    }
+    server.abort();
+}
+
+#[tokio::test]
+async fn no_delete_mode_commits_a_new_target() {
+    let files = Arc::new(StdMutex::new(HashMap::from([(
+        "/part".to_string(),
+        (1000, "new"),
+    )])));
+    let (client, server) = tokio::io::duplex(4096);
+    let server = tokio::spawn(russh_sftp::server::run(
+        server,
+        DifferentOwners {
+            files: files.clone(),
+            deny_remove: false,
+        },
+    ));
+    let sftp = SftpSession::new(client).await.unwrap();
+    assert!(
+        replace_remote_file_with_policy_mode(&sftp, "/part", "/target", None, true)
+            .await
+            .unwrap()
+    );
+    assert_eq!(files.lock().unwrap().get("/target"), Some(&(1000, "new")));
+    assert_eq!(files.lock().unwrap().len(), 1);
+    server.abort();
+}
+
+#[tokio::test]
+async fn denied_backup_cleanup_reports_committed_target_and_retained_old_file() {
+    let files = Arc::new(StdMutex::new(HashMap::from([
+        ("/part".to_string(), (1000, "new")),
+        ("/target".to_string(), (1000, "old")),
+    ])));
+    let (client, server) = tokio::io::duplex(4096);
+    let server = tokio::spawn(russh_sftp::server::run(
+        server,
+        DifferentOwners {
+            files: files.clone(),
+            deny_remove: true,
+        },
+    ));
+    let sftp = SftpSession::new(client).await.unwrap();
+    let error = replace_remote_file_with_policy_mode(&sftp, "/part", "/target", None, false)
+        .await
+        .unwrap_err();
+    assert!(error.contains("REMOVE backup"), "{error}");
+    assert!(error.contains("目标已更新"), "{error}");
+    assert!(error.contains("请勿重试"), "{error}");
+    let files = files.lock().unwrap();
+    assert_eq!(files.get("/target"), Some(&(1000, "new")));
+    assert!(
+        files
+            .iter()
+            .any(|(path, data)| path.starts_with("/target.fileterm-backup-")
+                && *data == (1000, "old"))
+    );
+    drop(files);
     server.abort();
 }

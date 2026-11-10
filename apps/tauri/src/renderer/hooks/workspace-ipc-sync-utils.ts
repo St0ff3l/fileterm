@@ -103,8 +103,24 @@ function isRootUploadCommandFailure(transfer: TransferTask) {
 }
 
 export function uploadFailureBanner(transfer: TransferTask) {
+  if (
+    transfer.direction === 'upload' &&
+    ['failed', 'paused', 'interrupted'].includes(transfer.status) &&
+    /SFTP REMOVE backup/.test(transfer.message ?? '') &&
+    /目标已更新/.test(transfer.message ?? '')
+  ) {
+    return transfer.message?.replace(/^command error:\s*/i, '').trim() ?? null
+  }
+  if (
+    transfer.direction === 'upload' &&
+    ['failed', 'paused', 'interrupted'].includes(transfer.status) &&
+    /禁止删除模式/.test(transfer.message ?? '')
+  ) {
+    return `${t.uploadFailed}: ${transfer.message?.replace(/^command error:\s*/i, '').trim()}`
+  }
   if (isUploadPermissionFailure(transfer)) {
-    return t.uploadPermissionDenied
+    const detail = transfer.message?.replace(/^command error:\s*/i, '').trim()
+    return detail ? `${t.uploadPermissionDenied} ${detail}` : t.uploadPermissionDenied
   }
   if (isRootUploadCommandFailure(transfer)) {
     const detail = transfer.message?.replace(/^command error:\s*/i, '').trim()

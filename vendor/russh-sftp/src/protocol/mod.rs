@@ -235,7 +235,7 @@ impl Packet {
             SSH_FXP_STATUS => Self::Status(de::from_bytes_with_encoding(bytes, UTF_8)?),
             SSH_FXP_HANDLE => Self::Handle(de::from_bytes_with_encoding(bytes, UTF_8)?),
             SSH_FXP_DATA => Self::Data(de::from_bytes_with_encoding(bytes, UTF_8)?),
-            SSH_FXP_NAME => Self::Name(de::from_bytes_with_encoding(bytes, encoding)?),
+            SSH_FXP_NAME => Self::Name(de::from_bytes_with_strict_encoding(bytes, encoding)?),
             SSH_FXP_ATTRS => Self::Attrs(de::from_bytes_with_encoding(bytes, UTF_8)?),
             SSH_FXP_EXTENDED => Self::Extended(de::from_bytes_with_encoding(bytes, UTF_8)?),
             SSH_FXP_EXTENDED_REPLY => Self::ExtendedReply(de::from_bytes_with_encoding(bytes, UTF_8)?),

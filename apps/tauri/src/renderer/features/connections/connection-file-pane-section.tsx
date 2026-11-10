@@ -52,6 +52,9 @@ export function ConnectionFilePaneSection({
               ]}
               onChange={(value) => setForm((previous) => ({ ...previous, encoding: value }))}
             />
+            {form.type === 'ssh' || form.type === 'sftp' ? (
+              <p className="ssh-field-hint">{t.sftpFilenameEncodingHint}</p>
+            ) : null}
           </div>
         </div>
       </fieldset>

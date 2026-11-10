@@ -14,3 +14,7 @@ mod commit_tests;
 #[cfg(test)]
 #[path = "tests/transfer_io.rs"]
 mod transfer_io_tests;
+
+#[cfg(test)]
+#[path = "tests/filename_encoding.rs"]
+mod filename_encoding_tests;

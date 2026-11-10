@@ -13,7 +13,7 @@ use tokio::{
     sync::{mpsc, oneshot},
 };
 
-use super::{error::Error, runtime, Handler};
+use super::{error::Error, filename_encoding::FilenameEncoding, runtime, Handler};
 use crate::{
     client::{run_with_encoding, Config},
     de,
@@ -124,7 +124,7 @@ pub struct RawSftpSession {
     handles: AtomicU64,
     timeout: AtomicU64,
     limits: Limits,
-    encoding: &'static Encoding,
+    encoding: Arc<FilenameEncoding>,
 }
 
 macro_rules! into_with_status {
@@ -159,7 +159,9 @@ impl RawSftpSession {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        let encoding = Encoding::for_label(cfg.filename_encoding.as_bytes()).unwrap_or(UTF_8);
+        let encoding = Arc::new(FilenameEncoding::new(
+            Encoding::for_label(cfg.filename_encoding.as_bytes()).unwrap_or(UTF_8),
+        ));
         let req_map = Arc::new(HashMap::new());
         let inner = SessionInner {
             version: None,
@@ -167,7 +169,7 @@ impl RawSftpSession {
         };
 
         Self {
-            tx: run_with_encoding(stream, inner, encoding),
+            tx: run_with_encoding(stream, inner, encoding.clone()),
             requests: req_map,
             next_req_id: AtomicU32::new(1),
             handles: AtomicU64::new(0),
@@ -175,6 +177,10 @@ impl RawSftpSession {
             limits: Limits::default(),
             encoding,
         }
+    }
+
+    pub fn filename_encoding(&self) -> &'static str {
+        self.encoding.current().name()
     }
 
     /// Set the maximum response time in seconds.
@@ -197,7 +203,7 @@ impl RawSftpSession {
             return Err(Error::UnexpectedBehavior("session closed".into()));
         }
 
-        let bytes = packet.to_bytes_with_encoding(self.encoding)?;
+        let bytes = packet.to_bytes_with_encoding(self.encoding.current())?;
 
         if let Some(max_len) = self.limits.packet_len {
             if bytes.len() as u64 > max_len {

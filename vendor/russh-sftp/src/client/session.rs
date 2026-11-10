@@ -28,7 +28,6 @@ pub(crate) struct Features {
 pub struct SftpSession {
     session: Arc<RawSftpSession>,
     features: Features,
-    filename_encoding: String,
 }
 
 impl SftpSession {
@@ -45,7 +44,6 @@ impl SftpSession {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        let filename_encoding = cfg.filename_encoding.clone();
         let max_concurrent_writes = cfg.max_concurrent_writes;
         let max_packet_len = cfg.max_packet_len;
         let mut session = RawSftpSession::new_with_config(stream, cfg);
@@ -74,12 +72,11 @@ impl SftpSession {
         Ok(Self {
             session: Arc::new(session),
             features,
-            filename_encoding,
         })
     }
 
     pub fn filename_encoding(&self) -> &str {
-        &self.filename_encoding
+        self.session.filename_encoding()
     }
 
     /// Set the maximum response time in seconds.

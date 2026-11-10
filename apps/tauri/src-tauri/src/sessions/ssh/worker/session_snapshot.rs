@@ -72,6 +72,7 @@ let state = startup.state;
     sessions.insert(
         tab_id.to_string(),
         crate::services::SessionSnapshot {
+            sftp_no_delete: profile.get("sftpNoDelete").and_then(Value::as_bool).unwrap_or(false),
             transfer_endpoint: None,
             profile_id: profile
                 .get("id")

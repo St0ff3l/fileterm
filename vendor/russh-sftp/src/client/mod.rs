@@ -1,5 +1,6 @@
 pub mod error;
 pub mod fs;
+mod filename_encoding;
 mod handler;
 pub mod rawsession;
 pub(crate) mod runtime;
@@ -10,7 +11,9 @@ pub use rawsession::RawSftpSession;
 pub use session::SftpSession;
 
 use bytes::Bytes;
-use encoding_rs::{Encoding, UTF_8};
+use encoding_rs::UTF_8;
+use filename_encoding::FilenameEncoding;
+use std::sync::Arc;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite, AsyncWriteExt},
     select,
@@ -55,12 +58,12 @@ impl Default for Config {
 async fn execute_handler<H>(
     bytes: &mut Bytes,
     handler: &mut H,
-    encoding: &'static Encoding,
+    encoding: &FilenameEncoding,
 ) -> Result<(), error::Error>
 where
     H: Handler + Send,
 {
-    match Packet::from_bytes_with_encoding(bytes, encoding)? {
+    match encoding.decode_packet(bytes)? {
         Packet::Version(p) => into_wrap!(handler.version(p)),
         Packet::Status(p) => into_wrap!(handler.status(p)),
         Packet::Handle(p) => into_wrap!(handler.handle(p)),
@@ -77,7 +80,7 @@ where
 async fn process_handler<S, H>(
     stream: &mut S,
     handler: &mut H,
-    encoding: &'static Encoding,
+    encoding: &FilenameEncoding,
 ) -> Result<(), Error>
 where
     S: AsyncRead + Unpin,
@@ -94,13 +97,13 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     H: Handler + Send + 'static,
 {
-    run_with_encoding(stream, handler, UTF_8)
+    run_with_encoding(stream, handler, Arc::new(FilenameEncoding::new(UTF_8)))
 }
 
-pub(crate) fn run_with_encoding<S, H>(
+fn run_with_encoding<S, H>(
     stream: S,
     mut handler: H,
-    encoding: &'static Encoding,
+    encoding: Arc<FilenameEncoding>,
 ) -> mpsc::UnboundedSender<Bytes>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -115,7 +118,7 @@ where
         runtime::spawn(async move {
             loop {
                 select! {
-                    result = process_handler(&mut rd, &mut handler, encoding) => {
+                    result = process_handler(&mut rd, &mut handler, &encoding) => {
                         match result {
                             Err(Error::UnexpectedEof) => break,
                             Err(err) => warn!("{}", err),
