@@ -19,7 +19,6 @@ export function ConnectionReliabilitySection({
   setSshConnectionSetting<K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]): void
 }) {
   const isSsh = form.type === 'ssh'
-  const supportsSftp = isSsh || form.type === 'sftp'
   const reconnectMode = isSsh
     ? effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode')
     : (form.reconnectMode ?? 'none')
@@ -137,21 +136,6 @@ export function ConnectionReliabilitySection({
                 </label>
               </div>
             </div>
-            {supportsSftp ? (
-              <div className="advanced-toggle-row">
-                <label className="ssh-checkbox advanced-toggle-label">
-                  <SelectionControl
-                    checked={form.disableChecksumTimeoutCap === true}
-                    type="checkbox"
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, disableChecksumTimeoutCap: event.target.checked }))
-                    }
-                  />
-                  <span className="advanced-toggle-name">{t.disableChecksumTimeoutCap}</span>
-                </label>
-                <p className="advanced-toggle-hint">{t.disableChecksumTimeoutCapHint}</p>
-              </div>
-            ) : null}
             <div className="advanced-toggle-row">
               <label className="ssh-checkbox advanced-toggle-label">
                 <SelectionControl
