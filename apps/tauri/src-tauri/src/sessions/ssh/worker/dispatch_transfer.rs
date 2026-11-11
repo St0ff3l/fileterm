@@ -181,7 +181,7 @@ async fn dispatch_transfer_cmd(
                         &remote_path,
                         resume_offset,
                         &transfer_id,
-                        cancel,
+                        cancel.clone(),
                         Some(&app),
                         operation_timeout,
                     )
@@ -201,7 +201,7 @@ async fn dispatch_transfer_cmd(
                         &remote_path,
                         resume_offset,
                         &transfer_id,
-                        cancel,
+                        cancel.clone(),
                         &app,
                         method,
                         &su,
@@ -228,7 +228,7 @@ async fn dispatch_transfer_cmd(
                         crate::services::transfers::mark_sha256_verifying(&app, &transfer_id)
                             .await;
                         tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "remote-checksum", file_size_bytes = source_size, timeout_secs = checksum_timeout.as_secs(), "SFTP upload checksum stage started");
-                        match verify_sftp_transfer_sha256(
+                        let verification = verify_sftp_transfer_sha256(
                             &handle,
                             &hash,
                             &remote_path,
@@ -237,9 +237,13 @@ async fn dispatch_transfer_cmd(
                             &su,
                             &sp,
                             checksum_timeout,
-                        )
-                        .await
-                        {
+                        );
+                        let verification = tokio::select! {
+                            biased;
+                            _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
+                            result = verification => result,
+                        };
+                        match verification {
                             Ok(false)
                                 if fam == "root"
                                     && !use_login_sftp_staging

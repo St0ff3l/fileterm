@@ -245,6 +245,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn head_distinguishes_deleted_objects_from_missing_etags_and_access_errors() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for (status, extra) in [
+                ("404 Not Found", "ETag: \"error-page-version\"\r\n"),
+                ("200 OK", ""),
+                ("403 Forbidden", ""),
+                ("500 Internal Server Error", ""),
+            ] {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                assert!(read_request(&mut socket).await.starts_with("HEAD "));
+                socket.write_all(format!("HTTP/1.1 {status}\r\n{extra}Content-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            }
+        });
+        let config = StoredConfig {
+            url: format!("http://{address}"), remote_path: "profiles.json".into(),
+            allow_insecure_tls: Some(true), last_etag: Some("old-version".into()),
+            ..StoredConfig::default()
+        };
+        let client = test_client();
+        assert_eq!(super::head_payload(&client, &config).await.unwrap(), (false, None));
+        assert_eq!(super::head_payload(&client, &config).await.unwrap(), (true, None));
+        assert!(super::head_payload(&client, &config).await.unwrap_err().to_string().contains("403"));
+        assert!(super::head_payload(&client, &config).await.unwrap_err().to_string().contains("500"));
+        server.await.unwrap();
+        assert_eq!(config.last_etag.as_deref(), Some("old-version"));
+    }
+
+    #[tokio::test]
     async fn real_webdav_server_rejects_stale_etag_with_if_match() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
