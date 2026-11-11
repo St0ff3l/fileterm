@@ -1,19 +1,24 @@
 // Budget full-file SHA-256 passes at a conservative 16 MiB/s floor.
 const CHECKSUM_THROUGHPUT_BYTES_PER_SECOND: u64 = 16 * 1024 * 1024;
 const CHECKSUM_TIMEOUT_GRACE: Duration = Duration::from_secs(60);
-// shortcut: cap SHA-256 checks at 24 hours; raise if supported files need longer.
+// shortcut: keep a 24-hour default cap; profiles can disable it for larger files.
 const MAX_CHECKSUM_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 
 fn checksum_timeout_for_size(
     operation_timeout: Duration,
     file_size: u64,
     hash_passes: u64,
+    timeout_cap_disabled: bool,
 ) -> Duration {
     let seconds_per_pass = file_size.div_ceil(CHECKSUM_THROUGHPUT_BYTES_PER_SECOND);
-    let timeout_secs = seconds_per_pass
+    let estimated_timeout_secs = seconds_per_pass
         .saturating_mul(hash_passes)
-        .saturating_add(CHECKSUM_TIMEOUT_GRACE.as_secs())
-        .min(MAX_CHECKSUM_TIMEOUT.as_secs());
+        .saturating_add(CHECKSUM_TIMEOUT_GRACE.as_secs());
+    let timeout_secs = if timeout_cap_disabled {
+        estimated_timeout_secs
+    } else {
+        estimated_timeout_secs.min(MAX_CHECKSUM_TIMEOUT.as_secs())
+    };
     operation_timeout.max(Duration::from_secs(timeout_secs))
 }
 
@@ -25,6 +30,7 @@ async fn dispatch_transfer_cmd(
     sftp: &SharedSftpSession,
     transfer_sftp_slot: &TransferSftpSlot,
     operation_timeout: Duration,
+    checksum_timeout_cap_disabled: bool,
     file_access_mode: &mut String,
     root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
@@ -140,7 +146,12 @@ async fn dispatch_transfer_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
-            let checksum_timeout = checksum_timeout_for_size(operation_timeout, source_size, 1);
+            let checksum_timeout = checksum_timeout_for_size(
+                operation_timeout,
+                source_size,
+                1,
+                checksum_timeout_cap_disabled,
+            );
             tokio::spawn(async move {
                 // Root uploads are deliberately staged under /var/tmp first. The
                 // login user's SFTP channel transfers the bulk bytes there,
@@ -350,8 +361,12 @@ async fn dispatch_transfer_cmd(
                         }
                     };
                     if let Some(local_file_size) = local_file_size {
-                        let checksum_timeout =
-                            checksum_timeout_for_size(operation_timeout, local_file_size, 2);
+                    let checksum_timeout = checksum_timeout_for_size(
+                        operation_timeout,
+                        local_file_size,
+                        2,
+                        checksum_timeout_cap_disabled,
+                    );
                         crate::services::transfers::mark_sha256_verifying(&app, &transfer_id)
                             .await;
                         tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "checksum", file_size_bytes = local_file_size, timeout_secs = checksum_timeout.as_secs(), "SFTP download checksum stage started");

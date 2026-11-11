@@ -51,6 +51,7 @@ async fn run_sftp_only_worker_loop(
     let _session_cleanup = session.cleanup;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let operation_timeout = file_operation_timeout(&session_profile);
+    let checksum_timeout_cap_disabled = profile_disables_checksum_timeout_cap(&session_profile);
     let startup = SshWorkerStartupContext {
         app,
         tab_id,
@@ -156,6 +157,7 @@ async fn run_sftp_only_worker_loop(
                             &sftp,
                             &transfer_sftp_slot,
                             operation_timeout,
+                            checksum_timeout_cap_disabled,
                             &mut file_access_mode,
                             &mut root_file_access_method,
                             &mut sudo_user,

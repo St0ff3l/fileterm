@@ -1317,6 +1317,8 @@ const zhCN = {
   timeoutAndKeepalive: '超时与保活',
   connectionTimeout: '连接超时（秒）',
   operationTimeout: '操作超时（秒）',
+  disableChecksumTimeoutCap: '关闭 SHA-256 校验超时上限',
+  disableChecksumTimeoutCapHint: '校验超时仍按文件大小估算；关闭默认 24 小时上限后，远端无响应时任务可能等待很久。',
   keepalive: '启用保活',
   keepaliveHint: '定期发送协议保活包，及时发现半开连接；失败达到上限后才触发断线处理。',
   keepaliveInterval: '保活间隔（秒）',
@@ -3582,6 +3584,9 @@ const enUS: typeof zhCN = {
   timeoutAndKeepalive: 'Timeouts & Keepalive',
   connectionTimeout: 'Connect timeout (seconds)',
   operationTimeout: 'Operation timeout (seconds)',
+  disableChecksumTimeoutCap: 'Remove the SHA-256 verification timeout cap',
+  disableChecksumTimeoutCapHint:
+    'The timeout is still estimated from file size. Without the default 24-hour cap, a stalled remote checksum may wait for a long time.',
   keepalive: 'Enable keepalive',
   keepaliveHint:
     'Send periodic protocol keepalives to detect half-open connections; disconnect handling starts only after the failure limit is reached.',

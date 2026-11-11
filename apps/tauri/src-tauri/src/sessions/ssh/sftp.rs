@@ -8,6 +8,13 @@ fn file_operation_timeout(profile: &Value) -> Duration {
     )
 }
 
+fn profile_disables_checksum_timeout_cap(profile: &Value) -> bool {
+    profile
+        .get("disableChecksumTimeoutCap")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 async fn open_sftp_session(
     handle: &Handle<ClientHandler>,
     request_timeout: Duration,

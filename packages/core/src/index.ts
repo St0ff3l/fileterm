@@ -423,6 +423,8 @@ export interface McpAgentSetup {
 
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
+  /** Disable the 24-hour ceiling for size-based SHA-256 transfer verification timeouts. */
+  disableChecksumTimeoutCap?: boolean
   /** Explicit session target. Missing keeps legacy server behavior; auto resolves after handshake. */
   deviceMode?: SshDeviceMode
   /** PTY terminal type sent during SSH shell setup. */
@@ -1352,6 +1354,7 @@ export interface CreateProfileInput {
   keepaliveMaxMisses?: number
   connectTimeoutSeconds?: number
   operationTimeoutSeconds?: number
+  disableChecksumTimeoutCap?: boolean
   sftpEnabled?: boolean
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig

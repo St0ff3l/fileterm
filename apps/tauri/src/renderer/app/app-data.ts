@@ -228,6 +228,7 @@ export function profileToForm(
     keepaliveMaxMisses: profile.keepaliveMaxMisses ?? 3,
     connectTimeoutSeconds: profile.connectTimeoutSeconds ?? 30,
     operationTimeoutSeconds: profile.operationTimeoutSeconds ?? 60,
+    disableChecksumTimeoutCap: isSshTransport ? (profile.disableChecksumTimeoutCap ?? false) : false,
     sftpEnabled: profile.type === 'sftp' ? true : profile.type === 'ssh' ? (profile.sftpEnabled ?? true) : false,
     legacyAlgorithms: isSshTransport ? sshConnectionSettings.legacyAlgorithms : false,
     secure: profile.type === 'ftp' ? profile.secure : false,
