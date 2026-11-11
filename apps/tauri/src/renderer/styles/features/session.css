@@ -6,7 +6,7 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  transition: grid-template-rows 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: grid-template-rows var(--duration-move) var(--ease-in-out);
 }
 
 .session-workspace.file-only,
@@ -75,8 +75,8 @@
   background: transparent;
   transform: translateY(-50%);
   transition:
-    height 0.16s ease,
-    background 0.16s ease;
+    height var(--duration-move) var(--ease-in-out),
+    background var(--duration-move) var(--ease-in-out);
 }
 
 .session-split-resizer:hover::after,
@@ -304,7 +304,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-panel-head button:hover {
@@ -334,7 +334,13 @@
   min-height: 24px;
   padding: 4px 12px;
   border-bottom: 1px solid var(--border-light);
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -384,7 +390,13 @@
   background: color-mix(in srgb, var(--text-main) 6%, transparent);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-family: var(--font-mono);
 }
 
@@ -413,7 +425,7 @@
 .terminal-dock-history-time {
   font-size: 10px;
   color: var(--text-muted);
-  transition: opacity 0.15s ease;
+  transition: opacity var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-history-actions {
@@ -422,7 +434,7 @@
   gap: 4px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--duration-hover) var(--ease-out);
   position: absolute;
   right: 0;
 }
@@ -447,7 +459,13 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   padding: 0;
 }
 
@@ -489,7 +507,13 @@
   border-radius: 4px;
   padding: 2px 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-clear-btn:hover {
@@ -513,8 +537,8 @@
   color: var(--text-main);
   font-size: 11px;
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-history-search:focus {
@@ -569,7 +593,13 @@
   color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-ttl-options button:hover,
@@ -645,7 +675,7 @@
   font-size: 11px;
   line-height: 14px;
   white-space: nowrap;
-  transition: color 0.15s ease;
+  transition: color var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-input-shell textarea:focus {
@@ -671,7 +701,13 @@
   color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-actions button:hover:not(:disabled) {
@@ -701,7 +737,13 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .terminal-dock-icon-btn:hover {
@@ -811,8 +853,8 @@
   outline: none;
   transform-origin: bottom;
   transition:
-    opacity 0.18s ease,
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .workspace-view-content {
@@ -853,10 +895,10 @@
   -webkit-backdrop-filter: blur(18px);
   pointer-events: auto;
   transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
+    background var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .file-panel-drawer-toggle:hover {
@@ -920,7 +962,13 @@
   border: 1px solid transparent;
   display: grid;
   place-items: center;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .file-split {
@@ -991,7 +1039,7 @@
 }
 
 .remote-capability-panel__chevron {
-  transition: transform 0.16s ease;
+  transition: transform var(--duration-hover) var(--ease-out);
 }
 
 .remote-capability-panel[open] .remote-capability-panel__chevron {
@@ -1187,8 +1235,8 @@
   background: transparent;
   gap: 6px;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background var(--duration-hover) var(--ease-out);
 }
 
 .pane-filter-input-wrapper:hover {
@@ -1280,7 +1328,13 @@
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-family: var(--font-mono);
 }
 
@@ -1352,7 +1406,7 @@
   cursor: default;
   outline: none;
   opacity: 0;
-  transition: opacity 160ms ease;
+  transition: opacity var(--duration-hover) var(--ease-out);
 }
 
 .terminal-area .vertical-scrollbar {
@@ -1483,7 +1537,7 @@
 }
 
 .fs-file-table tbody tr {
-  transition: background 0.15s;
+  transition: background var(--duration-hover) var(--ease-out);
 }
 
 .fs-file-table tbody tr.is-cut-pending {
@@ -1729,9 +1783,9 @@
   color: var(--text-muted);
   cursor: pointer;
   transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .transfer-session-hide:hover {
@@ -1965,7 +2019,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  transition: width 0.18s ease;
+  transition: width var(--duration-sm) linear;
 }
 
 .transfer-empty {
@@ -2193,7 +2247,13 @@
   color: var(--text-main);
   font: inherit;
   font-size: 14px;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .network-share-credentials-modal .file-action-field input:focus,
@@ -2235,7 +2295,13 @@
   color: var(--text-main);
   font: inherit;
   font-size: 14px;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .root-access-modal .file-action-field .dropdown-select-trigger:focus-visible {
@@ -2724,7 +2790,13 @@
   border-radius: 6px;
   color: var(--text-muted);
   background: var(--surface-inset);
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   margin-left: 12px;
   margin-right: 12px;
   -webkit-app-region: no-drag;
@@ -2778,7 +2850,13 @@
   font-size: var(--button-font-size-compact);
   font-weight: var(--button-font-weight);
   box-shadow: none;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-family: inherit;
   cursor: pointer;
 }
@@ -2843,7 +2921,13 @@
   font-size: 13px;
   font-weight: 400;
   text-align: left;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-family: inherit;
   cursor: pointer;
 }
@@ -3099,7 +3183,7 @@
 
 .manager-folder-toggle {
   font-size: 8px;
-  transition: transform 0.12s ease;
+  transition: transform var(--duration-hover) var(--ease-out);
 }
 
 .manager-node-name {
@@ -3152,10 +3236,10 @@
   opacity: 0.62;
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease,
-    opacity 0.2s ease,
-    box-shadow 0.2s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
 }
 
 .manager-icon-action:hover {
@@ -3289,11 +3373,11 @@
   height: 42px;
   width: 42px; /* Compact width when closed */
   transition:
-    width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-    background-color 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-    border-radius 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-    box-shadow 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-    border-color 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+    width var(--duration-move) var(--ease-in-out),
+    background-color var(--duration-move) var(--ease-in-out),
+    border-radius var(--duration-move) var(--ease-in-out),
+    box-shadow var(--duration-move) var(--ease-in-out),
+    border-color var(--duration-move) var(--ease-in-out);
   box-sizing: border-box;
   transform: translateZ(0);
   backface-visibility: hidden;
@@ -3328,11 +3412,11 @@
   max-width: 0;
   overflow: hidden;
   transition:
-    max-width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-    opacity 0.2s ease,
-    transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-    visibility 0.2s ease,
-    padding-left 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+    max-width var(--duration-move) var(--ease-in-out),
+    opacity var(--duration-move) var(--ease-in-out),
+    transform var(--duration-move) var(--ease-in-out),
+    visibility var(--duration-move) var(--ease-in-out),
+    padding-left var(--duration-move) var(--ease-in-out);
   will-change: max-width, opacity, transform;
 }
 
@@ -3361,9 +3445,9 @@
   line-height: var(--button-line-height);
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
   white-space: nowrap;
 }
 .drawer-option-btn .app-icon {
@@ -3425,14 +3509,14 @@
   color: var(--button-primary-text) !important;
   cursor: pointer;
   transition:
-    transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-    color 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-    background-color 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-    box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-    width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-    height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-    margin 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-    border-radius 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transform var(--duration-move) var(--ease-in-out),
+    color var(--duration-move) var(--ease-in-out),
+    background-color var(--duration-move) var(--ease-in-out),
+    box-shadow var(--duration-move) var(--ease-in-out),
+    width var(--duration-move) var(--ease-in-out),
+    height var(--duration-move) var(--ease-in-out),
+    margin var(--duration-move) var(--ease-in-out),
+    border-radius var(--duration-move) var(--ease-in-out);
   flex-shrink: 0;
   border-radius: 21px;
   margin: 0 !important;
@@ -3903,8 +3987,8 @@
   content: '';
   background: var(--border-light);
   transition:
-    background 0.16s ease,
-    box-shadow 0.16s ease;
+    background var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
 }
 
 .split-pane-resizer:hover,
@@ -3977,7 +4061,7 @@
   pointer-events: none;
   background: color-mix(in srgb, var(--bg-card) 82%, transparent);
   box-shadow: var(--shadow-sm);
-  transition: opacity 0.16s ease;
+  transition: opacity var(--duration-hover) var(--ease-out);
 }
 
 .split-pane-leaf:hover .split-pane-leaf-close,
@@ -3998,4 +4082,37 @@
 .split-pane-terminal .xterm {
   width: 100%;
   height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-workspace,
+  .session-split-resizer::after,
+  .terminal-dock-history-wrapper,
+  .history-token,
+  .terminal-dock-action-btn,
+  .terminal-dock-clear-btn,
+  .terminal-dock-ttl-options button,
+  .terminal-dock-option-inline button,
+  .terminal-dock-actions button,
+  .terminal-dock-icon-btn,
+  .file-manager,
+  .file-panel-drawer-toggle,
+  .file-toolbar button,
+  .remote-capability-panel__chevron,
+  .pane-filter-mode-btn,
+  .transfer-progress b,
+  .network-share-credentials-modal .file-action-field input,
+  .network-share-picker-modal .file-action-field select,
+  .root-access-modal .file-action-field input,
+  .root-access-modal .file-action-field select,
+  .root-access-modal .file-action-field .dropdown-select-trigger,
+  .connection-manager-search,
+  .connection-manager-action-button,
+  .connection-manager-sidebar-item,
+  .manager-folder-toggle,
+  .connection-manager-floating-drawer,
+  .drawer-options-wrapper,
+  .drawer-trigger-btn {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

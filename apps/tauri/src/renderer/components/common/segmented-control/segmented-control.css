@@ -1,4 +1,7 @@
 .ft-segmented-control {
+  position: relative;
+  isolation: isolate;
+  --selection-indicator-bg: var(--action-primary-bg);
   display: inline-grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
@@ -28,8 +31,8 @@
   text-align: center;
   cursor: pointer;
   transition:
-    background-color 150ms ease,
-    color 150ms ease;
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .ft-segmented-control > .ft-segmented-control__option:hover {
@@ -105,4 +108,28 @@
     outline: 1px solid Highlight;
     outline-offset: -1px;
   }
+}
+
+.ft-segmented-control > .selection-indicator {
+  border-radius: calc(var(--radius-sm) - 2px);
+  box-shadow: var(--control-shadow);
+}
+.ft-segmented-control__label {
+  position: relative;
+}
+.ft-segmented-control--neutral {
+  --selection-indicator-bg: var(--surface-section);
+}
+.ft-segmented-control[data-selection-motion='ready'] > .ft-segmented-control__option.is-selected {
+  background: transparent;
+  box-shadow: none;
+}
+@media (forced-colors: active) {
+  .ft-segmented-control > .selection-indicator {
+    display: none;
+  }
+}
+
+.ft-segmented-control:not(.ft-segmented-control--neutral):has(> .is-selected:hover) {
+  --selection-indicator-bg: var(--action-primary-hover);
 }

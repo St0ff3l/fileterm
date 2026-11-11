@@ -6,7 +6,7 @@
 .home-workspace {
   display: grid;
   grid-template-columns: var(--workspace-left-width, var(--sidebar-width, 214px)) minmax(0, 1fr);
-  transition: grid-template-columns 0.24s linear;
+  transition: grid-template-columns var(--duration-move) var(--ease-in-out);
   grid-template-rows: var(--window-tabbar-height) minmax(0, 1fr);
   width: 100%;
   height: 100%;
@@ -32,8 +32,8 @@
   flex-direction: column;
   flex-shrink: 0;
   transition:
-    min-width 0.24s linear,
-    padding 0.24s linear;
+    min-width var(--duration-move) var(--ease-in-out),
+    padding var(--duration-move) var(--ease-in-out);
 }
 
 .fs-shell.is-resizing-sidebar .home-sidebar,
@@ -130,9 +130,9 @@
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease,
-    padding-left 0.2s ease;
+    background-color var(--duration-move) var(--ease-in-out),
+    color var(--duration-move) var(--ease-in-out),
+    padding-left var(--duration-move) var(--ease-in-out);
   font-family: var(--font-ui);
   box-sizing: border-box;
 }
@@ -194,8 +194,8 @@
   font-size: 12px;
   text-align: left;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out);
 }
 
 .sidebar-update-hint:hover:not(:disabled) {
@@ -528,7 +528,7 @@
 .page-transition > .overview-page > *,
 .page-transition > .quick-links-page > *,
 .page-transition > .manager-inline > * {
-  animation: page-card-in-up 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: page-card-in-up 0.42s var(--ease-out) both;
 }
 
 .page-transition[data-nav-direction='up'] > .overview-page > *,
@@ -638,7 +638,13 @@
   border-bottom: 1px solid var(--border-light);
   font-size: 13.5px;
   color: var(--text-main);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   cursor: pointer;
   box-sizing: border-box;
   position: relative;
@@ -657,7 +663,13 @@
   bottom: 15%;
   width: 3px;
   background-color: transparent;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   border-radius: 0 2px 2px 0;
 }
 
@@ -704,8 +716,8 @@
   margin-right: 8px;
   cursor: pointer;
   transition:
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    color 0.2s ease;
+    transform var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .folder-chevron.expanded {
@@ -760,7 +772,7 @@
 .type-dot.dot-ssh {
   background-color: var(--type-ssh);
   box-shadow: 0 0 8px var(--type-ssh-surface);
-  animation: dot-glow 2.5s infinite ease-in-out;
+  animation: dot-glow 2.5s infinite var(--ease-in-out);
 }
 
 .type-dot.dot-telnet {
@@ -792,7 +804,7 @@
   display: flex;
   justify-content: flex-end;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--duration-hover) var(--ease-out);
 }
 
 .flat-grid-row:hover .col-action {
@@ -811,10 +823,10 @@
   justify-content: center;
   border-radius: 50%;
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    box-shadow 0.2s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
 }
 
 .col-action button:hover {
@@ -907,8 +919,8 @@
   padding: 4px 6px;
   border-radius: 4px;
   transition:
-    color 0.15s ease,
-    background-color 0.15s ease;
+    color var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out);
 }
 
 .footer-nav button:hover {
@@ -929,7 +941,7 @@
   padding: 4px 6px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--duration-hover) var(--ease-out);
 }
 
 .footer-status-link:focus-visible {
@@ -957,7 +969,7 @@
   height: 6px;
   background-color: var(--success);
   border-radius: 50%;
-  animation: status-pulse 2.5s infinite ease-in-out;
+  animation: status-pulse 2.5s infinite var(--ease-in-out);
 }
 
 /* Layout overrides when Home tab is active (hiding topbar and bottom bar) */
@@ -1196,5 +1208,23 @@
   .home-workspace,
   .home-sidebar {
     transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-workspace,
+  .home-sidebar,
+  .sidebar-nav-link,
+  .flat-grid-row,
+  .flat-grid-row::before,
+  .folder-chevron {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .type-dot.dot-ssh,
+  .footer-status-dot {
+    animation: none;
   }
 }

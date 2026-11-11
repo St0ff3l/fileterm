@@ -16,7 +16,7 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: ft-dialog-fade-in var(--transition-normal);
+  animation: ft-dialog-fade-in var(--duration-md) var(--ease-out);
 }
 
 .ft-dialog {
@@ -30,7 +30,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: ft-dialog-pop-in var(--transition-normal);
+  animation: ft-dialog-pop-in var(--duration-md) var(--ease-out);
   outline: none;
 }
 
@@ -114,6 +114,38 @@
 @media (prefers-reduced-motion: reduce) {
   .ft-dialog-backdrop,
   .ft-dialog {
-    animation: ft-dialog-fade-in 150ms ease-out;
+    animation: ft-dialog-fade-in 150ms var(--ease-out);
+  }
+}
+
+.ft-dialog-backdrop[data-exiting] {
+  pointer-events: none;
+  animation: ft-dialog-fade-out var(--duration-exit) var(--ease-in) both;
+}
+.ft-dialog-backdrop[data-exiting] .ft-dialog {
+  animation: ft-dialog-pop-out var(--duration-exit) var(--ease-in) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ft-dialog-backdrop[data-exiting] .ft-dialog {
+    animation-name: ft-dialog-fade-out;
+  }
+}
+
+@keyframes ft-dialog-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ft-dialog-pop-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
   }
 }

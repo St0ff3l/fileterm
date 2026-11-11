@@ -76,7 +76,13 @@
   cursor: not-allowed;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   box-sizing: border-box;
 }
 
@@ -503,5 +509,11 @@
     right: 50px !important;
     width: calc(100% - 100px) !important;
     max-width: calc(100% - 100px) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-editor-modal .modal-header .file-editor-save-button {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
   }
 }

@@ -269,7 +269,7 @@
   color: var(--text-muted);
   cursor: pointer;
   padding: 0;
-  transition: color 120ms ease;
+  transition: color var(--duration-hover) var(--ease-out);
 }
 
 .proxy-pwd-toggle-btn:hover {

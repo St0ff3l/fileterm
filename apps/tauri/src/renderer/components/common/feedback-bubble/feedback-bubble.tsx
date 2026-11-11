@@ -195,11 +195,13 @@ export function FeedbackBubbleViewport() {
   )
   const viewportRef = useRef<HTMLDivElement>(null)
   const previousTopsRef = useRef(new Map<number, number>())
+  const reorderAnimationsRef = useRef(new Map<number, Animation>())
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current
     if (!viewport) return
 
+    const motion = getComputedStyle(viewport)
     const viewportTop = viewport.getBoundingClientRect().top
     const nextTops = new Map<number, number>()
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -207,21 +209,51 @@ export function FeedbackBubbleViewport() {
     for (const item of viewport.querySelectorAll<HTMLElement>('[data-feedback-notice-id]')) {
       const id = Number(item.dataset.feedbackNoticeId)
       const top = viewportTop + item.offsetTop
-      const previousTop = previousTopsRef.current.get(id)
+      let previousTop = previousTopsRef.current.get(id)
+      const activeAnimation = reorderAnimationsRef.current.get(id)
+      if (activeAnimation) {
+        const offset = Number.parseFloat(getComputedStyle(item).translate.split(' ')[1]) || 0
+        if (previousTop !== undefined) previousTop += offset
+        activeAnimation.cancel()
+        reorderAnimationsRef.current.delete(id)
+      }
 
       if (!reduceMotion && previousTop !== undefined && previousTop !== top) {
-        item.animate([{ translate: `0px ${previousTop - top}px` }, { translate: '0px 0px' }], {
+        const animation = item.animate([{ translate: `0px ${previousTop - top}px` }, { translate: '0px 0px' }], {
           composite: 'add',
-          duration: 240,
-          easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)'
+          duration: Number.parseFloat(motion.getPropertyValue('--duration-move')) || 180,
+          easing: motion.getPropertyValue('--ease-in-out').trim() || 'ease-in-out'
         })
+        reorderAnimationsRef.current.set(id, animation)
       }
 
       nextTops.set(id, top)
     }
 
+    for (const [id, animation] of reorderAnimationsRef.current) {
+      if (!nextTops.has(id)) {
+        animation.cancel()
+        reorderAnimationsRef.current.delete(id)
+      }
+    }
     previousTopsRef.current = nextTops
   }, [currentNotices])
+
+  useLayoutEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const stop = () => {
+      for (const animation of reorderAnimationsRef.current.values()) animation.cancel()
+      reorderAnimationsRef.current.clear()
+    }
+    const onPreferenceChange = () => {
+      if (preference.matches) stop()
+    }
+    preference.addEventListener('change', onPreferenceChange)
+    return () => {
+      preference.removeEventListener('change', onPreferenceChange)
+      stop()
+    }
+  }, [])
 
   if (currentNotices.length === 0 || typeof document === 'undefined') return null
 

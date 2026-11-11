@@ -185,3 +185,9 @@
     transform: none;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-btn {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
+}

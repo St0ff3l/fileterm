@@ -1,0 +1,12 @@
+.selection-indicator {
+  position: absolute;
+  pointer-events: none;
+  visibility: hidden;
+  transform-origin: top left;
+  border-radius: inherit;
+  background: var(--selection-indicator-bg, var(--surface-active));
+}
+
+[data-selection-motion='ready'] > .selection-indicator {
+  visibility: visible;
+}
