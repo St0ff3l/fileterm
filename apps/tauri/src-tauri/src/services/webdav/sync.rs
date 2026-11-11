@@ -113,7 +113,7 @@ async fn upload_inner(app: &AppHandle, mode: UploadMode) -> Result<Value, AppErr
     } else {
         export_bundle(app, &password).await?
     };
-    let next_etag = upload_payload(&client, &config, payload, remote_etag.as_deref()).await?;
+    let next_etag = upload_payload(&client, &config, payload, remote_exists, remote_etag.as_deref()).await?;
     config.last_etag = next_etag;
     config.last_synced_at = Some(export_timestamp());
     config.content_hash = Some(content_hash);
@@ -144,7 +144,21 @@ async fn head_payload(
     if !remote_exists && response.status() != StatusCode::NOT_FOUND {
         return Err(response_error("预检", response.status()));
     }
-    Ok((remote_exists, etag(response.headers())))
+    Ok((remote_exists, remote_exists.then(|| etag(response.headers())).flatten()))
+}
+
+/// A confirmed missing object can be recreated; an existing unrecognized version cannot.
+pub(crate) fn validate_upload_version(
+    last_etag: Option<&str>,
+    remote_exists: bool,
+    remote_etag: Option<&str>,
+) -> Result<(), AppError> {
+    if remote_exists && last_etag.is_some() && last_etag != remote_etag {
+        return Err(command_error(
+            "远端配置自上次同步后已变更。请先下载并确认冲突，再上传。",
+        ));
+    }
+    Ok(())
 }
 
 /// Upload a prepared profile bundle with optimistic-concurrency protection.
@@ -159,16 +173,11 @@ async fn upload_payload(
     client: &Client,
     config: &StoredConfig,
     payload: Vec<u8>,
+    remote_exists: bool,
     remote_etag: Option<&str>,
 ) -> Result<Option<String>, AppError> {
     let remote = remote_url(config)?;
-    if let Some(last_etag) = config.last_etag.as_deref() {
-        if remote_etag != Some(last_etag) {
-            return Err(command_error(
-                "远端配置自上次同步后已变更。请先下载并确认冲突，再上传。",
-            ));
-        }
-    }
+    validate_upload_version(config.last_etag.as_deref(), remote_exists, remote_etag)?;
     let mut request = authenticated(
         client
             .put(remote)

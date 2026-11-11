@@ -125,17 +125,15 @@ pub async fn upload(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppErr
 async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
-    let mut remote_etag = head_object(&client, &config).await?;
-    if let Some(last_etag) = config.last_etag.as_deref() {
-        if remote_etag.as_deref() != Some(last_etag) {
-            return Err(command_error(
-                "远端配置自上次同步后已变更。请先下载并确认冲突，再上传。",
-            ));
-        }
-    }
+    let (remote_exists, mut remote_etag) = head_object(&client, &config).await?;
+    webdav::validate_upload_version(
+        config.last_etag.as_deref(),
+        remote_exists,
+        remote_etag.as_deref(),
+    )?;
     let password = backup_prompt::request(app, "upload", "S3").await?;
     let (payload, content_hash) = if mode == webdav::UploadMode::MergeCloud {
-        if remote_etag.is_some() {
+        if remote_exists {
             // The object can change after HEAD. Bind the conditional PUT to
             // the exact version returned with the bytes we merged.
             let (remote_bytes, downloaded_etag) = download_payload(&client, &config).await?;

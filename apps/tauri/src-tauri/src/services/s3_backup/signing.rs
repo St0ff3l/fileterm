@@ -122,7 +122,7 @@ fn response_error(action: &str, status: StatusCode) -> AppError {
     command_error(format!("S3 {action}失败 ({status})"))
 }
 
-async fn head_object(client: &Client, config: &StoredConfig) -> Result<Option<String>, AppError> {
+async fn head_object(client: &Client, config: &StoredConfig) -> Result<(bool, Option<String>), AppError> {
     let response = signed_request(
         client,
         config,
@@ -135,12 +135,12 @@ async fn head_object(client: &Client, config: &StoredConfig) -> Result<Option<St
     .await
     .map_err(|error| command_error(format!("S3 预检失败: {error}")))?;
     if response.status() == StatusCode::NOT_FOUND {
-        return Ok(None);
+        return Ok((false, None));
     }
     if !response.status().is_success() {
         return Err(response_error("预检", response.status()));
     }
-    Ok(etag(response.headers()))
+    Ok((true, etag(response.headers())))
 }
 
 async fn head_bucket(client: &Client, config: &StoredConfig) -> Result<(), AppError> {

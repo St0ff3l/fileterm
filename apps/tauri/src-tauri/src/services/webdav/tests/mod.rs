@@ -235,6 +235,15 @@ mod tests {
         assert!(super::prepare_import_profiles(vec![], DownloadMode::OverwriteLocal).unwrap().0.is_empty());
     }
 
+    #[test]
+    fn missing_backup_can_be_recreated_but_existing_versions_remain_protected() {
+        let old = Some("old");
+        assert!(super::validate_upload_version(old, false, None).is_ok());
+        assert!(super::validate_upload_version(old, true, old).is_ok());
+        assert!(super::validate_upload_version(old, true, Some("new")).is_err());
+        assert!(super::validate_upload_version(old, true, None).is_err());
+    }
+
     #[tokio::test]
     async fn real_webdav_server_rejects_stale_etag_with_if_match() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -273,7 +282,7 @@ mod tests {
         };
         let client = test_client();
         let (_, expected_etag) = super::head_payload(&client, &config).await.unwrap();
-        let result = upload_payload(&client, &config, b"{}".to_vec(), expected_etag.as_deref()).await;
+        let result = upload_payload(&client, &config, b"{}".to_vec(), true, expected_etag.as_deref()).await;
         server.await.unwrap();
         let error = result.unwrap_err();
         assert!(error.to_string().contains("ETag 冲突"), "{error}");
@@ -319,18 +328,44 @@ mod tests {
             allow_insecure_tls: Some(true),
             password: None,
             last_synced_at: None,
-            last_etag: None,
+            last_etag: Some("\"deleted-version\"".into()),
             content_hash: None,
         };
         let client = test_client();
         let (_, expected_etag) = super::head_payload(&client, &config).await.unwrap();
         assert_eq!(
-            upload_payload(&client, &config, payload, expected_etag.as_deref())
+            upload_payload(&client, &config, payload, false, expected_etag.as_deref())
                 .await
                 .unwrap(),
             Some("\"etag-after-write\"".to_string())
         );
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn recreating_deleted_backup_rejects_concurrent_creation() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut put, _) = listener.accept().await.unwrap();
+            let request = read_request(&mut put).await;
+            assert!(request.starts_with("PUT "));
+            assert!(request.contains("if-none-match: *\r\n"));
+            assert!(!request.contains("if-match:"));
+            put.write_all(b"HTTP/1.1 412 Precondition Failed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+        });
+        let config = StoredConfig {
+            enabled: true,
+            url: format!("http://{address}"),
+            remote_path: "profiles.json".into(),
+            allow_insecure_tls: Some(true),
+            last_etag: Some("deleted-version".into()),
+            ..StoredConfig::default()
+        };
+        let result = upload_payload(&test_client(), &config, b"{}".to_vec(), false, None).await;
+        server.await.unwrap();
+        assert!(result.unwrap_err().to_string().contains("ETag 冲突"));
+        assert_eq!(config.last_etag.as_deref(), Some("deleted-version"));
     }
 
     #[tokio::test]
@@ -356,7 +391,7 @@ mod tests {
         };
         let client = test_client();
         let (bytes, version) = download_payload(&client, &config).await.unwrap();
-        let result = upload_payload(&client, &config, bytes, version.as_deref()).await;
+        let result = upload_payload(&client, &config, bytes, true, version.as_deref()).await;
         server.await.unwrap();
         assert!(result.unwrap_err().to_string().contains("ETag 冲突"));
     }
