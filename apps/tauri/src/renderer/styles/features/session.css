@@ -169,7 +169,7 @@
   min-width: 0;
   height: 24px;
   padding: 0 6px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1;
@@ -1998,7 +1998,7 @@
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font-size: 13px;
 }
 
@@ -2188,7 +2188,7 @@
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--input-bg);
   color: var(--text-main);
   font: inherit;
@@ -2230,7 +2230,7 @@
 .root-access-modal .file-action-field .dropdown-select-trigger {
   padding: 0 12px;
   border-color: var(--border-light);
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--input-bg);
   color: var(--text-main);
   font: inherit;
@@ -2506,7 +2506,7 @@
   min-height: 32px;
   padding: 5px 10px;
   border: 1px solid var(--border-dark);
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-card);
   color: var(--text-main);
   font-family: inherit;
@@ -3659,7 +3659,7 @@
   min-height: 36px;
   min-width: 0;
   border: 1px solid var(--border-light);
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   padding: 0 12px;
   color: var(--text-main);
   background: var(--input-bg);

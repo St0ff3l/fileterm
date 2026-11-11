@@ -164,6 +164,7 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
         app,
         transfer_id,
         |task| {
+            let status_has_advanced = matches!(task.status.as_str(), "verifying" | "finalizing");
             let (aggregate_transferred, aggregate_total) = if let Some(manifest) =
                 task.manifest.as_mut().filter(|_| task.direction != "copy")
             {
@@ -178,7 +179,9 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
             } else {
                 (transferred, total)
             };
-            task.status = "running".to_string();
+            if !status_has_advanced {
+                task.status = "running".to_string();
+            }
             task.transferred_bytes = Some(aggregate_transferred);
             task.total_bytes = Some(aggregate_total);
             task.progress = if aggregate_total == 0 {
@@ -186,15 +189,17 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
             } else {
                 ((aggregate_transferred as f64 / aggregate_total as f64) * 100.0).min(99.0)
             };
-            if task.manifest.is_none() {
+            if !status_has_advanced && task.manifest.is_none() {
                 task.message = Some(
                     task.partial_path
                         .clone()
                         .unwrap_or_else(|| task.name.clone()),
                 );
             }
-            if let Some(speed) = speed {
-                task.speed = Some(speed);
+            if !status_has_advanced {
+                if let Some(speed) = speed {
+                    task.speed = Some(speed);
+                }
             }
             task.resumable = true;
         },
@@ -321,6 +326,23 @@ async fn patch_task(
     delivery: PatchDelivery,
 ) -> Result<Option<TransferTask>, AppError> {
     patch_task_inner(app, transfer_id, patch, delivery, false).await
+}
+
+pub(crate) async fn mark_sha256_verifying(app: &AppHandle, transfer_id: &str) {
+    if let Err(error) = patch_task(
+        app,
+        transfer_id,
+        |task| {
+            task.status = "verifying".to_string();
+            task.message = Some("正在校验 SHA-256...".to_string());
+            task.speed = None;
+        },
+        PatchDelivery::Event,
+    )
+    .await
+    {
+        tracing::warn!(category = "transfer", scope = "transfer", %transfer_id, %error, "Unable to publish SHA-256 verification status");
+    }
 }
 
 async fn patch_task_for_execution(

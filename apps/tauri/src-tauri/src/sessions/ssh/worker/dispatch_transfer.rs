@@ -1,3 +1,22 @@
+// Budget full-file SHA-256 passes at a conservative 16 MiB/s floor.
+const CHECKSUM_THROUGHPUT_BYTES_PER_SECOND: u64 = 16 * 1024 * 1024;
+const CHECKSUM_TIMEOUT_GRACE: Duration = Duration::from_secs(60);
+// shortcut: cap SHA-256 checks at 24 hours; raise if supported files need longer.
+const MAX_CHECKSUM_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
+
+fn checksum_timeout_for_size(
+    operation_timeout: Duration,
+    file_size: u64,
+    hash_passes: u64,
+) -> Duration {
+    let seconds_per_pass = file_size.div_ceil(CHECKSUM_THROUGHPUT_BYTES_PER_SECOND);
+    let timeout_secs = seconds_per_pass
+        .saturating_mul(hash_passes)
+        .saturating_add(CHECKSUM_TIMEOUT_GRACE.as_secs())
+        .min(MAX_CHECKSUM_TIMEOUT.as_secs());
+    operation_timeout.max(Duration::from_secs(timeout_secs))
+}
+
 /// Dispatch the SSH worker commands owned by the transfer group.
 #[allow(clippy::too_many_arguments)]
 async fn dispatch_transfer_cmd(
@@ -121,7 +140,7 @@ async fn dispatch_transfer_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
-            let checksum_timeout = operation_timeout;
+            let checksum_timeout = checksum_timeout_for_size(operation_timeout, source_size, 1);
             tokio::spawn(async move {
                 // Root uploads are deliberately staged under /var/tmp first. The
                 // login user's SFTP channel transfers the bulk bytes there,
@@ -195,23 +214,22 @@ async fn dispatch_transfer_cmd(
                         if (verify_checksum && checksum_available)
                             || (fam == "root" && !use_login_sftp_staging && resume_offset > 0) =>
                     {
-                        tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "remote-checksum", "SFTP upload stage started");
-                        match timeout(
+                        crate::services::transfers::mark_sha256_verifying(&app, &transfer_id)
+                            .await;
+                        tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "remote-checksum", file_size_bytes = source_size, timeout_secs = checksum_timeout.as_secs(), "SFTP upload checksum stage started");
+                        match verify_sftp_transfer_sha256(
+                            &handle,
+                            &hash,
+                            &remote_path,
+                            &fam,
+                            method,
+                            &su,
+                            &sp,
                             checksum_timeout,
-                            verify_sftp_transfer_sha256(
-                                &handle,
-                                &hash,
-                                &remote_path,
-                                &fam,
-                                method,
-                                &su,
-                                &sp,
-                                checksum_timeout,
-                            ),
                         )
                         .await
                         {
-                            Ok(Ok(false))
+                            Ok(false)
                                 if fam == "root"
                                     && !use_login_sftp_staging
                                     && resume_offset > 0 =>
@@ -219,8 +237,8 @@ async fn dispatch_transfer_cmd(
                                 Err("远端不支持 SHA-256，无法安全校验 root 上传断点，请从头传输"
                                     .to_string())
                             }
-                            Ok(result) => result.map(|_| ()),
-                            Err(_) => Err("SFTP 传输校验超时".to_string()),
+                            Ok(_) => Ok(()),
+                            Err(error) => Err(error),
                         }
                     }
                     Ok(_) => {
@@ -262,7 +280,6 @@ async fn dispatch_transfer_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
-            let checksum_timeout = operation_timeout;
             tokio::spawn(async move {
                 let mut result = if fam == "root" {
                     download_root_remote_file(
@@ -323,33 +340,49 @@ async fn dispatch_transfer_cmd(
                     tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "checksum", reason = "SSH exec SHA-256 capability unavailable or unconfirmed", "SFTP checksum skipped; file size will still be verified");
                 }
                 if result.is_ok() && verify_checksum && checksum_available {
-                    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "local-checksum", "SFTP download stage started");
-                    result = tokio::select! {
-                        biased;
-                        _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
-                        value = timeout(checksum_timeout, async {
-                            let hash =
-                                crate::sessions::file_integrity::sha256_file(&local_path).await?;
-                            tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "local-checksum", "SFTP download stage completed");
-                            tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "remote-checksum", "SFTP download stage started");
-                            verify_sftp_transfer_sha256(
-                                &handle,
-                                &hash,
-                                &remote_path,
-                                &fam,
-                                method,
-                                &su,
-                                &sp,
-                                checksum_timeout,
-                            )
-                            .await?;
-                            tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "remote-checksum", "SFTP download stage completed");
-                            Ok(())
-                        }) => match value {
-                            Ok(result) => result,
-                            Err(_) => Err("SFTP 传输校验超时".to_string()),
-                        },
+                    let local_file_size = match tokio::fs::metadata(&local_path).await {
+                        Ok(metadata) => Some(metadata.len()),
+                        Err(error) => {
+                            result = Err(format!(
+                                "本地 SHA-256 校验失败：读取下载文件大小失败：{error}"
+                            ));
+                            None
+                        }
                     };
+                    if let Some(local_file_size) = local_file_size {
+                        let checksum_timeout =
+                            checksum_timeout_for_size(operation_timeout, local_file_size, 2);
+                        crate::services::transfers::mark_sha256_verifying(&app, &transfer_id)
+                            .await;
+                        tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "checksum", file_size_bytes = local_file_size, timeout_secs = checksum_timeout.as_secs(), "SFTP download checksum stage started");
+                        tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "local-checksum", "SFTP download stage started");
+                        result = tokio::select! {
+                            biased;
+                            _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
+                            value = timeout(checksum_timeout, async {
+                                let hash =
+                                    crate::sessions::file_integrity::sha256_file(&local_path).await?;
+                                tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "local-checksum", "SFTP download stage completed");
+                                tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "remote-checksum", "SFTP download stage started");
+                                verify_sftp_transfer_sha256(
+                                    &handle,
+                                    &hash,
+                                    &remote_path,
+                                    &fam,
+                                    method,
+                                    &su,
+                                    &sp,
+                                    checksum_timeout,
+                                )
+                                .await?;
+                                tracing::info!(category = "transfer", scope = "transfer", %transfer_id, %tab_id, stage = "remote-checksum", "SFTP download stage completed");
+                                Ok(())
+                            }) => match value {
+                                Ok(result) => result,
+                                Err(_) => Err("SFTP SHA-256 校验超时".to_string()),
+                            },
+                        };
+                    }
                 }
                 match &result {
                     Ok(()) => {

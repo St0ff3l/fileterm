@@ -1351,7 +1351,7 @@ const zhCN = {
   reconnectNoneHint: '断线后不做任何操作，需手动点击重连按鈕。',
   sftpNoDelete: '此账号没有删除权限',
   sftpNoDeleteHint:
-    '开启后，上传不会覆盖已有文件；目标文件保持不变，断点文件保留。适用于没有删除权限的 SFTP 账号，保存后重新连接生效。',
+    '适用于没有删除权限的账号。新文件上传时若没有旧的断点文件，FileTerm 会跳过删除；下载只需要读取权限，因此这两种操作通常不受影响。开启后，遇到已存在的目标文件会停止上传，保留原文件和断点。保存后重新连接生效。',
   characterEncoding: '字符编码',
   sftpFilenameEncodingHint:
     'SFTP 优先使用 UTF-8，无法无损解码时自动回退 GBK；手动选择 GBK 时固定使用。自动识别仅影响当前会话，不改写此设置。',
@@ -3623,7 +3623,7 @@ const enUS: typeof zhCN = {
   reconnectNoneHint: 'Does nothing on disconnect. Use the reconnect button to reconnect manually.',
   sftpNoDelete: 'This account has no delete permission',
   sftpNoDeleteHint:
-    'Existing remote files are protected from upload replacement. Checkpoints are retained. Use this for SFTP accounts without delete permission; reconnect after saving.',
+    'For accounts without delete permission. When uploading a new file, FileTerm skips deletion if no old checkpoint exists; downloads only need read access, so these operations are usually unaffected. When enabled, an upload stops if the target already exists, leaving the original file and checkpoint intact. Reconnect after saving.',
   characterEncoding: 'Character Encoding',
   sftpFilenameEncodingHint:
     'SFTP prefers UTF-8 and falls back to GBK when names cannot be decoded losslessly. Selecting GBK uses it exclusively. Detection only affects the current session and does not change this setting.',

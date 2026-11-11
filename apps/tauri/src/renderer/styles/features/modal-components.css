@@ -34,7 +34,7 @@
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 10px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
   font-size: 14px;
@@ -491,7 +491,7 @@
   width: 76px;
   height: 36px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid color-mix(in srgb, var(--copy-link) 42%, var(--border-light));
   background: var(--input-bg);
   color: var(--copy-link);
@@ -2940,7 +2940,7 @@
 .connection-import-strategy select {
   max-width: 310px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-input, var(--bg-primary));
   color: var(--text-main);
   padding: 7px;

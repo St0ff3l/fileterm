@@ -902,7 +902,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-height: var(--button-height-md, 36px);
   padding: 0 10px;
   box-sizing: border-box;
-  border-radius: 8px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--border-light);
   background: var(--input-bg);
   color: var(--text-main);
@@ -943,7 +943,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-height: var(--button-height-md, 36px);
   box-sizing: border-box;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--border-light);
   background: var(--input-bg);
   color: var(--text-main);
@@ -1177,8 +1177,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-width: 0;
 }
 
-/* Keep both platform branches aligned with the normal SSH form inputs: 36px
-   high, 8px corners, and a centered text line inside the control. */
+/* Keep both platform branches aligned with the form control radius and height. */
 .resource-monitoring-interval__select.dropdown-select-trigger,
 .resource-monitoring-interval__select.ft-select-shell select {
   display: flex;
@@ -1187,7 +1186,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   height: 36px;
   min-height: 36px;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--input-bg);
   color: var(--text-main);
 }

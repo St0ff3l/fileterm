@@ -8,7 +8,7 @@
   align-items: center;
   position: relative;
   width: 100%;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background-color: var(--surface-input);
   border: 1px solid var(--border-subtle);
   transition:
@@ -93,7 +93,7 @@
   padding: 8px 10px;
   background-color: var(--surface-input);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   outline: none;
   font-family: var(--font-ui);
   font-size: var(--font-size-sm);

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FileTerm 表单控件圆角预览</title>
+    <link rel="stylesheet" href="../../../apps/tauri/src/renderer/styles/tokens/foundations.css" />
+    <link rel="stylesheet" href="../../../apps/tauri/src/renderer/components/common/input/input.css" />
+    <link
+      rel="stylesheet"
+      href="../../../apps/tauri/src/renderer/components/common/dropdown-select/dropdown-select.css"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --surface-canvas: #151515;
+        --surface-panel: #1f1f1f;
+        --surface-input: #1a1a1a;
+        --surface-input-focus: #202020;
+        --border-subtle: #343434;
+        --border-default: #484848;
+        --border-light: #363636;
+        --text-primary: #e7e7e7;
+        --text-main: #e7e7e7;
+        --text-secondary: #c4c4c4;
+        --text-muted: #969696;
+        --input-focus-shadow: inset 0 0 0 1px #555, 0 0 0 1px #2c2c2c;
+        --transition-normal: 160ms ease;
+      }
+
+      :root[data-theme='light'] {
+        color-scheme: light;
+        --surface-canvas: #f4f4f4;
+        --surface-panel: #fff;
+        --surface-input: #fff;
+        --surface-input-focus: #fff;
+        --border-subtle: #d4d4d4;
+        --border-default: #aaa;
+        --border-light: #d0d0d0;
+        --text-primary: #252525;
+        --text-main: #252525;
+        --text-secondary: #555;
+        --text-muted: #767676;
+        --input-focus-shadow: inset 0 0 0 1px #999, 0 0 0 1px #e3e3e3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        padding: 64px 32px;
+        background: var(--surface-canvas);
+        color: var(--text-primary);
+        font-family: var(--font-ui);
+      }
+
+      main {
+        width: min(100%, 1060px);
+        margin: 0 auto;
+        padding: 32px 36px 36px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        background: var(--surface-panel);
+      }
+
+      header {
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 600;
+      }
+
+      .description {
+        margin: 10px 0 0;
+        color: var(--text-muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .controls-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 26px 28px;
+        padding-top: 28px;
+      }
+
+      .field label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 9px;
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .token {
+        color: var(--text-muted);
+        font: 11px var(--font-mono);
+      }
+
+      .ft-input-wrapper {
+        display: flex;
+      }
+
+      .ft-input {
+        min-width: 0;
+      }
+
+      .dropdown-select-trigger {
+        min-width: 0;
+      }
+
+      .dropdown-select-arrow {
+        width: 8px;
+        height: 8px;
+        flex: 0 0 8px;
+        border-right: 2px solid currentColor;
+        border-bottom: 2px solid currentColor;
+        transform: translateY(-2px) rotate(45deg);
+      }
+
+      .native-select-shell {
+        position: relative;
+      }
+
+      .native-select {
+        display: block;
+        width: 100%;
+        height: var(--control-height-md);
+        padding: 0 36px 0 var(--control-padding-x-sm);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm, 4px);
+        background: var(--surface-input);
+        color: var(--text-primary);
+        font: 400 var(--font-size-sm) var(--font-ui);
+        appearance: none;
+        outline: none;
+      }
+
+      .native-select-arrow {
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        width: 8px;
+        height: 8px;
+        pointer-events: none;
+        border-right: 2px solid currentColor;
+        border-bottom: 2px solid currentColor;
+        transform: translateY(-65%) rotate(45deg);
+      }
+
+      .ft-textarea {
+        min-height: 92px;
+        resize: none;
+      }
+
+      footer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border-subtle);
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+
+      .radius-swatch {
+        width: 32px;
+        height: 24px;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        background: var(--surface-input);
+      }
+
+      @media (max-width: 720px) {
+        body {
+          padding: 24px 14px;
+        }
+
+        main {
+          padding: 24px 20px;
+        }
+
+        .controls-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">设置 · 终端显示 / 连接表单</p>
+        <h1>表单控件圆角统一预览</h1>
+        <p class="description">文本输入框、下拉框、原生选择框和文本区域统一使用 4px 圆角。</p>
+      </header>
+      <section class="controls-grid" aria-label="统一圆角控件示例">
+        <div class="field">
+          <label for="file-name">文本输入框 <span class="token">--radius-sm · 4px</span></label>
+          <div class="ft-input-wrapper">
+            <input id="file-name" class="ft-input" value="profiles.json" readonly />
+          </div>
+        </div>
+        <div class="field">
+          <label>公共下拉框 <span class="token">--radius-sm · 4px</span></label>
+          <button class="dropdown-select-trigger" type="button" aria-expanded="false">
+            <span class="dropdown-select-value">常规（400）</span>
+            <span class="dropdown-select-arrow" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="field">
+          <label for="renderer">旧表单选择框 <span class="token">--radius-sm · 4px</span></label>
+          <div class="native-select-shell">
+            <select id="renderer" class="native-select" aria-label="终端渲染器">
+              <option selected>WebGL</option>
+            </select>
+            <span class="native-select-arrow" aria-hidden="true"></span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="remote-path">文本区域 <span class="token">--radius-sm · 4px</span></label>
+          <textarea id="remote-path" class="ft-textarea" readonly>/绿软/xlight</textarea>
+        </div>
+      </section>
+      <footer><span class="radius-swatch" aria-hidden="true"></span>统一后的闭合控件圆角：4px</footer>
+    </main>
+    <script>
+      if (new URLSearchParams(location.search).get('theme') === 'light') {
+        document.documentElement.dataset.theme = 'light'
+      }
+    </script>
+  </body>
+</html>

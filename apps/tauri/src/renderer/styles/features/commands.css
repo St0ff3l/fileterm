@@ -1208,7 +1208,7 @@
   height: 26px;
   padding: 0 24px 0 10px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
   font-size: 11px;
@@ -1267,7 +1267,7 @@
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
   font-size: 11px;
@@ -1950,7 +1950,7 @@
   width: 100%;
   border-width: 1px;
   border-style: solid;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-family: inherit;
   transition:

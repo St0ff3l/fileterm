@@ -6,6 +6,8 @@
 
 打开 [可筛选预览索引](index.html)，点击图片可放大；或查看 [深色总览](overview-dark.png) / [浅色总览](overview-light.png)。
 
+另有一组 [表单控件圆角预览](form-control-radius.html)，展示输入框、公共下拉框、原生选择框与文本区域统一为 4px。对应 [深色截图](dark/form-control-radius.png) / [浅色截图](light/form-control-radius.png)。
+
 | 弹窗               | 深色                                | 浅色                                 |
 | ------------------ | ----------------------------------- | ------------------------------------ |
 | 连接 SMB 网络共享  | [查看](dark/smb-credentials.png)    | [查看](light/smb-credentials.png)    |

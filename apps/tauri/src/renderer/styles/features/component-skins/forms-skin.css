@@ -234,7 +234,7 @@
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
   background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
   font-size: 14px !important;
   min-height: 36px !important;
@@ -333,7 +333,7 @@
 :root[data-theme='default'] .command-form-standalone-page .command-code-area {
   background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-sm, 4px) !important;
   overflow: hidden !important;
   transition:
     border-color 0.18s,
@@ -583,7 +583,7 @@
 :root[data-theme='default'] .modal-card.ssh-modal textarea {
   background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
   transition:
     border-color 0.18s,
