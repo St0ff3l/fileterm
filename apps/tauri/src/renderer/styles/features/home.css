@@ -591,7 +591,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .page-transition > .overview-page > *,
-  .page-transition > .quick-links-page > * {
+  .page-transition > .quick-links-page > *,
+  .page-transition > .manager-inline > * {
     animation: none;
   }
 }
@@ -1188,5 +1189,12 @@
     grid-template-columns: minmax(130px, 1.1fr) minmax(130px, 1fr) 64px 64px 92px minmax(125px, 1fr) 78px !important;
     column-gap: 8px !important;
     padding: 0 12px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-workspace,
+  .home-sidebar {
+    transition: none;
   }
 }

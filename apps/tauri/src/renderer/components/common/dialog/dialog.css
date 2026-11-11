@@ -110,3 +110,10 @@
     transform: scale(1);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-dialog-backdrop,
+  .ft-dialog {
+    animation: ft-dialog-fade-in 150ms ease-out;
+  }
+}

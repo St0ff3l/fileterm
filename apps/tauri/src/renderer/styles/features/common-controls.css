@@ -213,3 +213,9 @@ input.selection-control--target:focus-visible {
   font-weight: 400;
   line-height: 1.45;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  input.selection-control::after {
+    transition: none;
+  }
+}

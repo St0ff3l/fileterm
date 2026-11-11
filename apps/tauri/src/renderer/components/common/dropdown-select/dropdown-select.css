@@ -234,3 +234,22 @@
     transform: translateY(0);
   }
 }
+
+@keyframes ft-dropdown-reduced-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-select-arrow {
+    transition: none;
+  }
+
+  .dropdown-select-menu {
+    animation: ft-dropdown-reduced-fade-in 150ms ease-out;
+  }
+}
