@@ -126,6 +126,13 @@ async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value
     let mut config = configured(app, true)?;
     let client = client()?;
     let (remote_exists, mut remote_etag) = head_object(&client, &config).await?;
+    tracing::info!(
+        category = "integration", scope = "s3-backup",
+        remote_exists, etag_present = remote_etag.is_some(),
+        saved_etag_present = config.last_etag.is_some(), mode = ?mode,
+        strategy = if remote_exists { "match-existing-version" } else { "create-if-absent" },
+        "upload preflight"
+    );
     webdav::validate_upload_version(
         config.last_etag.as_deref(),
         remote_exists,

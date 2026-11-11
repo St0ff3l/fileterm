@@ -320,3 +320,19 @@ SSH、FTP、本地终端、Telnet 和串口的状态更新仅在状态实际改�
 继续验证文件大小；这不能证明文件内容完全一致。root 校验要求不受该能力判断放宽。
 99% 是完成前的进度上限，最后一个开始但未完成的阶段用于缩小排查范围，
 不能单凭缺失日志断定根因（仍受日志分类、级别过滤和队列丢弃影响）。
+
+## 备份重建与 SHA-256 校验诊断
+
+WebDAV/S3 上传在 HEAD 预检成功后写入 `category=integration`、scope 为 `webdav` / `s3-backup` 的 `upload preflight` INFO 日志：
+
+| 字段                 | 含义                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `remote_exists`      | 远端对象是否存在；只有明确 404 才为 false                                                                                |
+| `etag_present`       | 本次预检是否取得对象 ETag                                                                                                |
+| `saved_etag_present` | 本地是否保存上一次同步的 ETag                                                                                            |
+| `mode`               | `OverwriteCloud` 或 `MergeCloud` 上传策略                                                                                |
+| `strategy`           | `create-if-absent` 使用 If-None-Match；`match-existing-version` 表示已存在对象，仍须通过版本校验并取得可用 ETag 才能覆盖 |
+
+403/500 等预检失败走已有 `upload failed` 错误记录，不会记录成功预检或当作远端文件不存在。预检后仍可能发生并发变更，应结合随后上传结果判断是否真正写入成功；不能仅凭 strategy 判定上传完成。日志只记录 ETag 是否存在，不记录 ETag 原文、URL、密码、Access Key、私钥或备份内容。
+
+传输日志 `category=transfer` 的 `stage=remote-checksum` / `stage=checksum` 记录文件大小与 `timeout_secs`；用户取消后迟到的校验状态通知会记为 DEBUG `Ignored late SHA-256 verification update`，包含 transfer_id 和当时状态。取消、暂停、失败、完成的任务不会因此重新进入运行或校验状态。

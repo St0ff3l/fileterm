@@ -399,6 +399,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn merge_can_use_get_version_when_head_omits_etag() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for (method, response) in [
+                ("HEAD ", "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+                ("GET ", "HTTP/1.1 200 OK\r\nETag: \"known\"\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"),
+                ("PUT ", "HTTP/1.1 201 Created\r\nETag: \"next\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+            ] {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let request = read_request(&mut socket).await;
+                assert!(request.starts_with(method));
+                if method == "PUT " { assert!(request.contains("if-match: \"known\"\r\n")); }
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let config = StoredConfig {
+            url: format!("http://{address}"), remote_path: "profiles.json".into(),
+            allow_insecure_tls: Some(true), last_etag: Some("\"known\"".into()),
+            ..StoredConfig::default()
+        };
+        let client = test_client();
+        let (exists, head_etag) = super::head_payload(&client, &config).await.unwrap();
+        assert!(exists);
+        assert!(head_etag.is_none());
+        let (bytes, downloaded_etag) = download_payload(&client, &config).await.unwrap();
+        let next = upload_payload(&client, &config, bytes, exists, downloaded_etag.as_deref()).await.unwrap();
+        assert_eq!(next.as_deref(), Some("\"next\""));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn merge_upload_uses_downloaded_etag_when_server_changes_before_put() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();

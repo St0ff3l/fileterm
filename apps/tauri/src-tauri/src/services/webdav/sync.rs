@@ -103,6 +103,13 @@ async fn upload_inner(app: &AppHandle, mode: UploadMode) -> Result<Value, AppErr
     let mut config = configured(app, true)?;
     let client = client()?;
     let (remote_exists, mut remote_etag) = head_payload(&client, &config).await?;
+    tracing::info!(
+        category = "integration", scope = "webdav",
+        remote_exists, etag_present = remote_etag.is_some(),
+        saved_etag_present = config.last_etag.is_some(), mode = ?mode,
+        strategy = if remote_exists { "match-existing-version" } else { "create-if-absent" },
+        "upload preflight"
+    );
     let password = backup_prompt::request(app, "upload", "WebDAV").await?;
     let (payload, content_hash) = if mode == UploadMode::MergeCloud && remote_exists {
         let (remote_bytes, downloaded_etag) = download_payload(&client, &config).await?;

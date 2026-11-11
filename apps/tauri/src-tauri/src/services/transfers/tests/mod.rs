@@ -458,6 +458,8 @@ mod tests {
         assert_eq!(json["manifest"]["files"].as_array().unwrap().len(), 0);
     }
 
+    include!("progress.rs");
+
     fn sample_task(id: &str, updated_at: u64) -> TransferTask {
         TransferTask {
             id: id.to_string(),
