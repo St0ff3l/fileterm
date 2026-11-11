@@ -34,3 +34,35 @@
 .modal-card.ssh-modal .ssh-fieldset {
   padding-bottom: 20px;
 }
+
+.ssh-modal-nav {
+  position: relative;
+  isolation: isolate;
+  --selection-indicator-bg: var(--surface-hover);
+}
+.ssh-modal-nav > .selection-indicator {
+  border-radius: 6px;
+}
+.ssh-modal-nav > button {
+  position: relative;
+}
+.modal-card.ssh-modal .ssh-modal-nav[data-selection-motion='ready'] > button.active {
+  background: transparent;
+}
+.connection-section-transition {
+  min-width: 0;
+  animation: connection-section-enter var(--duration-sm) var(--ease-out);
+}
+@keyframes connection-section-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-section-transition {
+    animation-duration: var(--duration-fade);
+  }
+}

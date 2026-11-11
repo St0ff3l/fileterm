@@ -13,10 +13,10 @@
   cursor: pointer;
   line-height: 1;
   transition:
-    background-color 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease,
-    opacity 0.18s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out);
   -webkit-app-region: no-drag;
 }
 

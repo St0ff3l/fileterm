@@ -19,7 +19,7 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  transition: color 0.2s ease;
+  transition: color var(--duration-hover) var(--ease-out);
 }
 
 .stat-card:hover {

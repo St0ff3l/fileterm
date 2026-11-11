@@ -309,15 +309,23 @@ async fn exec_su_command_with_pty_input(
     password: Option<&str>,
     input: Option<&[u8]>,
     send_eof: bool,
+    command_timeout: Duration,
+    command_timeout_message: &str,
 ) -> Result<(String, Option<u32>), String> {
-    let mut channel = handle
-        .channel_open_session()
+    let auth_started_at = Instant::now();
+    let auth_timeout_message = "su 认证超时：服务器未在 10 秒内响应";
+    let mut channel = timeout(SUDO_VERIFY_TIMEOUT, handle.channel_open_session())
         .await
+        .map_err(|_| auth_timeout_message.to_string())?
         .map_err(|error| error.to_string())?;
-    request_root_exec_pty(&channel).await?;
-    channel
-        .exec(true, command)
+    let auth_remaining = SUDO_VERIFY_TIMEOUT.saturating_sub(auth_started_at.elapsed());
+    timeout(auth_remaining, request_root_exec_pty(&channel))
         .await
+        .map_err(|_| auth_timeout_message.to_string())??;
+    let auth_remaining = SUDO_VERIFY_TIMEOUT.saturating_sub(auth_started_at.elapsed());
+    timeout(auth_remaining, channel.exec(true, command))
+        .await
+        .map_err(|_| auth_timeout_message.to_string())?
         .map_err(|error| error.to_string())?;
 
     let marker = SU_EXEC_OUTPUT_MARKER.as_bytes();
@@ -329,9 +337,19 @@ async fn exec_su_command_with_pty_input(
     let mut password_prompt_seen = false;
 
     loop {
-        let message = timeout(SUDO_VERIFY_TIMEOUT, channel.wait())
+        let wait_timeout = if marker_seen {
+            command_timeout
+        } else {
+            SUDO_VERIFY_TIMEOUT.saturating_sub(auth_started_at.elapsed())
+        };
+        let wait_timeout_message = if marker_seen {
+            command_timeout_message
+        } else {
+            auth_timeout_message
+        };
+        let message = timeout(wait_timeout, channel.wait())
             .await
-            .map_err(|_| "su 认证超时：服务器未在 10 秒内响应".to_string())?;
+            .map_err(|_| wait_timeout_message.to_string())?;
         let Some(message) = message else {
             break;
         };
@@ -392,14 +410,40 @@ async fn exec_su_command_with_pty_input(
     Ok((String::from_utf8_lossy(&output).into_owned(), exit_status))
 }
 
-/// Run a shell command through the independent exec channel with the same
-/// root strategy observed in the interactive terminal.
+/// Run a short shell command through the independent exec channel, preserving
+/// the root prompt deadline used by existing file operations.
 async fn exec_shell_file_command(
     handle: &Handle<ClientHandler>,
     command: &str,
     access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
+) -> Result<String, String> {
+    let timeout_message = if access_method == RootFileAccessMethod::Su || sudo_password.is_some() {
+        "root 认证超时：服务器未在 10 秒内响应，可能密码错误或网络中断"
+    } else {
+        "root 认证超时：服务器未在 10 秒内响应"
+    };
+    exec_shell_file_command_with_timeout(
+        handle,
+        command,
+        access_method,
+        sudo_user,
+        sudo_password,
+        SUDO_VERIFY_TIMEOUT,
+        timeout_message,
+    )
+    .await
+}
+
+async fn exec_shell_file_command_with_timeout(
+    handle: &Handle<ClientHandler>,
+    command: &str,
+    access_method: RootFileAccessMethod,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+    command_timeout: Duration,
+    timeout_message: &str,
 ) -> Result<String, String> {
     let command = if access_method == RootFileAccessMethod::Su {
         su_exec_command(command)
@@ -408,26 +452,30 @@ async fn exec_shell_file_command(
     };
     let (full_cmd, password) = root_file_command(access_method, sudo_user, sudo_password, &command);
 
-    // 整个 exec 包超时：PTY 模式下 root 错误密码可能 retry 多次，channel
-    // 不会自然退出。超时后返回错误，前端 loading 能在 10 秒内解除。
+    // The whole command needs a deadline: a bad root credential may keep the
+    // PTY open, while SHA-256 commands use a size-derived deadline.
     let (output, exit_status) = if access_method == RootFileAccessMethod::Su {
         match timeout(
-            SUDO_VERIFY_TIMEOUT,
-            exec_su_command_with_pty_input(handle, &full_cmd, password.as_deref(), None, false),
+            command_timeout,
+            exec_su_command_with_pty_input(
+                handle,
+                &full_cmd,
+                password.as_deref(),
+                None,
+                false,
+                command_timeout,
+                timeout_message,
+            ),
         )
         .await
         {
             Ok(inner) => inner?,
-            Err(_) => {
-                return Err(
-                    "root 认证超时：服务器未在 10 秒内响应，可能密码错误或网络中断".to_string(),
-                )
-            }
+            Err(_) => return Err(timeout_message.to_string()),
         }
     } else if let Some(pwd) = password {
         let stdin = format!("{pwd}\n");
         match timeout(
-            SUDO_VERIFY_TIMEOUT,
+            command_timeout,
             crate::sessions::system_metrics::exec_command_with_stdin_status(
                 handle, &full_cmd, &stdin,
             ),
@@ -435,21 +483,17 @@ async fn exec_shell_file_command(
         .await
         {
             Ok(inner) => inner?,
-            Err(_) => {
-                return Err(
-                    "root 认证超时：服务器未在 10 秒内响应，可能密码错误或网络中断".to_string(),
-                )
-            }
+            Err(_) => return Err(timeout_message.to_string()),
         }
     } else {
         match timeout(
-            SUDO_VERIFY_TIMEOUT,
+            command_timeout,
             crate::sessions::system_metrics::exec_command_with_status(handle, &full_cmd),
         )
         .await
         {
             Ok(inner) => inner?,
-            Err(_) => return Err("root 认证超时：服务器未在 10 秒内响应".to_string()),
+            Err(_) => return Err(timeout_message.to_string()),
         }
     };
 
@@ -608,6 +652,8 @@ async fn exec_write_file_via_shell(
             password.as_deref(),
             Some(encoded_input.as_bytes()),
             true,
+            SUDO_VERIFY_TIMEOUT,
+            "su 认证超时：服务器未在 10 秒内响应",
         )
         .await?
     } else {

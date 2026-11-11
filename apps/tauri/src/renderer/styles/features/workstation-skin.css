@@ -164,7 +164,7 @@ input:where(
       0px
     );
   grid-template-rows: var(--window-tabbar-height) minmax(0, 1fr) 24px;
-  transition: grid-template-columns 0.24s linear;
+  transition: grid-template-columns var(--duration-move) var(--ease-in-out);
 }
 
 .fs-shell.has-window-menubar {
@@ -178,8 +178,8 @@ input:where(
   z-index: 10;
   position: relative;
   transition:
-    width 0.24s linear,
-    min-width 0.24s linear;
+    width var(--duration-move) var(--ease-in-out),
+    min-width var(--duration-move) var(--ease-in-out);
 }
 
 .fs-shell.is-resizing-sidebar,
@@ -225,7 +225,7 @@ input:where(
   height: var(--window-tabbar-height);
   z-index: 10;
   position: relative;
-  transition: grid-template-columns 0.24s linear;
+  transition: grid-template-columns var(--duration-move) var(--ease-in-out);
 }
 
 .fs-shell.has-window-menubar .fs-tabbar {
@@ -269,7 +269,7 @@ input:where(
   bottom: 0;
   gap: 0;
   padding-left: 0;
-  transition: padding-left 0.24s linear;
+  transition: padding-left var(--duration-move) var(--ease-in-out);
 }
 
 .fs-tab {
@@ -396,7 +396,7 @@ input:where(
   font-weight: 500;
   line-height: 1;
   text-align: center;
-  transition: background 0.2s;
+  transition: background var(--duration-hover) var(--ease-out);
 }
 
 .system-sidebar-layout.is-collapsed {
@@ -453,7 +453,7 @@ input:where(
   display: block;
   min-height: 4px;
   border-radius: 999px;
-  transition: height 0.3s ease;
+  transition: height var(--duration-move) var(--ease-in-out);
 }
 
 .collapsed-resource-fill.status-green,
@@ -525,7 +525,7 @@ input:where(
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-  transition: color 0.15s ease;
+  transition: color var(--duration-hover) var(--ease-out);
 }
 
 .address-row span.copied-success {
@@ -544,7 +544,7 @@ input:where(
 
 .address-row strong.copyable {
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color var(--duration-hover) var(--ease-out);
 }
 
 .address-row strong.copyable:hover {
@@ -961,8 +961,8 @@ input:where(
   justify-content: center;
   cursor: pointer;
   transition:
-    background 0.18s ease,
-    color 0.18s ease;
+    background var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .process-scroll-region {
@@ -1734,4 +1734,14 @@ input:where(
   right: 2px;
   width: 2px;
   background-color: var(--focus-outline);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fs-shell,
+  .fs-sidebar,
+  .fs-tabbar,
+  .fs-tabs,
+  .collapsed-resource-fill {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

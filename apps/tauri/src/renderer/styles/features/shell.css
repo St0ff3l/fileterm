@@ -220,7 +220,7 @@
   width: 6px;
   min-height: 0;
   cursor: col-resize;
-  transition: background 0.15s ease;
+  transition: background var(--duration-hover) var(--ease-out);
 }
 
 .sidebar-resizer::after {
@@ -232,7 +232,7 @@
   width: 1px;
   background: transparent;
   pointer-events: none;
-  transition: background 0.15s ease;
+  transition: background var(--duration-hover) var(--ease-out);
 }
 
 .sidebar-resizer:hover::after,
@@ -410,7 +410,7 @@
 
 .address-row strong.copyable {
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color var(--duration-hover) var(--ease-out);
 }
 
 .address-row strong.copyable:hover {
@@ -552,7 +552,7 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  transition: width 0.3s ease;
+  transition: width var(--duration-move) var(--ease-in-out);
 }
 
 .meter-fill.stacked {
@@ -589,9 +589,9 @@
   cursor: pointer;
   opacity: 0.9;
   transition:
-    background 0.18s ease,
-    color 0.18s ease,
-    opacity 0.18s ease;
+    background var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out);
 }
 
 .mini-tabs span:hover {
@@ -1246,9 +1246,9 @@
 .window-tools button,
 .fs-tabbar .add-tab {
   transition:
-    background-color 0.2s,
-    color 0.2s,
-    opacity 0.2s;
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover),
+    opacity var(--duration-hover);
 }
 
 .window-tools button {
@@ -1364,7 +1364,7 @@
   .workspace-stage-transition.is-transitioning .workspace-content-stack__item.is-active .local-terminal-surface,
   .workspace-stage-transition.is-transitioning .workspace-content-stack__item.is-active > .file-transfer-workspace > *,
   .workspace-stage-transition.is-transitioning .workspace-content-stack__item.is-active .home-content-body {
-    animation: workspace-stage-fade-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: workspace-stage-fade-in 0.24s var(--ease-out) both;
   }
 }
 
@@ -1374,5 +1374,11 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meter-fill {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
   }
 }

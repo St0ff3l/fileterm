@@ -3,6 +3,7 @@ import { t } from '../../i18n'
 import type { ConnectionFormSetter } from './connection-modal-utils'
 import { ConnectionNoDeleteSetting } from './connection-no-delete-setting'
 import { TransferSidebarSettingControl } from '../../components/common/transfer-sidebar-setting-control'
+import { ConnectionChecksumTimeoutSetting } from './connection-checksum-timeout-setting'
 
 export function ConnectionTransferAdvancedSection({
   defaultTransferSidebarCollapsedByDefault,
@@ -18,6 +19,7 @@ export function ConnectionTransferAdvancedSection({
       <fieldset className="ssh-fieldset">
         <legend>{t.advancedSettings}</legend>
         <div className="advanced-toggle-list">
+          {form.type === 'sftp' ? <ConnectionChecksumTimeoutSetting form={form} setForm={setForm} /> : null}
           <TransferSidebarSettingControl
             checked={form.transferSidebarCollapsedByDefault ?? defaultTransferSidebarCollapsedByDefault}
             hint={t.connectionTransferSidebarCollapsedByDefaultHint}

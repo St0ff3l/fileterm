@@ -234,15 +234,15 @@
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
   background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
   font-size: 14px !important;
   min-height: 36px !important;
   height: 36px !important;
   padding: 0 12px !important;
   transition:
-    border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out) !important;
 }
 
 /* Adjust paddings for textareas */
@@ -333,11 +333,11 @@
 :root[data-theme='default'] .command-form-standalone-page .command-code-area {
   background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-sm, 4px) !important;
   overflow: hidden !important;
   transition:
-    border-color 0.18s,
-    box-shadow 0.18s !important;
+    border-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) !important;
 }
 
 :root:not([data-theme]) .command-editor-dialog-textarea .command-code-area:hover,
@@ -388,9 +388,9 @@
   height: 28px !important;
   padding: 0 12px !important;
   transition:
-    background 0.18s,
-    border-color 0.18s,
-    transform 0.18s !important;
+    background var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover),
+    transform var(--duration-hover) !important;
 }
 
 :root:not([data-theme]) .command-editor-dialog-params .command-param-hints button:hover,
@@ -426,8 +426,8 @@
   font-weight: 600 !important;
   cursor: pointer !important;
   transition:
-    background 0.18s,
-    transform 0.18s !important;
+    background var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) !important;
 }
 
 /* Save / Primary Button */
@@ -446,8 +446,8 @@
   font-weight: 600 !important;
   cursor: pointer !important;
   transition:
-    background 0.18s,
-    transform 0.18s !important;
+    background var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) !important;
 }
 
 :root:not([data-theme]) .command-dialog-actions .primary-button:hover:not(:disabled),
@@ -583,11 +583,11 @@
 :root[data-theme='default'] .modal-card.ssh-modal textarea {
   background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
   transition:
-    border-color 0.18s,
-    box-shadow 0.18s !important;
+    border-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) !important;
 }
 
 :root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
@@ -751,4 +751,18 @@
 :root:not([data-theme*='light']) .ssh-tunnel-form select,
 :root[data-theme='default'] .ssh-tunnel-form select {
   background: var(--input-bg) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-theme]) .command-editor-dialog-params .command-param-hints button,
+  :root:not([data-theme*='light']) .command-editor-dialog-params .command-param-hints button,
+  :root[data-theme='default'] .command-editor-dialog-params .command-param-hints button,
+  :root:not([data-theme]) .command-dialog-actions .flat-button,
+  :root:not([data-theme*='light']) .command-dialog-actions .flat-button,
+  :root[data-theme='default'] .command-dialog-actions .flat-button,
+  :root:not([data-theme]) .command-dialog-actions .primary-button,
+  :root:not([data-theme*='light']) .command-dialog-actions .primary-button,
+  :root[data-theme='default'] .command-dialog-actions .primary-button {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

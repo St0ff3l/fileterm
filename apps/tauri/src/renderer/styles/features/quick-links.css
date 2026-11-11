@@ -49,10 +49,10 @@
   line-height: var(--button-line-height);
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   box-shadow: var(--shadow-sm);
 }
 
@@ -94,3 +94,9 @@
 
 /* Reuse existing flat-grid styles from home.css */
 /* The grid is already styled in home.css */
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-new-connection {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
+}

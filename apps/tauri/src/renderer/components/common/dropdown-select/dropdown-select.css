@@ -84,7 +84,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  animation: ft-dropdown-fade-in var(--transition-fast);
+  animation: ft-dropdown-fade-in var(--duration-sm) var(--ease-out);
 }
 
 .dropdown-select-menu button {
@@ -227,10 +227,71 @@
 @keyframes ft-dropdown-fade-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(var(--dropdown-enter-offset, -4px));
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes ft-dropdown-reduced-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-select-arrow {
+    transition: none;
+  }
+
+  .dropdown-select-menu {
+    animation: ft-dropdown-reduced-fade-in 150ms var(--ease-out);
+  }
+}
+
+.dropdown-select-menu[data-placement='above'] {
+  --dropdown-enter-offset: 4px;
+  transform-origin: bottom;
+}
+.dropdown-select-menu[data-placement='below'] {
+  transform-origin: top;
+}
+.dropdown-select-menu[data-exiting] {
+  pointer-events: none;
+  animation: ft-dropdown-fade-out var(--duration-exit) var(--ease-in) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-select-menu[data-exiting] {
+    animation-name: ft-dropdown-reduced-fade-out;
+  }
+}
+
+@keyframes ft-dropdown-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(var(--dropdown-enter-offset, -4px));
+  }
+}
+@keyframes ft-dropdown-reduced-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-select-arrow {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
   }
 }

@@ -76,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-2022]
+        os: [macos-latest, ubuntu-22.04, windows-2022]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -414,8 +414,8 @@ jobs:
           done
 
   tauri-serial-virtual:
-    name: Tauri virtual serial (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Tauri virtual serial (ubuntu-22.04)
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -434,8 +434,8 @@ jobs:
         run: cargo test sessions::serial::tests::virtual_pty_round_trip_exercises_the_real_serial_stack
 
   tauri-real-protocols:
-    name: Tauri quality and real protocol fixtures (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Tauri quality and real protocol fixtures (ubuntu-22.04)
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout

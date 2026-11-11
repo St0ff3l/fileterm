@@ -49,7 +49,13 @@
   font-weight: var(--button-font-weight);
   line-height: var(--button-line-height);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .command-center-actions button:hover,
@@ -196,7 +202,13 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   margin-bottom: -1px;
 }
 
@@ -248,7 +260,13 @@
   color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .command-folder-add:hover {
@@ -582,7 +600,7 @@
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-card);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--duration-hover) var(--ease-out);
 }
 
 .command-temporary-history-item:nth-child(even) {
@@ -1192,7 +1210,13 @@
   background: var(--bg-main);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   flex-shrink: 0;
   box-shadow: var(--control-shadow);
 }
@@ -1208,7 +1232,7 @@
   height: 26px;
   padding: 0 24px 0 10px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
   font-size: 11px;
@@ -1216,7 +1240,13 @@
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   box-shadow: var(--control-shadow);
 }
 
@@ -1239,7 +1269,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  transition: transform 0.2s ease;
+  transition: transform var(--duration-hover) var(--ease-out);
 }
 
 .command-target-select select:focus + .command-select-arrow {
@@ -1267,14 +1297,20 @@
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   box-shadow: var(--control-shadow);
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   gap: 8px;
 }
 
@@ -1323,7 +1359,13 @@
   font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   user-select: none;
 }
 
@@ -1415,7 +1457,13 @@
   font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   user-select: none;
   background: transparent;
   gap: 8px;
@@ -1583,11 +1631,11 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
   transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    min-width 0.2s ease,
-    max-width 0.2s ease,
-    background 0.15s ease;
+    border-color var(--duration-move) var(--ease-in-out),
+    box-shadow var(--duration-move) var(--ease-in-out),
+    min-width var(--duration-move) var(--ease-in-out),
+    max-width var(--duration-move) var(--ease-in-out),
+    background var(--duration-move) var(--ease-in-out);
   box-sizing: border-box;
 }
 
@@ -1675,7 +1723,13 @@
   padding: 0;
   margin-right: 3px;
   border-radius: 50%;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   flex-shrink: 0;
 }
 
@@ -1950,13 +2004,13 @@
   width: 100%;
   border-width: 1px;
   border-style: solid;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-family: inherit;
   transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
   box-sizing: border-box;
 }
 
@@ -2471,4 +2525,23 @@
 .command-center-actions button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .command-runner-head button,
+  .command-manager-sidebar-head button,
+  .command-manager-submit button,
+  .command-param-hints button,
+  .command-folder-tabs button,
+  .command-folder-add,
+  .command-select-config-btn,
+  .command-target-select select,
+  .command-select-arrow,
+  .custom-select-trigger,
+  .custom-select-option,
+  .session-send-target-item,
+  .command-param-chip,
+  .command-param-chip-clear {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

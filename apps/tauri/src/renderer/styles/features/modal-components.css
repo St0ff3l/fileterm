@@ -34,11 +34,17 @@
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 10px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
   font-size: 14px;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .file-action-field input:focus {
@@ -491,7 +497,7 @@
   width: 76px;
   height: 36px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid color-mix(in srgb, var(--copy-link) 42%, var(--border-light));
   background: var(--input-bg);
   color: var(--copy-link);
@@ -527,8 +533,8 @@
   background: color-mix(in srgb, var(--bg-hover) 74%, transparent);
   border: 1px solid var(--border-light);
   transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
+    background var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out);
 }
 
 .file-permission-dialog__switch-track::after {
@@ -542,8 +548,8 @@
   background: var(--text-main);
   transform: translateX(0);
   transition:
-    transform 0.2s ease,
-    background 0.2s ease;
+    transform var(--duration-hover) var(--ease-out),
+    background var(--duration-hover) var(--ease-out);
 }
 
 .file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track {
@@ -673,7 +679,13 @@
   justify-content: center;
   font-size: 20px;
   line-height: 1;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   flex-shrink: 0;
 }
 
@@ -719,7 +731,13 @@
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .manager-toolbar button:hover {
@@ -761,7 +779,13 @@
   border-bottom: 1px solid var(--border-light);
   font-size: 13px;
   color: var(--text-main);
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   cursor: pointer;
   position: relative;
 }
@@ -778,7 +802,13 @@
   bottom: 15%;
   width: 3px;
   background-color: transparent;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   border-radius: 0 2px 2px 0;
 }
 
@@ -809,7 +839,7 @@
   display: flex;
   gap: 6px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--duration-hover) var(--ease-out);
 }
 
 .manager-row:hover .manager-actions {
@@ -827,7 +857,13 @@
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-size: 16px;
 }
 
@@ -872,7 +908,13 @@
   border: 1px solid var(--border-light);
   border-radius: 8px;
   background: var(--bg-main);
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   margin: 0 12px;
 }
 
@@ -929,7 +971,13 @@
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-size: 13px;
   color: var(--text-main);
 }
@@ -1121,7 +1169,13 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-family: inherit;
 }
 
@@ -1504,8 +1558,8 @@
   cursor: pointer;
   touch-action: pan-y;
   transition:
-    border-color 0.2s ease,
-    opacity 0.2s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out);
   -webkit-user-drag: none;
 }
 
@@ -1599,7 +1653,7 @@
   height: 100%;
   border-radius: inherit;
   background: var(--accent-highlight);
-  transition: width 180ms ease;
+  transition: width var(--duration-move) var(--ease-in-out);
 }
 
 .settings-update-actions {
@@ -1638,7 +1692,13 @@
   align-items: center;
   text-align: center;
   color: var(--text-main);
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   outline: none;
   font-family: inherit;
 }
@@ -1918,9 +1978,9 @@
   white-space: nowrap;
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
+    background var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .settings-modal .theme-config-actions-control .theme-config-danger-button:hover:not(:disabled) {
@@ -2172,8 +2232,8 @@
   border-radius: 4px;
   color: var(--text-muted);
   transition:
-    color 0.15s ease,
-    background 0.15s ease;
+    color var(--duration-hover) var(--ease-out),
+    background var(--duration-hover) var(--ease-out);
 }
 
 .settings-panel .theme-config-imported-font-item .theme-config-font-delete-btn:hover,
@@ -2283,8 +2343,8 @@
   border-radius: 8px;
   background: var(--surface-section);
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out);
 }
 
 .theme-advanced-section:hover {
@@ -2305,8 +2365,8 @@
   list-style: none;
   user-select: none;
   transition:
-    background 0.15s ease,
-    color 0.15s ease;
+    background var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .theme-config-section-summary:hover {
@@ -2333,8 +2393,8 @@
   line-height: 1;
   transform: rotate(0deg);
   transition:
-    transform 120ms ease,
-    color 120ms ease;
+    transform var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .theme-config-section-summary:hover::before {
@@ -2453,7 +2513,13 @@
   color: var(--text-main);
   cursor: pointer;
   font-size: 13px;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   font-family: inherit;
   outline: none;
 }
@@ -2488,7 +2554,13 @@
   display: flex;
   gap: 16px;
   align-items: flex-start;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .tool-shortcut-card:hover {
@@ -2940,7 +3012,7 @@
 .connection-import-strategy select {
   max-width: 310px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-input, var(--bg-primary));
   color: var(--text-main);
   padding: 7px;
@@ -3039,5 +3111,26 @@
   .connection-import-strategy select {
     max-width: none;
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-action-field input,
+  .file-permission-dialog__switch-track::after,
+  .icon-button,
+  .manager-toolbar button,
+  .manager-row,
+  .manager-row::before,
+  .manager-actions button,
+  .connection-manager-search,
+  .command-manager-item,
+  .sync-subtab-button,
+  .agent-mcp-subtab-button,
+  .update-progress > span,
+  .theme-card,
+  .theme-config-section-summary::before,
+  .lang-card,
+  .tool-shortcut-card {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
   }
 }

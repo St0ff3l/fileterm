@@ -7,6 +7,7 @@ async fn dispatch_terminal_cmd(
     sftp: &SharedSftpSession,
     transfer_sftp_slot: &TransferSftpSlot,
     operation_timeout: Duration,
+    checksum_timeout_cap_disabled: bool,
     file_access_mode: &mut String,
     root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
@@ -173,6 +174,6 @@ async fn dispatch_terminal_cmd(
             );
             Ok(false)
         }
-        _ => dispatch_transfer_cmd(cmd, handle, sftp, transfer_sftp_slot, operation_timeout, file_access_mode, root_file_access_method, sudo_user, sudo_password, saved_sudo_password, saved_su_password, tab_id, app, state, tunnel_commands, exec_channel_enabled).await,
+        _ => dispatch_transfer_cmd(cmd, handle, sftp, transfer_sftp_slot, operation_timeout, checksum_timeout_cap_disabled, file_access_mode, root_file_access_method, sudo_user, sudo_password, saved_sudo_password, saved_su_password, tab_id, app, state, tunnel_commands, exec_channel_enabled).await,
     }
 }

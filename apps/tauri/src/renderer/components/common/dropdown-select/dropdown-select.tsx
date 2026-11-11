@@ -10,6 +10,8 @@ import {
 import { createPortal } from 'react-dom'
 import { AppIcon } from '../../../features/common/app-icon'
 import './dropdown-select.css'
+import { useExitPresence } from '../../../features/common/use-exit-presence'
+import { useSurfaceMotion } from '../../../features/common/use-surface-motion'
 
 export type DropdownOption = {
   value: string
@@ -63,6 +65,7 @@ export function DropdownSelect({
 }) {
   const nativeSelect = useNativeSelect() && !forceCustomMenu
   const [open, setOpen] = useState(false)
+  const present = useExitPresence(open)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const selectRef = useRef<HTMLSelectElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -168,6 +171,7 @@ export function DropdownSelect({
     const shouldPlaceAbove =
       menuPlacement === 'above' ||
       (menuPlacement === 'auto' && belowTop + menuRect.height > window.innerHeight - viewportMargin)
+    menu.dataset.placement = shouldPlaceAbove ? 'above' : 'below'
     const top = shouldPlaceAbove ? aboveTop : belowTop
     const minWidth = menuWidth === 'trigger' ? rect.width : menuRect.width
     const shouldAlignRight =
@@ -185,6 +189,8 @@ export function DropdownSelect({
     menu.style.top = `${Math.min(maxTop, Math.max(viewportMargin, top))}px`
     menu.style.minWidth = `${minWidth}px`
   }, [open, options, menuWidth, menuPlacement, align])
+
+  useSurfaceMotion(menuRef, open, 'translateY(var(--dropdown-enter-offset, -4px))')
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue)
@@ -221,6 +227,9 @@ export function DropdownSelect({
   const menuElement = (
     <div
       ref={menuRef}
+      data-exiting={!open || undefined}
+      inert={!open}
+      aria-hidden={!open || undefined}
       className={`context-menu dropdown-select-menu ${menuClassName ?? ''}`.trim()}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
@@ -285,7 +294,7 @@ export function DropdownSelect({
         </span>
         {hideArrow ? null : <AppIcon className="dropdown-select-arrow" name="chevron-down" size={arrowSize} />}
       </button>
-      {open && typeof document !== 'undefined' ? createPortal(menuElement, document.body) : null}
+      {present && typeof document !== 'undefined' ? createPortal(menuElement, document.body) : null}
     </>
   )
 }

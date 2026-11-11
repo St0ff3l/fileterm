@@ -160,7 +160,7 @@
   min-height: 23px;
   padding: 2px 6px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-primary);
   background: var(--bg-input);
   font-size: 11px;
@@ -277,7 +277,7 @@
   min-width: 0;
   padding: 2px 6px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-primary);
   background: var(--bg-input);
   font-size: 11px;

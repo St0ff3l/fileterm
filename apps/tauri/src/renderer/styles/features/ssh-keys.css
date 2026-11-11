@@ -380,9 +380,9 @@
   font-weight: var(--button-font-weight);
   line-height: var(--button-line-height);
   transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .ssh-key-import-dialog__file-row .ssh-key-import-dialog__file-button .app-icon {

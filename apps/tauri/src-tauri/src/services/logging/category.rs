@@ -60,7 +60,7 @@ impl LogCategory {
             "storage" | "profile" => Some(Self::Storage),
             "security" => Some(Self::Security),
             "update" | "updates" => Some(Self::Updates),
-            "integration" | "mcp" | "ai" | "webdav" | "s3" => Some(Self::Integration),
+            "integration" | "mcp" | "ai" | "webdav" | "s3" | "s3-backup" => Some(Self::Integration),
             "logging" => Some(Self::Logging),
             _ => None,
         }
@@ -83,5 +83,19 @@ impl LogCategory {
             Self::Logging => "logging",
             Self::Other => "other",
         }
+    }
+}
+
+#[cfg(test)]
+mod backup_scope_tests {
+    use super::LogCategory;
+
+    #[test]
+    fn backup_scopes_share_the_integration_log_filter() {
+        assert_eq!(LogCategory::from_scope("webdav"), LogCategory::Integration);
+        assert_eq!(
+            LogCategory::from_scope("s3-backup"),
+            LogCategory::Integration
+        );
     }
 }

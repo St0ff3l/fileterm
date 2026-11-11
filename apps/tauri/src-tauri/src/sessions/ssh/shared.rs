@@ -510,39 +510,57 @@ async fn verify_sftp_transfer_sha256(
     access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
-    operation_timeout: Duration,
+    checksum_timeout: Duration,
 ) -> Result<bool, String> {
     let command = format!(
         "if command -v sha256sum >/dev/null 2>&1; then sha256sum -- {}; elif command -v shasum >/dev/null 2>&1; then shasum -a 256 -- {}; else printf '__FILETERM_SHA256_UNAVAILABLE__\\n'; fi",
         shell_quote(remote_path),
         shell_quote(remote_path),
     );
-    let output = if file_access_mode == "root" {
-        match timeout(
-            operation_timeout,
-            exec_shell_file_command(handle, &command, access_method, sudo_user, sudo_password),
+    let (output, exit_status) = if file_access_mode == "root" {
+        match exec_shell_file_command_with_timeout(
+            handle,
+            &command,
+            access_method,
+            sudo_user,
+            sudo_password,
+            checksum_timeout,
+            "远端 SHA-256 校验超时",
         )
         .await
         {
-            Ok(result) => result?,
-            Err(_) => return Err("远端 SHA-256 校验超时".to_string()),
+            Ok(output) => (output, Some(0)),
+            Err(error) if error == "远端 SHA-256 校验超时" => return Err(error),
+            Err(error) => return Err(format!("远端 SHA-256 校验失败: {error}")),
         }
     } else {
         match timeout(
-            operation_timeout,
+            checksum_timeout,
             crate::sessions::system_metrics::exec_command_with_status(handle, &command),
         )
         .await
         {
-            Ok(Ok((output, _))) => output,
+            Ok(Ok(result)) => result,
             Ok(Err(error)) => return Err(format!("远端 SHA-256 校验失败: {error}")),
             Err(_) => return Err("远端 SHA-256 校验超时".to_string()),
         }
     };
-    if output.contains("__FILETERM_SHA256_UNAVAILABLE__") {
+    validate_transfer_sha256_output(local_hash, &output, exit_status)
+}
+
+fn validate_transfer_sha256_output(
+    local_hash: &str,
+    output: &str,
+    exit_status: Option<u32>,
+) -> Result<bool, String> {
+    let status = exit_status.ok_or_else(|| "远端 SHA-256 校验失败：命令未返回退出状态".to_string())?;
+    if status != 0 {
+        return Err(format!("远端 SHA-256 校验失败：命令退出码 {status}"));
+    }
+    if output.trim() == "__FILETERM_SHA256_UNAVAILABLE__" {
         return Ok(false);
     }
-    let Some(remote_hash) = crate::sessions::file_integrity::parse_sha256_output(&output) else {
+    let Some(remote_hash) = crate::sessions::file_integrity::parse_sha256_output(output) else {
         return Err("远端未返回可识别的 SHA-256 校验和".to_string());
     };
     if remote_hash != local_hash {

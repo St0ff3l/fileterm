@@ -3352,6 +3352,7 @@ mod tests {
     }
 
     include!("otp.rs");
+    include!("checksum.rs");
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tests/local/otp-manual-fixture.rs"));
     include!("../transport/tests/route.rs");
     include!("../transport/tests/ssh_config_route.rs");

@@ -37,17 +37,15 @@ const PLATFORM_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 /// 地 hang 住整个会话。
 const SSH_TUNNEL_OP_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// sudo 凭据验证超时。`exec_shell_file_command` 用 PTY 模式 exec，sudo
-/// 密码错误时会重新 prompt 等待输入且不会自然退出，channel.wait() 永久
-/// 阻塞。这里强制 10 秒收口，让前端 RootAccessModal 的 loading 状态能
-/// 在合理时间内解除。
+/// sudo/su 凭据交互与普通 root 文件命令的默认超时。SHA-256 命令另用
+/// 文件大小计算执行时限，认证提示仍受此 10 秒上限约束。
 const SUDO_VERIFY_TIMEOUT: Duration = Duration::from_secs(10);
 /// `su` 在独立 exec 通道里需要一个可用的控制终端来完成 PAM 密码交互。
 /// 这个标记由提权后的 shell 打印，位于密码提示之后，用来从 PTY 合并
 /// 输出中剥离 `Password:` / `密码:` 等前缀，避免污染 stat/base64 结果。
 const SU_EXEC_OUTPUT_MARKER: &str = "__FILETERM_SU_EXEC_OUTPUT__";
 /// Inline `SetRemoteFileAccessMode` verification budget. The full
-/// `SUDO_VERIFY_TIMEOUT` (10s) is appropriate for spawned file operations,
+/// `SUDO_VERIFY_TIMEOUT` (10s) is appropriate for short spawned root file operations,
 /// but `SetRemoteFileAccessMode` runs inline on the worker loop — waiting
 /// the full 10 seconds would freeze `terminal_input_rx` polling and make
 /// Ctrl+C unresponsive while the user waits for the root-mode toggle to

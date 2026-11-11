@@ -27,14 +27,14 @@
   background: var(--surface-context-menu);
   box-shadow: var(--shadow-modal);
   color: var(--feedback-bubble-text);
-  animation: feedback-bubble-enter 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation: feedback-bubble-enter 240ms var(--ease-out);
   pointer-events: auto;
   user-select: text;
 }
 
 .feedback-bubble.is-exiting {
   will-change: opacity, transform;
-  animation: feedback-bubble-exit 180ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: feedback-bubble-exit 180ms var(--ease-in) forwards;
 }
 
 .feedback-bubble__icon {
@@ -123,9 +123,9 @@
   border-radius: 4px;
   flex-shrink: 0;
   transition:
-    opacity 120ms ease,
-    background-color 120ms ease,
-    color 120ms ease;
+    opacity var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .feedback-bubble .app-close-button.feedback-bubble__close-button:hover:not(:disabled) {

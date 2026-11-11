@@ -98,7 +98,13 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .modal-header button:hover {
@@ -186,16 +192,22 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   padding: 0 12px;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
-.ssh-modal-nav button:hover {
+.ssh-modal-nav button:hover:not(.active) {
   background: var(--bg-hover) !important;
   color: var(--text-primary) !important;
 }
 
 .ssh-modal-nav button.active {
-  background: var(--bg-hover) !important;
+  background: var(--bg-hover);
   color: var(--text-primary) !important;
   font-weight: 500;
 }
@@ -532,9 +544,9 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   line-height: var(--button-line-height);
   cursor: pointer;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 .tunnel-add-button:hover {
   border-color: var(--border-light);
@@ -902,7 +914,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-height: var(--button-height-md, 36px);
   padding: 0 10px;
   box-sizing: border-box;
-  border-radius: 8px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--border-light);
   background: var(--input-bg);
   color: var(--text-main);
@@ -943,7 +955,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-height: var(--button-height-md, 36px);
   box-sizing: border-box;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--border-light);
   background: var(--input-bg);
   color: var(--text-main);
@@ -1177,8 +1189,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-width: 0;
 }
 
-/* Keep both platform branches aligned with the normal SSH form inputs: 36px
-   high, 8px corners, and a centered text line inside the control. */
+/* Keep both platform branches aligned with the form control radius and height. */
 .resource-monitoring-interval__select.dropdown-select-trigger,
 .resource-monitoring-interval__select.ft-select-shell select {
   display: flex;
@@ -1187,7 +1198,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   height: 36px;
   min-height: 36px;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--input-bg);
   color: var(--text-main);
 }
@@ -1276,9 +1287,9 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   user-select: none;
   -webkit-user-drag: none;
   transition:
-    border-color 0.15s ease,
-    opacity 0.15s ease,
-    background-color 0.15s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out);
 }
 
 .resource-monitoring-item-card:hover {
@@ -1390,8 +1401,8 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   cursor: pointer;
   user-select: none;
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out);
 }
 
 .resource-monitoring-panel-row:hover:not(:has(input:disabled)) {
@@ -1625,9 +1636,9 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   font: inherit;
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    color 0.15s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .ssh-secret-field__clear {
@@ -1819,7 +1830,13 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   font-weight: var(--button-font-weight);
   line-height: var(--button-line-height);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .flat-button {
@@ -1953,5 +1970,14 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   .flat-button:hover:not(:disabled),
   .primary-button:hover:not(:disabled) {
     transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-header button,
+  .ssh-modal-nav button,
+  .flat-button,
+  .primary-button {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
   }
 }

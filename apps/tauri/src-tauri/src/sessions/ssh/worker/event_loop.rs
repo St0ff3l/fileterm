@@ -17,6 +17,7 @@ async fn run_worker_event_loop(
     let mut sftp_arc = context.sftp.clone();
     let transfer_sftp_slot = Arc::clone(&context.transfer_sftp_slot);
     let operation_timeout = context.operation_timeout;
+    let checksum_timeout_cap_disabled = profile_disables_checksum_timeout_cap(profile);
     let network_device_mode = context.network_device_mode;
     let exec_channel_enabled = context.exec_channel_enabled;
     let mut sftp_unavailable_reason = context.sftp_unavailable_reason.clone();
@@ -300,6 +301,7 @@ async fn run_worker_event_loop(
                     sftp_arc.as_ref(),
                     &transfer_sftp_slot,
                     operation_timeout,
+                    checksum_timeout_cap_disabled,
                     &mut file_access_mode,
                     &mut root_file_access_method,
                     &mut sudo_user,

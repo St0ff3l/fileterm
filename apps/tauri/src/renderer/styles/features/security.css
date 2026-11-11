@@ -104,7 +104,7 @@
   height: 36px;
   min-height: 36px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--input-bg, var(--bg-input, var(--bg-primary)));
   color: var(--text-main);
   font: inherit;
@@ -163,7 +163,7 @@
   height: 36px;
   padding: 0 10px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--input-bg, var(--bg-input, var(--bg-primary)));
   color: var(--text-main);
   font: inherit;
@@ -308,7 +308,7 @@
   height: 36px;
   padding: 0 10px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   outline: none;
   background: var(--input-bg, var(--bg-main));
   color: var(--text-main);
@@ -339,9 +339,9 @@
   font-size: 11px;
   cursor: pointer;
   transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease;
+    background var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
 }
 
 .sync-security-link:hover {
@@ -425,8 +425,8 @@
     inset 0 1px 0 color-mix(in srgb, var(--text-main) 10%, transparent);
   text-align: center;
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+    transform var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
 }
 
 @keyframes session-lock-shake {
@@ -445,7 +445,7 @@
 }
 
 .session-lock-card--shake {
-  animation: session-lock-shake 0.38s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  animation: session-lock-shake 0.38s var(--ease-in-out) both;
 }
 
 .session-lock-card__mark {
@@ -514,7 +514,7 @@
   height: 42px;
   padding: 0 42px 0 36px;
   border: 1px solid var(--border-light);
-  border-radius: 12px;
+  border-radius: var(--radius-sm, 4px);
   outline: none;
   background: var(--bg-input, var(--bg-main));
   color: var(--text-main);
@@ -522,9 +522,9 @@
   font-size: 13.5px;
   letter-spacing: normal;
   transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    background-color 0.18s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out);
 }
 
 .session-lock-card__form input::placeholder {
@@ -559,11 +559,11 @@
   opacity: 0.35;
   cursor: default;
   transition:
-    opacity 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.18s ease;
+    opacity var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
 }
 
 .session-lock-card__submit-button.is-active:not(:disabled) {
@@ -604,7 +604,13 @@
   font-weight: 550;
   cursor: pointer;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--button-primary-bg) 30%, transparent);
-  transition: all 0.16s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 .session-lock-card__retry-button:hover {
@@ -646,10 +652,10 @@
   cursor: pointer;
   opacity: 0.75;
   transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    opacity 0.15s ease,
-    transform 0.15s ease;
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
   -webkit-app-region: no-drag;
 }
 
@@ -717,5 +723,20 @@
 
   .session-lock-card {
     padding: 26px 20px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-lock-card,
+  .session-lock-card__submit-button,
+  .session-lock-card__retry-button,
+  .security-lock-now-button {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-lock-card--shake {
+    animation: none;
   }
 }

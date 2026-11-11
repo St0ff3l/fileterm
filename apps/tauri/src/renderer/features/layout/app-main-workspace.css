@@ -77,8 +77,8 @@
 @media (prefers-reduced-motion: no-preference) {
   .terminal-right-frame {
     transition:
-      width 0.24s linear,
-      opacity 0.24s linear;
+      width var(--duration-move) var(--ease-in-out),
+      opacity var(--duration-move) var(--ease-in-out);
   }
 }
 
@@ -133,4 +133,10 @@
 :root .fs-shell.has-host-rail > .fs-sidebar .sidebar-resizer {
   right: auto;
   left: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-right-frame {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

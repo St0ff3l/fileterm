@@ -89,10 +89,22 @@ button {
   line-height: var(--button-line-height);
   letter-spacing: 0;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

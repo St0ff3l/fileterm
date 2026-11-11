@@ -52,9 +52,9 @@
   background: var(--surface-card);
   cursor: pointer;
   transition:
-    border-color 120ms ease,
-    background-color 120ms ease,
-    box-shadow 120ms ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
 }
 
 .radio-card-group__option:hover:not(.is-disabled) {
@@ -96,9 +96,9 @@ input.selection-control {
   -webkit-appearance: none;
   cursor: pointer;
   transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    opacity 0.2s ease;
+    border-color var(--duration-hover) var(--ease-out),
+    background var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out);
 }
 
 input.selection-control {
@@ -122,7 +122,7 @@ input.selection-control::after {
   background: var(--focus-outline);
   content: '';
   transform: scale(0);
-  transition: transform 0.16s ease;
+  transition: transform var(--duration-hover) var(--ease-out);
 }
 
 input.selection-control--large::after {
@@ -171,7 +171,7 @@ input.selection-control--target:checked {
 }
 
 input.selection-control--target::after {
-  transition: transform 0.16s cubic-bezier(0.12, 0.4, 0.29, 1.46);
+  transition: transform var(--duration-hover) var(--ease-out);
 }
 
 input.selection-control--target:indeterminate {
@@ -212,4 +212,17 @@ input.selection-control--target:focus-visible {
   font-size: 10px;
   font-weight: 400;
   line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input.selection-control::after {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input.selection-control::after,
+  input.selection-control--target::after {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

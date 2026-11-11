@@ -187,7 +187,13 @@
   color: var(--text-soft) !important;
   border: none !important;
   border-radius: var(--radius-sm) !important;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
 }
 
 :root[data-theme*='light'] .mini-tabs span:hover:not(.active) {
@@ -313,8 +319,8 @@
   color: var(--text-soft) !important;
   height: calc(var(--window-tabbar-height) - 1px) !important;
   transition:
-    background-color 0.2s,
-    color 0.2s;
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover);
 }
 
 :root[data-theme*='light'] .fs-tab:hover:not(.active) {
@@ -329,8 +335,8 @@
   color: var(--text-soft) !important;
   height: 28px !important;
   transition:
-    background-color 0.2s,
-    color 0.2s;
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover);
 }
 
 :root[data-theme*='light'] .add-tab:hover {
@@ -981,4 +987,10 @@
 :root[data-theme*='light'] .command-preview code.is-empty {
   color: var(--text-muted) !important;
   opacity: 0.7 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme*='light'] .mini-tabs span {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }

@@ -66,10 +66,25 @@
   --shadow-lg: 0 18px 42px rgba(15, 23, 42, 0.14);
   --shadow-modal: 0 24px 48px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.1);
 
-  /* Transitions */
-  --transition-fast: 0.1s ease;
-  --transition-normal: 0.15s ease;
-  --transition-slow: 0.25s ease;
+  /* Motion: curves and durations are independent so entrances and exits differ. */
+  --ease-out: cubic-bezier(0, 0, 0.58, 1);
+  --ease-out-strong: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.42, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: var(--ease-out-strong);
+  --duration-hover: 120ms;
+  --duration-sm: 180ms;
+  --duration-md: 280ms;
+  --duration-lg: 400ms;
+  --duration-exit: 150ms;
+  --duration-move: 180ms;
+  --duration-fade: 150ms;
+
+  /* Compatibility shorthand for existing controls. */
+  --transition-fast: 100ms var(--ease-out);
+  --transition-normal: var(--duration-fade) var(--ease-out);
+  --transition-slow: var(--duration-md) var(--ease-out);
 }
 
 /* Linux window themes are desktop-specific. Unknown/X11 sessions stay square
@@ -84,4 +99,10 @@
 
 :root[data-platform='linux'][data-window-maximized='true'] {
   --window-corner-radius: 0px;
+}
+
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.32, 0.78, 1.04, 1.09, 1.06, 1.02, 1, 0.99, 0.99, 1);
+  }
 }

@@ -10,6 +10,7 @@ import {
 } from './connection-modal-utils'
 import { ConnectionNoDeleteSetting } from './connection-no-delete-setting'
 import { TransferSidebarSettingControl } from '../../components/common/transfer-sidebar-setting-control'
+import { ConnectionChecksumTimeoutSetting } from './connection-checksum-timeout-setting'
 
 export function ConnectionSshAdvancedSection({
   connectionDefaults,
@@ -127,6 +128,7 @@ export function ConnectionSshAdvancedSection({
                 </label>
                 <p className="advanced-toggle-hint">{t.sftpEnabledHint}</p>
               </div>
+              {form.sftpEnabled !== false ? <ConnectionChecksumTimeoutSetting form={form} setForm={setForm} /> : null}
               {form.sftpEnabled !== false ? (
                 <TransferSidebarSettingControl
                   checked={form.transferSidebarCollapsedByDefault ?? false}

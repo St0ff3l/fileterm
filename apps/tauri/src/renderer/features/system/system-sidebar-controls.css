@@ -31,10 +31,10 @@
   backdrop-filter: blur(10px);
   box-shadow: var(--system-sidebar-toggle-shadow);
   transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    background 0.18s ease;
+    transform var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out),
+    background var(--duration-hover) var(--ease-out);
 }
 
 .system-sidebar-layout .monitoring-toggle:hover:not(:disabled) {
@@ -89,4 +89,10 @@
 .system-sidebar-layout .mini-tabs span {
   overflow: hidden;
   white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-sidebar-layout .monitoring-toggle {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+  }
 }
