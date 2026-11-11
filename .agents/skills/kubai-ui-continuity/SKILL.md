@@ -15,7 +15,7 @@ Find the places in my product where the interface jumps from one state to the ne
 
 This is a change to my product, not a demo. Work inside my code, on my stack, with my components, tokens and layout. Keep what every action does, what each screen shows and where things end up; change only how one state becomes the next. Do not copy a demo scene (no phone frame, backdrop, sample content or fonts). Do not add a dependency or a router change without asking. Every value below is a default to start from. It applies to phone and desktop layouts alike; section 3 says where they differ.
 
-0. Read the product first
+1. Read the product first
 
 - Find the screens, routes, panels, sheets, dialogs, menus and lists, and how one opens from another: navigation stack or router, modal and sheet presenters, popover and menu components, list and grid components.
 - Find what animates today and how: CSS transitions, the View Transitions API, Motion or Framer Motion, GSAP, SwiftUI or UIKit transitions, Compose animations, Flutter Hero or implicit animations. Note the motion tokens (durations, curves, springs) and reduced-motion handling, and reuse them.
@@ -33,7 +33,7 @@ This is a change to my product, not a demo. Work inside my code, on my stack, wi
    g. Tabs, segmented controls, bottom bars and side navigation. Continuous: one indicator travels from the old tab to the new one. Its leading edge leaves first and the trailing edge follows, so it stretches on the way and settles as it lands (a small squash of about 15% of its height at the longest is enough); labels collapse and expand while the other items make room. New content enters from the side of the tab that was chosen.
    h. Layout changes: grid to list, sort, reorder, insert, delete, expand and collapse. Continuous: each item moves from where it was to where it goes; items that change row leave at the end of their row and come in at the start of the next, so nothing crosses the grid.
 
-2. How to make it continuous
+1. How to make it continuous
 
 - One element, not two. The thing that moves is the same element (or a shared element the framework matches by id), measured where it starts and where it ends. Animate between the two boxes with transforms; never animate width, height, top or margin on things that reflow.
 - What only one state has fades: content that exists only at the end fades in after about 45-55% of the move, and content that exists only at the start fades out in the first 25-35%. Text that changes size scales; it is not cross-faded with a copy.
@@ -45,13 +45,13 @@ This is a change to my product, not a demo. Work inside my code, on my stack, wi
 - Reduced motion: keep the change of state and a short cross-fade (about 150ms), drop the movement and scaling.
 - Accessibility: focus moves to the new state's heading or first control, and back to the element that opened it when it closes; screen readers announce the new state as they do now.
 
-3. Phone and desktop
+1. Phone and desktop
 
 - Phone: everything above, with gestures (swipe back, drag to dismiss) driving the same animation as the buttons, and safe areas respected at every frame.
 - Desktop: the same patterns, smaller and quicker. A card or row usually opens into a side panel or dialog rather than a full window; grow it from the card into that panel. Do not zoom whole windows. Hover never starts a layout animation. Keep pointer targets in place while they animate, so a second click lands where it aims. In split views, animate inside the pane that changes.
 - Window resizing and responsive breakpoints are not transitions; do not animate them.
 
-4. Report before building
+1. Report before building
    Go through the product and give me a ranked list, at most 10 entries, each with:
 
 - Where: the screen or component, and the action that triggers it (on phone, desktop or both).
@@ -62,7 +62,7 @@ This is a change to my product, not a demo. Work inside my code, on my stack, wi
 - Cost: what has to change in the code, and any risk (routing, virtualized lists, shared state).
   Put the frequent, disorienting ones with low cost first. Then ask me which ones to build and wait.
 
-5. Build what I pick
+1. Build what I pick
 
 - Describe the approach for each on my platform (section 6 is a starting point), and list the files you will touch. Wait for my go-ahead.
 - Build them one at a time. For each, list the files you touched, and check:
@@ -72,7 +72,7 @@ This is a change to my product, not a demo. Work inside my code, on my stack, wi
   - Phone and desktop layouts, light and dark, reduced motion, keyboard and screen reader.
   - At rest every screen looks exactly as before, and existing tests still pass.
 
-6. How, by platform (check against my versions)
+1. How, by platform (check against my versions)
 
 - Web: the View Transitions API with view-transition-name on the shared elements (same-document, and cross-document where pages are separate), with a plain update as the fallback. Otherwise FLIP: measure first, apply the change, measure last, animate the inverse with transforms (Motion's layout and layoutId do this; so do Svelte's flip and crossfade, and Vue's TransitionGroup). For router-driven pages, start the transition from the router's navigation hook.
 - iOS: SwiftUI matchedGeometryEffect for shared elements in one view, navigationTransition(.zoom(sourceID:in:)) with matchedTransitionSource on iOS 18 and later for pushes and sheets; UIKit preferredTransition = .zoom on iOS 18, or a custom UIViewControllerAnimatedTransitioning with UIViewPropertyAnimator for interruptible, gesture-driven ones.

@@ -13,7 +13,7 @@ description: 按使用场景为项目中的动画设置缓动曲线和时长：�
 
 Give the motion in my product the right easing curves, so things arrive, leave and move the way they should feel. Work inside my existing code and design system: keep what each animation does, how far it goes and what triggers it. Change how it moves over time, and its duration where that is off.
 
-0. Start from what exists
+1. Start from what exists
 
 - Find every transition and animation: CSS transitions and keyframes, animation libraries (Framer Motion, GSAP, the Web Animations API) and hand-written requestAnimationFrame loops. List each with its component, its trigger, its duration and its curve.
 - Flag the ones left on the CSS default `ease`, `linear` on something that moves, and `ease-in` on something that appears.
@@ -30,7 +30,7 @@ Give the motion in my product the right easing curves, so things arrive, leave a
 - linear: only for things that run rather than move: spinners, progress bars, marquees.
 - The CSS default `ease` is not a choice. Replace it wherever a curve was left unset.
 
-2. Durations
+1. Durations
 
 - Small UI (toasts, tooltips, menus, checks): 150-250ms in, 120-200ms out. Exits are shorter than entrances.
 - Medium (dialogs, popovers with content, drawers): 250-350ms.
@@ -38,7 +38,7 @@ Give the motion in my product the right easing curves, so things arrive, leave a
 - Springs and overshoots: about 1.5x the plain duration, since the settle takes time.
 - Keep the durations as tokens beside the curves (--duration-sm, -md, -lg).
 
-3. Apply them by role
+1. Apply them by role
 
 - Entrances: ease-out, coming from where the thing belongs (a toast from the top edge, a menu from its trigger), over a short distance (8-24px), growing from 96% and fading in a little sooner than it moves. A light blur (about 8px) that clears as it lands is a nice touch on toasts.
 - Exits: ease-in, the same path reversed, and shorter.
@@ -48,13 +48,13 @@ Give the motion in my product the right easing curves, so things arrive, leave a
 - Hover and press: 100-150ms ease-out. Never animate layout on hover.
 - Animate transform and opacity (filter sparingly), not top, left, width or height, which lay out and repaint every frame.
 
-4. Keep it consistent and accessible
+1. Keep it consistent and accessible
 
 - One curve per role across the product. Don't tune each component by hand.
 - Respect prefers-reduced-motion: keep the opacity changes, drop movement and scale, and turn springs and overshoots into a plain 150ms fade.
 - Never make a user wait on an animation: nothing blocks input, and a new action interrupts the old animation from where it is.
 
-5. Deliver
+1. Deliver
 
 - First list every animation you found, its current curve and duration, and the role and curve you will give it.
 - Then add the tokens, switch each animation over, and list every file you touched.
