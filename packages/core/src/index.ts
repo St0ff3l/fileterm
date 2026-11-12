@@ -96,6 +96,8 @@ export interface BaseProfile extends BaseEntity {
   port: number
   username: string
   remotePath: string
+  /** Initial local file directory for this connection; empty uses the system default. */
+  localPath?: string
   filePaneMode?: FilePaneMode
   /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
   transferSidebarCollapsedByDefault?: boolean
@@ -1306,6 +1308,8 @@ export interface CreateProfileInput {
   username: string
   group: string
   remotePath: string
+  /** Initial local file directory for this connection; empty uses the system default. */
+  localPath?: string
   filePaneMode?: FilePaneMode
   /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
   transferSidebarCollapsedByDefault?: boolean

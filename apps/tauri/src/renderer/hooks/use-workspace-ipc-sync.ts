@@ -29,7 +29,6 @@ import {
   type WorkspaceSnapshot
 } from '@fileterm/core'
 import { emptyState, localPreviewFiles, previewLocalPath, previewState } from '../app/app-data'
-import { withParentRow } from '../app/app-utils'
 import { t } from '../i18n'
 import { setTerminalFontWeight } from '../app/font-metrics'
 import { setTerminalRendererPreference } from '../app/terminal-renderer-preference'
@@ -731,29 +730,6 @@ export function useWorkspaceIpcSync({
     }
 
     void hydrateWorkspace()
-
-    if (isMainWorkspaceWindow) {
-      setIsLocalDirectoryLoading(true)
-      void desktopApi
-        .listLocalDirectory()
-        .then(({ path, items }) => {
-          if (canceled) {
-            return
-          }
-          setLocalPath(path)
-          setLocalItems(withParentRow(path, items))
-        })
-        .catch((error: unknown) => {
-          if (!canceled) {
-            onErrorRef.current('读取本机目录', error)
-          }
-        })
-        .finally(() => {
-          if (!canceled) {
-            setIsLocalDirectoryLoading(false)
-          }
-        })
-    }
 
     return () => {
       canceled = true

@@ -80,6 +80,7 @@ export type FileOperationErrorDetails = {
 }
 
 export interface UseFileOperationsOptions {
+  initializeLocalDirectory?: boolean
   desktopApi?: FileTermDesktopApi
   workspace: WorkspaceSnapshot
   activeTab: WorkspaceTab | null

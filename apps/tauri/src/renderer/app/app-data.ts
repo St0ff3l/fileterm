@@ -189,6 +189,7 @@ export function profileToForm(
     username: profile.username,
     group: profile.group,
     remotePath: profile.remotePath,
+    localPath: profile.localPath ?? '',
     filePaneMode: profile.filePaneMode ?? 'local',
     transferSidebarCollapsedByDefault: profile.transferSidebarCollapsedByDefault,
     sftpNoDelete: profile.sftpNoDelete ?? false,

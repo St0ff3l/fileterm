@@ -59,3 +59,11 @@ test('no-delete mode survives opening a saved SSH or SFTP profile for editing', 
     assert.equal(exports.profileToForm({ ...profile, type }).sftpNoDelete, false)
   }
 })
+
+test('each saved connection restores its own local default directory in the edit form', () => {
+  for (const type of ['ssh', 'sftp', 'ftp']) {
+    assert.equal(exports.profileToForm({ ...profile, type, localPath: '/projects/a' }).localPath, '/projects/a')
+    assert.equal(exports.profileToForm({ ...profile, type, localPath: '/projects/b' }).localPath, '/projects/b')
+    assert.equal(exports.profileToForm({ ...profile, type }).localPath, '')
+  }
+})

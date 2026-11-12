@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useConnectionLocalDirectory } from './use-connection-local-directory'
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
 import { t } from '../i18n'
 import type {
@@ -23,6 +24,7 @@ export * from './file-operations-utils'
 
 export function useFileOperations({
   desktopApi,
+  initializeLocalDirectory,
   workspace,
   activeTab,
   activeSession,
@@ -125,6 +127,22 @@ export function useFileOperations({
     }
     return true
   }
+
+  useConnectionLocalDirectory({
+    enabled: initializeLocalDirectory === true,
+    tabs: workspace.tabs,
+    desktopApi,
+    tabId: activeTab?.id,
+    defaultPath: activeProfile?.localPath,
+    localNetworkShareSource,
+    localPath,
+    setLocalPath,
+    setLocalItems,
+    setIsLocalDirectoryLoading,
+    setLocalNetworkShareSource,
+    onStatusMessage,
+    formatError
+  })
 
   const runtime: FileOperationsRuntime = {
     desktopApi,

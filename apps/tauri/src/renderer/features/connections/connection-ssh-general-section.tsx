@@ -381,6 +381,16 @@ export function ConnectionSshGeneralSection({
             />
           </label>
         ) : null}
+        {form.type === 'ftp' || form.type === 'sftp' || (form.type === 'ssh' && !isNetworkDevice) ? (
+          <label>
+            {t.defaultLocalPath}:
+            <input
+              value={form.localPath ?? ''}
+              placeholder={t.defaultLocalPathHint}
+              onChange={(event) => setForm((prev) => ({ ...prev, localPath: event.target.value }))}
+            />
+          </label>
+        ) : null}
         {form.type === 'serial' ? (
           <div className="span-2 ssh-grid">
             <label>
