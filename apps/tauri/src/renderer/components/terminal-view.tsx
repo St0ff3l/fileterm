@@ -3,6 +3,7 @@ import '@xterm/xterm/css/xterm.css'
 import '../xterm-adapters/xterm-compat.css'
 import { VerticalScrollbar } from '../features/common/vertical-scrollbar'
 import { SerialToolbar } from '../features/serial/serial-toolbar'
+import { TerminalCompletionPopup } from '../features/terminal/autocomplete/terminal-completion-popup'
 import { TerminalContextMenu } from './terminal-context-menu'
 import { TerminalFindBar } from './terminal-find-bar'
 import { useTerminalView, type TerminalViewProps } from './use-terminal-view'
@@ -19,6 +20,9 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
     canClosePane = false
   } = props
   const {
+    completionPopup,
+    acceptCompletion,
+    selectCompletion,
     hostRef,
     terminalScrollController,
     findInputRef,
@@ -61,6 +65,9 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
         <div className="terminal-inner" ref={hostRef} />
       </div>
       <VerticalScrollbar scrollController={terminalScrollController} />
+      {completionPopup ? (
+        <TerminalCompletionPopup popup={completionPopup} onAccept={acceptCompletion} onSelect={selectCompletion} />
+      ) : null}
       {findOpen ? (
         <TerminalFindBar
           findInputRef={findInputRef}

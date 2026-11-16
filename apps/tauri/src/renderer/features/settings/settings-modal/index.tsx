@@ -1,3 +1,4 @@
+import { AdvancedSettingsPanel } from './panels/advanced-settings-panel'
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
 import { SidebarAlignedLabel } from '../../../components/common/icon-label/icon-label'
 import type { McpAgentClientStatus, SavedTheme, ThemeConfig } from '@fileterm/core'
@@ -139,6 +140,7 @@ export function SettingsModal({
           </aside>
 
           <main className="connection-manager-main">
+            {activeTab === 'advanced' ? <AdvancedSettingsPanel /> : null}
             {activeTab === 'local-terminal' ? <LocalTerminalSettingsPanel /> : null}
 
             {activeTab === 'ai' ? <AiSettingsPanel /> : null}

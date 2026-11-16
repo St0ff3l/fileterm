@@ -93,6 +93,10 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
   - 符号显示槽严格采用 buffer 列宽，避免 fallback 字体实际 advance 与重复字形测量不同而推偏表格；不把 `✻`、`※` 等单列字符扩大为双列。笔画越界时先平移，确实超宽才等比缩小；双列 emoji 的笔画位于选区背景上方，避免从延续格开始选择时被遮住。保留 buffer 列宽与原始复制文本。
   - `terminal-block-glyph-renderer.ts` 将块字符和连续横线 `─`、`━`、`═` 按字符格几何绘入逐行设备像素位图，复用实时 palette 与选区前景，避免字体边缘和 ANSI span 接缝造成断线或粗细变化。同一原始文本 / 样式段里的连续图形共用一个透明 DOM 占位节点，避免长横线逐格建节点放大后续布局测量；不跨 ANSI / 选区来源合并，位图仍按每格绘制。
   - 图形适配器先筛选需要处理的行，再读取布局；普通文本不触发符号/块字符几何测量。行数缩小时移除越界位图，图形变为普通文字时仍清理旧画布。
+- `apps/tauri/src/renderer/features/terminal/autocomplete/`
+  - SSH 终端内命令候选直接复用固定版本 `@withfig/autocomplete` 的声明式规则，经构建脚本转换为按命令懒加载的离线 JSON；候选再合并已有连接历史和只读 `listRemoteDirectory`，不改变文件面板目录，也不新增远端执行或 CWD 探测。
+  - 每个窗格独立跟踪输入；已显示的常见 shell 提示符可从 xterm 缓冲区恢复，不依赖下一次 OSC 7，实时 OSC 7 还可确认自定义提示符。核对普通缓冲区、行尾光标和远端回显后才接受候选，仅追加文本，不发送换行。支持多级子命令、选项别名与参数、引号/转义和 `sudo` 等包装命令。密码/REPL 提示符、光标位置不可靠和备用屏幕暂停候选。
+  - `UiPreferences.terminalCommandCompletion` 在新安装与旧设置迁移时均默认开启，高级设置保存后即时广播；无关偏好广播和终端 resize 不再清除当前提示符的补全资格。Fig 来源、版本和 MIT 许可保存在 `THIRD-PARTY-NOTICES.md`，应用系统信息页展示致谢和完整许可；不执行上游生成器脚本或函数。Shell/SFTP CWD 命名空间无法确认一致时跳过路径候选，其余来源保持可用。
 - `apps/tauri/src/renderer/xterm-adapters/`
   - 归集 xterm 的私有 API、DOM 渲染、Unicode/emoji、输入法、回包过滤、Vim 选区、字体缓存和 WebView 兼容实现；目录 README 说明模块职责与注册时机。组件层负责生命周期、应用快捷键、会话守卫和 PTY resize 编排。共享字体观察器保留在 `app/font-metrics.ts`，xterm 专用的字体栈脉冲在适配目录内完成。
 - `apps/tauri/src/renderer/xterm-adapters/terminal-log-colorizer.ts`

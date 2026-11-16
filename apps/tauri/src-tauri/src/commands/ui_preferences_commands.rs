@@ -23,6 +23,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             show_macos_menu_bar_icon: default_show_macos_menu_bar_icon(),
             app_icon: default_app_icon(),
             update_channel: default_update_channel(),
+            terminal_command_completion: true,
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             ui_zoom_percent: default_ui_zoom_percent(),
@@ -115,6 +116,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(update_channel) = input.update_channel {
         preferences.update_channel = update_channel;
+    }
+    if let Some(enabled) = input.terminal_command_completion {
+        preferences.terminal_command_completion = enabled;
     }
     if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
         preferences.terminal_zoom_locked = terminal_zoom_locked;
@@ -368,6 +372,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             show_macos_menu_bar_icon: None,
             app_icon: None,
             update_channel: None,
+            terminal_command_completion: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
             ui_zoom_locked: None,
             ui_zoom_percent: None,
@@ -409,6 +414,7 @@ pub fn app_toggle_ui_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError
             show_macos_menu_bar_icon: None,
             app_icon: None,
             update_channel: None,
+            terminal_command_completion: None,
             terminal_zoom_locked: None,
             ui_zoom_locked: Some(!current.ui_zoom_locked),
             ui_zoom_percent: None,
@@ -457,6 +463,7 @@ pub fn app_adjust_ui_zoom(app: AppHandle, operation: &str) -> Result<UiPreferenc
             show_macos_menu_bar_icon: None,
             app_icon: None,
             update_channel: None,
+            terminal_command_completion: None,
             terminal_zoom_locked: None,
             ui_zoom_locked: None,
             ui_zoom_percent: Some(next),

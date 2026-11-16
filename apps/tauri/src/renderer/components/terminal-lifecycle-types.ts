@@ -1,3 +1,4 @@
+import type { CompletionController } from '../features/terminal/autocomplete/use-terminal-completion'
 import type { Dispatch, SetStateAction } from 'react'
 import type { FitAddon } from '@xterm/addon-fit'
 import type { SearchAddon } from '@xterm/addon-search'
@@ -23,6 +24,7 @@ export type TerminalResizeOptions = {
 }
 
 export type TerminalLifecycleOptions = {
+  completionControllerRef: MutableRef<CompletionController | null>
   isMac: boolean
   isWindowsPty: boolean
   isActive: boolean

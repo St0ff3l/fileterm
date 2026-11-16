@@ -2,6 +2,13 @@
 
 本文归总 FileTerm 当前已经接入的核心第三方项目、采用理由、实现位置和维护边界。它不是依赖清单的替代品；精确版本以 `apps/tauri/package.json`、`apps/tauri/src-tauri/Cargo.toml` 和 `package-lock.json` 为准。迁移前实现及其专用依赖已从仓库移除，本文不再列出。
 
+## Fig 终端补全规则
+
+- `@withfig/autocomplete` 固定为 `2.692.3`，作为构建期依赖直接复用上游规则。
+- `npm run sync:completion-specs -w @fileterm/tauri` 生成离线 JSON；开发、类型检查、renderer 测试和打包入口自动同步。生成结果不进入 Git，固定依赖与转换脚本保证可重建。按命令懒加载，不运行上游 `generators`、`script`、版本检测或函数回调。
+- 保留多级子命令、选项别名、参数建议、文件模板、互斥/依赖选项、持久选项及静态 `loadSpec` 引用。需要命令执行的动态建议不宣称已支持；路径使用 FileTerm 现有只读文件通道。
+- 来源、版本、版权与许可证见 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)，应用设置的系统信息页也展示 Fig 致谢与完整 MIT 许可证。
+
 ## 1. 终端：xterm.js
 
 ### 已采用包

@@ -798,6 +798,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: true,
             app_icon: default_app_icon(),
             update_channel: default_update_channel(),
+            terminal_command_completion: true,
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
@@ -850,6 +851,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: true,
             app_icon: default_app_icon(),
             update_channel: default_update_channel(),
+            terminal_command_completion: true,
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
@@ -893,6 +895,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: true,
             app_icon: default_app_icon(),
             update_channel: "nightly".to_string(),
+            terminal_command_completion: true,
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
@@ -1006,6 +1009,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: true,
             app_icon: default_app_icon(),
             update_channel: "beta".to_string(),
+            terminal_command_completion: true,
             terminal_zoom_locked: true,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
@@ -1069,6 +1073,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: true,
             app_icon: default_app_icon(),
             update_channel: default_update_channel(),
+            terminal_command_completion: true,
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
@@ -1133,6 +1138,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: true,
             app_icon: default_app_icon(),
             update_channel: default_update_channel(),
+            terminal_command_completion: true,
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
@@ -1187,6 +1193,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: true,
             app_icon: default_app_icon(),
             update_channel: default_update_channel(),
+            terminal_command_completion: true,
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
@@ -1273,6 +1280,22 @@ mod ui_preferences_tests {
         assert_eq!(resolved["reconnectMode"], "auto");
         assert_eq!(resolved["enableResourceMonitoring"], true);
         assert_eq!(resolved["resourceMonitoringIntervalSeconds"], 1);
+    }
+
+    #[test]
+    fn terminal_completion_defaults_on_and_preserves_explicit_opt_out() {
+        let mut value = serde_json::json!({ "theme": "default-dark", "locale": "zhCN" });
+        let migrated: UiPreferences = serde_json::from_value(value.clone()).unwrap();
+        assert!(migrated.terminal_command_completion);
+        value["terminalCommandCompletion"] = serde_json::json!(false);
+        let disabled: UiPreferences = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_value(normalize_ui_preferences(disabled)).unwrap();
+        assert_eq!(serialized["terminalCommandCompletion"], false);
+        let restored: UiPreferences = serde_json::from_value(serialized).unwrap();
+        assert!(!restored.terminal_command_completion);
+        let input: UiPreferencesInput = serde_json::from_value(serde_json::json!({ "terminalCommandCompletion": false })).unwrap();
+        assert_eq!(input.terminal_command_completion, Some(false));
+        assert!(serde_json::from_value::<UiPreferencesInput>(serde_json::json!({ "terminalCommandCompletion": "false" })).is_err());
     }
 
     #[test]
@@ -1396,6 +1419,7 @@ mod ui_preferences_tests {
             show_macos_menu_bar_icon: false,
             app_icon: default_app_icon(),
             update_channel: "beta".to_string(),
+            terminal_command_completion: true,
             terminal_zoom_locked: true,
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
