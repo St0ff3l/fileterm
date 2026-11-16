@@ -1938,7 +1938,7 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         error: isLight ? '#d94e4e' : '#ff5f57',
         success: isLight ? '#168a53' : '#34d399',
         primaryAction: isLight ? '#3b82f6' : '#1687e8',
-        dangerAction: isLight ? '#d32f2f' : '#b83535'
+        dangerAction: isLight ? '#d32f2f' : '#c93b3b'
       },
       surface: isLight ? '#F4F4F6' : '#151515',
       surfaceSecondary: isLight ? '#ffffff' : '#1e1e1e',

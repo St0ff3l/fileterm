@@ -794,7 +794,7 @@ function buildThemeVariables(
     '--theme-action-danger':
       isDefaultTheme && normalized.codeThemeId === 'fileterm' && !isLight
         ? 'var(--ref-action-danger-bg)'
-        : (theme.semanticColors.dangerAction ?? (isLight ? '#d32f2f' : '#b83535')),
+        : (theme.semanticColors.dangerAction ?? (isLight ? '#d32f2f' : '#c93b3b')),
     '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
     '--theme-font-ui': theme.fonts.ui ? configuredFontStack(theme.fonts.ui, 'ui') : 'var(--font-ui)',
     '--theme-font-code': theme.fonts.code ? configuredFontStack(theme.fonts.code, 'code') : 'var(--font-mono)',

@@ -1,3 +1,20 @@
-.update-channel-select {
-  min-width: 220px;
+.update-check-preference {
+  flex-wrap: wrap;
+}
+
+.update-check-preference > div {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.settings-panel .update-check-preference-select.dropdown-select-trigger,
+.settings-panel .update-check-preference-select.ft-select-shell {
+  flex: 0 0 min(240px, 100%);
+  width: min(240px, 100%);
+  min-width: 0;
+  margin-left: auto;
+}
+
+.settings-panel .update-check-preference-select.ft-select-shell select {
+  min-width: 0;
 }

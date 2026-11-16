@@ -88,9 +88,9 @@
   --ref-action-primary-hover: #1179d4;
   --ref-action-primary-active: #0c68b8;
   --ref-action-primary-text: #ffffff;
-  --ref-action-danger-bg: #b83535;
-  --ref-action-danger-hover: #a93030;
-  --ref-action-danger-active: #932a2a;
+  --ref-action-danger-bg: #c93b3b;
+  --ref-action-danger-hover: #b73636;
+  --ref-action-danger-active: #9e2d2d;
   --ref-action-danger-text: #ffffff;
   --ref-control-inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
   --ref-shadow-context-menu: 0 16px 40px rgba(0, 0, 0, 0.34);

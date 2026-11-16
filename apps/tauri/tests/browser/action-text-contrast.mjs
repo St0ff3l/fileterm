@@ -30,7 +30,7 @@ window.setTheme = (variant, action) => {
 }
 window.setFileTermTheme = (variant, legacy, custom) => {
   const config = createDefaultThemeConfig(variant)
-  if (legacy) config.theme.semanticColors.dangerAction = '#c93b3b'
+  if (legacy) config.theme.semanticColors.dangerAction = '#b83535'
   if (custom) config.codeThemeId = 'custom'
   applyThemeVariables('fileterm-' + variant, config)
 }
@@ -132,9 +132,9 @@ try {
     }
   }
   for (const [legacy, custom, background, color] of [
-    [false, false, 'rgb(184, 53, 53)', 'rgb(255, 255, 255)'],
-    [true, false, 'rgb(184, 53, 53)', 'rgb(255, 255, 255)'],
-    [true, true, 'rgb(201, 59, 59)', 'rgb(255, 255, 255)']
+    [false, false, 'rgb(201, 59, 59)', 'rgb(255, 255, 255)'],
+    [true, false, 'rgb(201, 59, 59)', 'rgb(255, 255, 255)'],
+    [true, true, 'rgb(184, 53, 53)', 'rgb(255, 255, 255)']
   ]) {
     await page.evaluate(([legacy, custom]) => window.setFileTermTheme('dark', legacy, custom), [legacy, custom])
     await page.mouse.move(800, 350)
