@@ -131,10 +131,8 @@ fn metrics_identity_is_unknown(value: &str) -> bool {
         )
 }
 
-/// A parsed metrics block is only trusted after it identifies the machine
-/// that owns the long-lived channel. This prevents a PTY gateway banner (or a
-/// synthetic zero-valued response) from opening the sidebar with data that
-/// actually belongs to the jump host.
+/// Reject incomplete or known gateway identities before displaying a sample.
+/// This does not prove that a Linux machine is the intended target.
 fn target_identity_is_valid(value: &serde_json::Value, platform: &str) -> bool {
     let hostname = metrics_identity_field(value, "hostname");
     let os_name = metrics_identity_field(value, "osName");
@@ -153,46 +151,6 @@ fn target_identity_is_valid(value: &serde_json::Value, platform: &str) -> bool {
     if os_lower.contains("jumpserver") || matches!(os_lower.trim(), "go" | "koko") {
         return false;
     }
-    let os_id = metrics_identity_field(value, "osId").to_ascii_lowercase();
-    let os_id_like = metrics_identity_field(value, "osIdLike").to_ascii_lowercase();
-    let linux_family_id = std::iter::once(os_id.as_str())
-        .chain(os_id_like.split_ascii_whitespace())
-        .any(|id| {
-            matches!(
-                id,
-                "linux" | "debian" | "ubuntu" | "rhel" | "fedora" | "centos"
-                    | "rocky" | "almalinux" | "amzn" | "suse" | "sles" | "sled"
-                    | "opensuse" | "opensuse-leap" | "opensuse-tumbleweed" | "alpine"
-                    | "arch" | "gentoo" | "nixos" | "void" | "slackware" | "solus"
-                    | "mageia" | "mandriva" | "openmandriva" | "clear-linux-os"
-                    | "openwrt" | "buildroot" | "busybox" | "armbian" | "photon"
-                    | "mariner" | "azurelinux" | "openeuler"
-            )
-        });
-    let linux_family_os = [
-        "linux",
-        "centos",
-        "red hat",
-        "rhel",
-        "fedora",
-        "debian",
-        "ubuntu",
-        "armbian",
-        "rocky",
-        "alma linux",
-        "amazon linux",
-        "suse",
-        "opensuse",
-        "alpine",
-        "arch linux",
-        "gentoo",
-        "kali",
-        "openwrt",
-        "buildroot",
-        "busybox",
-    ]
-    .iter()
-    .any(|marker| os_lower.contains(marker));
     match platform {
         "windows" => {
             os_lower.contains("windows")
@@ -205,11 +163,7 @@ fn target_identity_is_valid(value: &serde_json::Value, platform: &str) -> bool {
                 || os_lower.contains("mac os")
                 || kernel_lower.contains("darwin")
         }
-        "linux" | "busybox" => {
-            // Older collectors lack distro IDs. Keep the name fallback, but
-            // neither a kernel alone nor an unknown platform proves a target.
-            kernel_lower == "linux" && (linux_family_id || linux_family_os)
-        }
+        "linux" | "busybox" => kernel_lower == "linux",
         _ => false,
     }
 }
