@@ -7,6 +7,11 @@
   margin-top: 0;
 }
 
+.ssh-grid.ssh-grid-default-paths {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0;
+}
+
 .ssh-device-mode-row {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);

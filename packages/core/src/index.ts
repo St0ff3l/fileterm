@@ -96,6 +96,10 @@ export interface BaseProfile extends BaseEntity {
   port: number
   username: string
   remotePath: string
+  /** SSH file pane follows the terminal directory; absent preserves legacy path-based behavior. */
+  followShellCwd?: boolean
+  /** Initial local file directory for this connection; empty uses the system default. */
+  localPath?: string
   filePaneMode?: FilePaneMode
   /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
   transferSidebarCollapsedByDefault?: boolean
@@ -1306,6 +1310,9 @@ export interface CreateProfileInput {
   username: string
   group: string
   remotePath: string
+  followShellCwd?: boolean
+  /** Initial local file directory for this connection; empty uses the system default. */
+  localPath?: string
   filePaneMode?: FilePaneMode
   /** Sidebar default for this profile; absent inherits the workspace preference where applicable. */
   transferSidebarCollapsedByDefault?: boolean
@@ -2915,6 +2922,7 @@ export interface FileTermDesktopApi {
   createProfile(input: CreateProfileInput): Promise<WorkspaceSnapshot>
   updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot>
   setProfileFilePaneMode(profileId: string, mode: FilePaneMode): Promise<WorkspaceSnapshot>
+  setProfileDefaultDirectory(profileId: string, pane: 'local' | 'remote', path: string): Promise<WorkspaceSnapshot>
   clearTrustedHostFingerprint(profileId: string): Promise<WorkspaceSnapshot>
   testConnection(input: CreateProfileInput, profileId?: string): Promise<void>
   deleteProfile(profileId: string): Promise<WorkspaceSnapshot>

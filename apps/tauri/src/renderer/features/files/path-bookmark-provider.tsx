@@ -4,7 +4,11 @@ import { t } from '../../i18n'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 
 const BookmarkContext = createContext<(pane: 'local' | 'remote', item: RemoteFileItem) => void>(() => {})
+const DefaultDirectoryContext = createContext<(pane: 'local' | 'remote', path: string) => Promise<void>>(
+  async () => undefined
+)
 export const useAddPathBookmark = () => use(BookmarkContext)
+export const useSetDefaultDirectory = () => use(DefaultDirectoryContext)
 
 export function toPathBookmark(scope: string, item: Pick<RemoteFileItem, 'path' | 'name' | 'type'>): PathBookmark {
   return { id: '', scope, path: item.path, name: item.name, type: item.type }
@@ -19,19 +23,25 @@ export function PathBookmarkProvider({ profileId, children }: { profileId: strin
       setError(String(cause))
     })
   }
+  const setDefaultDirectory = (pane: 'local' | 'remote', path: string) => {
+    if (!window.fileterm) return Promise.reject(new Error('Desktop API is unavailable'))
+    return window.fileterm.setProfileDefaultDirectory(profileId, pane, path).then(() => undefined)
+  }
   return (
     <BookmarkContext value={add}>
-      {children}
-      {error !== null && (
-        <ConfirmActionDialog
-          title={t.pathBookmarks}
-          description={error}
-          confirmLabel={t.confirm}
-          confirmVariant="primary"
-          onClose={() => setError(null)}
-          onConfirm={() => setError(null)}
-        />
-      )}
+      <DefaultDirectoryContext value={setDefaultDirectory}>
+        {children}
+        {error !== null && (
+          <ConfirmActionDialog
+            title={t.pathBookmarks}
+            description={error}
+            confirmLabel={t.confirm}
+            confirmVariant="primary"
+            onClose={() => setError(null)}
+            onConfirm={() => setError(null)}
+          />
+        )}
+      </DefaultDirectoryContext>
     </BookmarkContext>
   )
 }

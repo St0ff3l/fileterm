@@ -27,12 +27,10 @@ let state = startup.state;
     let existing_reconnect_mode = sessions
         .get(tab_id)
         .and_then(|session| session.reconnect_mode.clone());
-    let existing_remote_path = sessions
-        .get(tab_id)
-        .map(|session| session.remote_path.clone())
-        .unwrap_or_else(|| {
-            crate::services::workspace::initial_remote_path_for_profile(profile)
-        });
+    let remote_path = crate::services::workspace::remote_path_for_session(
+        profile,
+        sessions.get(tab_id).map(|session| session.remote_path.as_str()),
+    );
     let existing_shell_cwd = if network_device_mode {
         None
     } else {
@@ -86,9 +84,11 @@ let state = startup.state;
             access_host: format!("{}:{}", host, port),
             summary: format!("{}@{}", username, host),
             terminal_transcript: existing_transcript,
-            remote_path: existing_remote_path,
+            remote_path,
             shell_cwd: existing_shell_cwd,
-            follow_shell_cwd: exec_channel_enabled && !interactive_gateway,
+            follow_shell_cwd: exec_channel_enabled
+                && !interactive_gateway
+                && crate::services::workspace::should_follow_shell_cwd_by_default(profile),
             remote_files_loading: effective_sftp_enabled(profile),
             remote_files: Vec::new(),
             sftp_unavailable_reason: None,

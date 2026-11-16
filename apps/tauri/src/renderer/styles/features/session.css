@@ -2422,12 +2422,13 @@
 
 .conflict-resolution-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
 }
 
 .conflict-resolution-actions > button {
-  min-width: 120px;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
@@ -3785,7 +3786,7 @@
   border-top: 1px solid var(--border-light);
 }
 .ssh-tunnel-form-actions .flat-button {
-  min-width: 88px;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
@@ -3794,7 +3795,7 @@
   font-weight: var(--button-font-weight);
 }
 .ssh-tunnel-form-actions .primary-button {
-  min-width: 116px;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
   padding: 0 12px;

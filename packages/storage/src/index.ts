@@ -366,6 +366,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         // server profile does not silently rewrite them.
         sftpEnabled: input.sftpEnabled ?? true,
         remotePath: input.remotePath,
+        followShellCwd: input.followShellCwd,
+        localPath: input.localPath,
         encoding: input.encoding ?? 'UTF-8',
         backspaceKey: input.backspaceKey ?? 'ASCII',
         deleteKey: input.deleteKey ?? 'VT220',
@@ -416,6 +418,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
           securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),
           group: input.group,
           remotePath: input.remotePath,
+          localPath: input.localPath,
           filePaneMode: input.filePaneMode
         }
 }

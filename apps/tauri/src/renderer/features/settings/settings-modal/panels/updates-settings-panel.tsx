@@ -65,7 +65,7 @@ export function UpdatesSettingsPanel() {
             <p>{t.updateChannelHint}</p>
           </div>
           <DropdownSelect
-            className="update-check-preference-select update-channel-select"
+            className="update-check-preference-select"
             disabled={!desktopApi}
             onChange={(value) => setUpdateChannelPreference(value === 'beta' ? 'beta' : 'stable')}
             value={updateChannel}

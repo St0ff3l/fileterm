@@ -544,6 +544,7 @@ export function useAppWorkspace({
   }, [desktopApi, isFileEditorDirty, isFileEditorSaving, isFileEditorWindow])
 
   const fileOperations = useFileOperations({
+    initializeLocalDirectory: isMainWorkspaceWindow,
     desktopApi,
     workspace,
     activeTab,

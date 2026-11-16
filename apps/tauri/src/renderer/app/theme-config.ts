@@ -457,7 +457,7 @@ function resolveCompactUiVariables(
     '--dialog-button-secondary-bg': 'transparent',
     '--dialog-button-secondary-border': strongBorder,
     '--dialog-button-secondary-text': ink,
-    '--dialog-button-secondary-hover-bg': hover,
+    '--dialog-button-secondary-hover-bg': `color-mix(in srgb, ${card} 90%, black)`,
     '--dialog-button-secondary-hover-border': strongBorder,
     '--dialog-button-primary-bg': hover,
     '--dialog-button-primary-border': strongBorder,
@@ -791,7 +791,10 @@ function buildThemeVariables(
     '--warning-text':
       !isLight && theme.semanticColors.warning.toLowerCase() === '#ffcc00' ? '#e7c65b' : theme.semanticColors.warning,
     '--theme-action-primary': theme.semanticColors.primaryAction ?? theme.accent,
-    '--theme-action-danger': theme.semanticColors.dangerAction ?? (variant === 'light' ? '#d32f2f' : '#c93b3b'),
+    '--theme-action-danger':
+      isDefaultTheme && normalized.codeThemeId === 'fileterm' && !isLight
+        ? 'var(--ref-action-danger-bg)'
+        : (theme.semanticColors.dangerAction ?? (isLight ? '#d32f2f' : '#c93b3b')),
     '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
     '--theme-font-ui': theme.fonts.ui ? configuredFontStack(theme.fonts.ui, 'ui') : 'var(--font-ui)',
     '--theme-font-code': theme.fonts.code ? configuredFontStack(theme.fonts.code, 'code') : 'var(--font-mono)',
@@ -896,7 +899,13 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
     const baseComparison = buildThemeVariables(themeMode, baseConfig, true).variables
     variables = { ...base.variables }
     for (const [name, value] of Object.entries(current.variables)) {
-      if (baseComparison[name] !== value) {
+      if (
+        baseComparison[name] !== value ||
+        (!current.isDefaultTheme &&
+          (name === '--action-danger-text' ||
+            name === '--dialog-button-danger-text' ||
+            name === '--dialog-button-danger-hover-text'))
+      ) {
         variables[name] = value
       }
     }

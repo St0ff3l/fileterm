@@ -199,7 +199,9 @@
 
 .security-actions-row .primary-button,
 .security-actions-row .primary-button.compact,
+.security-actions-row .flat-button.compact,
 .security-actions-row .security-reset-password-button {
+  min-width: 82px;
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
@@ -615,7 +617,6 @@
 
 .session-lock-card__retry-button:hover {
   background: var(--button-primary-hover);
-  transform: translateY(-1px);
 }
 
 .session-lock-card__error {

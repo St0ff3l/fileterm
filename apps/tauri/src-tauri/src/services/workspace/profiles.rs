@@ -37,6 +37,11 @@ pub fn configured_device_mode_for_profile(profile: &serde_json::Value) -> Option
 /// Initial browser path for file-capable sessions. SSH follows Electron's
 /// `currentRemotePath` default (`.`), while FTP keeps its protocol root `/`.
 pub fn initial_remote_path_for_profile(profile: &serde_json::Value) -> String {
+    if profile.get("type").and_then(serde_json::Value::as_str).unwrap_or("ssh") == "ssh"
+        && profile.get("followShellCwd").and_then(serde_json::Value::as_bool) == Some(true)
+    {
+        return ".".to_string();
+    }
     if let Some(path) = profile
         .get("remotePath")
         .and_then(serde_json::Value::as_str)
@@ -53,6 +58,32 @@ pub fn initial_remote_path_for_profile(profile: &serde_json::Value) -> String {
         "ssh" | "sftp" => ".".to_string(),
         "ftp" => "/".to_string(),
         _ => String::new(),
+    }
+}
+
+/// An explicit remote directory takes precedence over automatic terminal CWD
+/// following. Users can still turn following back on from the file toolbar.
+pub fn should_follow_shell_cwd_by_default(profile: &serde_json::Value) -> bool {
+    if let Some(enabled) = profile.get("followShellCwd").and_then(serde_json::Value::as_bool) {
+        return enabled;
+    }
+    matches!(
+        profile
+            .get("remotePath")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim),
+        None | Some("" | "." | "/")
+    )
+}
+
+pub fn remote_path_for_session(profile: &serde_json::Value, existing_path: Option<&str>) -> String {
+    if should_follow_shell_cwd_by_default(profile) {
+        existing_path
+            .filter(|path| !path.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| initial_remote_path_for_profile(profile))
+    } else {
+        initial_remote_path_for_profile(profile)
     }
 }
 

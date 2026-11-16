@@ -373,13 +373,49 @@ export function ConnectionSshGeneralSection({
           </label>
         ) : null}
         {form.type === 'ftp' || form.type === 'sftp' || (form.type === 'ssh' && !isNetworkDevice) ? (
-          <label>
-            {t.remotePath}:
-            <input
-              value={form.remotePath}
-              onChange={(event) => setForm((prev) => ({ ...prev, remotePath: event.target.value }))}
-            />
-          </label>
+          <div className="span-2 ssh-grid ssh-grid-default-paths">
+            {form.type === 'ssh' ? (
+              <div className="ssh-low-resource-mode">
+                <label className="ssh-low-resource-mode__label" htmlFor="connection-follow-shell-cwd">
+                  {t.followShellCwd}:
+                </label>
+                <div className="ssh-low-resource-mode__controls">
+                  <SelectionControl
+                    id="connection-follow-shell-cwd"
+                    type="checkbox"
+                    aria-describedby="connection-follow-shell-cwd-hint"
+                    checked={form.followShellCwd ?? ['', '.', '/'].includes((form.remotePath ?? '').trim())}
+                    onChange={(event) => {
+                      const enabled = event.target.checked
+                      setForm((prev) => ({ ...prev, followShellCwd: enabled }))
+                    }}
+                  />
+                  <span id="connection-follow-shell-cwd-hint" className="ssh-low-resource-mode__hint">
+                    {t.followShellCwdSettingHint}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+            <label>
+              {t.remotePath}:
+              <input
+                value={form.remotePath}
+                disabled={
+                  form.type === 'ssh' &&
+                  (form.followShellCwd ?? ['', '.', '/'].includes((form.remotePath ?? '').trim()))
+                }
+                onChange={(event) => setForm((prev) => ({ ...prev, remotePath: event.target.value }))}
+              />
+            </label>
+            <label>
+              {t.defaultLocalPath}:
+              <input
+                value={form.localPath ?? ''}
+                placeholder={t.defaultLocalPathHint}
+                onChange={(event) => setForm((prev) => ({ ...prev, localPath: event.target.value }))}
+              />
+            </label>
+          </div>
         ) : null}
         {form.type === 'serial' ? (
           <div className="span-2 ssh-grid">

@@ -43,6 +43,7 @@ export const defaultForm: CreateProfileInput = {
   // bridge resolves this to a canonical SFTP path after the subsystem opens;
   // FTP keeps its protocol root via the connection-type defaults.
   remotePath: '.',
+  followShellCwd: true,
   note: '',
   filePaneMode: 'local',
   sessionLogEnabled: false,
@@ -189,6 +190,8 @@ export function profileToForm(
     username: profile.username,
     group: profile.group,
     remotePath: profile.remotePath,
+    followShellCwd: profile.followShellCwd ?? ['', '.', '/'].includes(profile.remotePath.trim()),
+    localPath: profile.localPath ?? '',
     filePaneMode: profile.filePaneMode ?? 'local',
     transferSidebarCollapsedByDefault: profile.transferSidebarCollapsedByDefault,
     sftpNoDelete: profile.sftpNoDelete ?? false,

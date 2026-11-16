@@ -68,7 +68,6 @@
   background: var(--button-primary-hover);
   border-color: var(--button-primary-hover);
   box-shadow: 0 4px 20px var(--accent-tint);
-  transform: translateY(-1.5px);
 }
 
 .btn-new-connection:focus-visible {

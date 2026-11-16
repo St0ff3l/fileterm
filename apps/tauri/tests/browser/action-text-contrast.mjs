@@ -17,7 +17,7 @@ await build({
     contents: `
 import { createRoot } from 'react-dom/client'
 import { Button } from './apps/tauri/src/renderer/components/common/button/button'
-import { createCodexThemeConfig } from '@fileterm/core'
+import { createCodexThemeConfig, createDefaultThemeConfig } from '@fileterm/core'
 import { applyThemeVariables } from './apps/tauri/src/renderer/app/theme-config'
 import './apps/tauri/src/renderer/styles/index.css'
 window.setTheme = (variant, action) => {
@@ -27,6 +27,12 @@ window.setTheme = (variant, action) => {
     config.theme.semanticColors.dangerAction = action
   }
   applyThemeVariables('codex-' + variant, config)
+}
+window.setFileTermTheme = (variant, legacy, custom) => {
+  const config = createDefaultThemeConfig(variant)
+  if (legacy) config.theme.semanticColors.dangerAction = '#b83535'
+  if (custom) config.codeThemeId = 'custom'
+  applyThemeVariables('fileterm-' + variant, config)
 }
 window.setTheme('light')
 createRoot(document.getElementById('root')).render(<div style={{background:'var(--surface-panel)',padding:40}}>
@@ -124,6 +130,24 @@ try {
       if (theme === 'dark' && !action && variant === 'primary') assert.ok(normal.ratio >= 4.48)
       checks++
     }
+  }
+  for (const [legacy, custom, background, color] of [
+    [false, false, 'rgb(201, 59, 59)', 'rgb(255, 255, 255)'],
+    [true, false, 'rgb(201, 59, 59)', 'rgb(255, 255, 255)'],
+    [true, true, 'rgb(184, 53, 53)', 'rgb(255, 255, 255)']
+  ]) {
+    await page.evaluate(([legacy, custom]) => window.setFileTermTheme('dark', legacy, custom), [legacy, custom])
+    await page.mouse.move(800, 350)
+    await paint()
+    const normal = await read('danger')
+    assert.equal(normal.background, background)
+    assert.equal(normal.color, color)
+    assert.ok(normal.ratio >= 4.5)
+    await page.locator('.ft-btn--danger').hover()
+    await paint()
+    const hover = await read('danger')
+    assert.equal(hover.color, color)
+    assert.ok(hover.ratio >= 4.5)
   }
   assert.deepEqual(errors, [])
   console.log(

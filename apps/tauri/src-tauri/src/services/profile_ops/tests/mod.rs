@@ -97,6 +97,25 @@ mod tests {
     }
 
     #[test]
+    fn default_directory_updates_only_the_selected_profile_path() {
+        let mut profile = json!({ "id": "p1", "type": "ssh", "followShellCwd": true, "remotePath": "/old", "localPath": "/home" });
+        set_default_directory_in_profile(&mut profile, "remote", "/srv/www").unwrap();
+        assert_eq!(profile["remotePath"], "/srv/www");
+        assert_eq!(profile["followShellCwd"], false);
+        assert_eq!(profile["localPath"], "/home");
+        set_default_directory_in_profile(&mut profile, "local", "/work").unwrap();
+        assert_eq!(profile["localPath"], "/work");
+    }
+
+    #[test]
+    fn default_directory_rejects_invalid_pane_and_path() {
+        let mut profile = json!({ "id": "p1" });
+        assert!(set_default_directory_in_profile(&mut profile, "other", "/path").is_err());
+        assert!(set_default_directory_in_profile(&mut profile, "local", " ").is_err());
+        assert!(set_default_directory_in_profile(&mut profile, "remote", "/bad\0path").is_err());
+    }
+
+    #[test]
     fn heals_legacy_folder_and_command_entity_shapes() {
         let mut connection_folders = vec![json!({ "id": "f1", "name": "Legacy" })];
         let mut command_folders = vec![json!({ "id": "cf1", "name": "Legacy commands" })];

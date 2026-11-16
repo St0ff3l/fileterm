@@ -1850,7 +1850,11 @@
   padding: 9px 10px 10px;
   border: 1px solid var(--border-light);
   border-radius: 12px;
-  background: var(--bg-elevated);
+  background: var(--surface-raised-subtle);
+}
+
+.ai-copilot-composer-zone:has(.ai-copilot-composer textarea:focus-visible) {
+  border-color: var(--border-strong);
 }
 
 .ai-copilot-composer {
@@ -1880,6 +1884,10 @@
   font: inherit;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.ai-copilot-composer textarea:focus {
+  box-shadow: none;
 }
 
 .ai-copilot-composer textarea:disabled {
@@ -2719,16 +2727,10 @@
 }
 
 .ai-settings-model-add-row {
-  position: relative;
-  display: block;
-  width: calc(100% - var(--ai-settings-model-add-button-width) - 8px);
-  overflow: visible;
+  flex-wrap: wrap;
 }
 
 .ai-settings-model-add-row > .ai-settings-secondary-button {
-  position: absolute;
-  top: 0;
-  z-index: 1;
   height: 36px;
   min-height: 36px;
   max-height: 36px;
@@ -2740,16 +2742,14 @@
 }
 
 .ai-settings-model-add-row > .ai-settings-add-model-btn {
-  left: calc(100% + 8px);
   width: var(--ai-settings-model-add-button-width);
   min-width: var(--ai-settings-model-add-button-width);
   gap: 0;
 }
 
 .ai-settings-model-add-row > .ai-settings-model-cancel-btn {
-  left: calc(100% + var(--ai-settings-model-add-button-width) + 16px);
-  width: 72px;
-  min-width: 72px;
+  min-width: 82px;
+  padding: 0 12px;
 }
 
 .ai-settings-model-picker-row .ai-settings-model-select {
@@ -2781,6 +2781,7 @@
 
 .ai-settings-model-add-input {
   display: block;
+  flex: 1 1 120px;
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -3301,6 +3302,7 @@
 .ai-settings-footer-actions .ai-settings-secondary-button,
 .ai-settings-footer-actions .ai-settings-danger-button,
 .ai-settings-footer-actions .primary-button {
+  min-width: 82px;
   height: 36px;
   min-height: 36px;
   max-height: 36px;

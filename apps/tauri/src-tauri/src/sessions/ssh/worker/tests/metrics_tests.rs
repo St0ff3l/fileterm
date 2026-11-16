@@ -90,7 +90,7 @@ fn target_identity_requires_a_real_linux_identity_for_posix_metrics() {
 }
 
 #[test]
-fn target_identity_accepts_linux_distro_ids_and_parent_families() {
+fn target_identity_accepts_linux_without_a_distro_allowlist() {
     for (name, id, parents) in [
         ("Pop!_OS 24.04", "pop", "ubuntu debian"),
         ("KDE neon 24.04", "neon", "ubuntu"),
@@ -102,6 +102,9 @@ fn target_identity_accepts_linux_distro_ids_and_parent_families() {
         ("AlmaLinux 9", "almalinux", "rhel centos fedora"),
         ("Azure Linux 3", "azurelinux", ""),
         ("Custom derivative", "custom", "other\tdebian"),
+        ("OpenCloudOS 9.6", "opencloudos", "opencloudos"),
+        ("Unlisted OS", "unlisted", ""),
+        ("Unknown appliance", "unknown", "debian-ish"),
     ] {
         let block = format!(
             "__OS__{name}\r\n__OS_ID__{id}\r\n__OS_ID_LIKE__{parents}\r\n__KERNEL_NAME__Linux\r\n__HOSTNAME__target\r\n"
@@ -120,7 +123,6 @@ fn target_identity_keeps_gateway_and_incompatible_platform_boundaries() {
         ("JumpServer Linux", "ubuntu", "debian", "Linux", "linux"),
         ("Go", "ubuntu", "debian", "Linux", "linux"),
         ("Koko", "ubuntu", "debian", "Linux", "linux"),
-        ("Unknown appliance", "unknown", "debian-ish", "Linux", "linux"),
         ("NixOS", "nixos", "", "-", "linux"),
         ("NixOS", "nixos", "", "Darwin", "linux"),
         ("Ubuntu", "ubuntu", "debian", "Linux", "unknown"),
