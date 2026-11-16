@@ -155,6 +155,11 @@ export function registerTerminalInputHandlers(runtime: TerminalLifecycleRuntime)
       return false
     }
 
+    if (runtime.completionControllerRef.current?.key(event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      return false
+    }
     return true
   })
 
@@ -220,6 +225,7 @@ export function registerTerminalInputHandlers(runtime: TerminalLifecycleRuntime)
       } else {
         logTerminalClipboard(terminal, 'focus-tracking-preserved-selection', { data })
       }
+      if (!isFocusTrackingEvent) runtime.completionControllerRef.current?.input(data)
       writeTerminalInput(data)
     })
   )

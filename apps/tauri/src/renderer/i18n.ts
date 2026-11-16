@@ -6,6 +6,16 @@ const languageNames = {
 } as const
 
 const zhCN = {
+  thirdPartySoftware: '第三方开源项目',
+  thirdPartyLicense: '版权声明与许可证',
+  figCompletionAttribution: '终端命令补全规则来自 Fig 的开源 autocomplete 项目，感谢 Fig 与社区贡献者。',
+  figCompletionSource: '查看 Fig 规则库',
+  terminalCommandCompletion: '使用 FileTerm 命令候选',
+  terminalCommandCompletionHint:
+    '默认开启，在 SSH 终端显示 FileTerm 的命令、历史和路径候选。Tab 填入，Esc 关闭；不会执行命令。关闭后使用远端终端自身的补全，即时生效并保存。',
+  terminalCompletionHistory: '连接历史',
+  terminalCompletionPath: '远端路径',
+  terminalCompletionHelp: '↑ ↓ 选择 · Tab 填入 · Esc 关闭',
   fileTransferCopyFailed: '复制失败',
   fileTransferCopyCanceled: '复制已取消',
   fileTransferCopyDone: '复制完成',
@@ -2220,6 +2230,17 @@ const zhCN = {
 
 const enUS: typeof zhCN = {
   ...zhCN,
+  thirdPartySoftware: 'Third-party open source',
+  thirdPartyLicense: 'Copyright and license',
+  figCompletionAttribution:
+    'Terminal completion specifications are provided by the open-source Fig autocomplete project. Thanks to Fig and its community contributors.',
+  figCompletionSource: 'View Fig specifications',
+  terminalCommandCompletion: 'Use FileTerm command suggestions',
+  terminalCommandCompletionHint:
+    'Enabled by default. Show FileTerm command, history and path suggestions in SSH terminals. Tab inserts; Esc dismisses without executing. Turn off to use remote shell completion. Changes apply immediately and are saved.',
+  terminalCompletionHistory: 'Connection history',
+  terminalCompletionPath: 'Remote path',
+  terminalCompletionHelp: '↑ ↓ Select · Tab Insert · Esc Dismiss',
   fileTransferCopyFailed: 'Copy failed',
   fileTransferCopyCanceled: 'Copy canceled',
   fileTransferCopyDone: 'Copy completed',

@@ -21,6 +21,7 @@ function fixture() {
   let receive
   const ref = (current) => ({ current })
   const runtime = {
+    completionControllerRef: ref(null),
     terminal: {
       attachCustomKeyEventHandler() {},
       onData(listener) {

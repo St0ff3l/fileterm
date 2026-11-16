@@ -2224,6 +2224,7 @@ export interface UiPreferences {
   showMacosMenuBarIcon: boolean
   appIcon: AppIconVariant
   updateChannel: AppUpdateChannel
+  terminalCommandCompletion: boolean
   terminalZoomLocked: boolean
   uiZoomLocked: boolean
   uiZoomPercent: number
@@ -2257,6 +2258,7 @@ export interface UiPreferencesInput {
   showMacosMenuBarIcon?: boolean
   appIcon?: AppIconVariant
   updateChannel?: UiPreferences['updateChannel']
+  terminalCommandCompletion?: boolean
   terminalZoomLocked?: boolean
   uiZoomLocked?: boolean
   uiZoomPercent?: number

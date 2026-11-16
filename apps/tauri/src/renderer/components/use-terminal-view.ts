@@ -8,6 +8,10 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { createTerminalScrollController } from './terminal-scroll-controller'
 import { TerminalLogColorizer } from '../xterm-adapters/terminal-log-colorizer'
+import {
+  useTerminalCompletion,
+  type CompletionController
+} from '../features/terminal/autocomplete/use-terminal-completion'
 import { t } from '../i18n'
 import { getConfiguredMonoFontFamily, getTerminalFontWeight } from '../app/font-metrics'
 import {
@@ -60,6 +64,7 @@ export function useTerminalView({
     sessionType === 'local' ? normalizeLocalTerminalStartupTranscript(bootText, window.fileterm?.platform) : bootText
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [terminalScrollableElement, setTerminalScrollableElement] = useState<HTMLElement | null>(null)
+  const completionControllerRef = useRef<CompletionController | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const terminalLogColorizerRef = useRef<TerminalLogColorizer | null>(null)
@@ -276,6 +281,7 @@ export function useTerminalView({
   })
 
   useTerminalLifecycle({
+    completionControllerRef,
     isMac,
     isWindowsPty,
     isActive,
@@ -349,6 +355,23 @@ export function useTerminalView({
     runSplitPane,
     runClosePane,
     runCloseTab
+  })
+
+  const {
+    popup: completionPopup,
+    acceptCompletion,
+    selectCompletion
+  } = useTerminalCompletion({
+    terminalRef,
+    controllerRef: completionControllerRef,
+    tabId,
+    profileId,
+    sessionType,
+    active: isActive,
+    available: connected,
+    blocked: findOpen || Boolean(contextMenu),
+    composing: imeCompositionActiveRef,
+    replaying: replayingTranscriptRef
   })
 
   useLayoutEffect(() => {
@@ -539,6 +562,9 @@ export function useTerminalView({
   }, [findCaseSensitive, findOpen, findQuery, findRegex])
 
   return {
+    completionPopup,
+    acceptCompletion,
+    selectCompletion,
     hostRef,
     terminalScrollController,
     findInputRef,

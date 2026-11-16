@@ -39,3 +39,6 @@ __pycache__/
 .githooks/
 .workbuddy/
 /docs/quality/terminal-renderer-windows-2026-10-20/*.png
+
+# Derived offline Fig data; rebuilt from the pinned npm dependency.
+/apps/tauri/src/renderer/features/terminal/autocomplete/specs/*.json

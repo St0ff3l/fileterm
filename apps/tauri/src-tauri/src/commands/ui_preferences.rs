@@ -55,6 +55,8 @@ pub struct UiPreferences {
     pub app_icon: String,
     #[serde(default = "default_update_channel")]
     pub update_channel: String,
+    #[serde(default = "default_terminal_command_completion")]
+    pub terminal_command_completion: bool,
     #[serde(default)]
     pub terminal_zoom_locked: bool,
     #[serde(default, alias = "fileListZoomLocked")]
@@ -112,6 +114,7 @@ pub struct UiPreferencesInput {
     pub show_macos_menu_bar_icon: Option<bool>,
     pub app_icon: Option<String>,
     pub update_channel: Option<String>,
+    pub terminal_command_completion: Option<bool>,
     pub terminal_zoom_locked: Option<bool>,
     pub ui_zoom_locked: Option<bool>,
     pub ui_zoom_percent: Option<i32>,
@@ -798,4 +801,8 @@ fn write_json_object(app: &AppHandle, name: &str, value: &Value) -> Result<(), A
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     std::fs::write(&temporary, content).map_err(|error| AppError::Storage(error.to_string()))?;
     crate::storage::replace_file_atomically(&temporary, &path)
+}
+
+fn default_terminal_command_completion() -> bool {
+    true
 }

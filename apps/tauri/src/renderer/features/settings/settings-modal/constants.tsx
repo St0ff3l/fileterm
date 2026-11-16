@@ -31,6 +31,7 @@ export type SettingsTab =
   | 'updates'
   | 'system'
   | 'language'
+  | 'advanced'
 
 export type SyncFeedback = {
   kind: 'success' | 'error'
@@ -57,11 +58,13 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
   { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update_alt' },
   { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
+  { tab: 'advanced', labelKey: 'advancedSettings', appIcon: 'terminal-file' },
   { tab: 'system', labelKey: 'systemLogsInfo', materialIcon: 'info' },
   { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' }
 ]
 
 export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
+  advanced: 'terminal autocomplete completion suggestions ssh 终端 命令 补全 候选 高级',
   interface:
     'appearance overview theme color font ui window startup size menu bar tray icon macos renderer dom webgl terminal weight 字重 渲染器 终端 外观 概览 主题 颜色 字体 窗口 启动 大小 菜单栏 托盘 图标 layout tab tabs host group row compact height titlebar 布局 标签 标签页 二级 主机 分组 单行 紧凑 高度 标题栏',
   'local-terminal': 'terminal shell powershell pwsh bash zsh fish nushell 本地终端 shell',
