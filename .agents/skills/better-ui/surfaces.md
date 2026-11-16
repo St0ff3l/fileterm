@@ -4,7 +4,7 @@ Recipes for concentric radius, optical alignment, shadow rings and image outline
 
 ## Concentric border radius
 
-```
+```text
 outerRadius = innerRadius + padding + borderWidth
 ```
 
