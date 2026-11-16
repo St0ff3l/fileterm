@@ -2344,7 +2344,7 @@
 }
 
 .command-dialog-actions > button {
-  min-width: 92px;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
   padding: 0 12px;

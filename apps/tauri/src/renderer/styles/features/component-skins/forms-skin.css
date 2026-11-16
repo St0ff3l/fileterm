@@ -420,8 +420,8 @@
   border-radius: var(--radius-md, 6px) !important;
   min-height: 36px !important;
   height: 36px !important;
-  min-width: 92px !important;
-  padding: 0 12px !important;
+  min-width: 82px !important;
+  padding: 0 16px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   cursor: pointer !important;
@@ -440,8 +440,8 @@
   border-radius: var(--radius-md, 6px) !important;
   min-height: 36px !important;
   height: 36px !important;
-  min-width: 92px !important;
-  padding: 0 12px !important;
+  min-width: 82px !important;
+  padding: 0 16px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   cursor: pointer !important;

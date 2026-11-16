@@ -51,6 +51,18 @@ pub async fn app_set_profile_file_pane_mode(
 }
 
 #[tauri::command]
+pub async fn app_set_profile_default_directory(
+    app: AppHandle,
+    profile_id: String,
+    pane: String,
+    path: String,
+) -> Result<serde_json::Value, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
+    crate::services::profile_ops::set_default_directory(&app, &profile_id, &pane, &path)?;
+    get_workspace_snapshot_and_emit(&app).await
+}
+
+#[tauri::command]
 pub async fn app_clear_trusted_host_fingerprint(
     app: AppHandle,
     profile_id: String,

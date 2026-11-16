@@ -67,3 +67,11 @@ test('each saved connection restores its own local default directory in the edit
     assert.equal(exports.profileToForm({ ...profile, type }).localPath, '')
   }
 })
+
+test('terminal following restores explicit settings and preserves legacy path defaults', () => {
+  assert.equal(exports.defaultForm.followShellCwd, true)
+  assert.equal(exports.profileToForm({ ...profile, remotePath: '/srv' }).followShellCwd, false)
+  assert.equal(exports.profileToForm({ ...profile, remotePath: '/' }).followShellCwd, true)
+  assert.equal(exports.profileToForm({ ...profile, remotePath: '/', followShellCwd: false }).followShellCwd, false)
+  assert.equal(exports.profileToForm({ ...profile, remotePath: '/srv', followShellCwd: true }).followShellCwd, true)
+})

@@ -257,7 +257,8 @@ async fn apply_resolved_device_mode_to_workspace(app: &AppHandle, tab_id: &str, 
             session.device_mode =
                 crate::services::workspace::configured_device_mode_for_profile(profile);
             session.capabilities = capabilities.clone();
-            session.follow_shell_cwd = capabilities.shell_integration;
+            session.follow_shell_cwd = capabilities.shell_integration
+                && crate::services::workspace::should_follow_shell_cwd_by_default(profile);
             if is_network_device_profile(profile) {
                 session.shell_cwd = None;
                 session.shell_user = None;

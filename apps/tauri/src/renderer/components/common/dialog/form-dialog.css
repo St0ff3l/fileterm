@@ -118,7 +118,7 @@
 }
 
 .form-dialog > .form-actions > .ft-btn {
-  min-width: 88px;
+  min-width: 82px;
   height: 36px;
   padding: 0 16px;
   font-size: var(--button-font-size-regular);

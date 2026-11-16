@@ -79,10 +79,10 @@
 }
 
 .confirm-action-dialog__button {
-  min-width: 88px;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
-  padding: 0 12px;
+  padding: 0 16px;
   border-radius: var(--radius-md, 6px);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);
@@ -105,6 +105,11 @@
   border: 1px solid var(--dialog-button-secondary-border);
   background: var(--dialog-button-secondary-bg);
   color: var(--dialog-button-secondary-text);
+}
+
+.confirm-action-dialog__button--secondary:hover:not(:disabled) {
+  background: var(--dialog-button-secondary-hover-bg);
+  border-color: var(--dialog-button-secondary-hover-border);
 }
 
 .confirm-action-dialog__button--primary {

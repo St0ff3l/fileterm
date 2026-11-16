@@ -322,7 +322,7 @@
   border-radius: 8px;
   border: 1px solid var(--border-light);
   background: var(--input-bg);
-  color: var(--primary);
+  color: var(--focus-outline);
   flex: 0 0 auto;
 }
 
@@ -595,17 +595,13 @@
 }
 
 .file-permission-dialog__actions .ft-btn {
-  min-width: 88px;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
   --control-padding-x-md: 16px;
   border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
-}
-
-.file-permission-dialog__actions .ft-btn--primary {
-  box-shadow: 0 2px 10px var(--accent-tint);
 }
 
 @media (max-width: 900px) {
@@ -743,7 +739,6 @@
 .manager-toolbar button:hover {
   background: var(--bg-card);
   border-color: var(--text-muted);
-  transform: translateY(-1px);
 }
 
 .manager-table {
@@ -1123,6 +1118,7 @@
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
+  min-width: 82px;
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
@@ -2764,7 +2760,7 @@
 .sync-config-primary-buttons .primary-button.compact,
 .sync-config-primary-buttons .flat-button.compact {
   display: inline-flex;
-  min-width: 80px;
+  min-width: 82px;
   height: 36px;
   min-height: 36px;
   align-items: center;
@@ -2784,7 +2780,7 @@
 
 .sync-config-primary-buttons .flat-button.compact:hover:not(:disabled) {
   border-color: var(--text-muted);
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--bg-hover) 85%, var(--ref-surface-overlay));
 }
 
 .sync-last-synced-badge {
@@ -3076,7 +3072,7 @@
 }
 .connection-import-actions > button:not(.primary-button) {
   box-sizing: border-box;
-  min-width: 88px;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
   border: 1px solid var(--border-light);
@@ -3091,6 +3087,7 @@
 
 .connection-import-actions > .primary-button {
   box-sizing: border-box;
+  min-width: 82px;
   min-height: 36px;
   height: 36px;
   padding: 0 12px;

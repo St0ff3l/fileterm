@@ -187,4 +187,25 @@ test('connection target hints are contextual and low-resource help expands separ
   assert.ok(!descendants(controls).some((element) => element.props.id === 'connection-low-resource-mode-details'))
   assert.ok(render('network-device').some((element) => element.props.children === 'sshDeviceModeHint'))
   assert.ok(render('auto').some((element) => element.props.children === 'sshDeviceModeAutoHint'))
+
+  let form = { type: 'ssh', deviceMode: 'server', remotePath: '/srv', followShellCwd: false }
+  const pathControls = () =>
+    descendants(
+      ConnectionSshGeneralSection({
+        form,
+        connectionDefaults: {},
+        groupOptions: [],
+        setForm: (update) => {
+          form = update(form)
+        }
+      })
+    )
+  let paths = pathControls()
+  const follow = paths.find((element) => element.props.id === 'connection-follow-shell-cwd')
+  assert.ok(follow)
+  assert.equal(paths.find((element) => element.props.value === '/srv').props.disabled, false)
+  follow.props.onChange({ target: { checked: true } })
+  paths = pathControls()
+  assert.equal(paths.find((element) => element.props.value === '/srv').props.disabled, true)
+  assert.equal(form.remotePath, '/srv')
 })

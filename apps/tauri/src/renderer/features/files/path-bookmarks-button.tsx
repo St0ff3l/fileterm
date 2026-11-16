@@ -8,7 +8,7 @@ import { AppIcon } from '../common/app-icon'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { StableButtonLabel } from '../common/stable-button-content'
-import { toPathBookmark } from './path-bookmark-provider'
+import { toPathBookmark, useSetDefaultDirectory } from './path-bookmark-provider'
 import './path-bookmarks-button.css'
 
 export function PathBookmarksButton({
@@ -27,6 +27,7 @@ export function PathBookmarksButton({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState<PathBookmark | null>(null)
+  const setDefaultDirectory = useSetDefaultDirectory()
   const scrollRef = useRef<HTMLDivElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -77,6 +78,20 @@ export function PathBookmarksButton({
   const canBookmarkCurrent = Boolean(
     !disabled && !busy && path && !path.startsWith('fileterm:') && !isCurrentBookmarked
   )
+  const canSetDefault = Boolean(!disabled && !busy && path && !path.startsWith('fileterm:'))
+  const setCurrentAsDefault = async () => {
+    if (!canSetDefault) return
+    setBusy(true)
+    setError(null)
+    try {
+      await setDefaultDirectory(scope === 'local' ? 'local' : 'remote', path)
+      setOpen(false)
+    } catch (cause) {
+      setError(String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <span
@@ -146,19 +161,30 @@ export function PathBookmarksButton({
                     {path || '-'}
                   </span>
                 </div>
-                <Button
-                  className="path-bookmarks-add-btn"
-                  variant={isCurrentBookmarked ? 'secondary' : 'primary'}
-                  size="compact"
-                  disabled={!canBookmarkCurrent}
-                  onClick={() => void update('add', current)}
-                  icon={<AppIcon name={isCurrentBookmarked ? 'check' : 'plus'} size={13} />}
-                >
-                  <StableButtonLabel
-                    label={isCurrentBookmarked ? t.bookmarkAlreadyAdded : t.bookmarkCurrent}
-                    reserveLabel={isCurrentBookmarked ? t.bookmarkCurrent : t.bookmarkAlreadyAdded}
-                  />
-                </Button>
+                <div className="path-bookmarks-header-actions">
+                  <Button
+                    className="path-bookmarks-add-btn"
+                    variant={isCurrentBookmarked ? 'secondary' : 'primary'}
+                    size="compact"
+                    disabled={!canBookmarkCurrent}
+                    onClick={() => void update('add', current)}
+                    icon={<AppIcon name={isCurrentBookmarked ? 'check' : 'plus'} size={13} />}
+                  >
+                    <StableButtonLabel
+                      label={isCurrentBookmarked ? t.bookmarkAlreadyAdded : t.bookmarkCurrent}
+                      reserveLabel={isCurrentBookmarked ? t.bookmarkCurrent : t.bookmarkAlreadyAdded}
+                    />
+                  </Button>
+                  <Button
+                    className="path-bookmarks-add-btn"
+                    variant="secondary"
+                    size="compact"
+                    disabled={!canSetDefault}
+                    onClick={() => void setCurrentAsDefault()}
+                  >
+                    {t.bookmarkSetDefaultDirectory}
+                  </Button>
+                </div>
               </div>
               {error && (
                 <p role="alert" className="modal-error path-bookmarks-error">

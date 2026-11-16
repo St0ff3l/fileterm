@@ -191,6 +191,45 @@ pub fn set_file_pane_mode(app: &AppHandle, profile_id: &str, mode: &str) -> Resu
     persist_profiles(app, &profiles)
 }
 
+pub fn set_default_directory(
+    app: &AppHandle,
+    profile_id: &str,
+    pane: &str,
+    path: &str,
+) -> Result<(), AppError> {
+    let (mut profiles, _) = read_and_heal_profiles(app)?;
+    let profile = profiles
+        .iter_mut()
+        .find(|profile| profile.get("id").and_then(Value::as_str) == Some(profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+    set_default_directory_in_profile(profile, pane, path)?;
+    persist_profiles(app, &profiles)
+}
+
+fn set_default_directory_in_profile(
+    profile: &mut Value,
+    pane: &str,
+    path: &str,
+) -> Result<(), AppError> {
+    if path.trim().is_empty() || path.contains('\0') || path.len() > 32768 {
+        return Err(AppError::Command("Invalid default directory path".to_string()));
+    }
+    let field = match pane {
+        "local" => "localPath",
+        "remote" => "remotePath",
+        _ => return Err(AppError::Command("Invalid file pane".to_string())),
+    };
+    let is_ssh = profile.get("type").and_then(Value::as_str) == Some("ssh");
+    let profile = profile
+        .as_object_mut()
+        .ok_or_else(|| AppError::Storage("Invalid profile".to_string()))?;
+    profile.insert(field.to_string(), Value::String(path.to_string()));
+    if pane == "remote" && is_ssh {
+        profile.insert("followShellCwd".to_string(), Value::Bool(false));
+    }
+    Ok(())
+}
+
 fn set_file_pane_mode_in_profiles(
     profiles: &mut [Value],
     profile_id: &str,

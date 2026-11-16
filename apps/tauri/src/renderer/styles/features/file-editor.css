@@ -63,7 +63,7 @@
   justify-content: center;
   gap: 6px;
   height: 28px;
-  min-width: 72px;
+  min-width: 82px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
@@ -96,7 +96,6 @@
 .file-editor-modal .modal-header .file-editor-save-button.is-dirty:hover:not(:disabled) {
   background: var(--button-primary-hover);
   box-shadow: var(--file-editor-primary-shadow);
-  transform: translateY(-1px);
   border-color: transparent;
 }
 

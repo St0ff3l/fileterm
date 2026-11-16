@@ -132,7 +132,8 @@ pub async fn app_reconnect_tab(
                         crate::services::workspace::reconnect_mode_for_profile(profile);
                     session.capabilities =
                         crate::services::workspace::ConnectionCapabilities::for_profile(profile);
-                    session.follow_shell_cwd = session.capabilities.shell_integration;
+                    session.follow_shell_cwd = session.capabilities.shell_integration
+                        && crate::services::workspace::should_follow_shell_cwd_by_default(profile);
                     // Append a reconnect separator instead of wiping history.
                     if !session.terminal_transcript.is_empty() {
                         session

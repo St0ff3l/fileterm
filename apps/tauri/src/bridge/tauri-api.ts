@@ -603,6 +603,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_update_profile', { profileId, input }),
     setProfileFilePaneMode: (profileId: string, mode: FilePaneMode) =>
       invoke<WorkspaceSnapshot>('app_set_profile_file_pane_mode', { profileId, mode }),
+    setProfileDefaultDirectory: (profileId, pane, path) =>
+      invoke<WorkspaceSnapshot>('app_set_profile_default_directory', { profileId, pane, path }),
     clearTrustedHostFingerprint: (profileId: string) =>
       invoke<WorkspaceSnapshot>('app_clear_trusted_host_fingerprint', { profileId }),
     testConnection: (input: CreateProfileInput, profileId?: string) =>

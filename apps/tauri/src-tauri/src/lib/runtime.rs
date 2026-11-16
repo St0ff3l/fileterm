@@ -656,6 +656,7 @@ pub fn run() {
             crate::commands::app_create_profile,
             crate::commands::app_update_profile,
             crate::commands::app_set_profile_file_pane_mode,
+            crate::commands::app_set_profile_default_directory,
             crate::commands::app_clear_trusted_host_fingerprint,
             crate::commands::app_test_connection,
             crate::commands::app_delete_profile,

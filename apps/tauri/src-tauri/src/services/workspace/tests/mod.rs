@@ -2,8 +2,9 @@
 mod tests {
     use super::{
         configured_device_mode_for_profile, initial_remote_path_for_profile,
-        reconnect_mode_for_profile, ConnectionCapabilities, PaneNode, SplitDirection,
-        TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
+        reconnect_mode_for_profile, remote_path_for_session, should_follow_shell_cwd_by_default,
+        ConnectionCapabilities, PaneNode, SplitDirection, TransferRunHandle, WorkspaceState,
+        WorkspaceTabStatus,
     };
     use std::sync::{Arc, Mutex};
     use tauri::ipc::Channel;
@@ -156,6 +157,49 @@ mod tests {
         assert_eq!(
             initial_remote_path_for_profile(&serde_json::json!({ "type": "ftp" })),
             "/"
+        );
+    }
+
+    #[test]
+    fn explicit_remote_path_disables_automatic_shell_cwd_following() {
+        assert!(!should_follow_shell_cwd_by_default(&serde_json::json!({
+            "remotePath": "/srv/app"
+        })));
+        for remote_path in ["", ".", "/"] {
+            assert!(should_follow_shell_cwd_by_default(&serde_json::json!({
+                "remotePath": remote_path
+            })));
+        }
+        assert!(should_follow_shell_cwd_by_default(&serde_json::json!({})));
+        assert!(should_follow_shell_cwd_by_default(&serde_json::json!({
+            "remotePath": "/srv/app", "followShellCwd": true
+        })));
+        assert!(!should_follow_shell_cwd_by_default(&serde_json::json!({
+            "remotePath": "/", "followShellCwd": false
+        })));
+        assert_eq!(initial_remote_path_for_profile(&serde_json::json!({
+            "type": "ssh", "remotePath": "/srv/app", "followShellCwd": true
+        })), ".");
+        assert_eq!(initial_remote_path_for_profile(&serde_json::json!({
+            "type": "ssh", "remotePath": "/", "followShellCwd": false
+        })), "/");
+    }
+
+    #[test]
+    fn explicit_remote_path_takes_precedence_over_reconnected_session_path() {
+        assert_eq!(
+            remote_path_for_session(
+                &serde_json::json!({ "remotePath": "/srv/app" }),
+                Some("/home/user"),
+            ),
+            "/srv/app"
+        );
+        assert_eq!(
+            remote_path_for_session(
+                &serde_json::json!({ "remotePath": "." }),
+                Some("/home/user"),
+            ),
+            "/home/user"
         );
     }
 

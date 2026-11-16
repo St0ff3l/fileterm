@@ -1842,11 +1842,11 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 .flat-button {
   background: var(--action-secondary-bg);
   color: var(--action-secondary-text);
-  border-color: var(--border-subtle);
+  border-color: var(--border-default);
 }
 
 .flat-button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  background: var(--action-secondary-hover);
 }
 
 .flat-button:focus-visible,
@@ -1878,7 +1878,6 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   background: var(--button-primary-hover);
   border-color: var(--button-primary-hover);
   box-shadow: 0 4px 20px var(--accent-tint);
-  transform: translateY(-1px);
 }
 
 .primary-button:disabled,
@@ -1908,11 +1907,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   border-radius: var(--radius-md, 6px);
   gap: 6px;
   font-size: var(--button-font-size-regular);
-  min-width: 88px;
-}
-
-.file-action-submit-button {
-  min-width: 100px;
+  min-width: 82px;
 }
 
 .button-spinner {

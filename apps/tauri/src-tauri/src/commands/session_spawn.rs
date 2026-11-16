@@ -99,7 +99,8 @@ async fn spawn_session_for_profile(
                 terminal_transcript: "连接主机...\r\n".to_string(),
                 remote_path: initial_remote_path,
                 shell_cwd: None,
-                follow_shell_cwd: capabilities.shell_integration,
+                follow_shell_cwd: capabilities.shell_integration
+                    && crate::services::workspace::should_follow_shell_cwd_by_default(profile),
                 remote_files_loading: false,
                 remote_files: Vec::new(),
                 sftp_unavailable_reason: None,
