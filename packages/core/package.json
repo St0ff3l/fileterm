@@ -1,6 +1,6 @@
 {
   "name": "@fileterm/core",
-  "version": "2.3.4-beta.5",
+  "version": "2.3.4-beta.6",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
