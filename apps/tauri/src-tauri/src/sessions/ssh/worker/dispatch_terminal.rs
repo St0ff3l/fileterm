@@ -65,6 +65,14 @@ async fn dispatch_terminal_cmd(
             }
             Ok(false)
         }
+        WorkerCmd::ReadNetworkConnections { respond_to } => {
+            if exec_channel_enabled {
+                spawn_network_connections(handle, file_access_mode, *root_file_access_method, sudo_user, sudo_password, respond_to);
+            } else {
+                let _ = respond_to.send(Err("NETWORK_SESSION_UNAVAILABLE".to_string()));
+            }
+            Ok(false)
+        }
         WorkerCmd::ExecuteRemoteCommand {
             command,
             cwd,

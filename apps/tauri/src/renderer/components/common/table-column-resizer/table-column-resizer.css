@@ -2,12 +2,13 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -14px;
-  width: 28px;
+  left: -6px;
+  width: 12px;
   z-index: 20;
   cursor: col-resize;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
   outline: none;
 }
 
@@ -18,7 +19,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 14px;
+  left: 6px;
   width: 1px;
   background: var(--focus-outline);
 }

@@ -8,13 +8,7 @@ pub async fn app_get_network_connections(app: AppHandle, tab_id: String) -> Resu
             return Err(AppError::Command("NETWORK_SESSION_UNAVAILABLE".into()));
         }
     }
-    let result = send_worker_cmd(&app, &tab_id, |respond_to| WorkerCmd::ExecuteRemoteCommand {
-        command: crate::sessions::network_connections::COMMAND.into(),
-        cwd: None,
-        timeout_ms: 8000,
-        stdin: None,
-        request_pty: false,
-        cancellation: None,
+    let result = send_worker_cmd(&app, &tab_id, |respond_to| WorkerCmd::ReadNetworkConnections {
         respond_to,
     }).await?;
     if result["timedOut"] == true {

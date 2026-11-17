@@ -65,21 +65,33 @@ export function NetworkSocketTable({
                   scope="col"
                   aria-sort={sort.column === index ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
-                  <button
+                  <span
                     className="network-sockets-sort"
-                    type="button"
-                    onClick={() =>
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      const selection = window.getSelection()
+                      if (selection && !selection.isCollapsed && selection.containsNode(event.currentTarget, true))
+                        return
                       onSortChange({
                         column: index,
                         direction: sort.column === index && sort.direction === 'asc' ? 'desc' : 'asc'
                       })
-                    }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      onSortChange({
+                        column: index,
+                        direction: sort.column === index && sort.direction === 'asc' ? 'desc' : 'asc'
+                      })
+                    }}
                   >
                     <span className="table-column-heading">{header}</span>
                     {sort.column === index ? (
                       <AppIcon name={sort.direction === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} />
                     ) : null}
-                  </button>
+                  </span>
                   {index > 0 ? (
                     <TableColumnResizer label={headers[index - 1]} onResize={setWidths} onResizeEnd={commitWidths} />
                   ) : null}
@@ -104,8 +116,8 @@ export function NetworkSocketTable({
                 >
                   {row.cells.map((cell, i) => (
                     <td key={i}>
-                      {typeof cell === 'string' ? (
-                        <MetricHoverDetail className="network-socket-hover-detail" value={cell} />
+                      {typeof cell === 'string' || typeof cell === 'number' ? (
+                        <MetricHoverDetail className="network-socket-hover-detail" value={String(cell)} />
                       ) : (
                         cell
                       )}

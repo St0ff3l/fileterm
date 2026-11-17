@@ -1,4 +1,4 @@
-//! Read-only Linux socket snapshots from ss or netstat, without a remote agent or sudo.
+//! Read-only Linux socket snapshots from ss or netstat; privilege routing is owned by the SSH worker.
 use regex::Regex;
 use serde_json::{json, Value};
 
@@ -111,13 +111,16 @@ pub fn parse(output: &str, output_truncated: bool) -> Result<Value, String> {
                 .iter()
                 .find_map(|field| field.strip_prefix(key)?.parse().ok())
         };
+        let sent = counter("bytes_sent:");
+        let acked = counter("bytes_acked:");
         rows.push(json!({
             "protocol": protocol, "state": state,
             "localAddress": local_address, "localPort": local_port,
             "remoteAddress": remote_address, "remotePort": remote_port,
             "pid": pid,
             "process": process_name,
-            "txBytes": counter("bytes_sent:"), "rxBytes": counter("bytes_received:"),
+            "txBytes": sent.or(acked), "rxBytes": counter("bytes_received:"),
+            "txBytesSource": if sent.is_some() { Some("sent") } else if acked.is_some() { Some("acked") } else { None },
             "listening": state == "LISTEN" || (protocol == "udp" && remote_port == 0),
         }));
     }
@@ -133,6 +136,24 @@ pub fn parse(output: &str, output_truncated: bool) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_upload_uses_acked_bytes_without_overriding_sent_or_unknown() {
+        let value = parse(concat!(
+            "tcp ESTAB 0 0 10.0.0.1:22 10.0.0.2:50000\n\t cubic bytes_acked:1234 bytes_received:5678\n",
+            "tcp ESTAB 0 0 10.0.0.1:23 10.0.0.2:50001 bytes_sent:2000 bytes_acked:1234\n",
+            "tcp ESTAB 0 0 10.0.0.1:24 10.0.0.2:50002 bytes_sent:0 bytes_acked:100\n",
+            "tcp LISTEN 0 128 *:80 *:*\n"
+        ), false).unwrap();
+        let sockets = &value["sockets"];
+        assert_eq!(sockets[0]["txBytes"], 1234);
+        assert_eq!(sockets[0]["txBytesSource"], "acked");
+        assert_eq!(sockets[1]["txBytes"], 2000);
+        assert_eq!(sockets[1]["txBytesSource"], "sent");
+        assert_eq!(sockets[2]["txBytes"], 0);
+        assert!(sockets[3]["txBytes"].is_null());
+        assert!(sockets[3]["txBytesSource"].is_null());
+    }
 
     #[test]
     fn parses_legacy_ss_headers_and_multiline_counters() {
@@ -159,16 +180,14 @@ mod tests {
                 let _ = fs::remove_dir_all(&self.0);
             }
         }
-        let fixture = Fixture(
-            std::env::temp_dir().join(format!(
+        let fixture = Fixture(std::env::temp_dir().join(format!(
                 "fileterm-network-{}-{}",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_nanos()
-            )),
-        );
+            )));
         let path = fixture.0.join("path");
         let opt_bin = fixture.0.join("opt-bin-ss");
         let opt_sbin = fixture.0.join("opt-sbin-ss");

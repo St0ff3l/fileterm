@@ -33,13 +33,14 @@ const zhCN = {
   networkNoPeers: '当前没有连接',
   networkEmpty: '没有匹配的端口或连接',
   networkUnknownProcess: '权限不足或进程已退出',
+  networkExitPrivileged: '切回登录用户采集',
+  networkLegacyUploadHint: '旧版上传按已确认字节统计。',
   networkLoading: '正在读取网络连接…',
   networkUnsupported: '网络连接详情暂仅支持 Linux 远端。',
   networkSsRequired: '远端缺少 ss 和 netstat，请安装 iproute2 或 net-tools。',
   networkLoadFailed: '读取失败，数据可能已过期。请检查 SSH 连接和 exec 通道后刷新。',
   networkTruncated: '数据已截断，仅显示部分连接',
-  networkSocketHint:
-    '每 3 秒刷新，离开标签页后暂停。进程信息受登录权限限制；上传/下载为当前活动连接的内核累计字节，并非网卡总流量。不支持的计数显示 —。',
+  networkSocketHint: '3 秒刷新，离页暂停。进程信息受权限限制；流量为活动连接累计值，非网卡总量；未知为 —。',
 
   thirdPartySoftware: '第三方开源项目',
   thirdPartyLicense: '版权声明与许可证',
@@ -2292,13 +2293,15 @@ const enUS: typeof zhCN = {
   networkNoPeers: 'No current connections',
   networkEmpty: 'No matching ports or connections',
   networkUnknownProcess: 'Restricted or exited process',
+  networkExitPrivileged: 'Collect as the login user',
+  networkLegacyUploadHint: 'Legacy upload uses acknowledged bytes.',
   networkLoading: 'Loading network connections…',
   networkUnsupported: 'Connection details currently support Linux hosts only.',
   networkSsRequired: 'Neither ss nor netstat is available. Install iproute2 or net-tools.',
   networkLoadFailed: 'Could not refresh; data may be stale. Check SSH and exec access, then refresh.',
   networkTruncated: 'Partial snapshot: results truncated',
   networkSocketHint:
-    'Refreshes every 3 seconds while this tab is active. Process details depend on login permissions. Upload/download are kernel byte counters for currently active connections, not interface totals. Unavailable counters show —.',
+    'Refreshes every 3s; pauses off-tab. Process details require permission. Traffic totals cover active connections, not interfaces; unknown: —.',
 
   thirdPartySoftware: 'Third-party open source',
   thirdPartyLicense: 'Copyright and license',

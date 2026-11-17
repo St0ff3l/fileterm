@@ -17,7 +17,12 @@
 }
 
 .network-details-trigger.network-history {
-  width: 100%;
+  box-sizing: border-box;
+  width: calc(100% + 8px);
+  margin-top: 4px;
+  margin-inline: -4px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .network-details-trigger:hover:not(:disabled) {

@@ -152,3 +152,33 @@ fn detect_remote_exec_input_kind(output: &str) -> Option<&'static str> {
         || candidate.contains("确认");
     needs_input.then(|| remote_exec_input_kind(candidate))
 }
+
+/// Collect only the fixed socket command using an already active session privilege mode.
+/// This never elevates a user-mode session or prompts for credentials during polling.
+fn spawn_network_connections(
+    handle: &Arc<Handle<ClientHandler>>,
+    file_access_mode: &str,
+    access_method: RootFileAccessMethod,
+    sudo_user: &Option<String>,
+    root_password: &Option<String>,
+    respond_to: oneshot::Sender<Result<Value, String>>,
+) {
+    if file_access_mode != "root" {
+        spawn_remote_command(handle, crate::sessions::network_connections::COMMAND.into(), None, 8000, None, false, None, respond_to);
+        return;
+    }
+    let handle = Arc::clone(handle);
+    let sudo_user = sudo_user.clone();
+    let root_password = root_password.clone();
+    tokio::spawn(async move {
+        let result = exec_shell_file_command_with_timeout(
+            &handle, crate::sessions::network_connections::COMMAND,
+            access_method, &sudo_user, &root_password, Duration::from_secs(8),
+            "NETWORK_SNAPSHOT_TIMEOUT",
+        ).await.map(|output| {
+            let truncated = output.len() >= 256 * 1024;
+            serde_json::json!({ "output": output, "exitCode": 0, "timedOut": false, "outputTruncated": truncated })
+        });
+        let _ = respond_to.send(result);
+    });
+}

@@ -176,3 +176,77 @@ test('network header sorting compares numeric counters and addresses without sor
     ['large', 'small', 'unknown']
   )
 })
+
+test('only double-clicking blank space clears socket selection; refresh cannot reselect it', () => {
+  const states = []
+  let cursor = 0
+  const jsx = (type, props) => ({ type, props })
+  const module = {}
+  const snapshot = { sockets: [listener, { ...listener, localPort: 80 }], source: 'ss' }
+  vm.runInNewContext(
+    ts.transpileModule(
+      readFileSync(
+        new URL('../../src/renderer/features/system/network-connections-workspace.tsx', import.meta.url),
+        'utf8'
+      ),
+      { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }
+    ).outputText,
+    {
+      exports: module,
+      require: (name) => {
+        if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
+        if (name === 'react')
+          return {
+            useEffect() {},
+            useMemo: (fn) => fn(),
+            useRef: (current) => ({ current }),
+            useState: (initial) => {
+              const index = cursor++
+              if (!(index in states)) states[index] = index === 0 ? snapshot : initial
+              return [
+                states[index],
+                (value) => {
+                  states[index] = typeof value === 'function' ? value(states[index]) : value
+                }
+              ]
+            }
+          }
+        if (name === './network-connections-model') return exports
+        if (name === '../../i18n') return { t: new Proxy({}, { get: (_target, key) => key }) }
+        return new Proxy({}, { get: (_target, key) => key })
+      }
+    }
+  )
+  const render = () => {
+    cursor = 0
+    return module.NetworkConnectionsWorkspace({
+      tabId: 'tab',
+      connected: true,
+      isActive: true,
+      accessMode: 'user',
+      accessUser: 'root',
+      privilegeBusy: false,
+      onToggleAccessMode() {}
+    })
+  }
+  const tables = (page) => page.props.children.filter((child) => child?.type === 'NetworkSocketTable')
+  let page = render()
+  assert.equal(page.props.onPointerDown, undefined, 'single clicks must not clear selection')
+  tables(page)[0].props.rows[1].onSelect()
+  page = render()
+  assert.equal(tables(page)[0].props.rows[1].selected, true)
+  page.props.onDoubleClick({ target: { closest: () => ({}) } })
+  assert.equal(tables(render())[0].props.rows[1].selected, true)
+  page.props.onDoubleClick({ target: { closest: () => null } })
+  page = render()
+  assert.equal(
+    tables(page)[0].props.rows.some((row) => row.selected),
+    false
+  )
+  assert.equal(tables(page)[1].props.rows.length, 0)
+  states[0] = { ...snapshot, sockets: snapshot.sockets.map((socket) => ({ ...socket })) }
+  assert.equal(
+    tables(render())[0].props.rows.some((row) => row.selected),
+    false
+  )
+})

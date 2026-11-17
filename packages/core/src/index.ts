@@ -963,6 +963,8 @@ export interface NetworkSocket {
   remotePort: number
   pid: number | null
   process: string | null
+  /** Legacy ss may expose acknowledged bytes instead of total sent bytes. */
+  txBytesSource?: 'sent' | 'acked' | null
   txBytes: number | null
   rxBytes: number | null
   listening: boolean

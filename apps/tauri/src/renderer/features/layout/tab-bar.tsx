@@ -17,6 +17,7 @@ export type OrderedTabEntry =
       id: string
       title: string
       tabKind: 'home' | 'system' | 'transfers'
+      backgroundSessionsRequest?: number
       sessionTabId?: string
     }
   | { key: string; kind: 'session'; tab: WorkspaceTab }

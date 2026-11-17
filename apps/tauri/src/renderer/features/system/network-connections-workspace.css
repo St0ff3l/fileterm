@@ -16,7 +16,7 @@
 
 .network-connections-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 140px 150px max-content;
+  grid-template-columns: minmax(180px, 1fr) 140px 150px max-content max-content;
   align-items: center;
   gap: 8px;
 }
@@ -45,7 +45,6 @@
 .network-connections-toolbar .network-connections-refresh {
   min-width: 82px;
   padding-inline: 16px;
-  --action-secondary-hover: var(--action-secondary-bg);
 }
 
 .network-connections-toolbar .network-connections-refresh.ft-btn--loading {
@@ -242,4 +241,40 @@
 .network-sockets-table th[aria-sort='ascending'],
 .network-sockets-table th[aria-sort='descending'] {
   color: var(--text-primary);
+}
+
+.network-connections-access {
+  min-width: 82px;
+}
+
+.network-connections-toolbar :is(.network-connections-access, .network-connections-refresh) {
+  --action-secondary-bg: var(--dialog-button-secondary-bg);
+  --action-secondary-hover: var(--dialog-button-secondary-hover-bg);
+  --action-secondary-text: var(--dialog-button-secondary-text);
+}
+
+.network-connections-access-icon {
+  display: flex;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Keep native WebKit tap-drag selection enabled throughout the table. */
+.network-sockets-table,
+.network-sockets-sort,
+.network-port-button {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.network-sockets-table :is(.table-column-heading, .metric-hover-detail-text, .network-port-button > span) {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.network-sockets-sort .table-column-heading {
+  cursor: text;
 }

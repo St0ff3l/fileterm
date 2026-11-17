@@ -15,7 +15,7 @@ import type {
   ThemeConfig,
   WorkspaceTab
 } from '@fileterm/core'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ThemeMode } from '../../app/theme-config'
 import { t } from '../../i18n'
 import { resolveRendererPlatform } from '../../lib/renderer-platform'
@@ -38,6 +38,7 @@ import { BackgroundSessionsPage } from './background-sessions-page'
 
 export function HomeWorkspace({
   profiles,
+  backgroundSessionsRequest,
   backgroundTabs,
   sessions,
   folders = [],
@@ -86,6 +87,7 @@ export function HomeWorkspace({
   onCloseBackgroundSession
 }: {
   profiles: ConnectionProfile[]
+  backgroundSessionsRequest?: number
   backgroundTabs: WorkspaceTab[]
   sessions: Record<string, SessionSnapshot>
   folders?: ConnectionFolder[]
@@ -147,7 +149,10 @@ export function HomeWorkspace({
     | 'background-sessions'
     | 'mcp-call-log'
     | 'settings'
-  >('overview')
+  >(backgroundSessionsRequest === undefined ? 'overview' : 'background-sessions')
+  useLayoutEffect(() => {
+    if (backgroundSessionsRequest !== undefined) setActiveTab('background-sessions')
+  }, [backgroundSessionsRequest])
   const contentBodyRef = useRef<HTMLDivElement | null>(null)
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [suppressEntrance, setSuppressEntrance] = useState(Boolean(suppressEntranceProp))

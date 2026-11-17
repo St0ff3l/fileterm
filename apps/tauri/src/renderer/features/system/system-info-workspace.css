@@ -219,3 +219,25 @@
 .system-table td {
   overflow: hidden;
 }
+
+/* Avoid ancestor selection locks: WebKit tap-drag must start on text. */
+.system-info-card {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.system-info-card-head strong,
+.system-table :is(.table-column-heading, .metric-hover-detail-text),
+.system-description-row > span,
+.system-description-row strong {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.system-description-row > span,
+.system-description-row strong {
+  justify-self: start;
+}

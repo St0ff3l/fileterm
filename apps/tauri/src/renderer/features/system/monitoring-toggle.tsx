@@ -27,23 +27,25 @@ export function MonitoringToggle({
   const mounted = useRef(true)
   const state = session?.monitoring
   const stopped = state?.phase === 'stopped'
+  const disconnected = !session?.connected || state?.reason === 'ssh-disconnected'
   useEffect(() => {
     mounted.current = true
     return () => {
       mounted.current = false
     }
   }, [])
-  if (
-    !session?.connected ||
-    !state ||
-    session.capabilities?.resourceMonitoring === false ||
-    state.reason === 'ssh-disconnected' ||
-    state.phase === 'unsupported'
-  )
+  useEffect(() => {
+    if (disconnected) {
+      requestId.current += 1
+      setConfirming(false)
+      setError('')
+    }
+  }, [disconnected])
+  if (!session || !state || session.capabilities?.resourceMonitoring === false || state.phase === 'unsupported')
     return null
 
   async function change(enabled: boolean) {
-    if (!window.fileterm || !tabId || !state || pending.current) return
+    if (!window.fileterm || !tabId || !state || disconnected || pending.current) return
     pending.current = true
     const id = ++requestId.current
     setRequested(enabled)
@@ -90,13 +92,14 @@ export function MonitoringToggle({
         className="monitoring-toggle"
         data-stopped={stopped}
         size="sm"
-        title={label}
-        aria-label={label}
+        title={disconnected ? t.monitoringSshDisconnected : label}
+        aria-label={disconnected ? t.monitoringSshDisconnected : label}
         loading={requested !== null}
         reserveLoadingSpace
-        disabled={!window.fileterm}
+        disabled={!window.fileterm || !tabId || disconnected}
         icon={<span className="monitoring-toggle-icon" aria-hidden="true" />}
         onClick={() => {
+          if (disconnected) return
           setError('')
           if (stopped) void change(true)
           else {

@@ -39,6 +39,7 @@ const DEFAULT_COMMAND_PANE_WIDTH = 300
 
 type ActiveLocalTab = {
   kind: 'home' | 'system' | 'transfers'
+  backgroundSessionsRequest?: number
   view?: 'network'
   sessionTabId?: string
 } | null
@@ -331,6 +332,10 @@ function WorkspaceStageContent({
         tabId={activeTab?.id ?? ''}
         connected={Boolean(activeSession?.connected)}
         isActive={Boolean(isWorkspaceActive)}
+        accessMode={remoteFileAccessMode}
+        accessUser={activeSession?.sudoUser ?? 'root'}
+        privilegeBusy={isBusy}
+        onToggleAccessMode={onToggleRemoteFileAccessMode}
       />
     )
   }
@@ -453,6 +458,7 @@ function WorkspaceStageContent({
     <HomeWorkspace
       key={activeHomeTabId ?? 'home-root'}
       suppressEntrance={suppressHomeEntrance}
+      backgroundSessionsRequest={activeLocalTab?.backgroundSessionsRequest}
       folders={folders}
       commandFolders={commandFolders}
       commandTemplates={commandTemplates}
@@ -651,7 +657,12 @@ export function KeepAliveWorkspaceStage({
         >
           <WorkspaceStage
             {...stageProps}
-            activeLocalTab={{ kind: 'home' }}
+            activeLocalTab={{
+              kind: 'home',
+              backgroundSessionsRequest: stageProps.tabBarProps.orderedTabs.flatMap((entry) =>
+                entry.kind === 'local' && entry.id === id ? [entry.backgroundSessionsRequest] : []
+              )[0]
+            }}
             activeHomeTabId={id}
             isWorkspaceActive={isActive}
             suppressHomeEntrance={!shouldAnimateEntrance}

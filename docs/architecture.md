@@ -795,3 +795,5 @@ Renderer 使用 `lib/diagnostic-log.ts` 经已有 IPC 写入本地日志，不�
 完整分类、限流、保留和故障边界见 [本地诊断日志](./quality/logging.md)。
 
 命令候选开关属于 SSH 连接配置：连接默认值用于新建连接，单个连接的 `terminalCommandCompletion` 独立保存，缺失时默认开启。终端通过 workspace snapshot 读取当前连接并响应设置变化；旧全局 UI 偏好字段只保留存储兼容。
+
+网络连接采集由固定用途 `ReadNetworkConnections` SSH worker 请求执行，读取会话当前身份与既有 root/sudo/su 认证上下文；普通模式保持登录用户。`txBytesSource` 区分发送字节与旧版 ss 的已确认字节，renderer 显示统计口径说明。

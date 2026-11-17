@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NetworkConnectionsSnapshot } from '@fileterm/core'
+import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { Button } from '../../components/common/button/button'
 import { Input } from '../../components/common/input/input'
 import { DropdownSelect } from '../common/dropdown-select'
@@ -21,11 +22,19 @@ import './network-connections-workspace.css'
 export function NetworkConnectionsWorkspace({
   tabId,
   connected,
-  isActive
+  isActive,
+  accessMode,
+  accessUser,
+  privilegeBusy,
+  onToggleAccessMode
 }: {
   tabId: string
   connected: boolean
   isActive: boolean
+  accessMode: 'user' | 'root'
+  accessUser: string
+  privilegeBusy: boolean
+  onToggleAccessMode(): void
 }) {
   const [snapshot, setSnapshot] = useState<NetworkConnectionsSnapshot | null>(null)
   const [error, setError] = useState('')
@@ -33,7 +42,7 @@ export function NetworkConnectionsWorkspace({
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState('listeners')
-  const [selectedKey, setSelectedKey] = useState('')
+  const [selectedKey, setSelectedKey] = useState<string | null>('')
   const [sort, setSort] = useState<NetworkTableSort>({ column: 4, direction: 'asc' })
   const [peerSort, setPeerSort] = useState<NetworkTableSort>({ column: 0, direction: 'asc' })
   const [updatedAt, setUpdatedAt] = useState('')
@@ -86,7 +95,7 @@ export function NetworkConnectionsWorkspace({
       disposed = true
       clearTimeout(timer)
     }
-  }, [tabId, refresh, isActive, connected])
+  }, [tabId, refresh, isActive, connected, accessMode, accessUser])
 
   const sockets = snapshot?.sockets ?? []
   const listeners = sockets.filter((socket) => socket.listening)
@@ -100,14 +109,26 @@ export function NetworkConnectionsWorkspace({
           .includes(text)
     )
   }, [snapshot, mode, query])
-  const selected = visible.find((socket) => socketKey(socket) === selectedKey) ?? visible[0]
+  const selected =
+    selectedKey === null ? undefined : (visible.find((socket) => socketKey(socket) === selectedKey) ?? visible[0])
   const peers = selected ? (selected.listening ? connectionsFor(selected, sockets) : [selected]) : []
   const rowKeys = socketRowKeys(visible)
   const peerKeys = socketRowKeys(peers)
   const addressLabel = (address: string) => socketAddressLabel(address, t.networkAllIpv4, t.networkAllIpv6)
 
   return (
-    <section className="network-connections-workspace selectable-text">
+    <section
+      className="network-connections-workspace selectable-text"
+      onDoubleClick={(event) => {
+        const target = event.target as HTMLElement
+        if (
+          !target.closest(
+            '.network-socket-row, p, strong, span, button, input, select, [role="separator"], [role="scrollbar"], [role="listbox"], [role="option"]'
+          )
+        )
+          setSelectedKey(null)
+      }}
+    >
       <header className="system-info-header">
         <strong>{t.networkConnections}</strong>
         <p>{t.networkConnectionsDescription}</p>
@@ -148,6 +169,18 @@ export function NetworkConnectionsWorkspace({
             ].flatMap((label, column) => (column === 4 || column === 1 ? [] : [{ value: String(column), label }]))
           ]}
         />
+        <Button
+          className="network-connections-access"
+          size="md"
+          aria-pressed={accessMode === 'root'}
+          aria-label={accessMode === 'root' ? t.networkExitPrivileged : t.fileRootAccessTitle}
+          title={accessMode === 'root' ? t.networkExitPrivileged : t.fileRootAccessTitle}
+          disabled={!connected || privilegeBusy}
+          icon={<MaterialIcon name="admin_panel_settings" className="network-connections-access-icon" />}
+          onClick={onToggleAccessMode}
+        >
+          {accessMode === 'root' ? accessUser || 'root' : 'user'}
+        </Button>
         <Button
           className="network-connections-refresh"
           size="md"
@@ -216,7 +249,7 @@ export function NetworkConnectionsWorkspace({
                 aria-pressed={selected === socket}
                 onClick={() => setSelectedKey(socketKey(socket))}
               >
-                {socket.localPort}
+                <span>{socket.localPort}</span>
               </button>,
               new Set(related.map((peer) => peer.remoteAddress)).size,
               related.length,
@@ -253,7 +286,10 @@ export function NetworkConnectionsWorkspace({
           ]
         }))}
       />
-      <p className="network-connections-note network-connections-footer-note">{t.networkSocketHint}</p>
+      <p className="network-connections-note network-connections-footer-note">
+        {t.networkSocketHint}
+        {sockets.some((socket) => socket.txBytesSource === 'acked') ? ` ${t.networkLegacyUploadHint}` : ''}
+      </p>
     </section>
   )
 }

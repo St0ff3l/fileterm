@@ -44,6 +44,9 @@ pub enum WorkerCmd {
         width: u32,
         height: u32,
     },
+    ReadNetworkConnections {
+        respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
+    },
     ExecuteRemoteCommand {
         command: String,
         cwd: Option<String>,
