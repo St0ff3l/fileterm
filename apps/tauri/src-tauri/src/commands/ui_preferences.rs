@@ -658,6 +658,10 @@ fn resolve_profile_with_connection_defaults(
     };
 
     resolved.insert(
+        "terminalCommandCompletion".to_string(),
+        value_for("terminalCommandCompletion", Value::Bool(true)),
+    );
+    resolved.insert(
         "useEmptyPassword".to_string(),
         value_for("useEmptyPassword", Value::Bool(defaults.use_empty_password)),
     );

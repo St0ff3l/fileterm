@@ -1,7 +1,6 @@
 :root[data-theme*='light'] .fs-shell,
 :root[data-theme*='light'] .home-workspace,
-:root[data-theme*='light'] .session-workspace,
-:root[data-theme*='light'] .system-info-workspace {
+:root[data-theme*='light'] .session-workspace {
   background: var(--bg-main);
 }
 
@@ -290,8 +289,7 @@
 :root[data-theme*='light'] .file-manager,
 :root[data-theme*='light'] .file-table-shell,
 :root[data-theme*='light'] .local-pane,
-:root[data-theme*='light'] .remote-pane,
-:root[data-theme*='light'] .system-info-card {
+:root[data-theme*='light'] .remote-pane {
   background: var(--bg-card);
   border-color: var(--border-light);
   color: var(--text-main);
@@ -432,8 +430,7 @@
   color: var(--text-main);
 }
 
-:root[data-theme*='light'] .fs-file-table th,
-:root[data-theme*='light'] .system-table th {
+:root[data-theme*='light'] .fs-file-table th {
   background: var(--surface-hover);
 }
 
@@ -688,14 +685,12 @@
 
 :root[data-theme*='light'] .process-row:nth-child(odd),
 :root[data-theme*='light'] .disk-row:nth-child(odd),
-:root[data-theme*='light'] .system-table tbody tr:nth-child(odd),
 :root[data-theme*='light'] .fs-file-table tbody tr:nth-child(odd) {
   background: var(--surface-card);
 }
 
 :root[data-theme*='light'] .process-row:nth-child(even),
 :root[data-theme*='light'] .disk-row:nth-child(even),
-:root[data-theme*='light'] .system-table tbody tr:nth-child(even),
 :root[data-theme*='light'] .fs-file-table tbody tr:nth-child(even) {
   background: var(--surface-hover);
 }

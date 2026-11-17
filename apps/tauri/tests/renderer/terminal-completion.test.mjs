@@ -191,16 +191,17 @@ async function fixture(initialBefore = '$ ') {
     focus() {}
   }
   const api = {
-    getUiPreferences: async () => ({ terminalCommandCompletion: true }),
-    onUiPreferencesChanged: (fn) => {
-      callbacks.preferences = fn
-      return () => {}
-    },
     getSnapshot: async () => ({
+      profiles: [{ id: 'profile', type: 'ssh', terminalCommandCompletion: true }],
       sessions: { tab: { connected: true, shellCwd: '/home/me', remotePath: '/home/me', remoteFiles: [] } }
     }),
     onWorkspaceSnapshot: async (fn) => {
       callbacks.snapshot = fn
+      callbacks.completionProfile = (preferences) =>
+        fn({
+          profiles: [{ id: 'profile', type: 'ssh', terminalCommandCompletion: preferences.terminalCommandCompletion }],
+          sessions: { tab: { connected: true, shellCwd: '/home/me', remotePath: '/home/me', remoteFiles: [] } }
+        })
       return () => {}
     },
     getTerminalCommandHistory: async () => [{ command: 'git stash' }],
@@ -291,11 +292,11 @@ async function fixture(initialBefore = '$ ') {
   }
 }
 
-test('an already visible Docker prompt works without a fresh OSC marker, survives unrelated preference broadcasts and resize', async () => {
+test('an already visible Docker prompt works without a fresh OSC marker, survives unchanged profile broadcasts and resize', async () => {
   const f = await fixture('$ docker ')
   await flush()
   assert.ok(f.popup.items.some((item) => item.value === 'docker compose'))
-  f.callbacks.preferences({ terminalCommandCompletion: true, terminalRenderer: 'dom' })
+  f.callbacks.completionProfile({ terminalCommandCompletion: true, terminalRenderer: 'dom' })
   await flush()
   assert.ok(f.popup.items.some((item) => item.value === 'docker container'))
   f.callbacks.resize()
@@ -357,7 +358,7 @@ test('completion refuses stale echo, composing confirmation, password prompts, a
   f.composing.current = false
   f.echo('gi')
   await flush()
-  f.callbacks.preferences({ terminalCommandCompletion: false })
+  f.callbacks.completionProfile({ terminalCommandCompletion: false })
   assert.equal(f.popup, null)
   assert.equal(f.key('ArrowDown'), false)
   assert.equal(f.key('Tab'), false, 'disabled completion leaves Tab to the remote shell')
@@ -366,7 +367,7 @@ test('completion refuses stale echo, composing confirmation, password prompts, a
   f.echo('git')
   await flush()
   assert.equal(f.popup, null, 'typing cannot reopen FileTerm candidates while disabled')
-  f.callbacks.preferences({ terminalCommandCompletion: true })
+  f.callbacks.completionProfile({ terminalCommandCompletion: true })
   await flush()
   assert.ok(f.popup, 'enabling takes effect in the current prompt without reconnecting')
   f.prompt()
@@ -481,5 +482,23 @@ test('wrapped candidate descriptions use available viewport height and anchor ab
   await flush()
   assert.ok(f.popup.left >= 8)
   assert.ok(f.popup.left + f.popup.width <= 352)
+  f.cleanup()
+})
+
+test('completion follows the current connection, ignoring another connection setting', async () => {
+  const f = await fixture('$ docker ')
+  await flush()
+  f.callbacks.snapshot({
+    profiles: [
+      { id: 'profile', type: 'ssh' },
+      { id: 'other', type: 'ssh', terminalCommandCompletion: false }
+    ],
+    sessions: { tab: { connected: true, shellCwd: '/home/me', remotePath: '/home/me', remoteFiles: [] } }
+  })
+  await flush()
+  assert.ok(f.popup, 'legacy connections default to enabled independently of other connections')
+  f.callbacks.completionProfile({ terminalCommandCompletion: false })
+  assert.equal(f.popup, null)
+  assert.equal(f.key('Tab'), false)
   f.cleanup()
 })

@@ -38,3 +38,8 @@
   mask: url('../../assets/icons/system/settings.svg') center / contain no-repeat;
   -webkit-mask: url('../../assets/icons/system/settings.svg') center / contain no-repeat;
 }
+
+.window-tool-icon--lock {
+  mask: url('../../assets/icons/security/lock.svg') center / contain no-repeat;
+  -webkit-mask: url('../../assets/icons/security/lock.svg') center / contain no-repeat;
+}

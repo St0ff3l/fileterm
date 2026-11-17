@@ -78,8 +78,6 @@ export function HomeWorkspace({
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
-  canLockNow,
-  onLockNow,
   isSidebarCollapsed,
   tabBarProps,
   isResizingSidebar,
@@ -132,8 +130,6 @@ export function HomeWorkspace({
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
-  canLockNow: boolean
-  onLockNow(): void
   isSidebarCollapsed: boolean
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
@@ -636,17 +632,6 @@ export function HomeWorkspace({
                 <span>{t.mcpCallRecordsCount.replace('{count}', String(mcpCallCount))}</span>
               </>
             )}
-            {canLockNow ? (
-              <button
-                aria-label={t.securityLockNow}
-                className="security-lock-now-button"
-                onClick={onLockNow}
-                title={t.securityLockNow}
-                type="button"
-              >
-                <AppIcon name="lock" size={15} />
-              </button>
-            ) : null}
           </div>
           {/* Footer nav hidden: Changelog, API Reference, Status — code/handlers preserved */}
         </footer>

@@ -17,7 +17,7 @@ import type { AppLocale } from '../i18n'
 export type LocalTab =
   | { id: string; kind: 'home'; title: string }
   | { id: string; kind: 'transfers'; title: string; initialTabId?: string; initialPath?: string }
-  | { id: string; kind: 'system'; title: string; sessionTabId: string; sourceTabTitle: string }
+  | { id: string; kind: 'system'; view?: 'network'; title: string; sessionTabId: string; sourceTabTitle: string }
 
 export type StoredMainTabUiState = {
   localTabs: LocalTab[]

@@ -4,6 +4,8 @@
 pub struct SshConnectionDefaults {
     #[serde(default = "default_use_empty_password")]
     pub use_empty_password: bool,
+    #[serde(default = "default_terminal_command_completion")]
+    pub terminal_command_completion: bool,
     #[serde(default = "default_enable_exec_channel")]
     pub enable_exec_channel: bool,
     #[serde(default = "default_enable_resource_monitoring")]
@@ -28,6 +30,7 @@ pub struct SshConnectionDefaults {
 #[serde(rename_all = "camelCase")]
 pub struct SshConnectionDefaultsInput {
     pub use_empty_password: Option<bool>,
+    pub terminal_command_completion: Option<bool>,
     pub enable_exec_channel: Option<bool>,
     pub enable_resource_monitoring: Option<bool>,
     pub resource_monitoring_interval_seconds: Option<u64>,
@@ -99,6 +102,7 @@ impl Default for SshConnectionDefaults {
     fn default() -> Self {
         Self {
             use_empty_password: default_use_empty_password(),
+            terminal_command_completion: true,
             enable_exec_channel: default_enable_exec_channel(),
             enable_resource_monitoring: default_enable_resource_monitoring(),
             resource_monitoring_interval_seconds: default_resource_monitoring_interval_seconds(),

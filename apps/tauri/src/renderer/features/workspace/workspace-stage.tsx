@@ -23,6 +23,8 @@ import { peekHomeTabTransition } from './home-transition'
 import type { TabBarProps } from '../layout/tab-bar'
 import { FileTransferWorkspace } from '../file-transfer/file-transfer-workspace'
 import type { LocalTab } from '../../hooks/workspace-tabs-types'
+import { NetworkConnectionsWorkspace } from '../system/network-connections-workspace'
+import { TableColumnLayoutProvider } from '../common/table-column-layout/table-column-layout'
 import { SystemInfoWorkspace } from '../system/system-info-workspace'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
 import type { ThemeMode } from '../../app/theme-config'
@@ -37,10 +39,11 @@ const DEFAULT_COMMAND_PANE_WIDTH = 300
 
 type ActiveLocalTab = {
   kind: 'home' | 'system' | 'transfers'
+  view?: 'network'
   sessionTabId?: string
 } | null
 
-export function WorkspaceStage({
+function WorkspaceStageContent({
   activeLocalTab,
   fileTransferTab,
   desktopApi,
@@ -153,8 +156,6 @@ export function WorkspaceStage({
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
-  canLockNow,
-  onLockNow,
   isSidebarCollapsed,
   isWorkspaceFocusMode,
   isWorkspaceActive = true,
@@ -293,8 +294,6 @@ export function WorkspaceStage({
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
-  canLockNow: boolean
-  onLockNow(): void
   isSidebarCollapsed: boolean
   isWorkspaceFocusMode: boolean
   isWorkspaceActive?: boolean
@@ -324,6 +323,17 @@ export function WorkspaceStage({
     )
   }
   const activeTabProfile = profiles.find((profile) => profile.id === activeTab?.profileId) ?? null
+
+  if (activeLocalTab?.kind === 'system' && activeLocalTab.view === 'network') {
+    return (
+      <NetworkConnectionsWorkspace
+        key={activeTab?.id}
+        tabId={activeTab?.id ?? ''}
+        connected={Boolean(activeSession?.connected)}
+        isActive={Boolean(isWorkspaceActive)}
+      />
+    )
+  }
 
   if (activeLocalTab?.kind === 'system') {
     return (
@@ -484,14 +494,24 @@ export function WorkspaceStage({
       onSetLocale={onSetLocale}
       onOpenLogsDirectory={onOpenLogsDirectory}
       onLaunchLocalAgent={onLaunchLocalAgent}
-      canLockNow={canLockNow}
-      onLockNow={onLockNow}
       isSidebarCollapsed={isSidebarCollapsed}
       profiles={profiles}
       tabBarProps={tabBarProps}
       isResizingSidebar={isResizingSidebar}
       onResizeStart={onResizeStart}
     />
+  )
+}
+
+export function WorkspaceStage(props: Parameters<typeof WorkspaceStageContent>[0]) {
+  return (
+    <TableColumnLayoutProvider
+      profileId={props.activeTab?.profileId ?? null}
+      remember={props.rememberFilePanelRatio}
+      api={props.desktopApi}
+    >
+      <WorkspaceStageContent {...props} />
+    </TableColumnLayoutProvider>
   )
 }
 

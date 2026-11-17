@@ -3,6 +3,7 @@ pub(crate) mod file_read;
 pub mod ftp;
 pub mod local_files;
 pub mod local_terminal;
+pub(crate) mod network_connections;
 pub(crate) mod reconnect;
 pub(crate) mod relay_io;
 pub mod serial;

@@ -1,0 +1,31 @@
+.table-column-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -14px;
+  width: 28px;
+  z-index: 20;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.table-column-resizer:hover::after,
+.table-column-resizer:focus-visible::after,
+.table-column-resizer[data-dragging]::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 14px;
+  width: 1px;
+  background: var(--focus-outline);
+}
+
+.table-column-heading {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

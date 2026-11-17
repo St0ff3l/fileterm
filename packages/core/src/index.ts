@@ -337,6 +337,7 @@ export const DEFAULT_RESOURCE_MONITORING_METRIC_ORDER: ResourceMonitoringMetric[
 /** SSH connection behavior shared by newly created connections. */
 export interface SshConnectionDefaults {
   useEmptyPassword: boolean
+  terminalCommandCompletion: boolean
   enableExecChannel: boolean
   enableResourceMonitoring: boolean
   resourceMonitoringIntervalSeconds: ResourceMonitoringIntervalSeconds
@@ -355,6 +356,7 @@ export type SshConnectionOverrides = Partial<Omit<SshConnectionDefaults, 'sshAge
 
 export const DEFAULT_SSH_CONNECTION_DEFAULTS: SshConnectionDefaults = {
   useEmptyPassword: false,
+  terminalCommandCompletion: true,
   enableExecChannel: true,
   enableResourceMonitoring: true,
   resourceMonitoringIntervalSeconds: 1,
@@ -455,6 +457,7 @@ export interface SshProfile extends NetworkProfile {
   encoding?: string
   backspaceKey?: string
   deleteKey?: string
+  terminalCommandCompletion?: boolean
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
@@ -951,6 +954,26 @@ export interface FileSystemRow {
   mountPoint: string
 }
 
+export interface NetworkSocket {
+  protocol: 'tcp' | 'udp'
+  state: string
+  localAddress: string
+  localPort: number
+  remoteAddress: string
+  remotePort: number
+  pid: number | null
+  process: string | null
+  txBytes: number | null
+  rxBytes: number | null
+  listening: boolean
+}
+
+export interface NetworkConnectionsSnapshot {
+  source: 'ss' | 'netstat'
+  sockets: NetworkSocket[]
+  truncated: boolean
+}
+
 export interface SystemMetrics {
   platform?: RemoteSystemPlatform
   ip: string
@@ -1345,6 +1368,7 @@ export interface CreateProfileInput {
   loginScript?: string
   backspaceKey?: string
   deleteKey?: string
+  terminalCommandCompletion?: boolean
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
@@ -2934,6 +2958,7 @@ export interface FileTermDesktopApi {
   attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
   detachSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
   setMonitoringEnabled(tabId: string, generation: number, enabled: boolean): Promise<WorkspaceSnapshot>
+  getNetworkConnections(tabId: string): Promise<NetworkConnectionsSnapshot>
   retryMonitoring(tabId: string, generation: number): Promise<void>
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>

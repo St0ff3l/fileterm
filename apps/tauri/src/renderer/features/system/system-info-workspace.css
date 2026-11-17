@@ -1,0 +1,221 @@
+.system-info-workspace {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.system-info-workspace-empty {
+  display: grid;
+  place-items: center;
+  padding: 24px 28px;
+}
+
+.system-info-scroll {
+  height: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  min-width: 0;
+  padding: 24px 28px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.system-info-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.system-info-empty {
+  text-align: center;
+}
+
+.system-info-empty p {
+  color: var(--text-secondary);
+  margin-top: 10px;
+}
+
+.system-info-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.system-info-card {
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  overflow: hidden;
+}
+
+.system-info-card-head {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-canvas);
+}
+
+.system-info-card-head strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.system-description-list {
+  position: relative;
+  display: grid;
+  grid-auto-rows: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+}
+
+.system-description-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  height: 24px;
+  min-height: 0;
+  gap: 10px;
+  padding: 0 10px;
+  box-sizing: border-box;
+}
+
+.system-description-row > span {
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.system-description-row strong {
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-table-shell {
+  overflow-x: auto;
+}
+
+.system-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.system-table th,
+.system-table td {
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-table th {
+  position: relative;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-canvas);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.system-table tbody tr:nth-child(even) {
+  background: var(--surface-section);
+}
+
+.system-info-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1120px) {
+  .system-description-list,
+  .system-info-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .system-info-scroll,
+  .system-info-workspace-empty {
+    padding: 18px 16px;
+  }
+
+  .system-description-row {
+    grid-template-columns: 90px minmax(0, 1fr);
+  }
+}
+
+.system-table tbody tr + tr td,
+.system-description-row:nth-child(n + 3) {
+  border-top: 1px solid var(--border-subtle);
+}
+
+:root[data-theme*='light'] .system-info-card-head,
+:root[data-theme*='light'] .system-table th {
+  background: var(--surface-hover);
+}
+
+@media (max-width: 1120px) {
+  .system-description-row:nth-child(n + 2) {
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+
+.system-description-list::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--border-subtle);
+  pointer-events: none;
+}
+
+.system-description-row:nth-child(4n + 3),
+.system-description-row:nth-child(4n + 4) {
+  background: var(--surface-section);
+}
+
+@media (max-width: 1120px) {
+  .system-description-list::after {
+    display: none;
+  }
+
+  .system-description-row:nth-child(odd) {
+    background: var(--surface-panel);
+  }
+
+  .system-description-row:nth-child(even) {
+    background: var(--surface-section);
+  }
+}
+
+.system-info-hover-detail {
+  width: 100%;
+}
+
+@media (max-width: 1120px) {
+  .system-description-placeholder {
+    display: none;
+  }
+}
+
+.system-table td {
+  overflow: hidden;
+}

@@ -141,25 +141,28 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     activateHomeTab(id)
   }
 
-  const openSystemInfo = () => {
+  const openHostInfo = (view?: 'network') => {
     if (!activeTab) {
       return
     }
 
-    const existing = localTabs.find((tab) => tab.kind === 'system' && tab.sessionTabId === activeTab.id)
+    const existing = localTabs.find(
+      (tab) => tab.kind === 'system' && tab.sessionTabId === activeTab.id && tab.view === view
+    )
     if (existing) {
       activateHomeTab(existing.id)
       return
     }
 
-    const nextId = `system-${activeTab.id}`
+    const nextId = `${view ?? 'system'}-${activeTab.id}`
     const activeOrderKey = activeLocalTabId ? homeTabKey(activeLocalTabId) : sessionTabKey(activeTab.id)
     setLocalTabs((current) => [
       ...current,
       {
         id: nextId,
         kind: 'system',
-        title: formatSystemInfoTabTitle(activeTab.title),
+        view,
+        title: formatSystemInfoTabTitle(activeTab.title, view),
         sessionTabId: activeTab.id,
         sourceTabTitle: activeTab.title
       }
@@ -167,6 +170,9 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     setTabOrder((current) => insertTabKeyAfter(current, homeTabKey(nextId), activeOrderKey))
     activateHomeTab(nextId)
   }
+
+  const openSystemInfo = () => openHostInfo()
+  const openNetworkConnections = () => openHostInfo('network')
 
   const closeHomeTab = (event: MouseEvent<HTMLElement>, homeTabId: string) => {
     event.stopPropagation()
@@ -455,6 +461,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     dismissShortcutCloseConfirm,
     handleTabContextAction,
     openSystemInfo,
+    openNetworkConnections,
     openFileTransfers,
     openTabContextMenu,
     closeTabContextMenu,

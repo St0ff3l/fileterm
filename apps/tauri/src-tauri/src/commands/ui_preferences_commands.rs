@@ -165,6 +165,9 @@ pub fn app_set_ui_preferences(
         defaults.enable_exec_channel.is_some() || defaults.enable_resource_monitoring.is_some()
     });
     if let Some(connection_defaults) = input.connection_defaults {
+        if let Some(value) = connection_defaults.terminal_command_completion {
+            preferences.connection_defaults.terminal_command_completion = value;
+        }
         if let Some(value) = connection_defaults.use_empty_password {
             preferences.connection_defaults.use_empty_password = value;
         }

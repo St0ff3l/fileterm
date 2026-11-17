@@ -12,8 +12,8 @@ type PaneBounds = {
   height: number
 }
 
-export function formatSystemInfoTabTitle(sourceTabTitle: string) {
-  return `${t.systemInfoTabTitle} · ${sourceTabTitle || t.untitledTab}`
+export function formatSystemInfoTabTitle(sourceTabTitle: string, view?: 'network') {
+  return `${view === 'network' ? t.networkConnections : t.systemInfoTabTitle} · ${sourceTabTitle || t.untitledTab}`
 }
 
 export function formatSessionTabTitle(tab: WorkspaceTab) {
@@ -219,6 +219,7 @@ export function parseStoredMainTabUiState(raw: string | null | undefined): Store
             }
             return (
               tab.kind === 'system' &&
+              (tab.view === undefined || tab.view === 'network') &&
               typeof (tab as Extract<LocalTab, { kind: 'system' }>).sessionTabId === 'string' &&
               typeof (tab as Extract<LocalTab, { kind: 'system' }>).sourceTabTitle === 'string'
             )

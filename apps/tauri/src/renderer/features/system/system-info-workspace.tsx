@@ -1,9 +1,14 @@
 import '../workspace/workspace-list-rows.css'
+import './system-info-header.css'
+import './system-info-workspace.css'
 import { useRef, type ReactNode } from 'react'
 import type { ConnectionProfile, SessionSnapshot, TabStatus } from '@fileterm/core'
 import { t } from '../../i18n'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { formatSystemLoad } from './system-metric-format'
+import { TableColumnResizer } from '../../components/common/table-column-resizer/table-column-resizer'
+import { useRememberedColumnWidths } from '../common/table-column-layout/table-column-layout'
+import { MetricHoverDetail } from './system-resource-meters'
 
 export function SystemInfoWorkspace({
   activeProfile,
@@ -95,6 +100,7 @@ export function SystemInfoWorkspace({
 
             <DataCard title={t.cpuDetails}>
               <Table
+                layoutId="system-cpu"
                 columns={[t.model, t.cores, t.frequency, t.cache, t.bogomips]}
                 rows={metrics.cpuInfoRows.map((row) => [
                   row.model,
@@ -108,6 +114,7 @@ export function SystemInfoWorkspace({
 
             <DataCard title={t.gpuDetails}>
               <Table
+                layoutId="system-gpu"
                 columns={[t.model, t.vendor, t.driver, t.memory]}
                 rows={metrics.gpuInfoRows.map((row) => [row.model, row.vendor, row.driver, row.memory])}
               />
@@ -115,6 +122,7 @@ export function SystemInfoWorkspace({
 
             <DataCard title={t.cpuUsage}>
               <Table
+                layoutId="system-cpu-usage"
                 columns={[t.user, t.system, t.nice, t.idle, t.ioWait, t.irq, t.softIrq, t.realtime]}
                 rows={[
                   [
@@ -134,6 +142,7 @@ export function SystemInfoWorkspace({
             <div className="system-info-split">
               <DataCard title={t.memoryUsageTitle}>
                 <Table
+                  layoutId="system-memory"
                   columns={[t.total, t.used, t.remaining, t.usage]}
                   rows={[
                     [
@@ -147,6 +156,7 @@ export function SystemInfoWorkspace({
               </DataCard>
               <DataCard title={t.swapUsageTitle}>
                 <Table
+                  layoutId="system-swap"
                   columns={[t.total, t.used, t.remaining, t.usage]}
                   rows={[
                     [
@@ -162,6 +172,7 @@ export function SystemInfoWorkspace({
 
             <DataCard title={t.networkInterfaces}>
               <Table
+                layoutId="system-network-interfaces"
                 columns={[t.name, t.send, t.receive, t.sendRate, t.receiveRate]}
                 rows={metrics.networkInterfaceRows.map((row) => [
                   row.name,
@@ -175,6 +186,7 @@ export function SystemInfoWorkspace({
 
             <DataCard title={t.fileSystems}>
               <Table
+                layoutId="system-filesystems"
                 columns={[t.name, t.size, t.usage, t.available, t.mountPoint]}
                 rows={metrics.fileSystemRows.map((row) => [
                   row.name,
@@ -210,21 +222,45 @@ function DescriptionList({ rows }: { rows: Array<{ label: string; value: string 
       {rows.map((row) => (
         <div className="system-description-row" key={row.label}>
           <span>{row.label}</span>
-          <strong title={row.value}>{row.value}</strong>
+          <strong>
+            <MetricHoverDetail className="system-info-hover-detail" value={row.value} />
+          </strong>
         </div>
       ))}
+      {rows.length % 2 ? (
+        <div className="system-description-row system-description-placeholder" aria-hidden="true" />
+      ) : null}
     </div>
   )
 }
 
-function Table({ columns, rows }: { columns: string[]; rows: string[][] }) {
+function Table({ columns, rows, layoutId }: { columns: string[]; rows: string[][]; layoutId: string }) {
+  const [widths, setWidths, commitWidths] = useRememberedColumnWidths(layoutId, columns.length)
   return (
     <div className="system-table-shell">
-      <table className="system-table">
+      <table
+        className="system-table"
+        style={{
+          width: widths ? `max(100%, ${widths.reduce((sum, width) => sum + width, 0)}px)` : '100%',
+          minWidth: widths ? undefined : columns.length * 110
+        }}
+      >
+        {widths ? (
+          <colgroup>
+            {widths.map((width, index) => (
+              <col key={index} style={{ width }} />
+            ))}
+          </colgroup>
+        ) : null}
         <thead>
           <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
+            {columns.map((column, index) => (
+              <th key={column} scope="col">
+                <span className="table-column-heading">{column}</span>
+                {index > 0 ? (
+                  <TableColumnResizer label={columns[index - 1]} onResize={setWidths} onResizeEnd={commitWidths} />
+                ) : null}
+              </th>
             ))}
           </tr>
         </thead>
@@ -233,7 +269,9 @@ function Table({ columns, rows }: { columns: string[]; rows: string[][] }) {
             rows.map((row, rowIndex) => (
               <tr key={`${columns[0]}-${rowIndex}`}>
                 {row.map((cell, cellIndex) => (
-                  <td key={`${columns[cellIndex]}-${cellIndex}`}>{cell || '-'}</td>
+                  <td key={`${columns[cellIndex]}-${cellIndex}`}>
+                    <MetricHoverDetail className="system-info-hover-detail" value={cell || '-'} />
+                  </td>
                 ))}
               </tr>
             ))

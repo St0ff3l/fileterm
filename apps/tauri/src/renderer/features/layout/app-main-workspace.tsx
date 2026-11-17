@@ -90,6 +90,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     closeHomeTab,
     closeSessionTab,
     openSystemInfo,
+    openNetworkConnections,
     openFileTransfers,
     splitPane,
     closePane,
@@ -257,6 +258,11 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     }
   }
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
+    canLockNow:
+      sessionSecurity.status === 'ready' &&
+      sessionSecurity.settings?.hasLockPassword === true &&
+      !sessionSecurity.isLocked,
+    onLockNow: sessionSecurity.lockNow,
     activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
     isAiCopilotAvailable,
@@ -360,6 +366,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             isResizing={isResizingSidebar}
             onMonitoringSnapshot={shell.applySnapshot}
             onOpenSystemInfo={openSystemInfo}
+            onOpenNetworkConnections={openNetworkConnections}
             onResizeStart={startSidebarResize}
             onRestoreWidth={() => setActiveSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
             onToggleCollapsed={setIsSystemSidebarCollapsed}
@@ -538,12 +545,6 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 onOpenLogsDirectory={openLogsDirectory}
                 isSidebarCollapsed={isSystemSidebarCollapsed}
                 isWorkspaceFocusMode={isWorkspaceFocusMode}
-                canLockNow={
-                  sessionSecurity.status === 'ready' &&
-                  sessionSecurity.settings?.hasLockPassword === true &&
-                  !sessionSecurity.isLocked
-                }
-                onLockNow={sessionSecurity.lockNow}
                 tabBarProps={tabBarProps}
                 isResizingSidebar={isResizingSidebar}
                 onResizeStart={startSidebarResize}

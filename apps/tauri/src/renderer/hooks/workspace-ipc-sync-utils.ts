@@ -45,6 +45,7 @@ export function sameSyncedUiPreferences(left: SyncedUiPreferences, right: Synced
     JSON.stringify(left.resourceMonitoringMetrics) === JSON.stringify(right.resourceMonitoringMetrics) &&
     JSON.stringify(left.resourceMonitoringMetricOrder) === JSON.stringify(right.resourceMonitoringMetricOrder) &&
     left.connectionDefaults.useEmptyPassword === right.connectionDefaults.useEmptyPassword &&
+    left.connectionDefaults.terminalCommandCompletion === right.connectionDefaults.terminalCommandCompletion &&
     left.connectionDefaults.enableExecChannel === right.connectionDefaults.enableExecChannel &&
     left.connectionDefaults.enableResourceMonitoring === right.connectionDefaults.enableResourceMonitoring &&
     left.connectionDefaults.resourceMonitoringIntervalSeconds ===

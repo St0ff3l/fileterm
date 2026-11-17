@@ -50,6 +50,7 @@
     inset -1px 0 var(--terminal-right-frame-accent);
   background: var(--terminal-right-frame-outer);
   opacity: 0;
+  pointer-events: none;
   z-index: 6;
 }
 
@@ -60,6 +61,11 @@
 .terminal-right-frame.is-visible {
   width: var(--workspace-frame-size);
   opacity: 1;
+}
+
+/* Home collapses the tabbar and footer rows before the edge finishes exiting. */
+.fs-shell.is-home-active > .terminal-right-frame {
+  clip-path: inset(var(--window-tabbar-height) 0 24px);
 }
 
 .fs-shell.is-local-terminal .terminal-right-frame::after,
