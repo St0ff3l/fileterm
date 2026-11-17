@@ -192,7 +192,7 @@ export function useWorkspaceTabs({
 
         const sourceTabTitle =
           visibleWorkspaceTabs.find((entry) => entry.id === tab.sessionTabId)?.title ?? tab.sourceTabTitle
-        const title = formatSystemInfoTabTitle(sourceTabTitle)
+        const title = formatSystemInfoTabTitle(sourceTabTitle, tab.view)
         if (tab.sourceTabTitle === sourceTabTitle && tab.title === title) {
           return tab
         }
@@ -616,6 +616,7 @@ export function useWorkspaceTabs({
     dismissShortcutCloseConfirm,
     handleTabContextAction,
     openSystemInfo,
+    openNetworkConnections,
     openFileTransfers,
     openTabContextMenu,
     closeTabContextMenu,
@@ -722,6 +723,7 @@ export function useWorkspaceTabs({
     activateHomeTab,
     addHomeTab,
     openSystemInfo,
+    openNetworkConnections,
     openFileTransfers,
     closeHomeTab,
     closeActiveWorkspaceItem,

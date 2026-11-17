@@ -86,14 +86,14 @@ test('closing selects the right neighbour, then the left, using dragged and grou
   assert.equal(nextTabAfterClose(mixed, 'session:a', false).tab.id, 'b')
 })
 
-function fixture(api, activeLocalTabId = null, homeTabId = null) {
+function fixture(api, activeLocalTabId = null, homeTabId = null, sessionTabs = tabs) {
   const homeTabs = homeTabId ? [{ id: homeTabId, kind: 'home', title: 'New Tab' }] : []
   const state = {
     activeLocalTabId,
     localTabs: homeTabs,
     pending: null,
     closing: [],
-    order: tabs.map((tab) => `session:${tab.id}`),
+    order: sessionTabs.map((tab) => `session:${tab.id}`),
     snapshots: [],
     errors: []
   }
@@ -102,12 +102,12 @@ function fixture(api, activeLocalTabId = null, homeTabId = null) {
   }
   const context = {
     desktopApi: api,
-    workspace: { tabs, activeTabId: 'b' },
+    workspace: { tabs: sessionTabs, activeTabId: 'b' },
     tabBarLayout: 'host-groups',
     localTabs: homeTabs,
     localTabsRef: { current: homeTabs },
     tabOrder: state.order,
-    visibleWorkspaceTabs: tabs,
+    visibleWorkspaceTabs: sessionTabs,
     visibleActiveSessionTabId: 'b',
     activeLocalTabId,
     activeLocalTab: homeTabs[0] ?? null,
@@ -115,13 +115,14 @@ function fixture(api, activeLocalTabId = null, homeTabId = null) {
     isHomeWorkspaceVisible: Boolean(homeTabId),
     isMainWorkspaceWindow: false,
     pendingHomeReplacementKeyRef: { current: null },
-    orderedTabs: buildOrderedTabs(state.order, homeTabs, tabs),
+    orderedTabs: buildOrderedTabs(state.order, homeTabs, sessionTabs),
     tabActivationRequestRef: { current: 0 },
     setActiveLocalTabId: set('activeLocalTabId'),
     setPendingActiveTabId: set('pending'),
     setClosingSessionTabIds: set('closing'),
     setTabOrder: set('order'),
     setLocalTabs: set('localTabs'),
+    nextHomeTabNumber: 2,
     setNextHomeTabNumber: () => {},
     onSnapshot: (snapshot) => state.snapshots.push(snapshot),
     onBusyChange: () => {},
@@ -211,5 +212,45 @@ test('failed connection opening keeps the home tab and clears the pending replac
   await actions.openProfile('profile')
   assert.equal(state.localTabs[0].id, 'home-1')
   assert.equal(state.order[0], 'home:home-1')
+  assert.equal(state.errors.length, 1)
+})
+
+for (const homeId of [null, 'home-1']) {
+  test(`hiding an external session opens background sessions, ${homeId ? 'reusing the existing home' : 'creating a home tab'}`, async () => {
+    const sessions = tabs.map((tab) => ({ ...tab, source: 'mcp' }))
+    const snapshot = { tabs: sessions.filter((tab) => tab.id !== 'b'), activeTabId: 'c' }
+    const { state, actions } = fixture({ detachSessionToBackground: async () => snapshot }, null, homeId, sessions)
+    await actions.detachSessionToBackground('b')
+    const home = state.localTabs.find((tab) => tab.id === state.activeLocalTabId)
+    assert.equal(home.id, homeId ?? 'home-2')
+    assert.equal(home.backgroundSessionsRequest, 1)
+    assert.ok(state.order.includes(`home:${home.id}`))
+    assert.equal(state.order.includes('session:b'), false)
+    assert.equal(
+      buildOrderedTabs(state.order, state.localTabs, snapshot.tabs).find((entry) => entry.id === home.id)
+        .backgroundSessionsRequest,
+      1
+    )
+    assert.equal(state.errors.length, 0)
+  })
+}
+
+test('a failed hide keeps the current view and tab order', async () => {
+  const sessions = tabs.map((tab) => ({ ...tab, source: 'mcp' }))
+  const { state, actions } = fixture(
+    {
+      detachSessionToBackground: async () => {
+        throw new Error('failed')
+      }
+    },
+    null,
+    null,
+    sessions
+  )
+  const order = [...state.order]
+  await actions.detachSessionToBackground('b')
+  assert.equal(state.activeLocalTabId, null)
+  assert.equal(state.localTabs.length, 0)
+  assert.deepEqual(state.order, order)
   assert.equal(state.errors.length, 1)
 })

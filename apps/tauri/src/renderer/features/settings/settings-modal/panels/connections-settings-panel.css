@@ -41,3 +41,8 @@
   outline: none;
   box-shadow: var(--input-focus-shadow);
 }
+
+.settings-tools-hint.connection-defaults-hint {
+  white-space: nowrap;
+  overflow-x: auto;
+}

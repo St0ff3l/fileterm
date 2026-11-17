@@ -21,6 +21,7 @@ export function SystemSidebarShell({
   isResizing,
   onMonitoringSnapshot,
   onOpenSystemInfo,
+  onOpenNetworkConnections,
   onResizeStart,
   onRestoreWidth,
   onToggleCollapsed
@@ -36,6 +37,7 @@ export function SystemSidebarShell({
   isResizing: boolean
   onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
   onOpenSystemInfo(): void
+  onOpenNetworkConnections(): void
   onResizeStart(): void
   onRestoreWidth(): void
   onToggleCollapsed(nextCollapsed: boolean): void
@@ -53,6 +55,7 @@ export function SystemSidebarShell({
         visibleMetrics={visibleMetrics}
         onMonitoringSnapshot={onMonitoringSnapshot}
         onOpenSystemInfo={onOpenSystemInfo}
+        onOpenNetworkConnections={onOpenNetworkConnections}
         onToggleCollapsed={() => {
           const nextCollapsed = !collapsed
           if (!nextCollapsed) {

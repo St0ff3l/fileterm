@@ -48,6 +48,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - Renderer 的 workspace 快照按 IPC 顺序更新为每个 hook 实例独立的不可变快照，React 通过 `useSyncExternalStore` 订阅；监控、目录与传输合并不放进可被渲染重试的 state updater 队列。窗口之间仍通过原生 workspace 广播同步。
 - 预览态数据与桌面运行态双模式
 - SSH 主机系统信息页与轮询刷新
+- 系统侧栏网络流量卡片打开独立的“网络连接”主机工具标签，复用系统信息标签的宿主分组、恢复与关闭生命周期；Linux 远端通过固定只读 `ss` / `netstat` 命令按需采集 socket，Rust 解析后经 Tauri bridge 返回类型化快照，详情不依赖交互终端或远端代理。
 - 首页、终端、系统信息、新建标签之间的工作区切换动效
 - SSH 工作区底部文件面板的抽屉式收起/展开
 - 终端命令输入条的雾透悬浮布局
@@ -792,3 +793,7 @@ Windows 主窗口及子窗口在创建时登记 WebView2 浏览器 PID 和进程
 Renderer 使用 `lib/diagnostic-log.ts` 经已有 IPC 写入本地日志，不直接访问文件。
 日志增加统一 category，保留原 scope 与标签 ID；所有级别共用 1,024 项有界队列和一个专用线程，接纳时为 WARN/ERROR 预留容量。满载或故障不创建逐条兜底任务、不在业务线程写盘；丢弃和写入失败按级别累计，由写盘线程限频汇总，正常退出进行有界排空。
 完整分类、限流、保留和故障边界见 [本地诊断日志](./quality/logging.md)。
+
+命令候选开关属于 SSH 连接配置：连接默认值用于新建连接，单个连接的 `terminalCommandCompletion` 独立保存，缺失时默认开启。终端通过 workspace snapshot 读取当前连接并响应设置变化；旧全局 UI 偏好字段只保留存储兼容。
+
+网络连接采集由固定用途 `ReadNetworkConnections` SSH worker 请求执行，读取会话当前身份与既有 root/sudo/su 认证上下文；普通模式保持登录用户。`txBytesSource` 区分发送字节与旧版 ss 的已确认字节，renderer 显示统计口径说明。

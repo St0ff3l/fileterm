@@ -73,7 +73,6 @@
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .session-workspace,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .workspace-stage,
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-info-workspace,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .home-workspace {
   background: var(--surface-canvas) !important;
 }

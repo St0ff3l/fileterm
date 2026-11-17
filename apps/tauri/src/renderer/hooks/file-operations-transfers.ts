@@ -304,19 +304,42 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
 
     const nextMode = activeSession.fileAccessMode === 'root' ? 'user' : 'root'
     if (nextMode === 'root') {
-      rootAccessSubmittingRef.current = false
-      setRootAccessDialogError(null)
-      setIsRootAccessSubmitting(false)
-      setRootAccessDialog({
-        tabId: activeTab.id,
-        sshUser: activeProfile?.type === 'ssh' || activeProfile?.type === 'sftp' ? activeProfile.username : undefined,
-        rootAccessMethod: 'sudo',
-        sudoUser: 'root',
-        hasSavedSudoPassword:
-          activeSession.hasReusableSudoAuth ||
-          (activeProfile?.type === 'ssh' && activeProfile.hasSavedSudoPassword === true),
-        hasSavedSuPassword: activeProfile?.type === 'ssh' && activeProfile.hasSavedSuPassword === true
-      })
+      if (rootAccessSubmittingRef.current) return
+      const openDialog = (error: string | null = null) => {
+        setRootAccessDialogError(error)
+        setIsRootAccessSubmitting(false)
+        setRootAccessDialog({
+          tabId: activeTab.id,
+          sshUser: activeProfile?.type === 'ssh' || activeProfile?.type === 'sftp' ? activeProfile.username : undefined,
+          rootAccessMethod: 'sudo',
+          sudoUser: activeSession.sudoUser || 'root',
+          hasSavedSudoPassword:
+            activeSession.hasReusableSudoAuth ||
+            (activeProfile?.type === 'ssh' && activeProfile.hasSavedSudoPassword === true),
+          hasSavedSuPassword: activeProfile?.type === 'ssh' && activeProfile.hasSavedSuPassword === true
+        })
+      }
+      if (!activeSession.hasReusableSudoAuth) {
+        openDialog()
+        return
+      }
+      rootAccessSubmittingRef.current = true
+      void (async () => {
+        try {
+          onBusyChange(true)
+          const snapshot = await desktopApi.setRemoteFileAccessMode(activeTab.id, 'root', {
+            rootAccessMethod: 'sudo',
+            sudoUser: activeSession.sudoUser || 'root',
+            useSavedPassword: true
+          })
+          onApplySnapshot(snapshot)
+        } catch (error) {
+          openDialog(formatError('恢复 sudo 视角', error))
+        } finally {
+          rootAccessSubmittingRef.current = false
+          onBusyChange(false)
+        }
+      })()
       return
     }
 

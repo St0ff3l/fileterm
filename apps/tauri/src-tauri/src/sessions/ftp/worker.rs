@@ -589,7 +589,8 @@ async fn run_ftp_worker(
                 .await;
                 respond_ftp_result!(respond_to, result);
             }
-            Some(WorkerCmd::ExecuteRemoteCommand { respond_to, .. }) => {
+            Some(WorkerCmd::ReadNetworkConnections { respond_to })
+            | Some(WorkerCmd::ExecuteRemoteCommand { respond_to, .. }) => {
                 let _ = respond_to.send(Err("FTP 不支持远程命令执行".to_string()));
             }
             Some(WorkerCmd::StartBackgroundRemoteCommand { respond_to, .. }) => {

@@ -1230,6 +1230,7 @@ mod ui_preferences_tests {
     #[test]
     fn preserves_saved_connection_values_and_explicit_overrides() {
         let defaults = SshConnectionDefaults {
+            terminal_command_completion: true,
             use_empty_password: true,
             enable_exec_channel: false,
             enable_resource_monitoring: false,
@@ -1280,6 +1281,19 @@ mod ui_preferences_tests {
         assert_eq!(resolved["reconnectMode"], "auto");
         assert_eq!(resolved["enableResourceMonitoring"], true);
         assert_eq!(resolved["resourceMonitoringIntervalSeconds"], 1);
+    }
+
+    #[test]
+    fn connection_completion_defaults_and_profile_opt_out_are_independent() {
+        let mut defaults: SshConnectionDefaults = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(defaults.terminal_command_completion);
+        defaults.terminal_command_completion = false;
+        let serialized = serde_json::to_value(&defaults).unwrap();
+        assert_eq!(serialized["terminalCommandCompletion"], false);
+        let profile = serde_json::json!({ "type": "ssh" });
+        assert_eq!(resolve_profile_with_connection_defaults(&profile, &defaults)["terminalCommandCompletion"], true);
+        let opted_out = serde_json::json!({ "type": "ssh", "terminalCommandCompletion": false });
+        assert_eq!(resolve_profile_with_connection_defaults(&opted_out, &defaults)["terminalCommandCompletion"], false);
     }
 
     #[test]

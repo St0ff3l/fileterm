@@ -27,6 +27,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     setActiveLocalTabId,
     setPendingActiveTabId,
     tabActivationRequestRef,
+    nextHomeTabNumber,
     setNextHomeTabNumber,
     tabOrder,
     setTabOrder,
@@ -308,7 +309,6 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
       return
     }
 
-    const nextVisibleSessionTabs = visibleWorkspaceTabs.filter((tab) => tab.id !== tabId)
     const relatedLocalTabs = localTabsRef.current
       .filter((tab) => tab.kind === 'system' && tab.sessionTabId === tabId)
       .map((tab) => tab.id)
@@ -317,16 +317,30 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
       onBusyChange(true)
       const snapshot = await desktopApi.detachSessionToBackground(tabId)
       applySnapshot(snapshot)
-      if (relatedLocalTabs.length) {
-        closeHomeTabs(
-          relatedLocalTabs,
-          activeLocalTabId && relatedLocalTabs.includes(activeLocalTabId) ? null : activeLocalTabId,
-          nextVisibleSessionTabs
-        )
-      } else {
-        setTabOrder((current) => current.filter((key) => key !== sessionTabKey(tabId)))
+      const remainingLocalTabs = localTabsRef.current.filter((tab) => !relatedLocalTabs.includes(tab.id))
+      const existingHome = remainingLocalTabs.find((tab) => tab.kind === 'home')
+      const homeId = existingHome?.id ?? `home-${nextHomeTabNumber}`
+      const request = (existingHome?.backgroundSessionsRequest ?? 0) + 1
+      const home = {
+        id: homeId,
+        kind: 'home' as const,
+        title: existingHome?.title ?? t.untitledTab,
+        backgroundSessionsRequest: request
       }
-      setActiveLocalTabId(null)
+      setLocalTabs(
+        existingHome ? remainingLocalTabs.map((tab) => (tab.id === homeId ? home : tab)) : [...remainingLocalTabs, home]
+      )
+      if (!existingHome) setNextHomeTabNumber((current) => current + 1)
+      setTabOrder((current) => {
+        const next = current.filter(
+          (key) => key !== sessionTabKey(tabId) && !relatedLocalTabs.some((id) => homeTabKey(id) === key)
+        )
+        return next.includes(homeTabKey(homeId)) ? next : [...next, homeTabKey(homeId)]
+      })
+      tabActivationRequestRef.current += 1
+      setPendingActiveTabId(null)
+      onStatusMessage(null)
+      setActiveLocalTabId(homeId)
     } catch (error) {
       onError('隐藏后台会话', error)
     } finally {

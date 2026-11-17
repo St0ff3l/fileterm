@@ -12,8 +12,8 @@ type PaneBounds = {
   height: number
 }
 
-export function formatSystemInfoTabTitle(sourceTabTitle: string) {
-  return `${t.systemInfoTabTitle} · ${sourceTabTitle || t.untitledTab}`
+export function formatSystemInfoTabTitle(sourceTabTitle: string, view?: 'network') {
+  return `${view === 'network' ? t.networkConnections : t.systemInfoTabTitle} · ${sourceTabTitle || t.untitledTab}`
 }
 
 export function formatSessionTabTitle(tab: WorkspaceTab) {
@@ -79,6 +79,7 @@ export function buildOrderedTabs(
       id: tab.id,
       title: tab.title,
       tabKind: tab.kind,
+      backgroundSessionsRequest: tab.kind === 'home' ? tab.backgroundSessionsRequest : undefined,
       sessionTabId: tab.kind === 'system' ? tab.sessionTabId : undefined
     })),
     ...sessionTabs.map((tab) => ({ key: `session:${tab.id}`, kind: 'session' as const, tab }))
@@ -215,10 +216,14 @@ export function parseStoredMainTabUiState(raw: string | null | undefined): Store
               )
             }
             if (tab.kind === 'home') {
-              return true
+              return (
+                tab.backgroundSessionsRequest === undefined ||
+                (typeof tab.backgroundSessionsRequest === 'number' && Number.isFinite(tab.backgroundSessionsRequest))
+              )
             }
             return (
               tab.kind === 'system' &&
+              (tab.view === undefined || tab.view === 'network') &&
               typeof (tab as Extract<LocalTab, { kind: 'system' }>).sessionTabId === 'string' &&
               typeof (tab as Extract<LocalTab, { kind: 'system' }>).sourceTabTitle === 'string'
             )

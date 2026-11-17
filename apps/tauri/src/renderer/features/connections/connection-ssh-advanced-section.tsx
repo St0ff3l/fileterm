@@ -40,6 +40,17 @@ export function ConnectionSshAdvancedSection({
       <fieldset className="ssh-fieldset">
         <legend>{t.advancedSettings}</legend>
         <div className="advanced-toggle-list">
+          <div className="advanced-toggle-row">
+            <label className="ssh-checkbox advanced-toggle-label">
+              <SelectionControl
+                type="checkbox"
+                checked={effectiveConnectionSetting(form, connectionDefaults, 'terminalCommandCompletion')}
+                onChange={(event) => setSshConnectionSetting('terminalCommandCompletion', event.target.checked)}
+              />
+              <span className="advanced-toggle-name">{t.terminalCommandCompletion}</span>
+            </label>
+            <p className="advanced-toggle-hint">{t.terminalCommandCompletionHint}</p>
+          </div>
           {isPasswordAuth ? (
             <div className="advanced-toggle-row">
               <label className="ssh-checkbox advanced-toggle-label">

@@ -35,6 +35,21 @@ try {
       <div class="transfer-strip"></div>
     </div>`)
   await page.addStyleTag({ content: css })
+  const footerHeights = await page.evaluate(() => {
+    const homeFooter = document.createElement('footer')
+    homeFooter.className = 'home-footer'
+    const transferFooter = document.createElement('footer')
+    transferFooter.className = 'transfer-strip'
+    document.body.append(homeFooter, transferFooter)
+    const result = {
+      home: homeFooter.getBoundingClientRect().height,
+      transfer: transferFooter.getBoundingClientRect().height
+    }
+    homeFooter.remove()
+    transferFooter.remove()
+    return result
+  })
+  assert.equal(footerHeights.home, footerHeights.transfer, 'home footer must match the transfer strip height')
   for (const platform of ['darwin', 'win32', 'linux']) {
     for (const theme of ['fileterm-light', 'fileterm-dark', 'codex-light', 'codex-dark']) {
       await page.evaluate(
@@ -260,6 +275,75 @@ try {
       )
     }
   }
+  // Home collapses the tabbar/footer tracks while the edge exits. Keep the
+  // width/opacity animation and clip the moved top/bottom decorations.
+  for (const platform of ['darwin', 'win32', 'linux']) {
+    for (const theme of ['fileterm-light', 'fileterm-dark', 'codex-light', 'codex-dark']) {
+      const closingEdge = await page.evaluate(
+        ({ platform, theme }) => {
+          document.documentElement.dataset.platform = platform
+          document.documentElement.dataset.theme = theme
+          const results = []
+          for (const menubar of [false, true]) {
+            for (const local of [false, true]) {
+              const fixture = document.createElement('div')
+              fixture.className = `fs-shell ${menubar ? 'has-window-menubar' : ''} ${local ? 'is-local-terminal' : ''}`
+              fixture.style.cssText = 'position:fixed;inset:0;--sidebar-width:214px;--brand-width:214px'
+              fixture.innerHTML = `${menubar ? '<div class="window-menubar"></div>' : ''}<div class="fs-tabbar"></div><main class="fs-main full-width no-status"></main><div class="terminal-right-frame is-visible"></div>`
+              document.body.append(fixture)
+              const frame = fixture.querySelector('.terminal-right-frame')
+              frame.getBoundingClientRect()
+              fixture.classList.add('is-home-active')
+              frame.classList.remove('is-visible')
+              frame.getBoundingClientRect()
+              const animations = frame.getAnimations()
+              const hasWidthAnimation = animations.some((animation) => animation.transitionProperty === 'width')
+              const hasOpacityAnimation = animations.some((animation) => animation.transitionProperty === 'opacity')
+              for (const animation of animations) animation.pause()
+              const samples = [0, 60, 120, 180].map((time) => {
+                for (const animation of animations) animation.currentTime = time
+                const rect = frame.getBoundingClientRect()
+                return {
+                  time,
+                  clipPath: getComputedStyle(frame).clipPath,
+                  opacity: Number(getComputedStyle(frame).opacity),
+                  width: rect.width
+                }
+              })
+              fixture.classList.remove('is-home-active')
+              frame.classList.add('is-visible')
+              for (const animation of [...fixture.getAnimations(), ...frame.getAnimations()]) animation.finish()
+              results.push({
+                hasWidthAnimation,
+                hasOpacityAnimation,
+                samples,
+                reopenedWidth: frame.getBoundingClientRect().width,
+                reopenedOpacity: Number(getComputedStyle(frame).opacity),
+                reopenedClipPath: getComputedStyle(frame).clipPath
+              })
+              fixture.remove()
+            }
+          }
+          return results
+        },
+        { platform, theme }
+      )
+      for (const result of closingEdge) {
+        assert.equal(result.hasWidthAnimation, true, `${platform}/${theme}: closing edge width must animate`)
+        assert.equal(result.hasOpacityAnimation, true, `${platform}/${theme}: closing edge opacity must animate`)
+        for (const sample of result.samples) {
+          assert.match(sample.clipPath, /^inset\(48px 0px 24px(?: 0px)?\)$/)
+        }
+        assert.ok(result.samples[1].width < 12 && result.samples[1].width > 0, 'edge must be mid-collapse at 60ms')
+        assert.ok(result.samples[2].width < 12 && result.samples[2].width > 0, 'edge must be mid-collapse at 120ms')
+        assert.equal(result.samples[3].width, 0, 'edge must finish collapsing at 180ms')
+        assert.ok(result.samples[1].opacity < 1 && result.samples[1].opacity > 0, 'edge must fade while collapsing')
+        assert.equal(result.reopenedWidth, 12, 'reopening must restore the requested edge width')
+        assert.equal(result.reopenedOpacity, 1, 'reopening must restore edge opacity')
+        assert.equal(result.reopenedClipPath, 'none', 'reopening must restore the full edge')
+      }
+    }
+  }
   const dragging = await page.evaluate(() => {
     const shell = document.querySelector('.fs-shell')
     const home = document.createElement('div')
@@ -300,7 +384,7 @@ try {
   })
   assert.deepEqual(reduced, { width: 0, duration: '0s', shellDuration: '0s' })
   console.log(
-    'PASS: 36 home/remote, 36 shared-edge and 48 wide-to-thin switches, four themes, three platform styles; symmetric gutters, stable edges, content-only fades and reduced motion'
+    'PASS: 36 home/remote, 36 shared-edge and 48 wide-to-thin switches, four themes, three platform styles; symmetric gutters, stable edges, 48 clipped exits retain width/opacity animation, content-only fades and reduced motion'
   )
 } finally {
   await browser.close()

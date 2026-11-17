@@ -871,12 +871,12 @@
 
 /* Custom Page Footer */
 .home-footer {
-  height: 40px;
+  height: 24px;
   border-top: 1px solid var(--border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 12px 0 32px;
+  padding: 0 12px;
   margin-top: auto;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -885,14 +885,15 @@
 .footer-copyright {
   width: 100%;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
+  line-height: 1;
   color: var(--text-muted);
   display: flex;
   align-items: center;
 }
 
 .footer-meta-separator {
-  margin: 0 12px;
+  margin: 0 8px;
   color: var(--border-light);
   font-family: var(--font-ui);
   font-weight: 300;

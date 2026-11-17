@@ -60,6 +60,7 @@ export const defaultForm: CreateProfileInput = {
   encoding: 'UTF-8',
   backspaceKey: 'ASCII',
   deleteKey: 'VT220',
+  terminalCommandCompletion: true,
   enableExecChannel: true,
   enableResourceMonitoring: true,
   resourceMonitoringIntervalSeconds: 1,
@@ -137,6 +138,8 @@ function connectionOverridesForProfile(profile: SshProfile | SftpProfile): SshCo
   // introducing global defaults does not silently change existing hosts.
   const overrides: SshConnectionOverrides = {}
   if (profile.useEmptyPassword !== undefined) overrides.useEmptyPassword = profile.useEmptyPassword
+  if (profile.terminalCommandCompletion !== undefined)
+    overrides.terminalCommandCompletion = profile.terminalCommandCompletion
   if (profile.enableExecChannel !== undefined) overrides.enableExecChannel = profile.enableExecChannel
   if (profile.enableResourceMonitoring !== undefined) {
     overrides.enableResourceMonitoring = profile.enableResourceMonitoring
@@ -155,6 +158,7 @@ function connectionSettingsForProfile(
 ): SshConnectionDefaults {
   const overrides = connectionOverridesForProfile(profile)
   return {
+    terminalCommandCompletion: overrides.terminalCommandCompletion ?? profile.terminalCommandCompletion ?? true,
     useEmptyPassword: overrides.useEmptyPassword ?? profile.useEmptyPassword ?? defaults.useEmptyPassword,
     enableExecChannel: overrides.enableExecChannel ?? profile.enableExecChannel ?? defaults.enableExecChannel,
     enableResourceMonitoring:
@@ -212,6 +216,7 @@ export function profileToForm(
     encoding: profile.encoding ?? 'UTF-8',
     backspaceKey: profile.type === 'ssh' ? (profile.backspaceKey ?? 'ASCII') : 'ASCII',
     deleteKey: profile.type === 'ssh' ? (profile.deleteKey ?? 'VT220') : 'VT220',
+    terminalCommandCompletion: profile.type === 'ssh' ? sshConnectionSettings.terminalCommandCompletion : true,
     enableExecChannel:
       profile.type === 'sftp' ? false : profile.type === 'ssh' ? sshConnectionSettings.enableExecChannel : true,
     enableResourceMonitoring:

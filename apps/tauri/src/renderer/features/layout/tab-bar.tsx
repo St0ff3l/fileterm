@@ -17,6 +17,7 @@ export type OrderedTabEntry =
       id: string
       title: string
       tabKind: 'home' | 'system' | 'transfers'
+      backgroundSessionsRequest?: number
       sessionTabId?: string
     }
   | { key: string; kind: 'session'; tab: WorkspaceTab }
@@ -43,6 +44,8 @@ const MIDDLE_MOUSE_BUTTON = 1
 export interface TabBarProps {
   activeHomeTabId: string | null
   activeSessionTabId: string | null
+  canLockNow?: boolean
+  onLockNow?(): void
   homeBrandContent?: ReactNode
   isAiCopilotAvailable: boolean
   isAiCopilotOpen: boolean
@@ -75,6 +78,8 @@ export function TabBar({
   activeHomeTabId,
   activeSessionTabId,
   homeBrandContent,
+  canLockNow,
+  onLockNow,
   isAiCopilotAvailable,
   isAiCopilotOpen,
   showAiCopilotToggle = true,
@@ -277,6 +282,11 @@ export function TabBar({
               onClick={onToggleAiCopilot}
             >
               <span aria-hidden="true" className="window-tool-icon window-tool-icon--auto-awesome" />
+            </button>
+          ) : null}
+          {canLockNow && onLockNow ? (
+            <button aria-label={t.securityLockNow} title={t.securityLockNow} type="button" onClick={onLockNow}>
+              <span aria-hidden="true" className="window-tool-icon window-tool-icon--lock" />
             </button>
           ) : null}
           <button aria-label={t.settings} title={t.settings} type="button" onClick={onOpenSettings}>

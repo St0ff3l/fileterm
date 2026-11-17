@@ -46,7 +46,7 @@ export function ConnectionsSettingsPanel() {
     <div className="settings-panel">
       <section className="settings-section">
         <h3>{t.connectionDefaults}</h3>
-        <p className="settings-tools-hint">{t.connectionDefaultsHint}</p>
+        <p className="settings-tools-hint connection-defaults-hint">{t.connectionDefaultsHint}</p>
         <fieldset
           className="settings-connection-defaults"
           disabled={!desktopApi}
@@ -57,6 +57,17 @@ export function ConnectionsSettingsPanel() {
           <div className="settings-connection-defaults__group">
             <h4>{t.advancedSettings}</h4>
             <div className="advanced-toggle-list">
+              <div className="advanced-toggle-row">
+                <label className="ssh-checkbox advanced-toggle-label">
+                  <SelectionControl
+                    type="checkbox"
+                    checked={connectionDefaults.terminalCommandCompletion}
+                    onChange={(event) => setConnectionDefault('terminalCommandCompletion', event.target.checked)}
+                  />
+                  <span className="advanced-toggle-name">{t.terminalCommandCompletion}</span>
+                </label>
+                <p className="advanced-toggle-hint">{t.terminalCommandCompletionHint}</p>
+              </div>
               <div className="advanced-toggle-row">
                 <label className="ssh-checkbox advanced-toggle-label">
                   <SelectionControl

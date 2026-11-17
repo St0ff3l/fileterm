@@ -9,6 +9,7 @@ import { getRuntimeMetadata } from './runtime-metadata'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
   AppUpdateStatus,
+  NetworkConnectionsSnapshot,
   BackupDownloadMode,
   BackupUploadMode,
   FilePaneMode,
@@ -677,6 +678,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_detach_session_to_background', { tabId }),
     setMonitoringEnabled: (tabId, generation, enabled) =>
       invoke<WorkspaceSnapshot>('app_set_monitoring_enabled', { tabId, generation, enabled }),
+    getNetworkConnections: (tabId: string) =>
+      invoke<NetworkConnectionsSnapshot>('app_get_network_connections', { tabId }),
     retryMonitoring: (tabId: string, generation: number) => invoke<void>('app_retry_monitoring', { tabId, generation }),
     reconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_reconnect_tab', { tabId }),
     disconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_disconnect_tab', { tabId }),

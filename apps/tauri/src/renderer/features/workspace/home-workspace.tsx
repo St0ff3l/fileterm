@@ -15,7 +15,7 @@ import type {
   ThemeConfig,
   WorkspaceTab
 } from '@fileterm/core'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ThemeMode } from '../../app/theme-config'
 import { t } from '../../i18n'
 import { resolveRendererPlatform } from '../../lib/renderer-platform'
@@ -38,6 +38,7 @@ import { BackgroundSessionsPage } from './background-sessions-page'
 
 export function HomeWorkspace({
   profiles,
+  backgroundSessionsRequest,
   backgroundTabs,
   sessions,
   folders = [],
@@ -78,8 +79,6 @@ export function HomeWorkspace({
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
-  canLockNow,
-  onLockNow,
   isSidebarCollapsed,
   tabBarProps,
   isResizingSidebar,
@@ -88,6 +87,7 @@ export function HomeWorkspace({
   onCloseBackgroundSession
 }: {
   profiles: ConnectionProfile[]
+  backgroundSessionsRequest?: number
   backgroundTabs: WorkspaceTab[]
   sessions: Record<string, SessionSnapshot>
   folders?: ConnectionFolder[]
@@ -132,8 +132,6 @@ export function HomeWorkspace({
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
-  canLockNow: boolean
-  onLockNow(): void
   isSidebarCollapsed: boolean
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
@@ -151,7 +149,10 @@ export function HomeWorkspace({
     | 'background-sessions'
     | 'mcp-call-log'
     | 'settings'
-  >('overview')
+  >(backgroundSessionsRequest === undefined ? 'overview' : 'background-sessions')
+  useLayoutEffect(() => {
+    if (backgroundSessionsRequest !== undefined) setActiveTab('background-sessions')
+  }, [backgroundSessionsRequest])
   const contentBodyRef = useRef<HTMLDivElement | null>(null)
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [suppressEntrance, setSuppressEntrance] = useState(Boolean(suppressEntranceProp))
@@ -636,17 +637,6 @@ export function HomeWorkspace({
                 <span>{t.mcpCallRecordsCount.replace('{count}', String(mcpCallCount))}</span>
               </>
             )}
-            {canLockNow ? (
-              <button
-                aria-label={t.securityLockNow}
-                className="security-lock-now-button"
-                onClick={onLockNow}
-                title={t.securityLockNow}
-                type="button"
-              >
-                <AppIcon name="lock" size={15} />
-              </button>
-            ) : null}
           </div>
           {/* Footer nav hidden: Changelog, API Reference, Status — code/handlers preserved */}
         </footer>

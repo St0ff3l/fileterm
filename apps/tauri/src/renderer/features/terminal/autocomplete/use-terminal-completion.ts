@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Terminal } from '@xterm/xterm'
-import type { SessionSnapshot, SessionType, TerminalCommandHistoryEntry } from '@fileterm/core'
+import type { ConnectionProfile, SessionSnapshot, SessionType, TerminalCommandHistoryEntry } from '@fileterm/core'
 import { t } from '../../../i18n'
 import { FIG_COMMANDS, loadCommandSpec } from './fig-spec-loader'
 import { CompletionInput, type InputScreen } from './completion-input'
@@ -73,7 +73,6 @@ export function useTerminalCompletion({
     let enabled = false
     let disposed = false
     let revision = 0
-    let preferencesRevision = 0
     let items: Completion[] = []
     let selected = 0
     let history: TerminalCommandHistoryEntry[] = []
@@ -284,9 +283,10 @@ export function useTerminalCompletion({
         return false
       }
     }
-    const applyPreferences = (preferences: { terminalCommandCompletion: boolean }) => {
-      preferencesRevision++
-      const next = preferences.terminalCommandCompletion !== false
+    const applyProfile = (profile: ConnectionProfile | undefined) => {
+      const next =
+        profile?.type === 'ssh' &&
+        (profile.connectionOverrides?.terminalCommandCompletion ?? profile.terminalCommandCompletion ?? true)
       if (next !== enabled) {
         enabled = next
         if (!enabled) reset()
@@ -297,15 +297,8 @@ export function useTerminalCompletion({
         }
       }
     }
-    const initialPreferencesRevision = preferencesRevision
-    void api
-      .getUiPreferences()
-      .then((preferences) => {
-        if (!disposed && initialPreferencesRevision === preferencesRevision) applyPreferences(preferences)
-      })
-      .catch(() => {})
-    const offPreferences = api.onUiPreferencesChanged(applyPreferences)
-    const applySession = (snapshot: { sessions: Record<string, SessionSnapshot> }) => {
+    const applySession = (snapshot: { sessions: Record<string, SessionSnapshot>; profiles: ConnectionProfile[] }) => {
+      applyProfile(snapshot.profiles.find((profile) => profile.id === profileId))
       snapshotRevision++
       const next = snapshot.sessions[tabId]
       if (
@@ -377,7 +370,6 @@ export function useTerminalCompletion({
       controllerRef.current = null
       acceptRef.current = () => {}
       selectRef.current = () => {}
-      offPreferences()
       offSnapshot?.()
       prompt.dispose()
       parsed.dispose()

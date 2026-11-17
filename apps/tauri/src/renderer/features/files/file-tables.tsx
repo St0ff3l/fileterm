@@ -1,6 +1,8 @@
 import './file-tables.css'
+import { useRememberedColumnWidths } from '../common/table-column-layout/table-column-layout'
+import { TableColumnResizer } from '../../components/common/table-column-resizer/table-column-resizer'
 import '../workspace/workspace-list-rows.css'
-import { useCallback, useState, useEffect, FormEvent, MouseEvent, PointerEvent, ReactNode, RefObject } from 'react'
+import { useCallback, useRef, useEffect, FormEvent, MouseEvent, PointerEvent, ReactNode, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
@@ -16,6 +18,7 @@ import type { FileFilterConfig } from './file-filter'
 // while a trackpad momentum gesture is in progress.
 const FILE_TABLE_ROW_HEIGHT = 24
 const FILE_TABLE_OVERSCAN = 8
+const DEFAULT_FILE_COLUMN_WIDTHS = [260, 100, 100, 150, 100, 100]
 
 export type RemoteFileSortField = 'name' | 'size' | 'type' | 'modified' | 'permission' | 'ownerGroup'
 
@@ -197,54 +200,22 @@ export function FileTable({
     { field: 'ownerGroup', label: t.ownerGroup }
   ]
 
-  const [widths, setWidths] = useState<number[]>([260, 100, 100, 150, 100, 100])
+  const [rememberedWidths, setWidths, commitWidths] = useRememberedColumnWidths('remote-files', 6)
+  const widths = rememberedWidths ?? DEFAULT_FILE_COLUMN_WIDTHS
+  const columnsResized = rememberedWidths !== null
 
+  const lastResetColumnsTrigger = useRef(resetColumnsTrigger)
   useEffect(() => {
-    if (resetColumnsTrigger !== undefined && resetColumnsTrigger > 0) {
-      setWidths([260, 100, 100, 150, 100, 100])
+    if (
+      resetColumnsTrigger !== lastResetColumnsTrigger.current &&
+      resetColumnsTrigger !== undefined &&
+      resetColumnsTrigger > 0
+    ) {
+      setWidths(null)
+      commitWidths(null)
     }
+    lastResetColumnsTrigger.current = resetColumnsTrigger
   }, [resetColumnsTrigger])
-
-  const handleMouseDown = (e: React.MouseEvent, index: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    const thElement = e.currentTarget.parentElement
-    if (!thElement) return
-    const trElement = thElement.parentElement
-    if (!trElement) return
-    const ths = Array.from(trElement.querySelectorAll('th'))
-    const currentWidths = ths.map((th) => th.offsetWidth)
-    setWidths(currentWidths)
-
-    const startX = e.clientX
-    const startWidth = currentWidths[index]
-
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    document.body.style.setProperty('-webkit-user-select', 'none')
-
-    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX
-      const newWidth = Math.max(50, startWidth + deltaX)
-      setWidths((prev) => {
-        const next = [...currentWidths]
-        next[index] = newWidth
-        return next
-      })
-    }
-
-    const handleMouseUp = () => {
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-      document.body.style.removeProperty('-webkit-user-select')
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-  }
 
   const getItemKey = useCallback(
     (index: number) => {
@@ -268,7 +239,9 @@ export function FileTable({
     virtualItems.length > 0 ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end : 0
 
   const tableClass = `fs-file-table ${compact ? 'compact' : ''}`
-  const tableStyle = !compact ? { width: `${widths.reduce((sum, w) => sum + w, 0)}px`, minWidth: '100%' } : undefined
+  const tableStyle = !compact
+    ? { width: `${widths.reduce((sum, w) => sum + w, 0)}px`, minWidth: columnsResized ? undefined : '100%' }
+    : undefined
   const columns = !compact ? (
     <colgroup>
       {widths.map((width, index) => (
@@ -295,7 +268,7 @@ export function FileTable({
               className={onToggleSort ? 'is-sortable' : undefined}
               style={!compact ? { width: `${widths[index]}px` } : undefined}
               onClick={(e) => {
-                if ((e.target as HTMLElement).classList.contains('col-resizer')) {
+                if ((e.target as HTMLElement).classList.contains('table-column-resizer')) {
                   e.stopPropagation()
                   return
                 }
@@ -307,11 +280,11 @@ export function FileTable({
                 <span>{header.label}</span>
                 {!compact ? <span className="file-table-sort-indicator">{directionIcon}</span> : null}
               </span>
-              {!compact && index < headerCells.length - 1 && (
-                <div
-                  className="col-resizer"
-                  onMouseDown={(e) => handleMouseDown(e, index)}
-                  onClick={(e) => e.stopPropagation()}
+              {!compact && index > 0 && (
+                <TableColumnResizer
+                  label={headerCells[index - 1].label}
+                  onResize={setWidths}
+                  onResizeEnd={commitWidths}
                 />
               )}
             </th>

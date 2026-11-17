@@ -1,0 +1,280 @@
+.network-connections-workspace {
+  padding: 24px 28px 8px;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* The page gap supplies 12px of the shared 18px header-to-content spacing. */
+.network-connections-workspace .system-info-header {
+  margin-bottom: 6px;
+}
+
+.network-connections-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 140px 150px max-content max-content;
+  align-items: center;
+  gap: 8px;
+}
+
+.network-connections-toolbar .ft-input-wrapper {
+  min-width: 180px;
+}
+
+.network-connections-toolbar > :is(.ft-input-wrapper, .ft-select-shell, .dropdown-select-trigger, .ft-btn) {
+  height: var(--control-height-md);
+  box-sizing: border-box;
+  border-radius: var(--radius-sm);
+}
+
+.network-connections-toolbar .ft-select-shell select,
+.network-connections-toolbar .ft-select-shell option {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.network-connections-toolbar .ft-input {
+  height: 100%;
+}
+
+.network-connections-toolbar .network-connections-refresh {
+  min-width: 82px;
+  padding-inline: 16px;
+}
+
+.network-connections-toolbar .network-connections-refresh.ft-btn--loading {
+  opacity: 1;
+}
+
+.network-connections-status,
+.network-connections-note {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+/* Reduce the shared 12px gap to 6px above the footer note. */
+.network-connections-footer-note {
+  margin-top: -6px;
+  flex-shrink: 0;
+}
+
+.network-connections-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.network-connections-selected-endpoint {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.network-sockets-table-region {
+  position: relative;
+  min-height: 100px;
+  height: 26vh;
+  flex: 1 1 auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  overflow: hidden;
+}
+
+.network-sockets-scroll {
+  height: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.network-sockets-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.network-sockets-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.network-sockets-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--text-secondary);
+  background: var(--surface-canvas);
+  font-size: 10px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.network-sockets-table th,
+.network-sockets-table td {
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.network-sockets-table tbody tr:not([aria-hidden]) + tr:not([aria-hidden]) td {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.network-sockets-table tr[aria-hidden] td {
+  border: 0;
+}
+
+.network-sockets-table tr.is-alternate td {
+  background: var(--surface-section);
+}
+
+.network-sockets-table .network-socket-row:hover td {
+  background: var(--surface-hover);
+}
+
+.network-sockets-table .network-sockets-empty {
+  height: 72px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.network-sockets-table td:has(.network-port-button) {
+  padding: 0;
+}
+
+.network-sockets-table .network-port-button {
+  display: block;
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  height: 23px;
+  min-width: 36px;
+  width: 100%;
+  text-align: left;
+  padding: 0 10px;
+}
+
+.network-port-button:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}
+
+.network-socket-hover-detail {
+  width: 100%;
+}
+
+:root[data-theme*='light'] .network-sockets-table th {
+  background: var(--surface-hover);
+}
+
+@media (max-width: 1050px) {
+  .network-connections-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .network-connections-toolbar .ft-input-wrapper {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 820px) {
+  .network-connections-workspace {
+    padding: 18px 16px 8px;
+  }
+}
+
+.network-sockets-table td {
+  overflow: hidden;
+}
+
+.network-sockets-table .network-socket-row.is-selected td {
+  background: var(--selection-bg);
+}
+
+.network-sockets-sort {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.network-sockets-sort .app-icon {
+  flex-shrink: 0;
+}
+
+.network-sockets-sort:focus-visible {
+  outline: 1px solid var(--focus-outline);
+  outline-offset: -1px;
+}
+
+.network-sockets-table th[aria-sort='ascending'],
+.network-sockets-table th[aria-sort='descending'] {
+  color: var(--text-primary);
+}
+
+.network-connections-access {
+  min-width: 82px;
+}
+
+.network-connections-toolbar :is(.network-connections-access, .network-connections-refresh) {
+  --action-secondary-bg: var(--dialog-button-secondary-bg);
+  --action-secondary-hover: var(--dialog-button-secondary-hover-bg);
+  --action-secondary-text: var(--dialog-button-secondary-text);
+}
+
+.network-connections-access-icon {
+  display: flex;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Keep native WebKit tap-drag selection enabled throughout the table. */
+.network-sockets-table,
+.network-sockets-sort,
+.network-port-button {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.network-sockets-table :is(.table-column-heading, .metric-hover-detail-text, .network-port-button > span) {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.network-sockets-sort .table-column-heading {
+  cursor: text;
+}

@@ -3,6 +3,7 @@ pub(crate) mod file_read;
 pub mod ftp;
 pub mod local_files;
 pub mod local_terminal;
+pub(crate) mod network_connections;
 pub(crate) mod reconnect;
 pub(crate) mod relay_io;
 pub mod serial;
@@ -42,6 +43,9 @@ pub enum WorkerCmd {
         rows: u32,
         width: u32,
         height: u32,
+    },
+    ReadNetworkConnections {
+        respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
     },
     ExecuteRemoteCommand {
         command: String,
