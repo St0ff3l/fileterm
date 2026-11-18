@@ -1,6 +1,6 @@
 # macOS 签名与公证配置（Developer ID + notarize）
 
-状态：**未启用**。当前发布流水线保留 ad-hoc 应用签名（`signingIdentity: "-"`），不接入 Apple Developer ID，也不执行公证。本文记录购买 Apple Developer Program 后的启用步骤、必须同步修改的构建脚本与工作流，以及未启用时对用户的影响。
+当前发布继续使用 **ad-hoc 签名**（`signingIdentity: "-"`）。目前没有加入 Apple Developer Program、启用 Developer ID 签名或公证的计划。第 2 至 6 节仅供将来改变发布策略时参考。当前用户指引见第 7 节。
 
 ## 1. 现状
 
@@ -35,7 +35,7 @@ Developer ID 证书自创建起 5 年有效；证书过期后仍可运行当年�
 
 使用 API Key 时可改用 `APPLE_API_KEY`、`APPLE_API_ISSUER` 与 `APPLE_API_KEY_PATH`，此时不需要 `APPLE_ID` 和 `APPLE_PASSWORD`。
 
-`APPLE_SIGNING_IDENTITY` 会覆盖 `tauri.conf.json` 的 `bundle > macOS > signingIdentity`，因此 `tauri.release.macos.conf.json` 里现有的 `"-"` 不需要删除，也不能只删它而不配 secret——本地未配置 secret 时仍需 `"-"` 提供 ad-hoc 签名。若 Apple ID 关联多个团队，还需 `APPLE_PROVIDER_SHORT_NAME` 指定公证团队。
+`APPLE_SIGNING_IDENTITY` 会覆盖 `bundle > macOS > signingIdentity`。保留 `tauri.release.macos.conf.json` 中的 `"-"`，以便未配置证书的环境继续使用 ad-hoc 签名。使用 Apple ID 公证时，用 `APPLE_TEAM_ID` 选择 Developer ID 证书所属的团队。Tauri CLI 2.11.4 的公证逻辑读取该 Team ID。
 
 `APPLE_SIGNING_IDENTITY` 必须与 `APPLE_CERTIFICATE` 中的证书一致，否则 bundler 会直接报 `certificate from APPLE_CERTIFICATE ... does not match provided identity`。
 
@@ -62,7 +62,7 @@ if (signingIdentity !== '-') {
 run('codesign', [...codesignArgs, pluginDirectory])
 ```
 
-注意两点：`--timestamp=none` 只能在 ad-hoc 场景使用，真实身份下必须改为安全时间戳；签名要在 `beforeBundleCommand` 阶段完成，之后 Tauri 按 inside-out 顺序签名主程序与 frameworks。
+Developer ID 签名使用安全时间戳。插件在 `beforeBundleCommand` 阶段签名，因此该阶段开始前，`codesign` 就需要能访问证书和私钥。之后 Tauri 再签名主应用及其 frameworks。
 
 ### 4.2 工作流注入凭据
 
@@ -77,15 +77,15 @@ APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
 APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 ```
 
-不需要手工 `security import`：bundler 检测到 `APPLE_CERTIFICATE` 后会把证书导入临时 keychain 并用于签名。
+如果将来启用 Developer ID，两个 macOS job 都要在运行打包命令前创建并解锁临时 keychain，把 `.p12` 导入其中，并授权 CI 中的 `codesign` 非交互使用私钥。将临时 keychain 加入用户的 keychain 搜索列表，并先用 `security find-identity -v -p codesigning` 确认证书可见。Tauri 自己的证书导入发生在 `beforeBundleCommand` 之后，只供 bundler 签名阶段使用。
 
 ### 4.3 公证触发方式
 
 `tauri-bundler` 在 App 打包完成、签名成功后自动执行公证：
 
-- 存在 `APPLE_CERTIFICATE` 时会先导入证书；身份非 `-` 时才真正签名。
+- bundler 在插件构建 hook 之后导入 `APPLE_CERTIFICATE`，再使用 Developer ID 对主应用签名。
 - 签名身份不是 `-` 且提供了 `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID`（或 API Key）时，调用 `xcrun notarytool submit --wait` 并在成功后 `xcrun stapler staple` 到 `.app`。
-- 缺少凭据时只打印 `skipping app notarization` 警告，构建继续——即当前状态。
+- 当前 ad-hoc 发布未提供公证凭据，bundler 跳过公证。启用 Apple ID 公证时，Apple ID、App 专用密码和 Team ID 三项必须配齐。Apple ID 和密码已设置、Team ID 缺失时，bundler 会终止构建。
 - `.dmg` 在 App 公证、staple 之后生成，并以同一身份签名（identity 为 `"-"` 时跳过，见 tauri-apps/tauri#12288）；DMG 本身不单独公证，票据随 App 一起传递，Gatekeeper 校验能通过。
 
 ## 5. 产物验证
@@ -112,7 +112,7 @@ spctl --assess --type open --context context:primary-signature -v FileTerm.dmg
 ## 6. 成本与流水线影响
 
 - 每个架构的公证提交通常需要 2–5 分钟，release 总时长增加约 5–10 分钟。
-- 公证失败会让发布 job 直接失败，不再静默产出未公证包。
+- 已发起的公证提交失败时，发布 job 会失败。启用时应在打包前检查公证凭据，并在上传前验证票据。
 - Windows/Linux 的签名与更新资产不受影响；macOS 的 `.app.tar.gz` 更新包由已公证并 staple 的 App 打包，因此更新安装同样带公证票据。
 
 ## 7. 未启用时的用户指引
@@ -128,6 +128,7 @@ spctl --assess --type open --context context:primary-signature -v FileTerm.dmg
 ## 8. 参考
 
 - [Tauri v2 macOS Code Signing](https://v2.tauri.app/distribute/sign/macos/)
-- [Tauri CLI 环境变量说明](https://github.com/tauri-apps/tauri/blob/dev/crates/tauri-cli/ENVIRONMENT_VARIABLES.md)
+- [Tauri CLI 2.11.4 打包 hook 顺序](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-cli/src/bundle.rs#L178-L207)
+- [Tauri CLI 2.11.4 公证凭据](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle/macos/sign.rs#L89-L116)
 - [Apple：创建证书签名请求](https://developer.apple.com/help/account/create-certificates/create-a-certificate-signing-request)
 - [Apple：notarytool 日志](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)

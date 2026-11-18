@@ -10,5 +10,5 @@ Wire fixtures live in `apps/tauri/src-tauri/src/sessions/ssh/tests/filename_enco
 
 ## Rust 1.99 atomic deprecation
 
-- `client/rawsession.rs` uses `AtomicU64::try_update` instead of the now deprecated `fetch_update` alias (Rust 1.99 deprecates `fetch_update`, `try_update` has been stable since 1.86). Behaviour is identical.
-- This patch raises the minimum toolchain for the vendored crate to Rust 1.86.
+- `client/rawsession.rs` uses `AtomicU64::try_update`. Rust 1.99 deprecated its `fetch_update` alias with the same behavior.
+- This call requires [Rust 1.95 or later](https://doc.rust-lang.org/stable/core/sync/atomic/type.AtomicU64.html#method.try_update).
