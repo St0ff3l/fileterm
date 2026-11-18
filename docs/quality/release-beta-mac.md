@@ -5,7 +5,7 @@
 ## 1. 发布范围
 
 - 发布 macOS Apple Silicon（arm64）与 Intel（x64）两种架构的 `.dmg`。
-- 当前发布配置（`tauri.release.macos.conf.json`）`signingIdentity` 为 `-`，即未签名构建；不做 notarization。
+- 当前发布配置（`tauri.release.macos.conf.json`）`signingIdentity` 为 `-`，即未签名构建；不做 notarization。日后购买 Apple Developer Program 的启用步骤见 [macOS 签名与公证配置](./macos-code-signing-notarization.md)。
 - macOS 更新入口当前回退为打开 GitHub Release 下载页，不做应用内自动更新。
 - 是否标记为 prerelease 以 `release.yml` 实际行为为准。
 

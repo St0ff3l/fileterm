@@ -3,7 +3,7 @@
 FileTerm 的桌面运行时是 Rust + Tauri（唯一维护、构建和发布的运行时，历史桌面实现已彻底移除）。更新机制按平台不同：
 
 - **Windows**：x64 与 ARM64 Tauri 签名 NSIS 安装器 + 内置应用内更新（`tauri_plugin_updater`）。`services/updates.rs` 从 GitHub Release 的下载路径拉取 `latest.json`，按架构选取安装器或 portable EXE，校验 `.sig` 后再下载并替换。
-- **macOS**：保留 ad-hoc 应用签名，使用 Tauri updater 校验独立签名的 `.app.tar.gz`，用户确认后备份旧应用、安装并重启。不购买 Apple Developer ID、不执行公证；被系统拦截时需用户手动放行。旧 Release 无对应更新条目时回退 GitHub 下载页。
+- **macOS**：保留 ad-hoc 应用签名，使用 Tauri updater 校验独立签名的 `.app.tar.gz`，用户确认后备份旧应用、安装并重启。不购买 Apple Developer ID、不执行公证；被系统拦截时需用户手动放行。旧 Release 无对应更新条目时回退 GitHub 下载页。启用 Developer ID 与公证的步骤见 [macOS 签名与公证配置](./macos-code-signing-notarization.md)。
 - **Linux**：x86_64 与 ARM64 的 `.deb` / `.rpm` / `.AppImage` 使用 Tauri 签名更新，按安装格式选择独立目标；DEB/RPM 必须确认当前程序归属 `file-term` 系统包，AppImage 必须在 AppImage 环境中运行。AppImage 原地备份/替换，DEB/RPM 使用插件的系统提权安装；成功后保存传输断点并重启。Arch/pacman、开发态、解包运行或无法确认包归属时继续打开 Release 页。各架构 AppImage 仍提供匹配 `.AppImage.zsync`，供外部工具执行差量更新；应用内 updater 下载完整签名包。
 
 ## 首次启用前

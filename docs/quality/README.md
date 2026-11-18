@@ -24,3 +24,4 @@
 - `desktop-ui-regression-checklist.md`：记录顶部标签栏、首页侧栏、系统监控摘要、终端悬浮输入条、文件面板抽屉、文件编辑器和平台图标的 UI 回归清单。
 - `ai-copilot-platform-regression.md`：记录 AI Provider、流式取消、代理、断网/睡眠恢复和目标绑定的 macOS、Windows、Linux 发行验收。
 - `release-beta-mac.md`：记录 `v0.1.0-beta.1` 的 mac-only unsigned release 约定与发布流程。
+- `macos-code-signing-notarization.md`：记录未启用 Developer ID 时的 ad-hoc 签名现状，以及购买 Apple Developer Program 后签名、公证所需的 secrets、代码改动与验证步骤。
