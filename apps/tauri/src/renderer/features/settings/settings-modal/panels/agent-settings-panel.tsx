@@ -258,18 +258,26 @@ export function AgentSettingsPanel() {
             </div>
 
             {mcpLaunchCommand ? (
-              <div className="agent-mcp-registration">
-                <code>{mcpLaunchCommand}</code>
-                <button
-                  className="ai-settings-secondary-button agent-mcp-launch-button agent-mcp-launch-copy-button"
-                  disabled={!desktopApi}
-                  type="button"
-                  onClick={() => copyMcpAgentCommand(mcpLaunchCommand, t.agentMcpLaunchCommandCopied)}
-                >
-                  <AppIcon name="copy" size={14} strokeWidth={2} />
-                  {t.agentMcpLaunchCommandCopy}
-                </button>
-              </div>
+              <article className="agent-mcp-client-card">
+                <div className="agent-mcp-client-heading">
+                  <div>
+                    <strong>{t.agentMcpLaunchCommandTitle}</strong>
+                  </div>
+                </div>
+                <div className="agent-mcp-registration">
+                  <code>{mcpLaunchCommand}</code>
+                  <button
+                    aria-label={t.agentMcpLaunchCommandCopy}
+                    className="agent-mcp-copy-button agent-mcp-launch-copy-button"
+                    disabled={!desktopApi}
+                    title={t.agentMcpLaunchCommandCopy}
+                    type="button"
+                    onClick={() => copyMcpAgentCommand(mcpLaunchCommand, t.agentMcpLaunchCommandCopied)}
+                  >
+                    <AppIcon name="copy" size={14} strokeWidth={2} />
+                  </button>
+                </div>
+              </article>
             ) : null}
 
             <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>
@@ -289,7 +297,13 @@ export function AgentSettingsPanel() {
                       </span>
                     </div>
                     <div className="agent-mcp-registration">
-                      <code className={isDsh ? 'agent-mcp-config' : undefined}>{client.setupText}</code>
+                      <code
+                        aria-label={isDsh ? t.agentMcpDshConfigCopy : undefined}
+                        className={isDsh ? 'agent-mcp-config' : undefined}
+                        tabIndex={isDsh ? 0 : undefined}
+                      >
+                        {isDsh ? client.setupText.replace(/[ \t]*\r?\n[ \t]*/g, ' ') : client.setupText}
+                      </code>
                       <button
                         aria-label={copyLabel}
                         className="copy-icon-button agent-mcp-copy-button"

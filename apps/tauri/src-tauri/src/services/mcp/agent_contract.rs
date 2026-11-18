@@ -93,6 +93,13 @@ fn agent_contract() -> Value {
                 "never": "Use visible-terminal as a silent fallback or run a long deployment as repeated short commands."
             },
             {
+                "id": "privileged-command-shape",
+                "severity": "must",
+                "when": "A server command relies on FileTerm saved sudo/su credentials.",
+                "do": "Start the command with sudo or su, use the cwd argument for its working directory, and omit sudo -n/--non-interactive when authentication needs the saved password.",
+                "never": "Put sudo/su after cd, export, a shell operator, or in a script and expect FileTerm to inject credentials."
+            },
+            {
                 "id": "remote-paths-and-command-lookup",
                 "severity": "must",
                 "do": "Check fileAccessMode and use the current file view's namespace for directory tools: SSH user mode uses SFTP paths and root mode uses privileged shell paths. On Synology these roots can differ. Treat command -v as a PATH lookup only; inspect other evidence before concluding a service or its data is absent.",
@@ -247,7 +254,15 @@ fn agent_tool_description(name: &str, description: &str, read_only: bool) -> Str
     } else {
         "Side-effect rule: do not retry automatically after a timeout or bridge disconnect; the outcome may be unknown. Follow error.recovery and inspect state before repeating this tool."
     };
-    format!("{description} {instruction} {retry_hint}")
+    let privileged_instruction = if matches!(
+        name,
+        "fileterm_execute_remote_command" | "fileterm_start_remote_command"
+    ) {
+        "For saved sudo/su credentials, start the command with sudo/su, use cwd instead of a cd/export prefix, and omit sudo -n/--non-interactive when a password is needed."
+    } else {
+        ""
+    };
+    format!("{description} {instruction} {privileged_instruction} {retry_hint}")
 }
 
 fn attach_agent_metadata(mut result: Value, metadata: Value) -> Value {
