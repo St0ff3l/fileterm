@@ -209,7 +209,7 @@
   background: var(--selection-bg);
 }
 
-.network-sockets-table .network-socket-row:hover td {
+.network-sockets-table .network-socket-row:not(.is-selected):hover td {
   background: var(--surface-hover);
 }
 
