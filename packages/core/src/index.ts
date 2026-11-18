@@ -409,16 +409,17 @@ export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
   operationPolicy: 'basic-safe-operations'
 }
 
-export type McpAgentClientId = 'claude-code' | 'codex-cli' | 'opencode'
+export type McpAgentClientId = 'claude-code' | 'codex-cli' | 'dsh' | 'opencode'
 
 /** Local client discovery result. Detection reads PATH and known install locations, never runs the client. */
 export interface McpAgentClientStatus {
   id: McpAgentClientId
   label: string
   command: string
+  launchCommand: string
   available: boolean
   path?: string
-  registrationCommand: string
+  setupText: string
 }
 
 /** Backend-generated configuration help for local stdio MCP clients. */

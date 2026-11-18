@@ -89,8 +89,16 @@ fn resolve_local_cli(command: &str) -> Option<std::path::PathBuf> {
     }
 
     append_local_cli_search_paths(&mut search_paths);
+    #[cfg(target_os = "macos")]
+    if command == "dsh" {
+        search_paths.push(Path::new(DSH_MACOS_CLI_DIR).to_path_buf());
+    }
     resolve_local_cli_from_paths(command, search_paths)
 }
+
+#[cfg(target_os = "macos")]
+const DSH_MACOS_CLI_DIR: &str =
+    "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin";
 
 fn resolve_local_cli_from_paths<I>(command: &str, directories: I) -> Option<std::path::PathBuf>
 where
@@ -400,6 +408,14 @@ fn resolve_fileterm_executable_path() -> Result<std::path::PathBuf, AppError> {
     })
 }
 
+fn dsh_mcp_config(path: &std::path::Path) -> String {
+    // A JSON-quoted string is also a valid YAML scalar, including Windows paths.
+    let command = serde_json::Value::String(path.to_string_lossy().into_owned());
+    format!(
+        "- insert:\n    - id: mcp-fileterm\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n        serverName: fileterm\n        transport: stdio\n        command: {command}\n        args: [mcp]"
+    )
+}
+
 /// Discover locally installed Agent CLIs without launching them. This keeps
 /// setup responsive and avoids invoking arbitrary shell startup files on all
 /// three desktop platforms.
@@ -407,15 +423,24 @@ fn resolve_fileterm_executable_path() -> Result<std::path::PathBuf, AppError> {
 pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
     let fileterm_path = resolve_fileterm_executable_path()?;
     let fileterm_command = shell_quote_path(&fileterm_path);
-    let make_client = |id: &str, label: &str, command: &str, registration_command: String| {
+    let make_client = |id: &str, label: &str, command: &str, setup_text: String| {
         let path = resolve_local_cli(command);
+        let launch_command = match (id, path.as_deref()) {
+            #[cfg(target_os = "macos")]
+            ("dsh", Some(path)) if path.parent() == Some(Path::new(DSH_MACOS_CLI_DIR)) => {
+                format!("{} web", shell_quote_path(path))
+            }
+            ("dsh", _) => "dsh web".to_string(),
+            _ => command.to_string(),
+        };
         McpAgentClientStatus {
             id: id.to_string(),
             label: label.to_string(),
             command: command.to_string(),
+            launch_command,
             available: path.is_some(),
             path: path.map(|path| path.to_string_lossy().to_string()),
-            registration_command,
+            setup_text,
         }
     };
 
@@ -435,6 +460,12 @@ pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
                 "Codex CLI",
                 "codex",
                 format!("codex mcp add fileterm -- {fileterm_command} mcp"),
+            ),
+            make_client(
+                "dsh",
+                "DeepSeek Harness (dsh)",
+                "dsh",
+                dsh_mcp_config(&fileterm_path),
             ),
             make_client(
                 "opencode",
