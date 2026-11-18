@@ -117,13 +117,13 @@ spctl --assess --type open --context context:primary-signature -v FileTerm.dmg
 
 ## 7. 未启用时的用户指引
 
-维持 ad-hoc 签名期间，在 Release 说明或下载页给出口径一致的放行步骤：
+从 FileTerm 官方 Release 下载并安装应用后，如果首次打开时被 macOS 拦截：
 
-1. 右键 `FileTerm.app` → 打开 → 在弹窗中再次确认「打开」；或
-2. 系统设置 → 隐私与安全性 → 仍要打开；或
-3. 终端执行 `xattr -dr com.apple.quarantine /Applications/FileTerm.app`。
+1. 打开「系统设置 → 隐私与安全性」，向下滚动到「安全性」。
+2. 找到 FileTerm 的提示，点按「仍要打开」。
+3. 在确认弹窗中点按「打开」。
 
-不要建议用户关闭 Gatekeeper 或 SIP。
+也可在终端执行 `xattr -dr com.apple.quarantine /Applications/FileTerm.app`。不要建议用户关闭 Gatekeeper 或 SIP。
 
 ## 8. 参考
 
@@ -132,3 +132,4 @@ spctl --assess --type open --context context:primary-signature -v FileTerm.dmg
 - [Tauri CLI 2.11.4 公证凭据](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle/macos/sign.rs#L89-L116)
 - [Apple：创建证书签名请求](https://developer.apple.com/help/account/create-certificates/create-a-certificate-signing-request)
 - [Apple：notarytool 日志](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)
+- [Apple：在 Mac 上安全地打开 App](https://support.apple.com/zh-cn/102445)
