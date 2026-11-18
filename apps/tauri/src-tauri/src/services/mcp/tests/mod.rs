@@ -288,6 +288,14 @@ mod tests {
         assert!(remote_tool["description"]
             .as_str()
             .unwrap()
+            .contains("sudo -n/--non-interactive"));
+        assert!(remote_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("cwd instead of a cd/export prefix"));
+        assert!(remote_tool["description"]
+            .as_str()
+            .unwrap()
             .contains("no prompt is waiting"));
         assert_eq!(
             remote_tool["outputSchema"]["required"],
@@ -385,6 +393,14 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("never automatically rerun"));
+        assert!(start_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("sudo -n/--non-interactive"));
+        assert!(start_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("cwd instead of a cd/export prefix"));
         assert_eq!(
             start_tool["inputSchema"]["properties"]["timeout_ms"]["default"],
             DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS
@@ -698,6 +714,8 @@ mod tests {
         assert!(instructions.contains("REMOTE_INTERACTIVE_INPUT_REQUIRED"));
         assert!(instructions.contains("no prompt is waiting in the visible terminal"));
         assert!(instructions.contains("separate command beginning with sudo or su"));
+        assert!(instructions.contains("sudo -n/--non-interactive"));
+        assert!(instructions.contains("cwd argument"));
         assert!(instructions.contains("ask the user"));
         assert!(instructions.contains("sudo/su"));
         assert!(instructions.contains("progress/log notification"));
@@ -762,6 +780,11 @@ mod tests {
             .unwrap()
             .iter()
             .any(|rule| rule["id"] == "uncertain-side-effect"));
+        assert!(contract["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["id"] == "privileged-command-shape"));
         assert!(contract["recovery"]["sideEffectRequest"]
             .as_str()
             .unwrap()
