@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import './diagnostic-log-settings.css'
 import {
   DIAGNOSTIC_LOG_CATEGORIES,
   type UiPreferences,

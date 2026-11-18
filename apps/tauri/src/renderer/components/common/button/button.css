@@ -69,11 +69,12 @@
 .ft-btn--secondary {
   background-color: var(--action-secondary-bg);
   color: var(--action-secondary-text);
-  border-color: var(--border-default);
+  border-color: var(--border-subtle);
 }
 
 .ft-btn--secondary:hover:not(:disabled) {
   background-color: var(--action-secondary-hover);
+  border-color: var(--border-default);
 }
 
 .ft-btn--secondary:active:not(:disabled) {

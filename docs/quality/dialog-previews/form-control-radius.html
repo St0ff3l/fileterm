@@ -10,14 +10,28 @@
       rel="stylesheet"
       href="../../../apps/tauri/src/renderer/components/common/dropdown-select/dropdown-select.css"
     />
+    <link rel="stylesheet" href="../../../apps/tauri/src/renderer/components/common/subtab-bar/subtab-bar.css" />
+    <link
+      rel="stylesheet"
+      href="../../../apps/tauri/src/renderer/components/common/segmented-control/segmented-control.css"
+    />
     <style>
       :root {
         color-scheme: dark;
         --surface-canvas: #151515;
         --surface-panel: #1f1f1f;
         --surface-input: #1a1a1a;
+        --surface-sidebar: #242424;
+        --surface-card: #1e1e1e;
+        --surface-hover: #2a2a2a;
+        --surface-section: #303030;
+        --action-primary-bg: #1687e8;
+        --action-primary-hover: #0f79d3;
+        --action-primary-text: #fff;
+        --focus-outline: #8bbfff;
         --surface-input-focus: #202020;
         --border-subtle: #343434;
+        --subtab-bar-border: var(--border-subtle);
         --border-default: #484848;
         --border-light: #363636;
         --text-primary: #e7e7e7;
@@ -33,6 +47,13 @@
         --surface-canvas: #f4f4f4;
         --surface-panel: #fff;
         --surface-input: #fff;
+        --surface-sidebar: #eaeaea;
+        --surface-card: #fff;
+        --surface-hover: #e8e8e8;
+        --surface-section: #e3e3e3;
+        --action-primary-bg: #086bc4;
+        --action-primary-hover: #075da9;
+        --focus-outline: #3b82f6;
         --surface-input-focus: #fff;
         --border-subtle: #d4d4d4;
         --border-default: #aaa;
@@ -125,7 +146,8 @@
         min-width: 0;
       }
 
-      .dropdown-select-arrow {
+      .dropdown-select-arrow,
+      .ft-select-shell__icon {
         width: 8px;
         height: 8px;
         flex: 0 0 8px;
@@ -134,58 +156,68 @@
         transform: translateY(-2px) rotate(45deg);
       }
 
-      .native-select-shell {
-        position: relative;
-      }
-
-      .native-select {
-        display: block;
-        width: 100%;
-        height: var(--control-height-md);
-        padding: 0 36px 0 var(--control-padding-x-sm);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-sm, 4px);
-        background: var(--surface-input);
-        color: var(--text-primary);
-        font: 400 var(--font-size-sm) var(--font-ui);
-        appearance: none;
-        outline: none;
-      }
-
-      .native-select-arrow {
-        position: absolute;
-        top: 50%;
-        right: 14px;
-        width: 8px;
-        height: 8px;
-        pointer-events: none;
-        border-right: 2px solid currentColor;
-        border-bottom: 2px solid currentColor;
-        transform: translateY(-65%) rotate(45deg);
-      }
-
       .ft-textarea {
         min-height: 92px;
         resize: none;
       }
 
-      footer {
-        display: flex;
+      .preview-section {
+        margin-top: 28px;
+        padding-top: 22px;
+        border-top: 1px solid var(--border-subtle);
+      }
+
+      h2 {
+        margin: 0 0 16px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .radius-list {
+        display: grid;
+        gap: 12px;
+        margin: 0;
+      }
+
+      .radius-list > div {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         gap: 10px;
-        margin-top: 28px;
-        padding-top: 18px;
-        border-top: 1px solid var(--border-subtle);
-        color: var(--text-muted);
+      }
+
+      .radius-list dt {
         font-size: 13px;
+      }
+
+      .radius-list dd {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
       }
 
       .radius-swatch {
         width: 32px;
         height: 24px;
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-sm);
+        border-radius: var(--sample-radius);
         background: var(--surface-input);
+      }
+
+      .radius-swatch.is-round {
+        width: 24px;
+      }
+
+      .component-previews {
+        display: grid;
+        justify-items: start;
+        gap: 14px;
+      }
+
+      .preview-icon {
+        width: 15px;
+        height: 15px;
       }
 
       @media (max-width: 720px) {
@@ -206,11 +238,11 @@
   <body>
     <main>
       <header>
-        <p class="eyebrow">设置 · 终端显示 / 连接表单</p>
-        <h1>表单控件圆角统一预览</h1>
-        <p class="description">文本输入框、下拉框、原生选择框和文本区域统一使用 4px 圆角。</p>
+        <p class="eyebrow">设置 / 连接表单</p>
+        <h1>表单与设置控件圆角预览</h1>
+        <p class="description">圆角以 CSS 像素计。公共下拉框有自绘菜单和系统原生菜单两种实现，闭合外框均为 4px。</p>
       </header>
-      <section class="controls-grid" aria-label="统一圆角控件示例">
+      <section class="controls-grid" aria-label="基础表单控件">
         <div class="field">
           <label for="file-name">文本输入框 <span class="token">--radius-sm · 4px</span></label>
           <div class="ft-input-wrapper">
@@ -218,29 +250,284 @@
           </div>
         </div>
         <div class="field">
-          <label>公共下拉框 <span class="token">--radius-sm · 4px</span></label>
-          <button class="dropdown-select-trigger" type="button" aria-expanded="false">
+          <label for="custom-select">公共下拉框（自绘） <span class="token">--radius-sm · 4px</span></label>
+          <button id="custom-select" class="dropdown-select-trigger" type="button" aria-expanded="false">
             <span class="dropdown-select-value">常规（400）</span>
             <span class="dropdown-select-arrow" aria-hidden="true"></span>
           </button>
         </div>
         <div class="field">
-          <label for="renderer">旧表单选择框 <span class="token">--radius-sm · 4px</span></label>
-          <div class="native-select-shell">
-            <select id="renderer" class="native-select" aria-label="终端渲染器">
-              <option selected>WebGL</option>
+          <label for="native-select">公共下拉框（原生） <span class="token">--radius-sm · 4px</span></label>
+          <div class="ft-select-shell">
+            <span class="ft-select-shell__value" aria-hidden="true">常规（400）</span>
+            <select id="native-select">
+              <option selected>常规（400）</option>
+              <option>中等（500）</option>
             </select>
-            <span class="native-select-arrow" aria-hidden="true"></span>
+            <span class="ft-select-shell__icon" aria-hidden="true"></span>
           </div>
         </div>
         <div class="field">
           <label for="remote-path">文本区域 <span class="token">--radius-sm · 4px</span></label>
-          <textarea id="remote-path" class="ft-textarea" readonly>/绿软/xlight</textarea>
+          <textarea id="remote-path" class="ft-textarea" readonly>/srv/projects/demo</textarea>
         </div>
       </section>
-      <footer><span class="radius-swatch" aria-hidden="true"></span>统一后的闭合控件圆角：4px</footer>
+      <section class="preview-section">
+        <h2>外观与主题</h2>
+        <dl class="radius-list">
+          <div>
+            <dt>筛选设置、保存自定义主题、主题卡片内的窗口预览</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
+              ><code class="token">6px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>亮色 / 暗色主题卡片</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 10px" aria-hidden="true"></span
+              ><code class="token">10px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>主题自定义工具栏</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 8px" aria-hidden="true"></span
+              ><code class="token">8px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>主题预设、自定义名称、主题预览条、颜色值输入框</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
+              ><code class="token">4px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>基础颜色字段外框</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 7px" aria-hidden="true"></span
+              ><code class="token">7px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>颜色取样器</dt>
+            <dd>
+              <span class="radius-swatch is-round" style="--sample-radius: 50%" aria-hidden="true"></span
+              ><code class="token">50%</code>
+            </dd>
+          </div>
+          <div>
+            <dt>设置侧栏选中项</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 0 8px 8px 0" aria-hidden="true"></span
+              ><code class="token">0 8px 8px 0</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+      <section class="preview-section">
+        <h2>会话安全</h2>
+        <dl class="radius-list">
+          <div>
+            <dt>主密码与远程备份密码卡片、底部操作按钮</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
+              ><code class="token">6px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>空闲自动锁定下拉框、密码输入框</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
+              ><code class="token">4px</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+      <section class="preview-section">
+        <h2>应用更新</h2>
+        <dl class="radius-list">
+          <div>
+            <dt>更新检查、更新通道和更新状态卡片、检查更新按钮</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
+              ><code class="token">6px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>更新设置下拉框</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
+              ><code class="token">4px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>更新状态指示点</dt>
+            <dd>
+              <span class="radius-swatch is-round" style="--sample-radius: 50%" aria-hidden="true"></span
+              ><code class="token">50%</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+      <section class="preview-section">
+        <h2>配置同步</h2>
+        <dl class="radius-list">
+          <div>
+            <dt>保存、测试连接、打开安全设置、上传和下载按钮、上次同步标记、上传下载图标底板</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
+              ><code class="token">6px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>手动数据同步外框</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 10px" aria-hidden="true"></span
+              ><code class="token">10px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>上传备份、从云端恢复卡片</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 8px" aria-hidden="true"></span
+              ><code class="token">8px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>同步表单输入框和策略下拉框</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
+              ><code class="token">4px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>启用同步和允许不安全 HTTP 选项</dt>
+            <dd>
+              <span class="radius-swatch is-round" style="--sample-radius: 999px" aria-hidden="true"></span
+              ><code class="token">999px</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+      <section class="preview-section">
+        <h2>MCP / CLI</h2>
+        <dl class="radius-list">
+          <div>
+            <dt>执行权限和允许访问的连接卡片</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 10px" aria-hidden="true"></span
+              ><code class="token">10px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>权限及连接范围选项</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 8px" aria-hidden="true"></span
+              ><code class="token">8px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>权限提示、能力对照表</dt>
+            <dd>
+              <span class="radius-swatch" style="--sample-radius: 7px" aria-hidden="true"></span
+              ><code class="token">7px</code>
+            </dd>
+          </div>
+          <div>
+            <dt>连接范围标记、单选圆点</dt>
+            <dd>
+              <span class="radius-swatch is-round" style="--sample-radius: 999px" aria-hidden="true"></span
+              ><code class="token">999px</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+      <section class="preview-section">
+        <h2>设置副标签 · 外框 10px，选项 7px</h2>
+        <div class="component-previews">
+          <div class="ft-subtab-bar" role="tablist" aria-label="MCP / CLI 副标签示例">
+            <button type="button" class="ft-subtab-bar__tab" role="tab" aria-selected="true">MCP</button>
+            <button type="button" class="ft-subtab-bar__tab" role="tab" aria-selected="false">CLI</button>
+          </div>
+          <div class="ft-subtab-bar" role="tablist" aria-label="配置同步副标签示例">
+            <button type="button" class="ft-subtab-bar__tab" role="tab" aria-selected="true">
+              <svg class="preview-icon" aria-hidden="true" viewBox="0 0 16 16">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
+                  d="M4.5 12.5h7a3 3 0 0 0 .7-5.9 4 4 0 0 0-7.4-1.2 3 3 0 0 0-.3 7.1Z"
+                ></path>
+              </svg>
+              WebDAV
+            </button>
+            <button type="button" class="ft-subtab-bar__tab" role="tab" aria-selected="false">
+              <svg class="preview-icon" aria-hidden="true" viewBox="0 0 16 16">
+                <ellipse
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
+                  cx="8"
+                  cy="4.2"
+                  rx="4.5"
+                  ry="2"
+                ></ellipse>
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
+                  d="M3.5 4.2v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V4.2M3.5 8v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V8"
+                ></path>
+              </svg>
+              S3
+            </button>
+          </div>
+        </div>
+      </section>
+      <section class="preview-section">
+        <h2>连接对象分段控件 · 外框 4px，选项 2px</h2>
+        <div class="ft-segmented-control" role="radiogroup" aria-label="连接对象">
+          <label class="ft-segmented-control__option is-selected">
+            <input class="selection-control" type="radio" name="target" checked />
+            普通服务器
+          </label>
+          <label class="ft-segmented-control__option">
+            <input class="selection-control" type="radio" name="target" />
+            网络设备
+          </label>
+          <label class="ft-segmented-control__option">
+            <input class="selection-control" type="radio" name="target" />
+            自动识别
+          </label>
+        </div>
+      </section>
     </main>
     <script>
+      document.querySelector('#native-select').addEventListener('change', (event) => {
+        event.target.previousElementSibling.textContent = event.target.selectedOptions[0].text
+      })
+      document.querySelectorAll('.ft-subtab-bar').forEach((bar) => {
+        bar.addEventListener('click', (event) => {
+          const selected = event.target.closest('button')
+          if (!selected) return
+          bar.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-selected', String(button === selected))
+          })
+        })
+      })
+      document.querySelector('.ft-segmented-control').addEventListener('change', (event) => {
+        event.currentTarget.querySelectorAll('.ft-segmented-control__option').forEach((option) => {
+          option.classList.toggle('is-selected', option.contains(event.target))
+        })
+      })
       if (new URLSearchParams(location.search).get('theme') === 'light') {
         document.documentElement.dataset.theme = 'light'
       }

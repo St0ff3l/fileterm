@@ -233,7 +233,7 @@
 :root:not([data-theme*='light']) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
   background: var(--input-bg) !important;
-  border: 1px solid var(--border-light) !important;
+  border: 1px solid var(--border-subtle) !important;
   border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
   font-size: 14px !important;
@@ -284,7 +284,7 @@
 :root:not([data-theme]) .command-form-standalone-page .ft-select-shell:hover:not(:has(select:disabled)),
 :root:not([data-theme*='light']) .command-form-standalone-page .ft-select-shell:hover:not(:has(select:disabled)),
 :root[data-theme='default'] .command-form-standalone-page .ft-select-shell:hover:not(:has(select:disabled)) {
-  border-color: var(--border-dark) !important;
+  border-color: var(--border-default) !important;
 }
 
 /* Focus styles for inputs */
@@ -414,9 +414,7 @@
 :root:not([data-theme]) .command-dialog-actions .flat-button,
 :root:not([data-theme*='light']) .command-dialog-actions .flat-button,
 :root[data-theme='default'] .command-dialog-actions .flat-button {
-  background: var(--bg-hover) !important;
   color: var(--text-main) !important;
-  border: 1px solid var(--border-light) !important;
   border-radius: var(--radius-md, 6px) !important;
   min-height: 36px !important;
   height: 36px !important;
@@ -427,6 +425,7 @@
   cursor: pointer !important;
   transition:
     background var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
     transform var(--duration-hover) !important;
 }
 
@@ -582,7 +581,7 @@
 :root:not([data-theme*='light']) .modal-card.ssh-modal textarea,
 :root[data-theme='default'] .modal-card.ssh-modal textarea {
   background: var(--input-bg) !important;
-  border: 1px solid var(--border-light) !important;
+  border: 1px solid var(--border-subtle) !important;
   border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
   transition:
@@ -602,7 +601,7 @@
 :root:not([data-theme]) .modal-card.ssh-modal textarea:hover,
 :root:not([data-theme*='light']) .modal-card.ssh-modal textarea:hover,
 :root[data-theme='default'] .modal-card.ssh-modal textarea:hover {
-  border-color: var(--border-dark) !important;
+  border-color: var(--border-default) !important;
 }
 
 :root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,

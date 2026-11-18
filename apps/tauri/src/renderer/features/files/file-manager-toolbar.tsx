@@ -78,7 +78,9 @@ export function FileManagerToolbar({
           </button>
         ) : null}
       </div>
-      <span className={`file-current-path ${clipboardStatusText ? 'is-status-hint' : ''}`}>
+      <span
+        className={`file-current-path ${activeView !== 'file' ? 'file-pane-view-label' : clipboardStatusText ? 'is-status-hint' : ''}`}
+      >
         {activeView === 'file'
           ? clipboardStatusText || activeSession.remotePath
           : activeView === 'command'

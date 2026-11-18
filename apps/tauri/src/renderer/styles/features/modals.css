@@ -534,10 +534,10 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-height: 36px;
   height: 36px;
   padding: 0 14px;
-  border: 1px dashed var(--border-subtle);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm, 4px);
-  background: var(--bg-hover);
-  color: var(--text-secondary);
+  background: var(--action-secondary-bg);
+  color: var(--action-secondary-text);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);
   font-weight: 500;
@@ -548,10 +548,9 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
     border-color var(--duration-hover) var(--ease-out),
     color var(--duration-hover) var(--ease-out);
 }
-.tunnel-add-button:hover {
-  border-color: var(--border-light);
-  background: var(--bg-active);
-  color: var(--text-main);
+.tunnel-add-button:hover:not(:disabled) {
+  background: var(--action-secondary-hover);
+  border-color: var(--border-default);
 }
 .tunnel-add-button .material-symbols-outlined {
   font-size: 16px;
@@ -630,6 +629,8 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  inline-size: min(180px, 50%);
+  min-inline-size: 0;
   min-height: 30px;
   height: 30px;
   padding: 0 10px;
@@ -638,6 +639,11 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   font-weight: 500;
   white-space: nowrap;
   flex: 0 0 auto;
+}
+
+.network-create-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .network-routing-modes > .ft-segmented-control__option {
@@ -1362,7 +1368,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--action-secondary-text);
   cursor: pointer;
   font-size: 11px;
   line-height: 1;
@@ -1370,7 +1376,6 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 
 .resource-monitoring-reset-button:hover:not(:disabled) {
   border-color: var(--focus-outline);
-  color: var(--text-main);
 }
 
 .resource-monitoring-reset-button:disabled {
@@ -1842,11 +1847,12 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 .flat-button {
   background: var(--action-secondary-bg);
   color: var(--action-secondary-text);
-  border-color: var(--border-default);
+  border-color: var(--border-subtle);
 }
 
 .flat-button:hover:not(:disabled) {
   background: var(--action-secondary-hover);
+  border-color: var(--border-default);
 }
 
 .flat-button:focus-visible,
@@ -1857,9 +1863,10 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 
 .flat-button.danger {
   color: var(--danger-text);
+  border-color: var(--danger-border);
 }
 
-.flat-button.danger:hover {
+.flat-button.danger:hover:not(:disabled) {
   background: var(--danger-surface);
   border-color: var(--danger-border);
 }

@@ -11,6 +11,21 @@ mod tests {
     use std::time::Duration;
 
     #[tokio::test]
+    async fn upload_scan_reports_a_stalled_filesystem_operation() {
+        let path = std::path::Path::new("stalled-upload");
+        let error = super::upload_scan_io::<()>(
+            path,
+            "读取本地目录",
+            std::future::pending(),
+            Duration::ZERO,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("读取本地目录超时"));
+        assert!(error.to_string().contains("stalled-upload"));
+    }
+
+    #[tokio::test]
     async fn upload_scan_maps_every_entry_without_changing_names() {
         let root =
             std::env::temp_dir().join(format!("fileterm-complete-{}", rand::random::<u64>()));

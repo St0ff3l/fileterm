@@ -38,7 +38,7 @@
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .fs-tab.active,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .file-tabs button.active {
-  background: var(--surface-tab-active) !important;
+  background: var(--file-tab-hover-bg, var(--surface-tab-active)) !important;
 }
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .file-manager,
@@ -116,12 +116,12 @@
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .file-toolbar button,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-'])
   .file-tab-actions
-  button:not(.file-pane-mode-select):not([aria-pressed]),
+  button:not(.file-pane-mode-select):not([aria-pressed]):not(.command-manager-launch:hover),
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .pane-path-bar-action,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .pane-filter-mode-toggles,
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .pane-filter-mode-btn.active {
-  background: var(--surface-elevated) !important;
-  color: var(--text-primary) !important;
+  background: var(--file-tab-hover-bg, var(--surface-elevated)) !important;
+  color: var(--file-tab-label-color, var(--text-primary)) !important;
 }
 
 :root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .pane-filter-input-wrapper:hover,
@@ -151,8 +151,7 @@
   background: var(--border-light) !important;
 }
 
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .system-title,
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .network-select {
+:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .system-title {
   background: var(--surface-elevated) !important;
   color: var(--text-primary) !important;
 }

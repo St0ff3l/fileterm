@@ -20,6 +20,8 @@
   --surface-context-menu: var(--ref-surface-context-menu, var(--surface-modal));
   --surface-overlay: var(--ref-surface-overlay);
   --surface-hover: var(--ref-surface-hover);
+  --sidebar-navigation-highlight: var(--ref-sidebar-navigation-highlight, var(--surface-hover));
+  --toolbar-control-hover: var(--ref-toolbar-control-hover, var(--surface-hover));
   --surface-active: var(--ref-surface-active);
   --surface-input: var(--ref-surface-input);
   --surface-input-focus: var(--ref-surface-input-focus);
@@ -64,14 +66,15 @@
   --border-glass: var(--ref-border-glass);
   --border-context-menu: var(--ref-border-context-menu, var(--border-subtle));
   --border-focus: var(--ref-focus-outline, var(--ref-accent-secondary));
+  --subtab-bar-border: var(--border-subtle);
 
   /* Action & Interactive Semantics */
   --action-primary-bg: var(--theme-action-primary, var(--ref-action-primary-bg, var(--ref-accent)));
   --action-primary-hover: var(--theme-action-primary-hover, var(--ref-action-primary-hover, var(--ref-accent-hover)));
   --action-primary-active: var(--ref-action-primary-active, var(--ref-accent-active));
   --action-primary-text: var(--ref-action-primary-text, var(--ref-text-inverse));
-  --action-secondary-bg: var(--surface-hover);
-  --action-secondary-hover: color-mix(in srgb, var(--action-secondary-bg) 85%, var(--ref-surface-overlay));
+  --action-secondary-bg: transparent;
+  --action-secondary-hover: var(--surface-hover);
   --action-secondary-active: var(--surface-active);
   --action-secondary-text: var(--text-primary);
   --action-ghost-hover: var(--surface-hover);
@@ -185,14 +188,10 @@
   --dialog-title: var(--text-primary);
   --dialog-description: var(--text-secondary);
   --dialog-footer-border: var(--border-subtle);
-  --dialog-button-secondary-bg: var(--surface-hover);
-  --dialog-button-secondary-border: var(--border-default);
-  --dialog-button-secondary-text: var(--text-primary);
-  --dialog-button-secondary-hover-bg: color-mix(
-    in srgb,
-    var(--dialog-button-secondary-bg) 85%,
-    var(--ref-surface-overlay)
-  );
+  --dialog-button-secondary-bg: var(--action-secondary-bg);
+  --dialog-button-secondary-border: var(--border-subtle);
+  --dialog-button-secondary-text: var(--action-secondary-text);
+  --dialog-button-secondary-hover-bg: var(--action-secondary-hover);
   --dialog-button-secondary-hover-border: var(--border-default);
   --dialog-button-primary-bg: var(--action-primary-bg);
   --dialog-button-primary-border: transparent;

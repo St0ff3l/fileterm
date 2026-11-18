@@ -1058,6 +1058,7 @@
 }
 
 .settings-modal .connection-manager-sidebar-item {
+  --manager-sidebar-item-highlight: var(--sidebar-navigation-highlight);
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 12px;
   min-height: 40px;
@@ -1131,72 +1132,16 @@
   white-space: nowrap;
 }
 
-.settings-panel .flat-button.compact {
-  border-color: var(--border-light);
+.settings-panel .flat-button.compact:not(.danger) {
+  border-color: var(--border-subtle);
 }
 
-.sync-subtabs,
-.agent-mcp-subtabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  background: var(--surface-sidebar);
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  width: fit-content;
+.settings-panel .flat-button.compact:not(.danger):hover:not(:disabled) {
+  border-color: var(--border-default);
+}
+
+.sync-subtabs {
   margin-bottom: 16px;
-}
-
-.agent-mcp-subtabs {
-  margin-bottom: 0;
-}
-
-.sync-subtab-button,
-.agent-mcp-subtab-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  border-radius: 7px;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-hover) var(--ease-out),
-    border-color var(--duration-hover) var(--ease-out),
-    color var(--duration-hover) var(--ease-out),
-    box-shadow var(--duration-hover) var(--ease-out),
-    opacity var(--duration-hover) var(--ease-out),
-    transform var(--duration-hover) var(--ease-out);
-  font-family: inherit;
-}
-
-.sync-subtab-button .material-symbols-outlined {
-  font-size: 16px;
-}
-
-.sync-subtab-button:hover,
-.agent-mcp-subtab-button:hover {
-  color: var(--text-main);
-  background: var(--surface-hover);
-}
-
-.sync-subtab-button.active,
-.agent-mcp-subtab-button.active {
-  background: var(--surface-card) !important;
-  color: var(--text-primary) !important;
-  font-weight: 600;
-  box-shadow: var(--shadow-sm);
-}
-
-.sync-subtab-button:focus-visible,
-.agent-mcp-subtab-button:focus-visible {
-  outline: 2px solid var(--focus-outline);
-  outline-offset: 1px;
 }
 
 .settings-section {
@@ -2607,64 +2552,6 @@
   gap: 6px;
 }
 
-.about-info-list {
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-}
-
-.about-info-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
-  font-size: 13px;
-}
-
-.about-info-item:last-child {
-  border-bottom: none;
-}
-
-.info-label {
-  color: var(--text-muted);
-}
-
-.info-value {
-  color: var(--text-main);
-  font-family: var(--font-mono);
-}
-
-.logs-shortcut-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.logs-shortcut-card p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.logs-shortcut-card button,
-.logs-shortcut-card .flat-button.compact {
-  align-self: flex-start;
-  height: 36px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
-  font-size: var(--button-font-size-regular, 12px);
-  font-weight: 500;
-  gap: 6px;
-}
-
 .webdav-sync-form {
   --settings-form-control-height: 36px;
   --settings-form-control-inline-padding: 12px;
@@ -2771,16 +2658,6 @@
   border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
-}
-
-.sync-config-primary-buttons .flat-button.compact {
-  background: var(--bg-hover);
-  color: var(--text-main);
-}
-
-.sync-config-primary-buttons .flat-button.compact:hover:not(:disabled) {
-  border-color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-hover) 85%, var(--ref-surface-overlay));
 }
 
 .sync-last-synced-badge {
@@ -3121,8 +2998,6 @@
   .manager-actions button,
   .connection-manager-search,
   .command-manager-item,
-  .sync-subtab-button,
-  .agent-mcp-subtab-button,
   .update-progress > span,
   .theme-card,
   .theme-config-section-summary::before,

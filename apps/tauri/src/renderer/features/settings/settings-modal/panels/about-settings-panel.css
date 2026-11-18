@@ -1,0 +1,137 @@
+.about-settings-panel .settings-section {
+  gap: 12px;
+}
+
+.about-info-list,
+.about-project-card {
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-card);
+}
+
+.about-info-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.about-info-list > div + div {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.about-info-list dt {
+  color: var(--text-secondary);
+}
+
+.about-info-list dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.about-project-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.open-source-projects {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.open-source-projects dt {
+  margin-bottom: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.open-source-projects dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.about-project-card a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.about-project-card a:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+.about-project-card .modal-error {
+  margin: 0;
+}
+
+.open-source-license-text {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.open-source-license-text h4,
+.open-source-license-text h5 {
+  margin: 14px 0 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.open-source-license-text p,
+.open-source-license-text ul,
+.open-source-license-text blockquote {
+  margin: 4px 0 8px;
+}
+
+.third-party-license {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 4px;
+}
+
+.third-party-license summary {
+  padding: 6px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.third-party-license summary:hover {
+  color: var(--text-primary);
+}
+
+.third-party-license summary:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+.third-party-license pre {
+  margin: 4px 0 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-inset);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}

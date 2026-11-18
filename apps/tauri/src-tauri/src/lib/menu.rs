@@ -391,11 +391,11 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     let menu_builder = MenuBuilder::new(app);
     #[cfg(target_os = "macos")]
     let menu_builder = {
-        let about = PredefinedMenuItem::about(
-            app,
-            Some(localized(is_english, "About FileTerm", "关于 FileTerm")),
-            None,
+        let about = MenuItemBuilder::with_id(
+            "about",
+            localized(is_english, "About FileTerm", "关于 FileTerm"),
         )
+        .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
         let services =
             PredefinedMenuItem::services(app, Some(localized(is_english, "Services", "服务")))

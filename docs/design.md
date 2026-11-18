@@ -7,7 +7,7 @@
 Solarized 和 Gruvbox 浅色使用暖米色的侧栏、列表、输入框及浮层层次；主题预设的计算颜色读取为可保存的十六进制值，避免混合色回退成纯白。所有主题的标题栏左侧品牌区与主侧栏共用同一背景语义值。
 
 - 独立提供侧栏与工具栏背景、输入框与按钮背景、自绘菜单背景；主题值通过 core/Rust 配置保存，经过参考变量和语义变量进入组件。
-- FileTerm 深色默认分别为 #242424、#1A1A1A、#1E2024。浮层与悬停灰阶统一为 #303030；旧 #2A2A2A / #2E2E2E 表面颜色与 UI 覆盖值在读取时迁移。
+- FileTerm 深色默认分别为 #242424、#1A1A1A、#1E2024。浮层灰阶为 #303030，默认深色悬停灰阶为 #2A2A2A，主页与设置侧栏的选中和悬停底色为 #303030；旧 #2A2A2A / #2E2E2E 表面颜色与 UI 覆盖值在读取时迁移。
 - 旧自定义主题缺少新字段时保留派生行为；各主题的深浅色颜色独立保存。
 
 ## 1. Design Direction
@@ -74,6 +74,8 @@ tokens -> theme vars -> component skins -> terminal colors
 - Warning / memory pressure：使用 `--warning` 或 `--memory-warn`，只作为点、条、数字提示。
 - Danger / destructive：使用 `--danger`、`--danger-text`、`--danger-surface`，只用于删除、关闭、错误。
 - Info / action blue：使用 `--primary`、`--copy-link`、`--folder-accent`，不能随手写新的蓝色。
+- 次要按钮默认透出所在表面，悬停使用当前主题的 `--surface-hover`，文字使用 `--action-secondary-text`。有描边的次要按钮和下拉框默认使用 `--border-subtle`，悬停使用 `--border-default`。网络连接页中，与筛选控件并排的权限切换和刷新按钮使用 `--surface-input` 作为默认底色。红色次要操作默认使用 `--danger-border` 描边，悬停使用 `--danger-surface`。
+
 - `--focus-outline` 只用于焦点、选中态和拖拽目标的描边或光环；不要把它当作实心按钮背景。
 - 文件图标和发送等文件相关操作使用 `--folder-accent`；实心主按钮使用 `--action-primary-*`。
 - 主按钮和危险按钮的文字通过 action 语义 token 根据背景选择白色或深色，透明背景先合成 panel surface；不要固定白字。原生控件的兜底继承规则必须保持低优先级，不能覆盖公用组件自身的文字颜色。

@@ -15,7 +15,8 @@ import { InterfaceSettingsPanel } from './panels/interface-settings-panel'
 import { LanguageSettingsPanel } from './panels/language-settings-panel'
 import { LocalTerminalSettingsPanel } from './panels/local-terminal-settings-panel'
 import { SyncSettingsPanel } from './panels/sync-settings-panel'
-import { SystemSettingsPanel } from './panels/system-settings-panel'
+import { AboutSettingsPanel } from './panels/about-settings-panel'
+import { LogsSettingsPanel } from './panels/logs-settings-panel'
 import { ToolsSettingsPanel } from './panels/tools-settings-panel'
 import { UpdatesSettingsPanel } from './panels/updates-settings-panel'
 
@@ -119,6 +120,7 @@ export function SettingsModal({
             {SETTINGS_SIDEBAR_ITEMS.filter((item) => visibleSettingsTabs.has(item.tab)).map((item) => (
               <button
                 className={`connection-manager-sidebar-item ${activeTab === item.tab ? 'active' : ''}`}
+                aria-current={activeTab === item.tab ? true : undefined}
                 key={item.tab}
                 type="button"
                 onClick={() => setActiveTab(item.tab)}
@@ -165,9 +167,11 @@ export function SettingsModal({
 
             {activeTab === 'updates' ? <UpdatesSettingsPanel /> : null}
 
-            {activeTab === 'system' ? <SystemSettingsPanel /> : null}
+            {activeTab === 'logs' ? <LogsSettingsPanel /> : null}
 
             {activeTab === 'language' ? <LanguageSettingsPanel /> : null}
+
+            {activeTab === 'about' ? <AboutSettingsPanel /> : null}
           </main>
         </div>
       </div>

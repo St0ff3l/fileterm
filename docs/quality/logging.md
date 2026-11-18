@@ -46,7 +46,7 @@ tracing::info!(
 
 ## 文件与保留
 
-日志位于应用数据目录的 logs/，设置页“系统与日志”可打开。
+日志位于应用数据目录的 logs/，“设置 → 日志”可打开。
 开发版使用独立 bundle ID `com.fileterm.desktop.dev`，但与普通安装版共用 `com.fileterm.desktop` 数据与日志目录；此前的 `.dev` 数据目录不迁移、不读取。Windows portable 沿用 exe 旁的配置目录规则。
 
 app.log 在下一条日志导致超过 2 MiB 前轮转为 app.log.1，仅保留一个备份。单条消息上限为 16 KiB，控制字符转义，不允许换行注入。
@@ -259,7 +259,7 @@ Windows 的效率等级数值越高，表示内在性能较高、能效较低；
 
 ## 分类记录设置
 
-设置 → 系统与日志提供各类别的详细诊断记录开关，通过现有 UI preferences 的
+设置 → 日志提供各类别的详细诊断记录开关，通过现有 UI preferences 的
 `diagnosticLogCategories` 保存，保存成功后立即应用；启动时在旧数据迁移完成后加载。
 旧配置自动补全默认值，未知类别不会保存；局部更新只覆盖提交的类别。
 

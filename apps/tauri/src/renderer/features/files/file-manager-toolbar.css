@@ -9,6 +9,25 @@
   padding: 0;
 }
 
+.file-manager .file-tabs .file-tab-actions :is(.command-manager-launch, .file-transfer-launch) {
+  color: var(--file-tab-label-color, var(--action-secondary-text));
+}
+
+:root:not([data-theme*='light'])
+  .file-tabs
+  .file-tab-actions
+  :is(.command-manager-launch, .file-transfer-launch):not(:hover) {
+  --file-tab-label-color: var(--text-secondary);
+}
+
+:root:not([data-theme*='light']) .file-manager .file-tabs .file-pane-view-label {
+  color: var(--text-secondary);
+}
+
+.file-manager .file-tabs .file-tab-actions .command-manager-launch:hover:not(:disabled) {
+  background: var(--action-secondary-hover);
+}
+
 .file-manager .file-tab-actions .file-transfer-launch {
   gap: 6px;
 }
@@ -66,4 +85,13 @@
 .file-manager .file-tabs .file-tab-actions button[aria-pressed]:hover,
 .file-manager .file-tabs .file-tab-actions button[aria-pressed].active {
   background: var(--surface-input);
+}
+
+:root:not([data-theme*='light'])
+  .file-manager
+  .file-tabs
+  :is(.file-tabs-left, .file-tab-actions)
+  > button:hover:is(:enabled, .file-tab-icon-action) {
+  --file-tab-hover-bg: var(--toolbar-control-hover);
+  background-color: var(--file-tab-hover-bg);
 }

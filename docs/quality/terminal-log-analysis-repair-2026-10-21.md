@@ -56,7 +56,7 @@
 
 ## 2026-10-21：轮转日志卡顿时间线复核
 
-在 FileTerm 的“设置 → 系统与日志”中打开日志目录，检查 `app.log` 与 `app.log.1`。旧日志的一次 WebGL 双终端运行留下了清楚的卡顿窗口：新加坡时间 03:06:38.228–03:06:50.815，连续三个 WebView Long Animation Frame 分别约 3.879、4.407、4.256 秒。其 `scriptCount=0`、`blockingMs=0`、渲染/布局阶段约 0–1ms；同一健康样本显示两个 WebGL 终端，终端解析/ACK 队列为零、无失败、交互样本为零。这里的 frame 起点可用 `work.timeOriginUnixMs + longFrames.slowest[].startedAtMs` 还原。
+在 FileTerm 的“设置 → 日志”中打开日志目录，检查 `app.log` 与 `app.log.1`。旧日志的一次 WebGL 双终端运行留下了清楚的卡顿窗口：新加坡时间 03:06:38.228–03:06:50.815，连续三个 WebView Long Animation Frame 分别约 3.879、4.407、4.256 秒。其 `scriptCount=0`、`blockingMs=0`、渲染/布局阶段约 0–1ms；同一健康样本显示两个 WebGL 终端，终端解析/ACK 队列为零、无失败、交互样本为零。这里的 frame 起点可用 `work.timeOriginUnixMs + longFrames.slowest[].startedAtMs` 还原。
 
 `renderer-long-frame` 的 30 秒限频只留下首条 WARN，后续两帧保存在下一条分钟健康汇总中。旧原生采集白名单也没有接收这个 WARN，因此没有与卡顿重合的 ETW 窗口。
 

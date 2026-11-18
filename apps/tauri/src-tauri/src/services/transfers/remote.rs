@@ -278,8 +278,32 @@ fn windows_reparse_tag(path: &Path) -> std::io::Result<u32> {
     Ok(info.ReparseTag)
 }
 
+const UPLOAD_SCAN_IO_TIMEOUT: Duration = Duration::from_secs(30);
+
+async fn upload_scan_io<T>(
+    path: &Path,
+    operation: &str,
+    io: impl std::future::Future<Output = std::io::Result<T>>,
+    timeout: Duration,
+) -> Result<T, AppError> {
+    // shortcut: a timeout releases the caller; use cancellable OS I/O if stuck worker threads need reclaiming.
+    tokio::time::timeout(timeout, io)
+        .await
+        .map_err(|_| {
+            transfer_error(format!(
+                "{operation}超时（{} 秒）：{}",
+                timeout.as_secs(),
+                path.display()
+            ))
+        })?
+        .map_err(|error| transfer_error(format!("无法{operation} {}: {error}", path.display())))
+}
+
 #[cfg(windows)]
-fn windows_reparse_rejection(path: &Path, metadata: &std::fs::Metadata) -> Option<String> {
+async fn windows_reparse_rejection(
+    path: &Path,
+    metadata: &std::fs::Metadata,
+) -> Result<Option<String>, AppError> {
     use std::os::windows::fs::MetadataExt;
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
     use windows_sys::Win32::System::SystemServices::{
@@ -292,54 +316,49 @@ fn windows_reparse_rejection(path: &Path, metadata: &std::fs::Metadata) -> Optio
 
     let attributes = metadata.file_attributes();
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
-        return None;
+        return Ok(None);
     }
-    let tag = match windows_reparse_tag(path) {
-        Ok(tag) => tag,
-        Err(error) => {
-            return Some(format!(
-                "Windows 重解析点无法读取 tag: path={} attributes=0x{attributes:08x} error={error}",
-                path.display()
-            ));
-        }
+    let reparse_path = path.to_path_buf();
+    let tag = upload_scan_io(
+        path,
+        "读取 Windows 重解析点标签",
+        async move {
+            tokio::task::spawn_blocking(move || windows_reparse_tag(&reparse_path))
+                .await
+                .map_err(std::io::Error::other)?
+        },
+        UPLOAD_SCAN_IO_TIMEOUT,
+    )
+    .await?;
+    let cloud_placeholder =
+        (tag & !IO_REPARSE_TAG_CLOUD_MASK) == (IO_REPARSE_TAG_CLOUD & !IO_REPARSE_TAG_CLOUD_MASK);
+    if matches!(tag, IO_REPARSE_TAG_FILE_PLACEHOLDER | IO_REPARSE_TAG_WOF) || cloud_placeholder {
+        return Ok(None);
+    }
+    let kind = if tag == IO_REPARSE_TAG_SYMLINK || tag == IO_REPARSE_TAG_MOUNT_POINT {
+        "Windows 符号链接/Junction"
+    } else {
+        "Windows 不支持的重解析点"
     };
-    let cloud_placeholder = (tag & !IO_REPARSE_TAG_CLOUD_MASK)
-        == (IO_REPARSE_TAG_CLOUD & !IO_REPARSE_TAG_CLOUD_MASK);
-    if matches!(tag, IO_REPARSE_TAG_FILE_PLACEHOLDER | IO_REPARSE_TAG_WOF)
-        || cloud_placeholder
-    {
-        return None;
-    }
-    if tag == IO_REPARSE_TAG_SYMLINK || tag == IO_REPARSE_TAG_MOUNT_POINT {
-        return Some(format!(
-            "Windows 符号链接/Junction: path={} tag=0x{tag:08x} attributes=0x{attributes:08x}",
-            path.display()
-        ));
-    }
-    Some(format!(
-        "Windows 不支持的重解析点: path={} tag=0x{tag:08x} attributes=0x{attributes:08x}",
+    Ok(Some(format!(
+        "{kind}: path={} tag=0x{tag:08x} attributes=0x{attributes:08x}",
         path.display()
-    ))
-}
-
-#[cfg(not(windows))]
-fn windows_reparse_rejection(_path: &Path, _metadata: &std::fs::Metadata) -> Option<String> {
-    None
+    )))
 }
 
 async fn collect_local_tree(
     root: &Path,
 ) -> Result<(Vec<PathBuf>, Vec<(PathBuf, TransferFileIdentity)>), AppError> {
-    let root_metadata = tokio::fs::symlink_metadata(root).await.map_err(|error| {
-        transfer_error(format!(
-            "无法读取本地目录 {}: {error}",
-            root.display()
-        ))
-    })?;
-    if let Some(reason) = windows_reparse_rejection(root, &root_metadata) {
-        return Err(transfer_error(format!(
-            "无法递归扫描本地目录：{reason}"
-        )));
+    let root_metadata = upload_scan_io(
+        root,
+        "读取本地目录",
+        tokio::fs::symlink_metadata(root),
+        UPLOAD_SCAN_IO_TIMEOUT,
+    )
+    .await?;
+    #[cfg(windows)]
+    if let Some(reason) = windows_reparse_rejection(root, &root_metadata).await? {
+        return Err(transfer_error(format!("无法递归扫描本地目录：{reason}")));
     }
     if root_metadata.file_type().is_symlink() {
         return Err(transfer_error(format!(
@@ -357,39 +376,41 @@ async fn collect_local_tree(
     let mut files = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
-        let mut entries = tokio::fs::read_dir(&directory).await.map_err(|error| {
-            transfer_error(format!("无法读取本地目录 {}: {error}", directory.display()))
-        })?;
-        while let Some(entry) = entries.next_entry().await.map_err(|error| {
-            transfer_error(format!(
-                "无法读取本地目录项 {}: {error}",
-                directory.display()
-            ))
-        })? {
+        let mut entries = upload_scan_io(
+            &directory,
+            "读取本地目录",
+            tokio::fs::read_dir(&directory),
+            UPLOAD_SCAN_IO_TIMEOUT,
+        )
+        .await?;
+        while let Some(entry) = upload_scan_io(
+            &directory,
+            "读取本地目录项",
+            entries.next_entry(),
+            UPLOAD_SCAN_IO_TIMEOUT,
+        )
+        .await?
+        {
             let path = entry.path();
-            let file_type = entry.file_type().await.map_err(|error| {
-                transfer_error(format!("无法读取本地文件类型 {}: {error}", path.display()))
-            })?;
-            // Inspect the directory entry itself before following it for
-            // metadata. On Windows a Junction/reparse point can otherwise
-            // resolve to an ordinary directory and escape the scanned tree.
-            let link_metadata = tokio::fs::symlink_metadata(&path).await.map_err(|error| {
-                transfer_error(format!("无法读取本地文件属性 {}: {error}", path.display()))
-            })?;
-            if let Some(reason) = windows_reparse_rejection(&path, &link_metadata) {
-                return Err(transfer_error(format!(
-                    "无法递归扫描本地目录：{reason}"
-                )));
+            // Use a single no-follow lookup for both the entry type and identity.
+            let metadata = upload_scan_io(
+                &path,
+                "读取本地文件属性",
+                tokio::fs::symlink_metadata(&path),
+                UPLOAD_SCAN_IO_TIMEOUT,
+            )
+            .await?;
+            #[cfg(windows)]
+            if let Some(reason) = windows_reparse_rejection(&path, &metadata).await? {
+                return Err(transfer_error(format!("无法递归扫描本地目录：{reason}")));
             }
-            if link_metadata.file_type().is_symlink() || file_type.is_symlink() {
+            let file_type = metadata.file_type();
+            if file_type.is_symlink() {
                 return Err(transfer_error(format!(
                     "无法递归扫描本地目录：不支持符号链接或 Windows Junction：{}",
                     path.display()
                 )));
             }
-            let metadata = entry.metadata().await.map_err(|error| {
-                transfer_error(format!("无法读取本地文件信息 {}: {error}", path.display()))
-            })?;
             if file_type.is_dir() {
                 directories.push(path.clone());
                 pending.push(path);

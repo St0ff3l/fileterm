@@ -662,7 +662,6 @@
   height: 22px;
   min-height: 22px;
   padding: 0 6px;
-  border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   font-size: 10px;
   font-weight: 400;
@@ -679,24 +678,8 @@
   gap: 4px;
 }
 
-/* The compact sidebar selector is a passive status control. Keep its
-   keyboard/open state visible through the normal surface and border without
-   adding the large blue focus ring used by form inputs. */
-.system-sidebar-layout .network-select.dropdown-select-trigger:focus-visible,
-.system-sidebar-layout .network-select.dropdown-select-trigger[aria-expanded='true'] {
-  box-shadow: var(--input-focus-shadow);
-  background-color: var(--surface-hover);
-  outline: none;
-}
-
 .system-sidebar-layout .network-select.ft-select-shell {
   font-size: 9px;
-}
-
-.system-sidebar-layout .network-select.ft-select-shell:focus-within {
-  box-shadow: var(--input-focus-shadow);
-  background-color: var(--surface-hover);
-  outline: none;
 }
 
 .system-sidebar-layout .network-select.ft-select-shell .ft-select-shell__value {
@@ -705,7 +688,6 @@
 
 .system-sidebar-layout .network-select.dropdown-select-trigger .dropdown-select-arrow {
   font-size: 12px;
-  color: var(--text-muted);
 }
 
 /* macOS 上 system sidebar 的 network-select 采用统一单框样式，
@@ -743,7 +725,6 @@
   top: 50%;
   transform: translateY(-50%);
   font-size: 12px;
-  color: var(--text-muted);
   pointer-events: none;
 }
 

@@ -311,6 +311,12 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
+            #[cfg(target_os = "macos")]
+            "about" => {
+                if let Err(error) = crate::macos_icon::show_about_panel(app) {
+                    crate::services::logging::warn(app, "app-icon", error);
+                }
+            }
             "new-connection" => {
                 open_child_window_from_native_event(
                     app,

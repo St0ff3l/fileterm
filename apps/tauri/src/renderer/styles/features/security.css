@@ -211,20 +211,6 @@
   gap: 6px;
 }
 
-.security-reset-password-button {
-  color: var(--danger-text);
-}
-
-.security-reset-password-button:hover:not(:disabled) {
-  background: var(--danger-surface);
-  border-color: var(--danger-border);
-}
-
-.security-reset-password-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--danger-border);
-}
-
 .security-action-icon {
   display: grid;
   width: 14px;

@@ -159,7 +159,6 @@
 }
 
 :root[data-theme*='light'] .system-sidebar-layout .system-title,
-:root[data-theme*='light'] .system-sidebar-layout .network-select,
 :root[data-theme*='light'] .system-sidebar-layout .grid-chart {
   border-color: var(--system-sidebar-control-border);
 }
@@ -297,7 +296,6 @@
 
 :root[data-theme*='light'] .file-tabs button,
 :root[data-theme*='light'] .file-tab-actions button,
-:root[data-theme*='light'] .network-select,
 :root[data-theme*='light'] .ssh-grid input:not(.selection-control),
 :root[data-theme*='light'] .ssh-grid .dropdown-select-trigger,
 :root[data-theme*='light'] .ssh-grid .ft-select-shell,
@@ -490,12 +488,6 @@
 
 :root[data-theme*='light'] .meter-fill.tone-danger {
   background: var(--metric-status-red);
-}
-
-:root[data-theme*='light'] .network-select {
-  border-color: var(--border-light);
-  background: var(--surface-hover);
-  color: var(--text-main);
 }
 
 :root[data-theme*='light'] .network-scale {

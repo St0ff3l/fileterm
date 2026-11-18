@@ -328,14 +328,6 @@
   color: var(--network-rx);
 }
 
-:root:not([data-theme]) .network-select,
-:root:not([data-theme*='light']) .network-select,
-:root[data-theme='default'] .network-select {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
 :root:not([data-theme]) .network-scale,
 :root:not([data-theme*='light']) .network-scale,
 :root[data-theme='default'] .network-scale {

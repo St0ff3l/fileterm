@@ -29,8 +29,9 @@ export type SettingsTab =
   | 'sync'
   | 'tools'
   | 'updates'
-  | 'system'
+  | 'logs'
   | 'language'
+  | 'about'
 
 export type SyncFeedback = {
   kind: 'success' | 'error'
@@ -57,8 +58,9 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
   { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update_alt' },
   { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
-  { tab: 'system', labelKey: 'systemLogsInfo', materialIcon: 'info' },
-  { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' }
+  { tab: 'logs', labelKey: 'logsSettings', appIcon: 'log' },
+  { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' },
+  { tab: 'about', labelKey: 'aboutSettings', materialIcon: 'info' }
 ]
 
 export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
@@ -73,9 +75,9 @@ export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
   sync: 'sync webdav s3 backup cloud configuration 同步 备份 云端',
   updates: 'update release version beta stable 更新 版本 发布',
   tools: 'manager connection command key shortcut 管理器 连接 命令 密钥 快捷键',
-  system:
-    'system log diagnostics platform version category performance ssh monitoring 系统 日志 诊断 平台 版本 分类 开关 性能 监控',
-  language: 'language locale chinese english 中文 英文 语言'
+  logs: 'log diagnostics category performance ssh monitoring transfer 日志 诊断 分类 开关 性能 监控 传输',
+  language: 'language locale chinese english 中文 英文 语言',
+  about: 'about fileterm system platform version license open source fig 关于 系统 平台 版本 许可 开源'
 }
 
 const ITERM2_THEME_PRESETS: Array<{ id: Iterm2ThemePresetId; labelKey: keyof LocaleMessages }> = [

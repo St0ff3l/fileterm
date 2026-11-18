@@ -27,11 +27,12 @@
   line-height: 1.5;
 }
 
-.ssh-low-resource-mode__help {
+.ssh-low-resource-mode__help.ft-btn--ghost {
   min-height: 24px;
   height: 24px;
   padding: 0 4px;
   font-size: 12px;
+  color: var(--action-secondary-text);
 }
 
 .ssh-low-resource-mode__details {
