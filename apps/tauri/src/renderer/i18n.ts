@@ -310,6 +310,7 @@ const zhCN = {
   agentMcpTabCli: 'CLI',
   agentMcpDesktopOnly: 'MCP / CLI 仅可在桌面应用中配置。',
   agentMcpRuntimeTitle: 'FileTerm MCP 本机桥接',
+  agentMcpLaunchCommandTitle: 'FileTerm MCP',
   agentMcpLaunchCommandCopy: '复制通用 MCP 启动命令',
   agentMcpLaunchCommandCopied: '通用 MCP 启动命令已复制',
   agentMcpRuntimeDescription:
@@ -319,7 +320,7 @@ const zhCN = {
     '请先读取下方第一项 FileTerm CLI Skill。AI Agent 默认使用 `fileterm cli --jsonl`。一次性 CLI 使用 `fileterm cli <command>`，仅供用户手动调试和 shell 脚本。',
   agentMcpProcessModelTitle: 'CLI 的两种调用模式',
   agentMcpProcessModelDescription:
-    '一次性模式 `fileterm cli <command>` 每次调用启动一个新的 CLI 进程，执行一次请求后退出；2.2.7 会在 GUI 启动前分流它，因此不会打开新的 FileTerm 窗口，但进程本身仍不会复用。JSONL 模式 `fileterm cli --jsonl` 使用同一个可执行文件和同一套权限/bridge，保持一个 stdin/stdout 进程，用 request ID 和 worker pool 处理多次请求，直到 stdin 关闭。AI Agent 只需启动一次 JSONL 模式，不要按每个动作重新启动一次性 CLI。',
+    '一次性模式 `fileterm cli <command>` 每次调用启动一个新的 CLI 进程，执行一次请求后退出；它会在 GUI 启动前分流，不会打开新的 FileTerm 窗口。JSONL 模式 `fileterm cli --jsonl` 使用同一个可执行文件和同一套权限/bridge，保持一个 stdin/stdout 进程，用 request ID 和 worker pool 处理多次请求，直到 stdin 关闭。AI Agent 只需启动一次 JSONL 模式，不要按每个动作重新启动一次性 CLI。',
   agentMcpPersistentAgentPath: 'AI 默认：常驻 CLI JSONL 命令',
   agentMcpPersistentAgentCopy: '复制常驻 CLI JSONL 命令',
   agentMcpPersistentAgentCopied: '常驻 CLI JSONL 命令已复制',
@@ -2591,6 +2592,7 @@ const enUS: typeof zhCN = {
   agentMcpTabCli: 'CLI',
   agentMcpDesktopOnly: 'MCP / CLI can only be configured in the desktop app.',
   agentMcpRuntimeTitle: 'FileTerm MCP local bridge',
+  agentMcpLaunchCommandTitle: 'FileTerm MCP',
   agentMcpLaunchCommandCopy: 'Copy generic MCP launch command',
   agentMcpLaunchCommandCopied: 'Generic MCP launch command copied',
   agentMcpRuntimeDescription:
@@ -2600,7 +2602,7 @@ const enUS: typeof zhCN = {
     'Read the first FileTerm CLI Skill below. AI Agents should use `fileterm cli --jsonl`. One-shot CLI uses `fileterm cli <command>` and is for user-run debugging and shell scripts.',
   agentMcpProcessModelTitle: 'Two FileTerm CLI modes',
   agentMcpProcessModelDescription:
-    'One-shot mode, `fileterm cli <command>`, starts one CLI process per request, completes it, and exits. Version 2.2.7 routes it before GUI startup, so it does not open another FileTerm window, but the process itself is not reused. JSONL mode, `fileterm cli --jsonl`, uses the same executable and the same policy/bridge while keeping one stdin/stdout process alive; request IDs and a bounded worker pool handle multiple requests until stdin closes. An AI Agent only starts JSONL mode once and must not relaunch one-shot CLI for every action.',
+    'One-shot mode, `fileterm cli <command>`, starts one CLI process per request, completes it, and exits. It is routed before GUI startup, so it does not open another FileTerm window. JSONL mode, `fileterm cli --jsonl`, uses the same executable and the same policy/bridge while keeping one stdin/stdout process alive; request IDs and a bounded worker pool handle multiple requests until stdin closes. An AI Agent only starts JSONL mode once and must not relaunch one-shot CLI for every action.',
   agentMcpPersistentAgentPath: 'AI default: persistent CLI JSONL command',
   agentMcpPersistentAgentCopy: 'Copy persistent CLI JSONL command',
   agentMcpPersistentAgentCopied: 'Persistent CLI JSONL command copied',

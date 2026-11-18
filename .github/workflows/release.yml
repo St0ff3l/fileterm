@@ -55,6 +55,13 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
+          shared-key: rust-aarch64-apple-darwin
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
@@ -128,6 +135,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
+          shared-key: rust-x86_64-apple-darwin
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -215,6 +229,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
+          shared-key: rust-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -337,6 +358,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
+          shared-key: rust-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node
         uses: actions/setup-node@v5

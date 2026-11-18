@@ -3918,7 +3918,12 @@
 
 .agent-mcp-registration code.agent-mcp-config {
   font-family: var(--font-mono);
-  white-space: pre;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.agent-mcp-registration code.agent-mcp-config::-webkit-scrollbar {
+  display: none;
 }
 
 .agent-mcp-launch-copy-button {
