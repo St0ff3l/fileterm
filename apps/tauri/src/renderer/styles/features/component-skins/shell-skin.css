@@ -239,13 +239,6 @@
   color: var(--success);
 }
 
-:root:not([data-theme]) .network-select,
-:root:not([data-theme*='light']) .network-select,
-:root[data-theme='default'] .network-select {
-  background: var(--bg-card);
-  color: var(--text-main);
-}
-
 :root:not([data-theme]) .network-scale,
 :root:not([data-theme*='light']) .network-scale,
 :root[data-theme='default'] .network-scale {

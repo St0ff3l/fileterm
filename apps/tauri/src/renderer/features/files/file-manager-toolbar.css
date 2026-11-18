@@ -91,7 +91,7 @@
   .file-manager
   .file-tabs
   :is(.file-tabs-left, .file-tab-actions)
-  > button:hover:not(:disabled) {
+  > button:hover:is(:enabled, .file-tab-icon-action) {
   --file-tab-hover-bg: var(--toolbar-control-hover);
   background-color: var(--file-tab-hover-bg);
 }

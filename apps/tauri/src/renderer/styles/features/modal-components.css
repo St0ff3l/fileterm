@@ -1140,68 +1140,8 @@
   border-color: var(--border-default);
 }
 
-.sync-subtabs,
-.agent-mcp-subtabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  background: var(--surface-sidebar);
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  width: fit-content;
+.sync-subtabs {
   margin-bottom: 16px;
-}
-
-.agent-mcp-subtabs {
-  margin-bottom: 0;
-}
-
-.sync-subtab-button,
-.agent-mcp-subtab-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  border-radius: 7px;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-hover) var(--ease-out),
-    border-color var(--duration-hover) var(--ease-out),
-    color var(--duration-hover) var(--ease-out),
-    box-shadow var(--duration-hover) var(--ease-out),
-    opacity var(--duration-hover) var(--ease-out),
-    transform var(--duration-hover) var(--ease-out);
-  font-family: inherit;
-}
-
-.sync-subtab-button .material-symbols-outlined {
-  font-size: 16px;
-}
-
-.sync-subtab-button:hover,
-.agent-mcp-subtab-button:hover {
-  color: var(--text-main);
-  background: var(--surface-hover);
-}
-
-.sync-subtab-button.active,
-.agent-mcp-subtab-button.active {
-  background: var(--surface-card) !important;
-  color: var(--text-primary) !important;
-  font-weight: 600;
-  box-shadow: var(--shadow-sm);
-}
-
-.sync-subtab-button:focus-visible,
-.agent-mcp-subtab-button:focus-visible {
-  outline: 2px solid var(--focus-outline);
-  outline-offset: 1px;
 }
 
 .settings-section {
@@ -3058,8 +2998,6 @@
   .manager-actions button,
   .connection-manager-search,
   .command-manager-item,
-  .sync-subtab-button,
-  .agent-mcp-subtab-button,
   .update-progress > span,
   .theme-card,
   .theme-config-section-summary::before,

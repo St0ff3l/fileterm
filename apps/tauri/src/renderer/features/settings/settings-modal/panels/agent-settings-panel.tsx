@@ -6,6 +6,7 @@ import type {
   McpAgentPreferences,
   McpAgentSetup
 } from '@fileterm/core'
+import { SubtabBar } from '../../../../components/common/subtab-bar/subtab-bar'
 import { AppIcon } from '../../../common/app-icon'
 import { RadioCardGroup } from '../../../common/radio-card-group'
 import { SelectionControl } from '../../../common/selection-control'
@@ -229,30 +230,16 @@ export function AgentSettingsPanel() {
           </section>
         </div>
 
-        <div className="agent-mcp-subtabs" role="tablist" aria-label={t.agentMcpSubTabs}>
-          <button
-            id="agent-mcp-tab-mcp"
-            aria-controls="agent-mcp-panel-mcp"
-            aria-selected={agentSubTab === 'mcp'}
-            className={`agent-mcp-subtab-button ${agentSubTab === 'mcp' ? 'active' : ''}`}
-            role="tab"
-            type="button"
-            onClick={() => setAgentSubTab('mcp')}
-          >
-            {t.agentMcpTabMcp}
-          </button>
-          <button
-            id="agent-mcp-tab-cli"
-            aria-controls="agent-mcp-panel-cli"
-            aria-selected={agentSubTab === 'cli'}
-            className={`agent-mcp-subtab-button ${agentSubTab === 'cli' ? 'active' : ''}`}
-            role="tab"
-            type="button"
-            onClick={() => setAgentSubTab('cli')}
-          >
-            {t.agentMcpTabCli}
-          </button>
-        </div>
+        <SubtabBar<'mcp' | 'cli'>
+          idPrefix="agent-mcp"
+          ariaLabel={t.agentMcpSubTabs}
+          value={agentSubTab}
+          options={[
+            { value: 'mcp', label: t.agentMcpTabMcp },
+            { value: 'cli', label: t.agentMcpTabCli }
+          ]}
+          onChange={setAgentSubTab}
+        />
 
         {agentSubTab === 'mcp' ? (
           <div

@@ -151,8 +151,7 @@
   background: var(--border-light) !important;
 }
 
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .system-title,
-:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .network-select {
+:root:is([data-theme-base='codex'], [data-theme-preset^='iterm2-']) .system-sidebar-layout .system-title {
   background: var(--surface-elevated) !important;
   color: var(--text-primary) !important;
 }

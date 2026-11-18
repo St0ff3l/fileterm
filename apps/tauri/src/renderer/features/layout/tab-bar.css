@@ -4,6 +4,7 @@
 
 :root:not([data-theme*='light']) .fs-tabbar .window-tools > button:hover:not(:disabled) {
   background-color: var(--toolbar-control-hover);
+  color: var(--text-primary);
 }
 
 /* Window tools use bundled SVGs so hiding/restoring the window cannot flash a
@@ -15,12 +16,9 @@
   height: 16px;
   border-radius: 0;
   background-color: currentColor;
-  cursor: inherit;
+  color: inherit;
+  pointer-events: none;
   transition: none;
-}
-
-:root .fs-tabbar .window-tools button:hover .window-tool-icon {
-  background-color: currentColor;
 }
 
 .window-tool-icon--open-in-full {

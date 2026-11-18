@@ -1,0 +1,46 @@
+.ft-subtab-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-sidebar);
+  border: 1px solid var(--subtab-bar-border);
+  border-radius: var(--radius-lg);
+  width: fit-content;
+}
+
+.ft-subtab-bar > .ft-subtab-bar__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
+}
+
+.ft-subtab-bar > .ft-subtab-bar__tab:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.ft-subtab-bar > .ft-subtab-bar__tab[aria-selected='true'] {
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.ft-subtab-bar > .ft-subtab-bar__tab:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 1px;
+}

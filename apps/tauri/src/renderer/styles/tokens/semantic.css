@@ -66,6 +66,7 @@
   --border-glass: var(--ref-border-glass);
   --border-context-menu: var(--ref-border-context-menu, var(--border-subtle));
   --border-focus: var(--ref-focus-outline, var(--ref-accent-secondary));
+  --subtab-bar-border: var(--border-subtle);
 
   /* Action & Interactive Semantics */
   --action-primary-bg: var(--theme-action-primary, var(--ref-action-primary-bg, var(--ref-accent)));

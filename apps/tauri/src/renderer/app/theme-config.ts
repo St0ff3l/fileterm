@@ -337,6 +337,7 @@ function resolveCompactUiVariables(
     '--border-dark': strongBorder,
     '--border': border,
     '--border-subtle': subtleBorder,
+    '--subtab-bar-border': border,
     '--text-main': ink,
     '--text-primary': ink,
     '--text-secondary': secondaryText,
