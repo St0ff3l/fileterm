@@ -306,7 +306,7 @@ impl RawSftpSession {
             if status.status_code == StatusCode::Ok
                 && self
                     .handles
-                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+                    .try_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
                         if h > 0 {
                             Some(h - 1)
                         } else {
