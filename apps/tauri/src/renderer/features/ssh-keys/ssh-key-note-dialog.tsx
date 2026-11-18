@@ -152,7 +152,7 @@ export function SshKeyNoteDialog({
                       className={`ssh-key-import-dialog__file-name${selectedFile ? ' has-file' : ''}`}
                       title={selectedFile?.sourcePath}
                     >
-                      <MaterialIcon name="description" aria-hidden="true" className="material-symbols-outlined" />
+                      <AppIcon name="log" size={18} />
                       <span>{selectedFile?.fileName ?? t.sshKeyNoteNoFile}</span>
                     </div>
                     <button

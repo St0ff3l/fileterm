@@ -16,10 +16,11 @@
   --ref-surface-card: #181818;
   --ref-surface-section: #1d1d20;
   --ref-surface-elevated: #222222;
+  --ref-toolbar-control-hover: #303030;
   --ref-surface-modal: #181818;
   --ref-surface-context-menu: #242424;
   --ref-surface-overlay: rgba(0, 0, 0, 0.7);
-  --ref-surface-hover: #303030;
+  --ref-surface-hover: #2a2a2a;
   --ref-surface-active: #333338;
   --ref-surface-input: #0d0d0d;
   --ref-surface-input-focus: #111111;

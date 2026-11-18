@@ -147,10 +147,6 @@
   background: var(--surface-section);
 }
 
-.network-sockets-table .network-socket-row:hover td {
-  background: var(--surface-hover);
-}
-
 .network-sockets-table .network-sockets-empty {
   height: 72px;
   text-align: center;
@@ -213,6 +209,10 @@
   background: var(--selection-bg);
 }
 
+.network-sockets-table .network-socket-row:hover td {
+  background: var(--surface-hover);
+}
+
 .network-sockets-sort {
   display: flex;
   align-items: center;
@@ -248,9 +248,7 @@
 }
 
 .network-connections-toolbar :is(.network-connections-access, .network-connections-refresh) {
-  --action-secondary-bg: var(--dialog-button-secondary-bg);
-  --action-secondary-hover: var(--dialog-button-secondary-hover-bg);
-  --action-secondary-text: var(--dialog-button-secondary-text);
+  --action-secondary-bg: var(--surface-input);
 }
 
 .network-connections-access-icon {

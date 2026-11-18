@@ -363,7 +363,7 @@ export function HomeWorkspace({
             title={t.mcpCallRecordsTitle}
             type="button"
           >
-            <AppIcon name="call-log" size={18} />
+            <AppIcon name="log" size={18} />
             <SidebarAlignedLabel>{t.mcpCallRecordsTitle}</SidebarAlignedLabel>
           </button>
           <button

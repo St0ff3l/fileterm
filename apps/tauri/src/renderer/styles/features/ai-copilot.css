@@ -3088,9 +3088,9 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--danger-border);
   border-radius: 5px;
-  color: var(--status-danger);
+  color: var(--danger-text);
   background: transparent;
   font: inherit;
   font-size: 11px;
@@ -3105,9 +3105,8 @@
     transform var(--duration-hover) var(--ease-out);
 }
 
-.ai-settings-clear-key-btn:hover {
-  border-color: var(--status-danger);
-  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+.ai-settings-clear-key-btn:hover:not(:disabled) {
+  background: var(--danger-surface);
 }
 
 .ai-settings-key-cleared-tag {
@@ -3277,7 +3276,7 @@
   font-weight: 600;
   cursor: pointer;
   border-radius: 7px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-subtle);
   appearance: none;
   -webkit-appearance: none;
   transition:
@@ -3314,24 +3313,23 @@
 }
 
 .ai-settings-secondary-button {
-  color: var(--text-secondary);
-  background: var(--bg-hover);
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-bg);
 }
 
 .ai-settings-secondary-button:hover:not(:disabled) {
-  border-color: var(--focus-outline);
-  color: var(--text-main);
-  background: var(--accent-tint-weak);
+  background: var(--action-secondary-hover);
+  border-color: var(--border-default);
 }
 
 .ai-settings-danger-button {
-  color: var(--danger);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
   background: transparent;
 }
 
 .ai-settings-danger-button:hover:not(:disabled) {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  background: var(--danger-surface);
 }
 
 .ai-settings-secondary-button:disabled,

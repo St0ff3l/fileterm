@@ -58,7 +58,7 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
   { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update_alt' },
   { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
-  { tab: 'logs', labelKey: 'logsSettings', appIcon: 'document' },
+  { tab: 'logs', labelKey: 'logsSettings', appIcon: 'log' },
   { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' },
   { tab: 'about', labelKey: 'aboutSettings', materialIcon: 'info' }
 ]

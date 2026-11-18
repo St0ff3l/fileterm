@@ -501,7 +501,7 @@
 
 .terminal-dock-clear-btn {
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--action-secondary-text);
   background: var(--bg-hover);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -517,7 +517,6 @@
 }
 
 .terminal-dock-clear-btn:hover {
-  color: var(--text-main);
   background: var(--bg-active);
   border-color: var(--border-dark);
 }
@@ -2572,7 +2571,7 @@
   width: 100%;
   min-height: 32px;
   padding: 5px 10px;
-  border: 1px solid var(--border-dark);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-card);
   color: var(--text-main);
@@ -2934,13 +2933,13 @@
 }
 
 .connection-manager-sidebar-item:hover {
-  background: var(--bg-hover) !important;
+  background: var(--manager-sidebar-item-highlight, var(--bg-hover)) !important;
   color: var(--text-primary) !important;
   padding-left: 12px;
 }
 
 .connection-manager-sidebar-item.active {
-  background: var(--surface-hover) !important;
+  background: var(--manager-sidebar-item-highlight, var(--surface-hover)) !important;
   color: var(--text-primary) !important;
   font-weight: 500;
 }
@@ -3337,7 +3336,7 @@
   border-color: transparent;
   border-radius: 5px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--action-secondary-text);
   font-size: var(--button-font-size-compact);
   font-weight: var(--button-font-weight);
 }
@@ -3345,11 +3344,16 @@
 .connection-manager-modal .flat-button.compact:hover:not(:disabled) {
   background: var(--bg-hover);
   border-color: transparent;
-  color: var(--text-main);
 }
 
 .connection-manager-modal .flat-button.compact.danger {
-  color: var(--danger);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+
+.connection-manager-modal .flat-button.compact.danger:hover:not(:disabled) {
+  background: var(--danger-surface);
+  border-color: var(--danger-border);
 }
 
 @media (max-width: 1080px) {
@@ -3570,6 +3574,7 @@
   flex-direction: column;
   height: 100%;
   overflow: auto;
+  scrollbar-gutter: stable;
   padding: 12px 18px 16px;
   background: var(--surface-panel, var(--bg-secondary));
 }
@@ -3620,10 +3625,20 @@
   cursor: pointer;
 }
 
+.ssh-tunnel-header-actions {
+  flex-shrink: 0;
+}
+
 .tunnel-icon-button {
+  flex: 0 0 36px;
   width: 36px;
   height: 36px;
   padding: 0;
+}
+
+.tunnel-icon-button:hover:not(:disabled) {
+  background: var(--action-secondary-hover);
+  border-color: var(--border-default);
 }
 
 .ssh-tunnel-actions button,
@@ -3835,6 +3850,10 @@
   gap: 8px;
   align-content: start;
   padding-top: 14px;
+}
+.ssh-tunnel-list:has(> .ssh-tunnel-empty) {
+  min-height: min-content;
+  padding-top: 2px;
 }
 .ssh-tunnel-list.is-loading {
   align-items: stretch;

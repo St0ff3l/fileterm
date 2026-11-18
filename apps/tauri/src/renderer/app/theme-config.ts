@@ -155,7 +155,7 @@ function resolveCompactUiVariables(
   const input = controls.input
   const hover =
     isCodex && !isLight
-      ? '#303030'
+      ? '#2a2a2a'
       : isLight
         ? blend(surfaceElevated, '#000000', 5.5)
         : blend(surfaceElevated, '#FFFFFF', 8)
@@ -326,7 +326,7 @@ function resolveCompactUiVariables(
     '--surface-secondary': surfaceSecondary,
     '--surface-section': section,
     '--surface-elevated': surfaceElevated,
-    '--surface-hover': alpha(ink, isLight ? 5 : 7),
+    '--surface-hover': isCodex && !isLight ? 'var(--ref-surface-hover)' : alpha(ink, isLight ? 5 : 7),
     '--surface-chip': alpha(ink, isLight ? 8 : 14),
     '--surface-inset': alpha(ink, isLight ? 3 : 5),
     '--surface-inset-border': border,
@@ -454,11 +454,6 @@ function resolveCompactUiVariables(
     '--dialog-footer-border': border,
     '--dialog-focus-ring': `0 0 0 2px ${blend(card, 'transparent', 12)}, 0 0 0 4px ${alpha(secondaryAccent, isLight ? 24 : 28)}`,
     '--dialog-warning-text': danger,
-    '--dialog-button-secondary-bg': 'transparent',
-    '--dialog-button-secondary-border': strongBorder,
-    '--dialog-button-secondary-text': ink,
-    '--dialog-button-secondary-hover-bg': `color-mix(in srgb, ${card} 90%, black)`,
-    '--dialog-button-secondary-hover-border': strongBorder,
     '--dialog-button-primary-bg': hover,
     '--dialog-button-primary-border': strongBorder,
     '--dialog-button-primary-text': ink,

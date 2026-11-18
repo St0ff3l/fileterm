@@ -46,7 +46,7 @@ export function ConnectionsSettingsPanel() {
     <div className="settings-panel">
       <section className="settings-section">
         <h3>{t.connectionDefaults}</h3>
-        <p className="settings-tools-hint connection-defaults-hint">{t.connectionDefaultsHint}</p>
+        <p className="settings-tools-hint">{t.connectionDefaultsHint}</p>
         <fieldset
           className="settings-connection-defaults"
           disabled={!desktopApi}

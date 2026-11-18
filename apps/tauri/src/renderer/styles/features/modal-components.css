@@ -1058,6 +1058,7 @@
 }
 
 .settings-modal .connection-manager-sidebar-item {
+  --manager-sidebar-item-highlight: var(--sidebar-navigation-highlight);
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 12px;
   min-height: 40px;
@@ -1131,8 +1132,12 @@
   white-space: nowrap;
 }
 
-.settings-panel .flat-button.compact {
-  border-color: var(--border-light);
+.settings-panel .flat-button.compact:not(.danger) {
+  border-color: var(--border-subtle);
+}
+
+.settings-panel .flat-button.compact:not(.danger):hover:not(:disabled) {
+  border-color: var(--border-default);
 }
 
 .sync-subtabs,
@@ -2713,16 +2718,6 @@
   border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
-}
-
-.sync-config-primary-buttons .flat-button.compact {
-  background: var(--bg-hover);
-  color: var(--text-main);
-}
-
-.sync-config-primary-buttons .flat-button.compact:hover:not(:disabled) {
-  border-color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-hover) 85%, var(--ref-surface-overlay));
 }
 
 .sync-last-synced-badge {

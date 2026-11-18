@@ -1,5 +1,8 @@
+.home-sidebar .sidebar-nav-link:is(:hover, .active) {
+  background-color: var(--sidebar-navigation-highlight);
+}
+
 .home-sidebar .sidebar-nav-link.active {
-  background: var(--surface-hover);
   border-radius: 8px;
   color: var(--text-primary);
   font-weight: 500;
