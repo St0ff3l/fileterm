@@ -705,13 +705,7 @@ export function useAppWorkspace({
 
   const launchLocalAgent = useCallback(
     (client: McpAgentClientStatus) => {
-      const launch =
-        client.id === 'claude-code'
-          ? { title: 'Claude Code', command: 'claude' }
-          : client.id === 'codex-cli'
-            ? { title: 'Codex CLI', command: 'codex' }
-            : { title: 'OpenCode', command: 'opencode' }
-      void openLocalTerminal({ title: launch.title }, launch.command)
+      void openLocalTerminal({ title: client.label }, client.launchCommand)
     },
     [openLocalTerminal]
   )

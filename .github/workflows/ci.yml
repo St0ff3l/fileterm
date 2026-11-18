@@ -217,6 +217,17 @@ jobs:
         with:
           targets: ${{ matrix.rust_target }}
 
+      # Cache the release-profile target dir built by the smoke package job.
+      # Only main refreshes it: PR runs restore the default-branch cache
+      # read-only so open pull requests cannot evict the caches that release
+      # tags restore from.
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
+          shared-key: rust-${{ matrix.rust_target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Install Windows native build dependencies
         if: runner.os == 'Windows'
         shell: pwsh

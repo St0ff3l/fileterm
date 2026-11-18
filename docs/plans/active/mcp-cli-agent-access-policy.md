@@ -1040,4 +1040,9 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] Rust route、列表可见性和 transfer 过滤统一使用两档连接策略。
 - [ ] macOS/Windows/Linux 打包后的设置页视觉、键盘操作和真实连接策略仍待人工验收。
 
+### MCP 客户端配置入口
+
+- [x] MCP 标签页提供可复制的通用 stdio 启动命令，并在 OpenCode 上方提供 dsh 配置片段。
+- [x] dsh 复用本机 CLI 检测，并识别 macOS 标准安装目录中 DeepSeek Harness 随附的 CLI。用户可复制 `cordis.patch.yml` 片段或点击启动 `dsh web`。
+
 阶段 1-6 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为、真实 SSH/FTP/设备连接仍待目标环境人工验证。

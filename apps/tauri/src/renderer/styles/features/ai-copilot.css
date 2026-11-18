@@ -3916,6 +3916,15 @@
   background: transparent;
 }
 
+.agent-mcp-registration code.agent-mcp-config {
+  font-family: var(--font-mono);
+  white-space: pre;
+}
+
+.agent-mcp-launch-copy-button {
+  margin: 3px;
+}
+
 .agent-mcp-copy-button:hover:not(:disabled) {
   color: var(--text-main);
   background: var(--bg-hover);

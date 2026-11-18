@@ -85,10 +85,11 @@ pub struct McpAgentClientStatus {
     pub id: String,
     pub label: String,
     pub command: String,
+    pub launch_command: String,
     pub available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
-    pub registration_command: String,
+    pub setup_text: String,
 }
 
 #[derive(Serialize)]

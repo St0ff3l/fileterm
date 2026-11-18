@@ -310,6 +310,8 @@ const zhCN = {
   agentMcpTabCli: 'CLI',
   agentMcpDesktopOnly: 'MCP / CLI 仅可在桌面应用中配置。',
   agentMcpRuntimeTitle: 'FileTerm MCP 本机桥接',
+  agentMcpLaunchCommandCopy: '复制通用 MCP 启动命令',
+  agentMcpLaunchCommandCopied: '通用 MCP 启动命令已复制',
   agentMcpRuntimeDescription:
     'MCP 或 CLI 通过本机回环连接已运行的 FileTerm；外部客户端应复用桥接进程，连接凭据和 SSH 会话始终留在应用内。',
   agentMcpDirectCliTitle: 'FileTerm CLI',
@@ -333,6 +335,9 @@ const zhCN = {
   agentMcpRegistration: '复制注册命令',
   agentMcpRegistrationDescription: '仅复制命令；请在本机 shell 中执行。',
   agentMcpCommandCopied: '注册命令已复制',
+  agentMcpDshConfigCopy: '复制 dsh MCP 配置',
+  agentMcpDshConfigCopied: 'dsh MCP 配置已复制',
+  agentMcpDshConfigDescription: '将这段配置合并到 dsh 所用配置档的 cordis.patch.yml。',
   agentMcpLaunch: '在 FileTerm 中启动',
   agentMcpLaunchDescription: '在新的可见本地终端中启动外部客户端；登录、密码和确认只在该终端中交互。',
   agentMcpConnectionScope: '连接范围',
@@ -2586,6 +2591,8 @@ const enUS: typeof zhCN = {
   agentMcpTabCli: 'CLI',
   agentMcpDesktopOnly: 'MCP / CLI can only be configured in the desktop app.',
   agentMcpRuntimeTitle: 'FileTerm MCP local bridge',
+  agentMcpLaunchCommandCopy: 'Copy generic MCP launch command',
+  agentMcpLaunchCommandCopied: 'Generic MCP launch command copied',
   agentMcpRuntimeDescription:
     'MCP or CLI connects to the running FileTerm app over local loopback. External clients should reuse one bridge process; credentials and SSH sessions always remain in the app.',
   agentMcpDirectCliTitle: 'FileTerm CLI',
@@ -2609,6 +2616,9 @@ const enUS: typeof zhCN = {
   agentMcpRegistration: 'Copy registration command',
   agentMcpRegistrationDescription: 'This only copies a command; run it yourself in a local shell.',
   agentMcpCommandCopied: 'Registration command copied',
+  agentMcpDshConfigCopy: 'Copy dsh MCP configuration',
+  agentMcpDshConfigCopied: 'dsh MCP configuration copied',
+  agentMcpDshConfigDescription: 'Merge this snippet into the cordis.patch.yml for your dsh profile.',
   agentMcpLaunch: 'Start in FileTerm',
   agentMcpLaunchDescription:
     'Start the external client in a new visible local terminal. Login, passwords and confirmations stay in that terminal.',

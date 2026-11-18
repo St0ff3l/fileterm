@@ -205,9 +205,13 @@ mod mcp_agent_setup_tests {
     fn generates_stdio_registration_commands_for_supported_clients() {
         let setup = app_get_mcp_agent_setup().expect("MCP Agent setup should be readable");
         assert!(!setup.fileterm_command.is_empty());
-        assert!(
-            setup.fileterm_command.starts_with(if cfg!(target_os = "windows") { "& '" } else { "'" })
-        );
+        assert!(setup
+            .fileterm_command
+            .starts_with(if cfg!(target_os = "windows") {
+                "& '"
+            } else {
+                "'"
+            }));
 
         let claude = setup
             .clients
@@ -215,20 +219,54 @@ mod mcp_agent_setup_tests {
             .find(|client| client.id == "claude-code")
             .expect("Claude Code client should be exposed");
         assert!(claude
-            .registration_command
+            .setup_text
             .starts_with("claude mcp add --scope user fileterm -- "));
-        assert!(claude.registration_command.ends_with(" mcp"));
+        assert!(claude.setup_text.ends_with(" mcp"));
 
         let codex = setup
             .clients
             .iter()
             .find(|client| client.id == "codex-cli")
             .expect("Codex CLI client should be exposed");
-        assert!(codex
-            .registration_command
-            .starts_with("codex mcp add fileterm -- "));
-        assert!(codex.registration_command.ends_with(" mcp"));
-        assert!(!codex.registration_command.contains("-- & "));
+        assert!(codex.setup_text.starts_with("codex mcp add fileterm -- "));
+        assert!(codex.setup_text.ends_with(" mcp"));
+        assert!(!codex.setup_text.contains("-- & "));
+
+        let dsh_and_opencode = setup
+            .clients
+            .windows(2)
+            .find(|clients| clients[0].id == "dsh" && clients[1].id == "opencode")
+            .expect("dsh should appear directly above OpenCode");
+        let dsh = &dsh_and_opencode[0];
+        assert_eq!(dsh.command, "dsh");
+        let expected_launch = match dsh.path.as_deref() {
+            #[cfg(target_os = "macos")]
+            Some(path) if Path::new(path).parent() == Some(Path::new(super::DSH_MACOS_CLI_DIR)) => {
+                format!("{} web", quote_executable_argument(path, false))
+            }
+            _ => "dsh web".to_string(),
+        };
+        assert_eq!(dsh.launch_command, expected_launch);
+        assert!(dsh
+            .setup_text
+            .contains("name: '@deepseek-ai/dsh-mcp-client'"));
+        assert!(dsh
+            .setup_text
+            .contains("serverName: fileterm\n        transport: stdio"));
+        assert!(dsh.setup_text.ends_with("args: [mcp]"));
+        let command = dsh
+            .setup_text
+            .lines()
+            .find_map(|line| line.strip_prefix("        command: "))
+            .expect("dsh must use the raw executable path");
+        let path: String = serde_json::from_str(command).expect("command should be a YAML string");
+        assert_eq!(
+            setup.fileterm_command,
+            executable_invocation(
+                &quote_executable_argument(&path, cfg!(target_os = "windows")),
+                cfg!(target_os = "windows")
+            )
+        );
 
         let opencode = setup
             .clients
@@ -237,9 +275,9 @@ mod mcp_agent_setup_tests {
             .expect("OpenCode client should be exposed");
         assert_eq!(opencode.command, "opencode");
         assert!(opencode
-            .registration_command
+            .setup_text
             .starts_with("opencode mcp add fileterm -- "));
-        assert!(opencode.registration_command.ends_with(" mcp"));
+        assert!(opencode.setup_text.ends_with(" mcp"));
     }
 }
 
