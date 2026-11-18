@@ -42,10 +42,11 @@ const zhCN = {
   networkTruncated: '数据已截断，仅显示部分连接',
   networkSocketHint: '3 秒刷新，离页暂停。进程信息受权限限制；流量为活动连接累计值，非网卡总量；未知为 —。',
 
-  thirdPartySoftware: '第三方开源项目',
+  thirdPartySoftware: '开源致谢',
   thirdPartyLicense: '版权声明与许可证',
-  figCompletionAttribution: '终端命令补全规则来自 Fig 的开源 autocomplete 项目，感谢 Fig 与社区贡献者。',
-  figCompletionSource: '查看 Fig 规则库',
+  openSourceInterface: '界面与终端',
+  openSourceTransfers: '连接与传输',
+  openSourceAssets: '补全、图标与主题',
   terminalCommandCompletion: '使用 FileTerm 命令候选',
   terminalCommandCompletionHint:
     '默认开启，在 SSH 终端显示 FileTerm 的命令、历史和路径候选。Tab 填入，Esc 关闭；不会执行命令。关闭后使用远端终端自身的补全。默认值用于新建连接，各连接可单独设置。',
@@ -918,7 +919,7 @@ const zhCN = {
   saveSessionLog: '保存终端内容日志',
   autoSaveSessionLog: '自动保存终端内容日志',
   autoSaveSessionLogHint:
-    '保存本连接的终端输出，供回看操作内容；“系统与日志”记录软件运行情况，用于排查故障，两者独立。不会单独采集键盘输入，但远端回显的内容可能被保存。',
+    '保存本连接的终端输出，供回看操作内容；“设置 → 日志”记录软件运行情况，用于排查故障，两者独立。不会单独采集键盘输入，但远端回显的内容可能被保存。',
   sessionLogDirectory: '保存目录',
   sessionLogDefaultDirectory: '留空使用 FileTerm 默认目录',
   chooseDirectory: '选择目录',
@@ -1888,7 +1889,9 @@ const zhCN = {
   openInSeparateWindow: '独立打开',
   settingsConnectionManagerDescription: '管理所有远程服务器连接与分组，配置 SSH / SFTP 证书、跳板机及代理隧道。',
   settingsCommandManagerDescription: '管理常用命令与快捷脚本，分类存储命令，并在 SSH 终端中一键快速发送。',
-  systemLogsInfo: '系统与日志',
+  logsSettings: '日志',
+  logRecording: '日志记录',
+  aboutSettings: '关于',
   basicLogging: '基础日志',
   basicLoggingHint: '默认开启，记录启动退出、连接结果等基本运行信息；详细诊断分类独立设置。',
   diagnosticLogCategoriesHint: '所有详细诊断默认关闭，排查问题时再按类别开启。',
@@ -1910,8 +1913,7 @@ const zhCN = {
   diagnosticLogCategory_integration: 'AI、MCP 与备份',
   diagnosticLogCategory_logging: '日志系统',
   diagnosticLogCategory_other: '其他诊断',
-  settingsLogsDescription:
-    '应用程序在运行期间会产生日志。如果遇到任何连接错误或意外崩溃，你可以打开日志目录并查看具体的日志信息。',
+  settingsLogsDescription: '查看应用运行、连接错误和崩溃的本地日志。',
   logsDirectory: '日志目录',
   aboutAppInfo: '关于 FileTerm',
   versionLabel: '应用版本',
@@ -2303,11 +2305,11 @@ const enUS: typeof zhCN = {
   networkSocketHint:
     'Refreshes every 3s; pauses off-tab. Process details require permission. Traffic totals cover active connections, not interfaces; unknown: —.',
 
-  thirdPartySoftware: 'Third-party open source',
-  thirdPartyLicense: 'Copyright and license',
-  figCompletionAttribution:
-    'Terminal completion specifications are provided by the open-source Fig autocomplete project. Thanks to Fig and its community contributors.',
-  figCompletionSource: 'View Fig specifications',
+  thirdPartySoftware: 'Open Source Credits',
+  thirdPartyLicense: 'Copyright and Licenses',
+  openSourceInterface: 'Interface and terminal',
+  openSourceTransfers: 'Connections and transfers',
+  openSourceAssets: 'Completion, icons and themes',
   terminalCommandCompletion: 'Use FileTerm command suggestions',
   terminalCommandCompletionHint:
     'Enabled by default. Show FileTerm command, history and path suggestions in SSH terminals. Tab inserts; Esc dismisses without executing. Turn off to use remote shell completion. Defaults apply to new connections; each connection can be configured separately.',
@@ -3216,7 +3218,7 @@ const enUS: typeof zhCN = {
   saveSessionLog: 'Save terminal content log',
   autoSaveSessionLog: 'Auto-save terminal content logs',
   autoSaveSessionLogHint:
-    'Saves this connection’s terminal output for later review. This is separate from System & Logs, which records app diagnostics for troubleshooting. Keyboard input is not collected separately, but remote-echoed text may be saved.',
+    'Saves this connection’s terminal output for later review. This is separate from Settings → Logs, which records app diagnostics for troubleshooting. Keyboard input is not collected separately, but remote-echoed text may be saved.',
   sessionLogDirectory: 'Save directory',
   sessionLogDefaultDirectory: 'Leave empty to use FileTerm’s default folder',
   chooseDirectory: 'Choose folder',
@@ -4249,7 +4251,9 @@ const enUS: typeof zhCN = {
     'Manage remote server connections and groups, including SSH / SFTP credentials, jump hosts, and proxy tunnels.',
   settingsCommandManagerDescription:
     'Organize reusable commands and quick scripts, then send them to the current SSH terminal with one click.',
-  systemLogsInfo: 'System & Logs',
+  logsSettings: 'Logs',
+  logRecording: 'Log Recording',
+  aboutSettings: 'About',
   basicLogging: 'Basic logs',
   basicLoggingHint:
     'On by default. Records startup, shutdown, connection results and other basic events. Detailed categories are configured separately.',
@@ -4274,8 +4278,7 @@ const enUS: typeof zhCN = {
   diagnosticLogCategory_integration: 'AI, MCP & backups',
   diagnosticLogCategory_logging: 'Logging system',
   diagnosticLogCategory_other: 'Other diagnostics',
-  settingsLogsDescription:
-    'The app writes runtime logs while it is running. If you hit a connection error or unexpected crash, open the logs directory to inspect the details.',
+  settingsLogsDescription: 'Find local logs for app activity, connection errors, and crashes.',
   logsDirectory: 'Logs Directory',
   aboutAppInfo: 'About FileTerm',
   versionLabel: 'Version',

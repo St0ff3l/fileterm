@@ -106,3 +106,34 @@
   font-size: 12px;
   line-height: 1.6;
 }
+
+.logs-settings-panel .settings-section {
+  gap: 12px;
+}
+
+.logs-shortcut-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-card);
+}
+
+.logs-shortcut-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.logs-shortcut-card .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.settings-modal .connection-manager-sidebar-icon .app-icon-document path:last-child {
+  --manager-icon-stroke-width: 1;
+}

@@ -2736,7 +2736,7 @@
 
 /* Thinned stroke for SVG icons in connection manager */
 .connection-manager-modal .app-icon * {
-  stroke-width: 1.35 !important;
+  stroke-width: var(--manager-icon-stroke-width, 1.35) !important;
 }
 
 .modal-card.manager-modal.connection-manager-modal.standalone {

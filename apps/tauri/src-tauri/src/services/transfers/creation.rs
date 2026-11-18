@@ -61,9 +61,13 @@ async fn create_upload_task(
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
-    let metadata = tokio::fs::symlink_metadata(&local_path)
-        .await
-        .map_err(|error| transfer_error(format!("无法读取本地上传路径 {local_path}: {error}")))?;
+    let metadata = upload_scan_io(
+        Path::new(&local_path),
+        "读取本地上传路径",
+        tokio::fs::symlink_metadata(&local_path),
+        UPLOAD_SCAN_IO_TIMEOUT,
+    )
+    .await?;
     if metadata.file_type().is_symlink() {
         return Err(transfer_error(
             "不支持通过符号链接上传，请选择其实际文件或目录",

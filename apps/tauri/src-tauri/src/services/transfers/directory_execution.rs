@@ -208,6 +208,16 @@ async fn run_directory_transfer(
         .await?;
     }
 
+    let scope = format!("transfer:{transfer_id}");
+    let preparation_started = std::time::Instant::now();
+    crate::services::logging::info(
+        app,
+        &scope,
+        format!(
+            "directory preparation started direction={} protocol={:?} directories={} files={} total_bytes={total_bytes} resume={resume_requested}",
+            task.direction, task.session_type, manifest.directories.len(), manifest.files.len()
+        ),
+    );
     for directory in &manifest.directories {
         if cancel.is_cancelled() {
             return Ok(());
@@ -249,6 +259,16 @@ async fn run_directory_transfer(
         }
     }
 
+    crate::services::logging::info(
+        app,
+        &scope,
+        format!(
+            "directory preparation completed elapsed_ms={}",
+            preparation_started.elapsed().as_millis()
+        ),
+    );
+
+    let files_started = std::time::Instant::now();
     let mut failed_files: Vec<String> = Vec::new();
     for index in 0..manifest.files.len() {
         if cancel.is_cancelled() {
@@ -422,6 +442,16 @@ async fn run_directory_transfer(
         )
         .await?;
     }
+    crate::services::logging::info(
+        app,
+        &scope,
+        format!(
+            "directory file transfer settled files={} failed_files={} elapsed_ms={}",
+            manifest.files.len(),
+            failed_files.len(),
+            files_started.elapsed().as_millis()
+        ),
+    );
     if task.direction == "upload" {
         if let Err(error) = refresh_remote_listing(app, tab_id).await {
             crate::services::logging::warn(
