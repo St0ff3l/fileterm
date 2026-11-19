@@ -488,6 +488,8 @@ export function HomeWorkspace({
                   sessions={sessions}
                   workspaceTabs={managementTabs}
                   focusedProfileId={focusedProfileId}
+                  isFocusMode={tabBarProps.isWorkspaceFocusMode}
+                  onToggleFocusMode={tabBarProps.onToggleWorkspaceFocus}
                   selectedFolderId={serverManagement?.selectedFolderId ?? null}
                   onSelectFolder={(folderId) => serverManagement?.navigate('overview', folderId)}
                   onOpenProfile={onOpen}

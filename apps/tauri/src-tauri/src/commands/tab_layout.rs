@@ -593,6 +593,46 @@ fn detach_session_to_background_in_tabs(
     Ok(top_level_tab_id)
 }
 
+/// Hide a GUI session in the background without closing its connection.
+/// Management mode uses this when the last terminal view for a server is
+/// closed: the view disappears, but the managed server stays connected.
+#[tauri::command]
+pub async fn app_hide_session_to_background(
+    app: AppHandle,
+    tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let active_tab_id = state.active_tab_id.read().await.clone();
+    let (top_level_tab_id, next_active_tab_id) = {
+        let mut tabs = state.tabs.write().await;
+        let top_level_tab_id = tabs
+            .iter()
+            .find(|tab| tab.id == tab_id)
+            .map(|tab| {
+                tab.pane_root_tab_id
+                    .clone()
+                    .unwrap_or_else(|| tab.id.clone())
+            })
+            .ok_or_else(|| AppError::Storage(format!("Session not found: {tab_id}")))?;
+        let tab = tabs
+            .iter_mut()
+            .find(|tab| tab.id == top_level_tab_id)
+            .ok_or_else(|| AppError::Storage(format!("Root session not found: {top_level_tab_id}")))?;
+        tab.is_background = true;
+        let next_active_tab_id = (active_tab_id.as_deref() == Some(top_level_tab_id.as_str()))
+            .then(|| next_visible_top_level_tab_id(&tabs, &top_level_tab_id))
+            .flatten();
+        (top_level_tab_id, next_active_tab_id)
+    };
+
+    if active_tab_id.as_deref() == Some(top_level_tab_id.as_str()) {
+        let mut active = state.active_tab_id.write().await;
+        *active = next_active_tab_id;
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
 fn next_visible_top_level_tab_id(
     tabs: &[crate::services::WorkspaceTab],
     hidden_tab_id: &str,

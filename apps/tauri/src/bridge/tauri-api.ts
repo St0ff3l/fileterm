@@ -678,6 +678,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     attachBackgroundSession: (tabId: string) => invoke<WorkspaceSnapshot>('app_attach_background_session', { tabId }),
     detachSessionToBackground: (tabId: string) =>
       invoke<WorkspaceSnapshot>('app_detach_session_to_background', { tabId }),
+    hideSessionToBackground: (tabId: string) => invoke<WorkspaceSnapshot>('app_hide_session_to_background', { tabId }),
     setMonitoringEnabled: (tabId, generation, enabled) =>
       invoke<WorkspaceSnapshot>('app_set_monitoring_enabled', { tabId, generation, enabled }),
     getNetworkConnections: (tabId: string) =>

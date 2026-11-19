@@ -40,13 +40,15 @@
   height: 100%;
 }
 
-/* Management mode renders no transfer strip, so the reserved bottom row stays
-   empty and doubles the height of the footer band. Let the workspace fill it. */
-.fs-shell:has(.home-workspace.is-management-mode) > .fs-main {
+/* Management mode renders no transfer strip on its home page, so the reserved
+   bottom row stays empty and doubles the height of the footer band. Let the
+   workspace fill it. Session pages still render the strip, and spanning the row
+   there would tuck the terminal dock behind it. */
+.fs-shell:has(.home-workspace.is-management-mode):not(:has(> .transfer-strip)) > .fs-main {
   grid-row: 2 / 4;
 }
 
-.fs-shell.has-window-menubar:has(.home-workspace.is-management-mode) > .fs-main {
+.fs-shell.has-window-menubar:has(.home-workspace.is-management-mode):not(:has(> .transfer-strip)) > .fs-main {
   grid-row: 3 / 5;
 }
 

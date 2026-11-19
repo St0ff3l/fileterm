@@ -181,6 +181,13 @@ test('management close returns to the overview only when the host group runs out
       closeTab: async (id) => {
         calls.push(`close:${id}`)
         return { tabs: sessions.filter((tab) => tab.id !== id), activeTabId: 'b1' }
+      },
+      hideSessionToBackground: async (id) => {
+        calls.push(`hide:${id}`)
+        return {
+          tabs: sessions.map((tab) => (tab.id === id ? { ...tab, isBackground: true } : tab)),
+          activeTabId: 'b1'
+        }
       }
     },
     null,
@@ -193,8 +200,71 @@ test('management close returns to the overview only when the host group runs out
     }
   )
   await actions.closeSessionTabById('a2')
-  assert.deepEqual(calls, ['close:a2'])
+  assert.deepEqual(calls, ['hide:a2'])
   assert.equal(state.activeLocalTabId, 'home-1')
+})
+
+test('closing a managed terminal keeps the server connection in the background', async () => {
+  const sessions = [{ id: 'a1', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a1' }]
+  const calls = []
+  const { state, actions } = fixture(
+    {
+      closeTab: async (id) => {
+        calls.push(`close:${id}`)
+        return { tabs: [], activeTabId: null }
+      },
+      hideSessionToBackground: async (id) => {
+        calls.push(`hide:${id}`)
+        return { tabs: [{ ...sessions[0], isBackground: true }], activeTabId: null }
+      }
+    },
+    null,
+    'home-1',
+    sessions,
+    {
+      serverManagementMode: true,
+      workspace: { tabs: sessions, activeTabId: 'a1' },
+      visibleActiveSessionTabId: 'a1'
+    }
+  )
+  await actions.closeSessionTabById('a1')
+  assert.deepEqual(calls, ['hide:a1'])
+  assert.equal(state.closing.length, 0)
+  assert.equal(state.activeLocalTabId, 'home-1')
+})
+
+test('closing one of several managed terminals still closes that session', async () => {
+  const sessions = [
+    { id: 'a1', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a1' },
+    { id: 'a2', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a2' }
+  ]
+  const calls = []
+  const { actions } = fixture(
+    {
+      activateTab: async (id) => {
+        calls.push(`activate:${id}`)
+        return { tabs: sessions, activeTabId: id }
+      },
+      closeTab: async (id) => {
+        calls.push(`close:${id}`)
+        return { tabs: sessions.filter((tab) => tab.id !== id), activeTabId: 'a2' }
+      },
+      hideSessionToBackground: async (id) => {
+        calls.push(`hide:${id}`)
+        return { tabs: sessions, activeTabId: 'a2' }
+      }
+    },
+    null,
+    'home-1',
+    sessions,
+    {
+      serverManagementMode: true,
+      workspace: { tabs: sessions, activeTabId: 'a1' },
+      visibleActiveSessionTabId: 'a1'
+    }
+  )
+  await actions.closeSessionTabById('a1')
+  assert.deepEqual(calls, ['activate:a2', 'close:a1'])
 })
 
 test('management connect runs the session in the background instead of opening a tab', async () => {

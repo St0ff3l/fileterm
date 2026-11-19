@@ -324,6 +324,14 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
         ...currentModes,
         [activeWorkspaceFocusKey]: nextFocusMode
       }))
+      // Session pages react on their own, but the management shell also needs a
+      // visible response, so focus mode tucks the host rail away.
+      if (isServerManagementMode) {
+        setIsHostRailCollapsed(nextFocusMode)
+        // Exiting focus restores the resource sidebar even if it was collapsed
+        // by hand, so the window tool behaves as a master toggle.
+        if (!nextFocusMode) setIsSystemSidebarCollapsed(false)
+      }
       if (!nextFocusMode) setActiveSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
     },
     orderedTabs,
@@ -366,7 +374,9 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             onToggleTerminalZoomLock={() => setTerminalZoomLocked((current) => !current)}
           />
         ) : null}
-        {(isServerManagementMode || !isHomeWorkspaceVisible) && <TabBar {...tabBarProps} orderedTabs={tabBarEntries} />}
+        {(isServerManagementMode || !isHomeWorkspaceVisible) && (
+          <TabBar {...tabBarProps} orderedTabs={tabBarEntries} showAiCopilotToggle={!isHomeWorkspaceVisible} />
+        )}
 
         {showHostRail ? (
           <HostRail

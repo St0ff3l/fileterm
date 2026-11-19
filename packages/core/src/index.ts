@@ -2962,6 +2962,7 @@ export interface FileTermDesktopApi {
   activateTab(tabId: string): Promise<WorkspaceSnapshot>
   attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
   detachSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
+  hideSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
   setMonitoringEnabled(tabId: string, generation: number, enabled: boolean): Promise<WorkspaceSnapshot>
   getNetworkConnections(tabId: string): Promise<NetworkConnectionsSnapshot>
   retryMonitoring(tabId: string, generation: number): Promise<void>

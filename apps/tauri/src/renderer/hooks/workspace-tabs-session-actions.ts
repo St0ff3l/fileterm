@@ -9,7 +9,7 @@ import { resolveSelectedTabIds, type SendScope } from '../features/common/sessio
 import { t } from '../i18n'
 import { runProfileOpenOnce } from './profile-open-guard'
 import type { WorkspaceTabsActionContext } from './workspace-tabs-types'
-import { nextTabAfterClose, nextTabInHostGroup, uniqueStrings } from './workspace-tabs-utils'
+import { isTabActivelyConnected, nextTabAfterClose, nextTabInHostGroup, uniqueStrings } from './workspace-tabs-utils'
 
 export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionContext) {
   const {
@@ -484,6 +484,21 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     setActiveLocalTabId((current) => current ?? homeId)
   }
 
+  // Closing a managed server's last terminal view should not tear down the
+  // connection that backs the overview; hide it in the background instead.
+  const shouldHideLastManagedSession = (tabId: string) => {
+    if (!context.serverManagementMode) {
+      return false
+    }
+    const closingTab = workspace.tabs.find((tab) => tab.id === tabId)
+    if (!closingTab?.profileId || !isTabActivelyConnected(closingTab)) {
+      return false
+    }
+    return !workspace.tabs.some(
+      (tab) => tab.id !== tabId && !tab.paneRootTabId && tab.profileId === closingTab.profileId
+    )
+  }
+
   const closeSessionTabById = async (tabId: string) => {
     if (!desktopApi) {
       return null
@@ -524,8 +539,15 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     if (next) setActiveLocalTabId(next.kind === 'local' ? next.id : null)
     if (context.serverManagementMode && closingActive && !next) activateManagementHome()
 
-    const snapshot = await desktopApi.closeTab(tabId)
+    const snapshot = shouldHideLastManagedSession(tabId)
+      ? await desktopApi.hideSessionToBackground(tabId)
+      : await desktopApi.closeTab(tabId)
     applySnapshot(snapshot)
+    // A hidden session stays in the snapshot, so applySnapshot keeps it in the
+    // closing set; clear it so attaching the same tab again is not filtered out.
+    if (shouldHideLastManagedSession(tabId)) {
+      setClosingSessionTabIds((current) => current.filter((id) => id !== tabId))
+    }
     if (snapshot.activeTabId === null) {
       setLocalTabs((current) => (current.length ? current : [{ id: 'home-1', kind: 'home', title: t.untitledTab }]))
       setTabOrder((current) => {

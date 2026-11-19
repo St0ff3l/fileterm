@@ -47,6 +47,16 @@
   display: none;
 }
 
+/* The host rail already closes the left edge in server management mode, so the
+   decorative transfer frame would only add a second vertical border. */
+.fs-shell.has-host-rail .file-transfer-workspace {
+  padding-inline-start: 12px;
+}
+
+.fs-shell.has-host-rail .file-transfer-workspace::before {
+  display: none;
+}
+
 .fs-shell:not(.has-host-rail, .has-ai-copilot) .file-transfer-workspace {
   padding-inline-end: 12px;
 }

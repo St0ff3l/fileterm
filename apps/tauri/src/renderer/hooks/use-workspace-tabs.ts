@@ -284,6 +284,12 @@ export function useWorkspaceTabs({
       if (current && nextLocalTabs.some((tab) => tab.id === current)) {
         return current
       }
+      // A session activation is in flight (for example attaching a background
+      // session); keep the home tab inactive so the incoming snapshot can open
+      // the terminal on the first click.
+      if (pendingActiveTabId) {
+        return null
+      }
       if (visibleWorkspaceTabs.length > 0) {
         return null
       }
@@ -295,6 +301,7 @@ export function useWorkspaceTabs({
     hasLoadedInitialSnapshot,
     isMainWorkspaceWindow,
     localTabs,
+    pendingActiveTabId,
     tabOrder,
     visibleWorkspaceTabs
   ])

@@ -146,6 +146,7 @@ export function ServerManagementOverview({
   sessions,
   workspaceTabs,
   focusedProfileId,
+  isFocusMode,
   selectedFolderId,
   onSelectFolder,
   onOpenProfile,
@@ -154,13 +155,15 @@ export function ServerManagementOverview({
   onActivateSession,
   onCreateConnection,
   onEditConnection,
-  onUpdateConnectionOrder
+  onUpdateConnectionOrder,
+  onToggleFocusMode
 }: {
   profiles: ConnectionProfile[]
   folders: ConnectionFolder[]
   sessions: Record<string, SessionSnapshot>
   workspaceTabs: WorkspaceTab[]
   focusedProfileId?: string | null
+  isFocusMode?: boolean
   selectedFolderId: string | null
   onSelectFolder(folderId: string | null): void
   onOpenProfile(profileId: string): void
@@ -174,10 +177,14 @@ export function ServerManagementOverview({
     newParentId: string | undefined,
     newOrder: number
   ): Promise<boolean> | boolean | void
+  onToggleFocusMode?(): void
 }) {
   const [query, setQuery] = useState('')
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false)
+  // Focus mode owns the side panels, so the inspector folds away with it and the
+  // expand affordance leaves focus mode instead of fighting the forced state.
+  const inspectorCollapsed = isInspectorCollapsed || Boolean(isFocusMode)
   const [dragState, setDragState] = useState<{
     draggingId: string | null
     targetId: string | null
@@ -205,6 +212,12 @@ export function ServerManagementOverview({
       current && baseProfiles.some((profile) => profile.id === current) ? current : firstBaseProfileId
     )
   }, [baseProfiles, firstBaseProfileId])
+  useEffect(() => {
+    // Leaving focus mode restores the inspector even if it was manually
+    // collapsed, so the window tools stay a predictable master toggle.
+    if (!isFocusMode) setIsInspectorCollapsed(false)
+  }, [isFocusMode])
+
   const focusedProfileRef = useRef<string | null>(null)
   useEffect(() => {
     // Coming back from a terminal selects the server that session belongs to.
@@ -330,7 +343,7 @@ export function ServerManagementOverview({
 
   return (
     <div
-      className={`server-management-overview ${selectedProfile ? 'has-inspector' : ''} ${isInspectorCollapsed ? 'is-inspector-collapsed' : ''}`}
+      className={`server-management-overview ${selectedProfile ? 'has-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}
     >
       <div className="server-dashboard-main-scroll">
         <main className="server-dashboard-main" ref={mainScrollRef}>
@@ -448,15 +461,21 @@ export function ServerManagementOverview({
       {selectedProfile ? (
         <section className="server-dashboard-inspector-region">
           <header className="server-dashboard-inspector-header">
-            {!isInspectorCollapsed ? <h2>{t.serverDashboardDetails}</h2> : null}
+            {!inspectorCollapsed ? <h2>{t.serverDashboardDetails}</h2> : null}
             <SidebarToggle
               className="server-dashboard-inspector-toggle"
-              collapsed={isInspectorCollapsed}
-              label={isInspectorCollapsed ? t.showConnectionDetails : t.hideConnectionDetails}
-              onClick={() => setIsInspectorCollapsed((current) => !current)}
+              collapsed={inspectorCollapsed}
+              label={inspectorCollapsed ? t.showConnectionDetails : t.hideConnectionDetails}
+              onClick={() => {
+                if (isFocusMode) {
+                  onToggleFocusMode?.()
+                  return
+                }
+                setIsInspectorCollapsed((current) => !current)
+              }}
             />
           </header>
-          {!isInspectorCollapsed ? (
+          {!inspectorCollapsed ? (
             <div className="server-dashboard-inspector-scroll">
               <aside
                 aria-label={t.serverDashboardDetails}

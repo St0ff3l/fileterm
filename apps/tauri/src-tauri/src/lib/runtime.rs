@@ -603,6 +603,7 @@ pub fn run() {
             crate::commands::app_activate_tab,
             crate::commands::app_attach_background_session,
             crate::commands::app_detach_session_to_background,
+            crate::commands::app_hide_session_to_background,
             crate::commands::app_reconnect_tab,
             crate::commands::app_retry_monitoring,
             crate::commands::app_get_network_connections,
