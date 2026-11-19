@@ -35,6 +35,42 @@ pub async fn app_open_profile(
     get_workspace_snapshot_and_emit(&app).await
 }
 
+/// Connect a profile without opening a visible terminal tab. The dashboard's
+/// connect action uses this so a server can be monitored (system metrics,
+/// connection history) while the overview stays in front; entering the
+/// terminal remains an explicit action that attaches the session.
+#[tauri::command]
+pub async fn app_open_profile_background(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
+    let profiles = read_json_array(&app, "profiles.json")?;
+    let profile = profiles
+        .iter()
+        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+
+    crate::services::profile_ops::touch_profile(&app, &profile_id)?;
+
+    spawn_session_for_profile(
+        &app,
+        &state,
+        profile,
+        &profile_id,
+        None,
+        None,
+        SessionSpawnOptions {
+            is_background: true,
+            source: None,
+        },
+    )
+    .await?;
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
 /// Open a saved profile for an external CLI/MCP caller and return the tab id
 /// together with the initial workspace snapshot. Background sessions remain
 /// attached to the App worker without appearing in the top-level tab bar;

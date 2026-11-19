@@ -55,6 +55,10 @@ export type UseWorkspaceTabsOptions = {
   workspace: WorkspaceSnapshot
   isMainWorkspaceWindow: boolean
   hasLoadedInitialSnapshot: boolean
+  /** Server-management mode hides connection tabs, so failed attempts must not linger. */
+  autoCloseFailedHiddenTabs?: boolean
+  /** Server-management mode groups tabs by host, so closing stays inside the active host group. */
+  serverManagementMode?: boolean
   locale: AppLocale
   transferSidebarCollapsedByDefault: boolean
   isBusy: boolean
@@ -99,6 +103,7 @@ export type WorkspaceTabsActionContext = Pick<
   | 'workspace'
   | 'isMainWorkspaceWindow'
   | 'hasLoadedInitialSnapshot'
+  | 'serverManagementMode'
   | 'isBusy'
   | 'closeActiveRequestVersion'
   | 'newTabRequestVersion'

@@ -671,6 +671,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         saveSuPassword: credentials?.saveSuPassword ?? null
       }),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
+    openProfileBackground: (profileId: string) =>
+      invoke<WorkspaceSnapshot>('app_open_profile_background', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
     attachBackgroundSession: (tabId: string) => invoke<WorkspaceSnapshot>('app_attach_background_session', { tabId }),

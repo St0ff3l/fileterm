@@ -120,6 +120,7 @@ function WorkspaceStageContent({
   onBackToLocalComputer,
   onOpenProfile,
   onConnectProfile,
+  onDisconnectSession,
   onOpenLocalTerminal,
   onReconnectLocalTerminal,
   onOpenRemoteItem,
@@ -256,6 +257,7 @@ function WorkspaceStageContent({
   onBackToLocalComputer(): void
   onOpenProfile(profileId: string): void
   onConnectProfile(profileId: string): void
+  onDisconnectSession(tabId: string): void | Promise<void>
   onOpenLocalTerminal(): void
   onReconnectLocalTerminal(tabId: string): Promise<void>
   onOpenRemoteItem(item: RemoteFileItem): void
@@ -478,6 +480,7 @@ function WorkspaceStageContent({
       overviewSectionOrder={overviewSectionOrder}
       onOpen={onOpenProfile}
       onConnectProfile={onConnectProfile}
+      onDisconnectSession={onDisconnectSession}
       onOpenFileTransfers={onOpenFileTransfers}
       backgroundTabs={backgroundTabs}
       sessions={sessions}

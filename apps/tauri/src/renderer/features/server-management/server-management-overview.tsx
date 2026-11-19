@@ -1,10 +1,18 @@
-import { useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
 import type { ConnectionFolder, ConnectionProfile, SessionSnapshot, SystemMetrics, WorkspaceTab } from '@fileterm/core'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { tabStatusClass } from '../../app/app-utils'
-import { t } from '../../i18n'
+import { getLocale, t } from '../../i18n'
+import {
+  getConnectionHistory,
+  getServerInsight,
+  hydrateServerInsights,
+  serverInsightFromMetrics,
+  subscribeServerInsights,
+  type ServerInsight
+} from './server-insights-store'
 import { StatusIndicator, type StatusIndicatorStatus } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { buildConnectionTree, flattenConnectionProfiles, type ConnectionTreeNode } from '../connections/connection-tree'
@@ -94,15 +102,55 @@ function getResourceMetrics(metrics: SystemMetrics | null) {
   }
 }
 
+function statusLabel(status: StatusIndicatorStatus) {
+  if (status === 'connected') return t.hostStatusConnected
+  if (status === 'connecting') return t.hostStatusConnecting
+  // A closed session is just "not connected"; never surface "disconnected".
+  return t.serverDashboardNotConnected
+}
+
+function formatConnectionHistoryTime(at: number) {
+  try {
+    return new Intl.DateTimeFormat(getLocale() === 'zhCN' ? 'zh-CN' : 'en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    }).format(new Date(at))
+  } catch {
+    return new Date(at).toLocaleString()
+  }
+}
+
+function formatClockTime(at: number) {
+  try {
+    return new Intl.DateTimeFormat(getLocale() === 'zhCN' ? 'zh-CN' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(at))
+  } catch {
+    return new Date(at).toLocaleTimeString()
+  }
+}
+
+function useServerInsightStore() {
+  const [, refresh] = useReducer((value: number) => value + 1, 0)
+
+  useEffect(() => {
+    void hydrateServerInsights()
+    return subscribeServerInsights(refresh)
+  }, [])
+}
+
 export function ServerManagementOverview({
   profiles,
   folders,
   sessions,
   workspaceTabs,
+  focusedProfileId,
   selectedFolderId,
   onSelectFolder,
   onOpenProfile,
   onConnectProfile,
+  onDisconnectSession,
   onActivateSession,
   onCreateConnection,
   onEditConnection,
@@ -112,10 +160,12 @@ export function ServerManagementOverview({
   folders: ConnectionFolder[]
   sessions: Record<string, SessionSnapshot>
   workspaceTabs: WorkspaceTab[]
+  focusedProfileId?: string | null
   selectedFolderId: string | null
   onSelectFolder(folderId: string | null): void
   onOpenProfile(profileId: string): void
   onConnectProfile(profileId: string): void
+  onDisconnectSession(tabId: string): void | Promise<void>
   onActivateSession(tabId: string): void
   onCreateConnection(): void
   onEditConnection(profile: ConnectionProfile): void
@@ -126,7 +176,7 @@ export function ServerManagementOverview({
   ): Promise<boolean> | boolean | void
 }) {
   const [query, setQuery] = useState('')
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(profiles[0]?.id ?? null)
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false)
   const [dragState, setDragState] = useState<{
     draggingId: string | null
@@ -135,6 +185,7 @@ export function ServerManagementOverview({
   }>({ draggingId: null, targetId: null, position: null })
   const mainScrollRef = useRef<HTMLDivElement>(null)
   const inspectorScrollRef = useRef<HTMLElement>(null)
+  useServerInsightStore()
   const tree = useMemo(() => buildConnectionTree(profiles, folders), [profiles, folders])
   const selectedFolder = selectedFolderId ? findFolder(tree.roots, selectedFolderId) : undefined
   const baseProfiles =
@@ -147,12 +198,90 @@ export function ServerManagementOverview({
       value?.toLocaleLowerCase().includes(search)
     )
   )
+  const firstBaseProfileId = baseProfiles[0]?.id ?? null
+  useEffect(() => {
+    // Default to the first connection and recover when the selected one disappears.
+    setSelectedProfileId((current) =>
+      current && baseProfiles.some((profile) => profile.id === current) ? current : firstBaseProfileId
+    )
+  }, [baseProfiles, firstBaseProfileId])
+  const focusedProfileRef = useRef<string | null>(null)
+  useEffect(() => {
+    // Coming back from a terminal selects the server that session belongs to.
+    if (!focusedProfileId || focusedProfileRef.current === focusedProfileId) {
+      return
+    }
+    focusedProfileRef.current = focusedProfileId
+    if (baseProfiles.some((profile) => profile.id === focusedProfileId)) {
+      setSelectedProfileId(focusedProfileId)
+    }
+  }, [baseProfiles, focusedProfileId])
   const selectedProfile =
     visibleProfiles.find((profile) => profile.id === selectedProfileId) ?? visibleProfiles[0] ?? null
   const selectedStatus = selectedProfile ? statusForProfile(selectedProfile.id, workspaceTabs, sessions) : null
+  const selectedBadgeStatus: StatusIndicatorStatus =
+    selectedStatus?.status === 'connected' || selectedStatus?.status === 'connecting' ? selectedStatus.status : 'idle'
   const selectedSessionTab = selectedStatus?.tab ?? null
   const selectedSessionConnected = Boolean(selectedSessionTab && sessions[selectedSessionTab.id]?.connected)
   const selectedMetrics = selectedProfile ? liveMetrics(selectedProfile.id, workspaceTabs, sessions) : null
+  const displayedInsight: ServerInsight | undefined = selectedMetrics
+    ? serverInsightFromMetrics(selectedMetrics)
+    : selectedProfile
+      ? getServerInsight(selectedProfile.id)
+      : undefined
+  const isShowingCachedInsight = !selectedMetrics && Boolean(displayedInsight)
+  const connectionHistory = selectedProfile ? getConnectionHistory(selectedProfile.id) : []
+  const insightSystemName = displayedInsight?.osName
+    ? [
+        displayedInsight.osName,
+        ...(displayedInsight.osName.trim().toLowerCase() === 'linux'
+          ? [displayedInsight.hostname, displayedInsight.kernelVersion]
+          : [])
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join(' ')
+    : null
+  const insightSystem =
+    displayedInsight && insightSystemName
+      ? `${insightSystemName}${
+          displayedInsight.architecture && !insightSystemName.includes(displayedInsight.architecture)
+            ? ` (${displayedInsight.architecture})`
+            : ''
+        }`
+      : null
+  const insightUptime = (() => {
+    if (!displayedInsight) {
+      return null
+    }
+    const seconds = displayedInsight.uptimeSeconds
+    if (seconds && seconds > 0) {
+      const days = Math.floor(seconds / 86400)
+      const hours = Math.floor((seconds % 86400) / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const parts: string[] = []
+      if (days > 0) {
+        parts.push(`${days}${t.uptimeDayUnit}`)
+      }
+      if (hours > 0) {
+        parts.push(`${hours}${t.uptimeHourUnit}`)
+      }
+      if (!days && !hours && minutes > 0) {
+        parts.push(`${minutes}${t.uptimeMinuteUnit}`)
+      }
+      return parts.length ? parts.join(' ') : t.uptimeJustNow
+    }
+    return displayedInsight.uptime ?? null
+  })()
+  const insightCpu = displayedInsight?.cpuModel
+    ? displayedInsight.cpuCores
+      ? `${displayedInsight.cpuModel} (${t.serverInspectorCores.replace('{cores}', String(displayedInsight.cpuCores))})`
+      : displayedInsight.cpuModel
+    : null
+  const insightDisk =
+    displayedInsight?.diskUsed && displayedInsight.diskSize
+      ? `${displayedInsight.diskUsed} / ${displayedInsight.diskSize}`
+      : (displayedInsight?.diskSize ?? null)
+  const insightDiskPercent = displayedInsight?.diskPercent ?? null
   const connectedCount = baseProfiles.filter((profile) =>
     workspaceTabs.some((tab) => tab.profileId === profile.id && sessions[tab.id]?.connected)
   ).length
@@ -243,6 +372,10 @@ export function ServerManagementOverview({
             <section aria-label={title} className="server-dashboard-grid">
               {visibleProfiles.map((profile) => {
                 const connectionStatus = statusForProfile(profile.id, workspaceTabs, sessions)
+                const connectionBadgeStatus: StatusIndicatorStatus =
+                  connectionStatus?.status === 'connected' || connectionStatus?.status === 'connecting'
+                    ? connectionStatus.status
+                    : 'idle'
                 const metrics = liveMetrics(profile.id, workspaceTabs, sessions)
                 const resources = getResourceMetrics(metrics)
                 const isSelected = selectedProfile?.id === profile.id
@@ -269,19 +402,13 @@ export function ServerManagementOverview({
                     <span className="server-dashboard-card-heading">
                       <MaterialIcon name={profile.type === 'serial' ? 'usb' : 'dns'} />
                       <strong>{profile.name}</strong>
-                      {connectionStatus ? (
-                        <span className={`server-dashboard-status is-${connectionStatus.status}`}>
-                          <StatusIndicator aria-hidden="true" status={connectionStatus.status} />
-                          {connectionStatus.status === 'connected'
-                            ? t.hostStatusConnected
-                            : connectionStatus.status === 'connecting'
-                              ? t.hostStatusConnecting
-                              : connectionStatus.status === 'disconnected'
-                                ? t.hostStatusDisconnected
-                                : t.hostStatusIdle}
-                        </span>
-                      ) : (
+                      {connectionBadgeStatus === 'idle' ? (
                         <span className="server-dashboard-status is-idle">{t.serverDashboardNotConnected}</span>
+                      ) : (
+                        <span className={`server-dashboard-status is-${connectionBadgeStatus}`}>
+                          <StatusIndicator aria-hidden="true" status={connectionBadgeStatus} />
+                          {statusLabel(connectionBadgeStatus)}
+                        </span>
                       )}
                     </span>
                     <span className="server-dashboard-address">{connectionProfileSummary(profile)}</span>
@@ -290,7 +417,14 @@ export function ServerManagementOverview({
                       <ResourceRing label={t.memory} value={resources.memory} detail={resources.memoryDetail} />
                       <ResourceRing label={t.disk} value={resources.disk} detail={resources.diskDetail} />
                     </span>
-                    <span className="server-dashboard-card-foot">{profile.note || profile.type.toUpperCase()}</span>
+                    <span className="server-dashboard-card-foot">
+                      {profile.note ? (
+                        <span className="server-dashboard-card-note" title={profile.note}>
+                          {profile.note}
+                        </span>
+                      ) : null}
+                      <span className="server-dashboard-card-type">{profile.type.toUpperCase()}</span>
+                    </span>
                   </article>
                 )
               })}
@@ -314,12 +448,7 @@ export function ServerManagementOverview({
       {selectedProfile ? (
         <section className="server-dashboard-inspector-region">
           <header className="server-dashboard-inspector-header">
-            {!isInspectorCollapsed ? (
-              <h2>
-                <MaterialIcon name="dns" />
-                {t.serverDashboardDetails}
-              </h2>
-            ) : null}
+            {!isInspectorCollapsed ? <h2>{t.serverDashboardDetails}</h2> : null}
             <SidebarToggle
               className="server-dashboard-inspector-toggle"
               collapsed={isInspectorCollapsed}
@@ -334,72 +463,151 @@ export function ServerManagementOverview({
                 className="server-dashboard-inspector"
                 ref={inspectorScrollRef}
               >
-                <dl>
-                  <div>
-                    <dt>{t.host}</dt>
-                    <dd>{selectedProfile.host}</dd>
+                <div className="server-inspector-hero">
+                  <div className="server-inspector-name-row">
+                    <strong title={selectedProfile.name}>{selectedProfile.name}</strong>
+                    <span className={`server-dashboard-status is-${selectedBadgeStatus}`}>
+                      <StatusIndicator aria-hidden="true" status={selectedBadgeStatus} />
+                      {statusLabel(selectedBadgeStatus)}
+                    </span>
                   </div>
-                  <div>
-                    <dt>{t.port}</dt>
-                    <dd>{selectedProfile.port}</dd>
-                  </div>
-                  <div>
-                    <dt>{t.username}</dt>
-                    <dd>{selectedProfile.username || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>{t.serverDashboardSystem}</dt>
-                    <dd>{selectedMetrics?.identity.osName ?? t.serverDashboardNoMetrics}</dd>
-                  </div>
-                  <div>
-                    <dt>{t.note}</dt>
-                    <dd>{selectedProfile.note || '—'}</dd>
-                  </div>
-                </dl>
-                {selectedMetrics ? (
-                  <div className="server-dashboard-inspector-metrics">
-                    <ResourceRing label="CPU" value={selectedMetrics.cpuPercent} />
-                    <ResourceRing
-                      label={t.memory}
-                      value={selectedMetrics.memoryPercent}
-                      detail={selectedMetrics.memoryUsage}
-                    />
-                    <ResourceRing
-                      label={t.disk}
-                      value={diskPercent(selectedMetrics)}
-                      detail={selectedMetrics.fileSystemRows[0]?.usagePercent}
-                    />
-                  </div>
-                ) : (
-                  <p className="server-dashboard-inspector-empty">{t.serverDashboardNoMetrics}</p>
-                )}
-                <div className="server-dashboard-inspector-actions">
-                  <button
-                    className="server-dashboard-connect"
-                    disabled={selectedSessionConnected || selectedStatus?.status === 'connecting'}
-                    onClick={() => onConnectProfile(selectedProfile.id)}
-                    type="button"
-                  >
-                    <MaterialIcon name="cloud_sync" />
-                    {selectedSessionConnected
-                      ? t.serverDashboardConnected
-                      : selectedStatus?.status === 'connecting'
-                        ? t.serverDashboardConnecting
-                        : t.serverDashboardConnect}
-                  </button>
-                  <button className="server-dashboard-open" onClick={openWorkspace} type="button">
+                  <p className="server-inspector-address" title={connectionProfileSummary(selectedProfile)}>
+                    {selectedProfile.type === 'serial'
+                      ? connectionProfileSummary(selectedProfile)
+                      : `${selectedProfile.username}@${selectedProfile.host}:${selectedProfile.port}`}
+                  </p>
+                </div>
+
+                <div className="server-inspector-actions">
+                  {selectedSessionConnected && selectedSessionTab ? (
+                    <button
+                      className="server-inspector-action is-danger"
+                      onClick={() => void onDisconnectSession(selectedSessionTab.id)}
+                      type="button"
+                    >
+                      <MaterialIcon name="stop" />
+                      {t.disconnect}
+                    </button>
+                  ) : (
+                    <button
+                      className="server-inspector-action is-primary"
+                      disabled={selectedStatus?.status === 'connecting'}
+                      onClick={() => onConnectProfile(selectedProfile.id)}
+                      type="button"
+                    >
+                      <MaterialIcon name="cloud_sync" />
+                      {selectedStatus?.status === 'connecting' ? t.serverDashboardConnecting : t.connect}
+                    </button>
+                  )}
+                  <button className="server-inspector-action" onClick={openWorkspace} type="button">
                     <MaterialIcon name="terminal" />
-                    {t.serverDashboardOpenWorkspace}
+                    {t.serverInspectorTerminal}
                   </button>
                   <button
-                    className="server-dashboard-edit"
+                    className="server-inspector-action"
                     onClick={() => onEditConnection(selectedProfile)}
                     type="button"
                   >
                     <MaterialIcon name="edit" />
-                    {t.serverDashboardEdit}
+                    {t.edit}
                   </button>
                 </div>
+
+                <section className="server-inspector-card">
+                  <header className="server-inspector-card-header">
+                    <MaterialIcon name="dns" />
+                    <strong>{t.serverInspectorConfig}</strong>
+                    {isShowingCachedInsight && displayedInsight ? (
+                      <small>
+                        {t.serverInspectorLastUpdated.replace('{time}', formatClockTime(displayedInsight.updatedAt))}
+                      </small>
+                    ) : null}
+                  </header>
+                  {displayedInsight ? (
+                    <dl className="server-inspector-config">
+                      <div className="is-wide">
+                        <dt>
+                          <MaterialIcon name="dns" />
+                          {t.serverInspectorSystem}
+                        </dt>
+                        <dd className="server-inspector-system" title={insightSystem ?? undefined}>
+                          {insightSystem ?? '—'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <MaterialIcon name="history" />
+                          {t.serverInspectorUptime}
+                        </dt>
+                        <dd title={insightUptime ?? undefined}>{insightUptime ?? '—'}</dd>
+                      </div>
+                      <div className="is-wide">
+                        <dt>
+                          <MaterialIcon name="tune" />
+                          {t.serverInspectorProcessor}
+                        </dt>
+                        <dd title={insightCpu ?? undefined}>{insightCpu ?? '—'}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <MaterialIcon name="dashboard" />
+                          {t.memory}
+                        </dt>
+                        <dd>{displayedInsight.memoryTotal ?? '—'}</dd>
+                      </div>
+                      <div className="is-wide">
+                        <dt>
+                          <MaterialIcon name="folder" />
+                          {t.disk}
+                        </dt>
+                        <dd className="server-inspector-disk">
+                          <span>{insightDisk ?? '—'}</span>
+                          {insightDiskPercent === null ? null : (
+                            <>
+                              <span
+                                aria-valuemax={100}
+                                aria-valuemin={0}
+                                aria-valuenow={Math.round(insightDiskPercent)}
+                                className="server-inspector-disk-track"
+                                role="progressbar"
+                              >
+                                <span style={{ width: `${Math.round(insightDiskPercent)}%` }} />
+                              </span>
+                              <span className="server-inspector-disk-percent">{Math.round(insightDiskPercent)}%</span>
+                            </>
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                  ) : (
+                    <p className="server-inspector-empty">{t.serverInspectorNoData}</p>
+                  )}
+                </section>
+
+                <section className="server-inspector-card">
+                  <header className="server-inspector-card-header">
+                    <MaterialIcon name="history" />
+                    <strong>{t.serverInspectorHistory}</strong>
+                  </header>
+                  {connectionHistory.length ? (
+                    <ul className="server-inspector-history">
+                      {connectionHistory.map((entry) => (
+                        <li key={entry.id} title={entry.error}>
+                          <span
+                            aria-hidden="true"
+                            className={`server-inspector-history-dot ${entry.ok ? 'is-success' : 'is-failure'}`}
+                          />
+                          <span className="server-inspector-history-time">{formatConnectionHistoryTime(entry.at)}</span>
+                          <span className={`server-inspector-history-tag ${entry.ok ? 'is-success' : 'is-failure'}`}>
+                            {entry.ok ? t.serverInspectorHistorySuccess : t.serverInspectorHistoryFailed}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="server-inspector-empty">{t.serverInspectorHistoryEmpty}</p>
+                  )}
+                </section>
               </aside>
               <VerticalScrollbar ariaLabel={t.serverDashboardDetails} scrollRef={inspectorScrollRef} />
             </div>

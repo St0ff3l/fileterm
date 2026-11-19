@@ -40,8 +40,51 @@
   height: 100%;
 }
 
-.home-workspace.is-management-mode .home-content-body {
-  margin-bottom: 12px;
+/* Management mode renders no transfer strip, so the reserved bottom row stays
+   empty and doubles the height of the footer band. Let the workspace fill it. */
+.fs-shell:has(.home-workspace.is-management-mode) > .fs-main {
+  grid-row: 2 / 4;
+}
+
+.fs-shell.has-window-menubar:has(.home-workspace.is-management-mode) > .fs-main {
+  grid-row: 3 / 5;
+}
+
+/* The detail inspector runs to the window bottom, so the footer only spans the
+   dashboard column instead of cutting the inspector off. Other management
+   pages keep the footer in flow so the 12px bottom gap stays visible. */
+.home-workspace.is-management-mode .home-main-content:has(.server-management-overview) .home-footer {
+  position: absolute;
+  right: auto;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: var(--surface-canvas);
+}
+
+.home-workspace.is-management-mode
+  .home-main-content:has(.server-management-overview.has-inspector:not(.is-inspector-collapsed))
+  .home-footer {
+  width: calc(100% - 320px);
+}
+
+.home-workspace.is-management-mode
+  .home-main-content:has(.server-management-overview.has-inspector.is-inspector-collapsed)
+  .home-footer {
+  width: calc(100% - 44px);
+}
+
+/* Narrow windows stack the inspector under the dashboard, so the footer spans
+   the full width again. */
+@media (max-width: 760px) {
+  .home-workspace.is-management-mode
+    .home-main-content:has(.server-management-overview.has-inspector:not(.is-inspector-collapsed))
+    .home-footer,
+  .home-workspace.is-management-mode
+    .home-main-content:has(.server-management-overview.has-inspector.is-inspector-collapsed)
+    .home-footer {
+    width: 100%;
+  }
 }
 
 .home-workspace.is-management-mode .home-content-body.is-server-management-overview {
@@ -59,9 +102,5 @@
 }
 
 .home-workspace.is-management-mode .home-main-content > .vertical-scrollbar {
-  bottom: 0;
-}
-
-.home-workspace.is-management-mode .home-footer {
-  display: none;
+  bottom: 24px;
 }

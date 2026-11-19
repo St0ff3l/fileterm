@@ -18,6 +18,7 @@ export type OrderedTabEntry =
       tabKind: 'home' | 'system' | 'transfers'
       backgroundSessionsRequest?: number
       sessionTabId?: string
+      initialTabId?: string
     }
   | { key: string; kind: 'session'; tab: WorkspaceTab }
 
@@ -64,7 +65,7 @@ export interface TabBarProps {
   onToggleWindowMaximize(): void
   onToggleWorkspaceFocus(): void
   orderedTabs: OrderedTabEntry[]
-  /** The management shell keeps local workspace pages out of the tab bar. */
+  /** The management shell keeps the home workspace tab out of the tab bar. */
   sessionOnly?: boolean
 }
 
@@ -99,7 +100,11 @@ export function TabBar({
   orderedTabs,
   sessionOnly = false
 }: TabBarProps) {
-  const visibleTabs = sessionOnly ? orderedTabs.filter((entry) => entry.kind === 'session') : orderedTabs
+  // System and transfer pages belong to their server, so a grouped tab bar still
+  // shows them next to that server's sessions and only drops the home tab.
+  const visibleTabs = sessionOnly
+    ? orderedTabs.filter((entry) => entry.kind === 'session' || entry.tabKind !== 'home')
+    : orderedTabs
   const focusModeLabel = isWorkspaceFocusMode ? t.exitWorkspaceFocusMode : t.enterWorkspaceFocusMode
   const aiCopilotLabel = isAiCopilotOpen ? t.closeAiCopilot : t.openAiCopilot
   const suppressTabClickRef = useRef(false)

@@ -11,7 +11,7 @@ import { TabBar, type TabBarProps, type TabContextTarget } from './tab-bar'
 import type { AppViewModel } from './app-view-model'
 import { WindowMenubar } from './window-menubar'
 import { HostRail } from './host-rail'
-import { sessionHostGroupKey } from './host-groups'
+import { entryHostGroupKey, sessionHostGroupKey } from './host-groups'
 import { useWorkspaceTabShortcuts } from './use-workspace-tab-shortcuts'
 import { DEFAULT_SIDEBAR_WIDTH, STATUS_MESSAGE_TIMEOUT_MS } from '../../app/app-shell-utils'
 import { t, setLocale } from '../../i18n'
@@ -86,6 +86,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     detachSessionToBackground,
     closeBackgroundSession,
     reconnectSessionTab,
+    disconnectSessionTab,
     openTabContextMenu,
     startTabDrag,
     enterDraggedTab,
@@ -220,15 +221,25 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   // A collapsed sidebar keeps enough titlebar space for the native window controls.
   // Management mode keeps the server navigator on the left and live system info on the right.
   const showHostRail = isServerManagementMode
-  const activeSessionGroupKey = activeTab ? sessionHostGroupKey(activeTab) : null
-  const tabBarEntries = isServerManagementMode
-    ? orderedTabs.filter(
-        (entry) =>
-          entry.kind === 'session' &&
-          activeSessionGroupKey !== null &&
-          sessionHostGroupKey(entry.tab) === activeSessionGroupKey
-      )
-    : orderedTabs
+  const activeLocalEntry =
+    activeLocalTab && activeLocalTab.kind !== 'home'
+      ? (orderedTabs.find((entry) => entry.kind === 'local' && entry.id === activeLocalTab.id) ?? null)
+      : null
+  const activeSessionGroupKey = activeTab
+    ? sessionHostGroupKey(activeTab)
+    : activeLocalEntry
+      ? entryHostGroupKey(activeLocalEntry, visibleWorkspaceTabs)
+      : null
+  const tabBarEntries =
+    isServerManagementMode && activeSessionGroupKey !== null
+      ? orderedTabs.filter((entry) =>
+          entry.kind === 'session'
+            ? sessionHostGroupKey(entry.tab) === activeSessionGroupKey
+            : entry.tabKind !== 'home' && entryHostGroupKey(entry, visibleWorkspaceTabs) === activeSessionGroupKey
+        )
+      : isServerManagementMode
+        ? []
+        : orderedTabs
   const brandWidth = showHostRail
     ? isHostRailCollapsed
       ? DEFAULT_SIDEBAR_WIDTH
@@ -264,15 +275,11 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   )
   useWorkspaceTabShortcuts({
     tabs: tabBarEntries,
-    activeKey: isServerManagementMode
-      ? visibleActiveSessionTabId
+    activeKey: effectiveActiveLocalTabId
+      ? `home:${effectiveActiveLocalTabId}`
+      : visibleActiveSessionTabId
         ? `session:${visibleActiveSessionTabId}`
-        : null
-      : effectiveActiveLocalTabId
-        ? `home:${effectiveActiveLocalTabId}`
-        : visibleActiveSessionTabId
-          ? `session:${visibleActiveSessionTabId}`
-          : null,
+        : null,
     onActivateHome: activateHomeTab,
     onActivateSession: activateSession
   })
@@ -519,6 +526,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 onBackToLocalComputer={handleBackToLocalComputer}
                 onOpenProfile={openProfile}
                 onConnectProfile={connectProfile}
+                onDisconnectSession={disconnectSessionTab}
                 onOpenLocalTerminal={() => void openLocalTerminal()}
                 onLaunchLocalAgent={launchLocalAgent}
                 onReconnectLocalTerminal={reconnectSessionTab}

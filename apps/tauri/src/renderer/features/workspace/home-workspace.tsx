@@ -33,7 +33,7 @@ import { McpCallLogPage } from './mcp-call-log-page'
 import { SettingsModal } from '../settings/settings-modal'
 import { TabBar, type TabBarProps } from '../layout/tab-bar'
 import { BackgroundSessionsPage } from './background-sessions-page'
-import type { ServerManagementNavigation } from '../server-management/server-management-types'
+import type { ServerManagementNavigation, ServerManagementPage } from '../server-management/server-management-types'
 import { ServerManagementOverview } from '../server-management/server-management-overview'
 
 export function HomeWorkspace({
@@ -56,6 +56,7 @@ export function HomeWorkspace({
   overviewSectionOrder,
   onOpen,
   onConnectProfile,
+  onDisconnectSession,
   onOpenFileTransfers,
   onOpenLocalTerminal,
   onCreateConnection,
@@ -107,6 +108,7 @@ export function HomeWorkspace({
   overviewSectionOrder: OverviewSectionId[]
   onOpen(profileId: string): void
   onConnectProfile(profileId: string): void
+  onDisconnectSession(tabId: string): void | Promise<void>
   onOpenFileTransfers(): void
   onOpenLocalTerminal(): void
   onCreateConnection(): void
@@ -191,16 +193,48 @@ export function HomeWorkspace({
     'mcp-call-log': 6,
     settings: 7
   }
+  const resolveNavDirection = (fromPage: string, toPage: string) =>
+    (tabOrder[toPage] ?? 0) >= (tabOrder[fromPage] ?? 0) ? 'down' : 'up'
   const selectTab = (tab: typeof activeTab) => {
     const currentPage = isServerManagementMode ? managementPage : activeTab
     if (tab === currentPage) return
     setSuppressEntrance(false)
-    setNavDirection((tabOrder[tab] ?? 0) >= (tabOrder[currentPage] ?? 0) ? 'down' : 'up')
+    setNavDirection(resolveNavDirection(currentPage, tab))
     setActiveTab(tab)
     if (isServerManagementMode) serverManagement?.navigate(tab)
   }
 
+  // Management navigation lives in the host rail, so it bypasses selectTab().
+  // Mirror the default-mode page transition whenever the page changes there.
+  const previousManagementPageRef = useRef<ServerManagementPage | null>(null)
+  useLayoutEffect(() => {
+    if (!isServerManagementMode) {
+      previousManagementPageRef.current = null
+      return
+    }
+    const previousPage = previousManagementPageRef.current
+    previousManagementPageRef.current = managementPage
+    if (previousPage === null || previousPage === managementPage) return
+    setSuppressEntrance(false)
+    setNavDirection(resolveNavDirection(previousPage, managementPage))
+  }, [isServerManagementMode, managementPage])
+
   const desktopApi = window.fileterm
+  // Sessions the dashboard owns: visible tabs plus the background connections
+  // created by the connect action.
+  const managementTabs = [
+    ...tabBarProps.orderedTabs.flatMap((entry) => (entry.kind === 'session' ? [entry.tab] : [])),
+    ...backgroundTabs
+  ]
+  const lastActiveSessionTabId = useRef<string | null>(null)
+  if (tabBarProps.activeSessionTabId) {
+    lastActiveSessionTabId.current = tabBarProps.activeSessionTabId
+  }
+  // Remember the server the user came from so returning to the overview lands
+  // on the matching connection instead of whatever was selected before.
+  const focusedProfileId =
+    managementTabs.find((tab) => tab.id === (tabBarProps.activeSessionTabId ?? lastActiveSessionTabId.current))
+      ?.profileId ?? null
   const { openExternalUrl, externalUrlError } = useExternalUrl(desktopApi, t.openExternalUrlFailed)
   // Keep Linux on the same compact home-shell layout as Windows. macOS keeps
   // its sidebar wordmark because it has native traffic lights above it.
@@ -452,13 +486,13 @@ export function HomeWorkspace({
                   profiles={profiles}
                   folders={folders}
                   sessions={sessions}
-                  workspaceTabs={tabBarProps.orderedTabs.flatMap((entry) =>
-                    entry.kind === 'session' ? [entry.tab] : []
-                  )}
+                  workspaceTabs={managementTabs}
+                  focusedProfileId={focusedProfileId}
                   selectedFolderId={serverManagement?.selectedFolderId ?? null}
                   onSelectFolder={(folderId) => serverManagement?.navigate('overview', folderId)}
                   onOpenProfile={onOpen}
                   onConnectProfile={onConnectProfile}
+                  onDisconnectSession={onDisconnectSession}
                   onActivateSession={tabBarProps.onActivateSession}
                   onCreateConnection={onCreateConnection}
                   onEditConnection={onEditConnection}

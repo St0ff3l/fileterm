@@ -43,6 +43,14 @@
   padding-right: 16px;
 }
 
+/* Management mode keeps the title at its original offset from the top and
+   lets the list start right below it. */
+.fs-host-rail:has(.server-management-sidebar-content) .fs-host-rail-header {
+  min-height: 0;
+  padding-top: 12px;
+  padding-bottom: 2px;
+}
+
 .fs-host-rail-header .fs-host-rail-title {
   padding-block: 0;
 }

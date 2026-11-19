@@ -73,6 +73,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     fileEditorWindowTabId,
     fileEditorWindowEncoding,
     hasLoadedInitialSnapshot: shell.hasLoadedInitialSnapshot,
+    autoCloseFailedHiddenTabs: shell.workspaceMode === 'server-management',
+    serverManagementMode: shell.workspaceMode === 'server-management',
     locale: shell.locale,
     connectionDefaults: shell.connectionDefaults,
     filePanelRememberRatio: shell.filePanelRememberRatio,

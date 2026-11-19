@@ -152,14 +152,17 @@ export function ServerManagementSidebar({
     { page: 'mcp-call-log', label: t.mcpCallRecordsTitle, icon: 'log' },
     { page: 'settings', label: t.settings, icon: 'settings' }
   ]
+  // A session tab in front means no management page is visible, so the nav
+  // should not keep claiming one of its entries is current.
+  const navActive = !activeSessionTabId
 
   return (
     <div className="server-management-sidebar-content">
       <nav aria-label={t.serverManagementNavigation} className="server-management-nav">
         {navItems.map(({ page: itemPage, label, icon }) => (
           <button
-            aria-current={page === itemPage ? 'page' : undefined}
-            className={`sidebar-nav-link ${page === itemPage ? 'active' : ''}`}
+            aria-current={navActive && page === itemPage ? 'page' : undefined}
+            className={`sidebar-nav-link ${navActive && page === itemPage ? 'active' : ''}`}
             key={itemPage}
             onClick={() => onNavigate(itemPage, itemPage === 'overview' ? null : selectedFolderId)}
             title={label}
@@ -173,13 +176,14 @@ export function ServerManagementSidebar({
 
       <section aria-label={t.serverConnections} className="server-management-connections">
         {!collapsed ? <h3>{t.serverConnections}</h3> : null}
-        <div className="server-management-tree-container">
-          <ul className="server-management-tree" ref={treeRef}>
-            {tree.length ? tree.map((node) => renderNode(node)) : null}
-          </ul>
-          <VerticalScrollbar ariaLabel={t.serverConnections} scrollRef={treeRef} />
-        </div>
-        {tree.length === 0 && !collapsed ? (
+        {tree.length ? (
+          <div className="server-management-tree-container">
+            <ul className="server-management-tree" ref={treeRef}>
+              {tree.map((node) => renderNode(node))}
+            </ul>
+            <VerticalScrollbar ariaLabel={t.serverConnections} scrollRef={treeRef} />
+          </div>
+        ) : !collapsed ? (
           <p className="server-management-empty">{t.noActiveServerConnections}</p>
         ) : null}
       </section>

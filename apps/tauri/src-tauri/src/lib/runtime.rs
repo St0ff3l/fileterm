@@ -599,6 +599,7 @@ pub fn run() {
             crate::commands::app_show_window_menu,
             // Phase 3 commands
             crate::commands::app_open_profile,
+            crate::commands::app_open_profile_background,
             crate::commands::app_activate_tab,
             crate::commands::app_attach_background_session,
             crate::commands::app_detach_session_to_background,

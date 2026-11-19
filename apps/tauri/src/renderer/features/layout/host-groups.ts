@@ -5,7 +5,7 @@ import type { OrderedTabEntry } from './tab-bar'
  * Tabs are grouped by the machine they belong to: the left rail lists the
  * groups and the tab bar only shows the tabs of the active group.
  *
- * - `home`: home/overview tabs (and system-info tabs whose session is gone)
+ * - `home`: home/overview tabs (and system-info or transfer tabs whose session is gone)
  * - `local`: every local terminal
  * - `profile:<id>`: every session opened from the same connection profile
  */
@@ -38,8 +38,10 @@ export function entryHostGroupKey(entry: OrderedTabEntry, sessionTabs: readonly 
   if (entry.kind === 'session') {
     return sessionHostGroupKey(entry.tab)
   }
-  if (entry.tabKind === 'system' && entry.sessionTabId) {
-    const sessionTab = sessionTabs.find((tab) => tab.id === entry.sessionTabId)
+  const sourceTabId =
+    entry.tabKind === 'system' ? entry.sessionTabId : entry.tabKind === 'transfers' ? entry.initialTabId : undefined
+  if (sourceTabId) {
+    const sessionTab = sessionTabs.find((tab) => tab.id === sourceTabId)
     if (sessionTab) {
       return sessionHostGroupKey(sessionTab)
     }

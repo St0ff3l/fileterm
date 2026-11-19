@@ -2957,6 +2957,7 @@ export interface FileTermDesktopApi {
   testConnection(input: CreateProfileInput, profileId?: string): Promise<void>
   deleteProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfile(profileId: string): Promise<WorkspaceSnapshot>
+  openProfileBackground(profileId: string): Promise<WorkspaceSnapshot>
   openProfileFromManager(profileId: string): Promise<WorkspaceSnapshot>
   activateTab(tabId: string): Promise<WorkspaceSnapshot>
   attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
