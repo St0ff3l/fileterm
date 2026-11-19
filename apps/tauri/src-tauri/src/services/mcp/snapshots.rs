@@ -34,7 +34,7 @@ fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
         "pathRoots": shell_root.map(|root| json!({
             "shell": root,
             "fileView": "/",
-            "note": "Possible Synology mapping inferred from shellCwd. FileTerm checks the original SFTP path first."
+            "note": "Inferred for this connection from shellCwd; roots can differ by server. FileTerm checks the exact SFTP path before trying an alias."
         })),
         "capabilities": session.get("capabilities"),
     })

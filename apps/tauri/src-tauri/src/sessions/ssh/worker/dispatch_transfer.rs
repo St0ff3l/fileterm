@@ -146,6 +146,14 @@ async fn dispatch_transfer_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
+            let shell_cwd = state
+                .sessions
+                .read()
+                .await
+                .get(&tab_id)
+                .and_then(|session| session.shell_cwd.clone());
+            let checksum_paths =
+                sftp_transfer_checksum_paths(&remote_path, &fam, shell_cwd.as_deref());
             let checksum_timeout = checksum_timeout_for_size(
                 operation_timeout,
                 source_size,
@@ -231,7 +239,7 @@ async fn dispatch_transfer_cmd(
                         let verification = verify_sftp_transfer_sha256(
                             &handle,
                             &hash,
-                            &remote_path,
+                            &checksum_paths,
                             &fam,
                             method,
                             &su,
@@ -295,6 +303,14 @@ async fn dispatch_transfer_cmd(
             let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
+            let shell_cwd = state
+                .sessions
+                .read()
+                .await
+                .get(&tab_id)
+                .and_then(|session| session.shell_cwd.clone());
+            let checksum_paths =
+                sftp_transfer_checksum_paths(&remote_path, &fam, shell_cwd.as_deref());
             tokio::spawn(async move {
                 let mut result = if fam == "root" {
                     download_root_remote_file(
@@ -386,7 +402,7 @@ async fn dispatch_transfer_cmd(
                                 verify_sftp_transfer_sha256(
                                     &handle,
                                     &hash,
-                                    &remote_path,
+                                    &checksum_paths,
                                     &fam,
                                     method,
                                     &su,

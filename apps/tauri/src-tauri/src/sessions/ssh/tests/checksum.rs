@@ -62,3 +62,59 @@ fn checksum_unavailable_marker_in_a_filename_does_not_skip_verification() {
     )
     .is_err());
 }
+
+#[test]
+fn user_mode_checksum_checks_the_observed_shell_namespace_alias() {
+    let paths = super::sftp_transfer_checksum_paths(
+        "/docker/apple-music/.env.example",
+        "user",
+        Some("/volume1/homes/Stoffel"),
+    );
+    assert_eq!(
+        paths,
+        vec![
+            "/volume1/docker/apple-music/.env.example".to_string(),
+            "/docker/apple-music/.env.example".to_string()
+        ]
+    );
+}
+
+#[test]
+fn root_mode_checksum_keeps_the_privileged_shell_path() {
+    let paths = super::sftp_transfer_checksum_paths(
+        "/volume1/docker/apple-music/.env.example",
+        "root",
+        Some("/volume1/homes/Stoffel"),
+    );
+    assert_eq!(
+        paths,
+        vec!["/volume1/docker/apple-music/.env.example".to_string()]
+    );
+}
+
+#[test]
+fn remote_checksum_command_checks_quoted_paths_in_order() {
+    let command = super::remote_sha256_command(&[
+        "/volume1/docker/apple music/.env.example".to_string(),
+        "/docker/apple music/.env.example".to_string(),
+    ]);
+    assert!(command.contains(
+        "for candidate in '/volume1/docker/apple music/.env.example' '/docker/apple music/.env.example'"
+    ));
+    assert!(command.contains("sha256sum -- \"$candidate\""));
+    assert!(command.contains("__FILETERM_CHECKSUM_PATH_NOT_FOUND__"));
+}
+
+#[test]
+fn checksum_path_marker_in_filename_does_not_masquerade_as_a_missing_path() {
+    let hash = "a".repeat(64);
+    let output = format!("{hash}  __FILETERM_CHECKSUM_PATH_NOT_FOUND__\n");
+    assert!(super::validate_transfer_sha256_output(&hash, &output, Some(0)).unwrap());
+    assert!(super::validate_transfer_sha256_output(
+        &hash,
+        "__FILETERM_CHECKSUM_PATH_NOT_FOUND__\n",
+        Some(1)
+    )
+    .unwrap_err()
+    .contains("SFTP 路径在 SSH shell 命名空间中不存在"));
+}

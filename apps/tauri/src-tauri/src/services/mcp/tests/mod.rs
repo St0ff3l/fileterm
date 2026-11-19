@@ -766,10 +766,13 @@ mod tests {
         let instructions = result["instructions"].as_str().unwrap();
         assert!(instructions.contains("REMOTE_INTERACTIVE_INPUT_REQUIRED"));
         assert!(instructions.contains("no prompt is waiting in the visible terminal"));
-        assert!(instructions.contains("separate command beginning with sudo or su"));
+        assert!(instructions.contains("separate command that begins with sudo/su"));
         assert!(instructions.contains("sudo -n/--non-interactive"));
         assert!(instructions.contains("cwd argument"));
         assert!(instructions.contains("ask the user"));
+        assert!(instructions.contains("never hardcode one host's mapping"));
+        assert!(instructions.contains("FileTerm injects it automatically"));
+        assert!(instructions.contains("Never ask for passwords in chat"));
         assert!(instructions.contains("sudo/su"));
         assert!(instructions.contains("progress/log notification"));
         assert!(instructions.contains("fileterm_execute_visible_command"));
@@ -792,6 +795,52 @@ mod tests {
             result["capabilities"]["experimental"]["filetermAgentContract"]["tool"],
             "fileterm_get_agent_contract"
         );
+    }
+
+    #[test]
+    fn path_and_sudo_guidance_is_visible_in_first_mcp_tool_descriptions() {
+        let tools = tool_definitions();
+        let description = |name: &str| {
+            tools
+                .iter()
+                .find(|tool| tool["name"] == name)
+                .unwrap_or_else(|| panic!("missing MCP tool: {name}"))["description"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+
+        for name in [
+            "fileterm_get_session_context",
+            "fileterm_list_remote_directory",
+            "fileterm_read_remote_file",
+            "fileterm_download_file",
+        ] {
+            let text = description(name);
+            assert!(text.contains("fileNamespace"));
+            assert!(text.contains("pathRoots"));
+            assert!(text.contains("do not hardcode"));
+        }
+        let context = description("fileterm_get_session_context");
+        assert!(context.contains("shell=/volume1 and fileView=/"));
+        assert!(context.contains("do not hardcode this mapping for another server"));
+
+        for name in [
+            "fileterm_execute_remote_command",
+            "fileterm_start_remote_command",
+        ] {
+            let text = description(name);
+            assert!(text.contains("saved profile credential"));
+            assert!(text.contains("secure FileTerm prompt"));
+            assert!(text.contains("Never ask for the password in chat"));
+        }
+        assert!(description("fileterm_start_remote_command")
+            .contains("secure main-window password prompt"));
+
+        let connections = description("fileterm_list_connections");
+        assert!(connections.contains("hasSavedSudoPassword"));
+        assert!(connections.contains("never exposed"));
+        assert!(connections.contains("automatically"));
     }
 
     #[test]
@@ -838,6 +887,35 @@ mod tests {
             .unwrap()
             .iter()
             .any(|rule| rule["id"] == "privileged-command-shape"));
+        let path_rule = contract["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rule| rule["id"] == "remote-paths-and-command-lookup")
+            .unwrap();
+        assert!(path_rule["do"].as_str().unwrap().contains("pathRoots"));
+        assert!(path_rule["do"]
+            .as_str()
+            .unwrap()
+            .contains("resolvedPath"));
+        assert!(path_rule["never"]
+            .as_str()
+            .unwrap()
+            .contains("every server"));
+        let sudo_rule = contract["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rule| rule["id"] == "privileged-command-shape")
+            .unwrap();
+        assert!(sudo_rule["do"]
+            .as_str()
+            .unwrap()
+            .contains("inject a saved profile credential automatically"));
+        assert!(sudo_rule["do"]
+            .as_str()
+            .unwrap()
+            .contains("Never ask for the password in chat"));
         assert!(contract["recovery"]["sideEffectRequest"]
             .as_str()
             .unwrap()
