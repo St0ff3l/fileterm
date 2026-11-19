@@ -1,5 +1,18 @@
 // Snapshot compaction, pagination, parameter validation, and public errors.
 fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
+    let session_type = tab
+        .get("sessionType")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let mode = session
+        .get("fileAccessMode")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let shell_root = observed_sftp_volume(
+        session_type,
+        mode,
+        session.get("shellCwd").and_then(Value::as_str),
+    );
     json!({
         "sessionId": tab_id,
         "tabId": tab_id,
@@ -17,6 +30,12 @@ fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
         "shellUser": session.get("shellUser"),
         "sessionRevision": session.get("aiSessionRevision"),
         "fileAccessMode": session.get("fileAccessMode"),
+        "fileNamespace": file_namespace(session_type, mode),
+        "pathRoots": shell_root.map(|root| json!({
+            "shell": root,
+            "fileView": "/",
+            "note": "Inferred for this connection from shellCwd; roots can differ by server. FileTerm checks the exact SFTP path before trying an alias."
+        })),
         "capabilities": session.get("capabilities"),
     })
 }

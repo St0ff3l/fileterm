@@ -153,7 +153,11 @@ fn sanitize_entry(raw: Value, line: &str) -> Option<Value> {
         "cli" => "cli",
         _ => return None,
     };
-    let modern = raw.get("schemaVersion") == Some(&json!(2));
+    let schema_version = raw
+        .get("schemaVersion")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let modern = schema_version >= 2;
     let id = raw
         .get("id")
         .and_then(Value::as_str)
@@ -231,14 +235,22 @@ fn sanitize_entry(raw: Value, line: &str) -> Option<Value> {
             | "FILETERM_COMMAND_FAILED" => error,
             _ => mcp_error_code(error),
         });
+    let command = if schema_version >= 3 {
+        raw.get("command")
+            .and_then(Value::as_str)
+            .and_then(|command| audit_command(action, &json!({"command": command})))
+    } else {
+        None
+    };
     Some(json!({
-        "schemaVersion": if modern { 2 } else { 1 },
+        "schemaVersion": if schema_version >= 3 { 3 } else if modern { 2 } else { 1 },
         "id": id, "ts": ts, "source": source,
         "clientId": bridge_session, "bridgeSessionId": bridge_session,
         "action": action, "approval": approval, "status": status,
         "ok": raw.get("ok").and_then(Value::as_bool).unwrap_or(false),
         "callOk": raw.get("callOk").and_then(Value::as_bool),
         "error": error,
+        "command": command,
         "params": redact_params(action, raw.get("params").unwrap_or(&Value::Null)),
         "target": target, "execution": execution,
         "durationMs": raw.get("durationMs").and_then(Value::as_u64).unwrap_or(0),

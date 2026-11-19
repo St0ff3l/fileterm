@@ -4,7 +4,7 @@
 // structures describe the public state machine instead: which identifier to
 // retain, which tool to call next, and when a retry could duplicate work.
 
-const FILETERM_AGENT_CONTRACT_VERSION: u32 = 2;
+const FILETERM_AGENT_CONTRACT_VERSION: u32 = 3;
 
 fn agent_contract() -> Value {
     json!({
@@ -96,14 +96,14 @@ fn agent_contract() -> Value {
                 "id": "privileged-command-shape",
                 "severity": "must",
                 "when": "A server command relies on FileTerm saved sudo/su credentials.",
-                "do": "Start the command with sudo or su, use the cwd argument for its working directory, and omit sudo -n/--non-interactive when authentication needs the saved password.",
+                "do": "Start the command with sudo or su so FileTerm can inject a saved profile credential automatically; use cwd for its working directory and omit sudo -n/--non-interactive. If no safe saved credential is available, execute_remote_command and start_remote_command can wait for FileTerm's secure main-window password prompt; tell the user to enter it there and do not send another request while it is pending. Never ask for the password in chat. If the tool returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED, ask the user to restore the FileTerm prompt or save the credential in the profile, then wait for an explicit retry.",
                 "never": "Put sudo/su after cd, export, a shell operator, or in a script and expect FileTerm to inject credentials."
             },
             {
                 "id": "remote-paths-and-command-lookup",
                 "severity": "must",
-                "do": "Check fileAccessMode and use the current file view's namespace for directory tools: SSH user mode uses SFTP paths and root mode uses privileged shell paths. On Synology these roots can differ. Treat command -v as a PATH lookup only; inspect other evidence before concluding a service or its data is absent.",
-                "never": "Assume a shell path is an SFTP path or that a missing executable in PATH means a service is not installed."
+                "do": "Before path-sensitive work, check fileNamespace and pathRoots in fileterm_get_session_context. Shell commands use the server's shell namespace; file tools use the current file view (SSH user mode uses SFTP and root mode uses the privileged shell). Roots vary by server, so never hardcode one server's path translation. For list_remote_directory, read_remote_file, and download_file, FileTerm may try a matching path alias inferred from this session; use the returned resolvedPath and namespace. For upload_file, remote_directory must already use the current file view; FileTerm does not translate shell-path aliases for uploads. On Synology, /volumeN/docker may map to SFTP /docker, but this is only an observed example. Treat command -v as a PATH lookup only; inspect other evidence before concluding a service or its data is absent.",
+                "never": "Assume a shell path is an SFTP path, apply /volume1-to-/ translation to every server, or conclude a file is missing before checking the current file namespace."
             },
             {
                 "id": "read-background-command",
@@ -254,13 +254,11 @@ fn agent_tool_description(name: &str, description: &str, read_only: bool) -> Str
     } else {
         "Side-effect rule: do not retry automatically after a timeout or bridge disconnect; the outcome may be unknown. Follow error.recovery and inspect state before repeating this tool."
     };
-    let privileged_instruction = if matches!(
-        name,
-        "fileterm_execute_remote_command" | "fileterm_start_remote_command"
-    ) {
-        "For saved sudo/su credentials, start the command with sudo/su, use cwd instead of a cd/export prefix, and omit sudo -n/--non-interactive when a password is needed."
-    } else {
-        ""
+    let privileged_instruction = match name {
+        "fileterm_execute_remote_command" | "fileterm_start_remote_command" => {
+            "Start the command with sudo/su so FileTerm can inject a saved profile credential; omit sudo -n/--non-interactive. If no safe credential is saved, FileTerm can wait for a secure FileTerm prompt in the main window; tell the user to enter it there and do not send another request while pending. Never ask for the password in chat. If the tool returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED, ask the user to restore the FileTerm prompt or save the credential in the profile, then wait for an explicit retry. Use cwd instead of a cd/export prefix."
+        }
+        _ => "",
     };
     format!("{description} {instruction} {privileged_instruction} {retry_hint}")
 }
@@ -493,7 +491,21 @@ fn agent_error_metadata(action: &str, params: &Value, error: &str) -> Value {
     ) && !read_safe;
     let tab_id = params.get("tab_id").and_then(Value::as_str);
 
-    let recovery = if action == "read_remote_command" && read_safe && transport_retryable {
+    let reconnect_required = matches!(code, MCP_RECONNECT_REQUIRED | "FILETERM_SESSION_NOT_FOUND");
+    let recovery = if code == MCP_PATH_NOT_FOUND {
+        json!({
+            "type": "correct-path",
+            "reason": "Check fileNamespace and pathRoots in session context, then use the path for this server's file view. A Synology /volumeN alias is session-specific; do not apply it to other servers."
+        })
+    } else if reconnect_required {
+        json!({
+            "type": "refresh-session",
+            "mcpTool": "fileterm_get_session_context",
+            "cliJsonlAction": "get_session_context",
+            "cliCommand": "sessions",
+            "reason": "Find the current session. Reconnect an existing disconnected tab or open the saved connection through the normal approval flow if the tab is gone."
+        })
+    } else if action == "read_remote_command" && read_safe && transport_retryable {
         json!({
             "type": "retry-same-read",
             "mcpTool": "fileterm_read_remote_command",
@@ -576,6 +588,8 @@ fn agent_error_metadata(action: &str, params: &Value, error: &str) -> Value {
             "unknown"
         } else if interactive_input {
             "needs-user-input"
+        } else if code == MCP_PATH_NOT_FOUND || reconnect_required {
+            "not-accepted"
         } else {
             "not-accepted-or-needs-user-action"
         },

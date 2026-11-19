@@ -232,6 +232,8 @@ async fn create_upload_task(
     Ok(())
 }
 
+pub(crate) const DOWNLOAD_REMOTE_FILE_NOT_FOUND: &str = "远端下载文件不存在";
+
 pub async fn create_download(
     app: &AppHandle,
     tab_id: String,
@@ -259,7 +261,7 @@ pub async fn create_download(
         }
     })
     .await?
-    .ok_or_else(|| transfer_error("远端下载文件不存在"))?;
+    .ok_or_else(|| transfer_error(DOWNLOAD_REMOTE_FILE_NOT_FOUND))?;
     let name = download_target_name(&remote_path, target_name, cfg!(windows))?;
     let destination_path = Path::new(&local_directory)
         .join(&name)

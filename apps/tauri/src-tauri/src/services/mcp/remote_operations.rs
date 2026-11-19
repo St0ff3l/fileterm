@@ -205,21 +205,22 @@ async fn download_file(app: &AppHandle, params: &Value) -> Result<Value, String>
     let tab_id = required_string(params, "tab_id", 256)?;
     let remote_path = required_string(params, "remote_path", 4_096)?;
     let local_directory = required_string(params, "local_directory", 4_096)?;
-    let snapshot = crate::commands::app_download_file(
-        app.clone(),
-        tab_id.clone(),
-        remote_path,
-        local_directory,
-        transfer_options(params)?,
-    )
-    .await
-    .map_err(public_app_error)?;
-    Ok(transfer_snapshot(
-        &snapshot,
-        &tab_id,
-        "download_file",
-        "download",
-    ))
+    let options = transfer_options(params)?;
+    let (snapshot, resolved_path, namespace) =
+        with_mcp_file_path(app, &tab_id, Some(remote_path), |path| {
+            crate::commands::app_download_file(
+                app.clone(),
+                tab_id.clone(),
+                path,
+                local_directory.clone(),
+                options.clone(),
+            )
+        })
+        .await?;
+    let mut result = transfer_snapshot(&snapshot, &tab_id, "download_file", "download");
+    result["resolvedPath"] = json!(resolved_path);
+    result["namespace"] = json!(namespace);
+    Ok(result)
 }
 
 async fn download_remote_directory(app: &AppHandle, params: &Value) -> Result<Value, String> {

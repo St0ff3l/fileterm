@@ -82,7 +82,7 @@ fn cli_agent_contract_is_available_without_the_desktop_app() {
     assert!(output.stderr.is_empty());
     let contract: Value =
         serde_json::from_slice(&output.stdout).expect("one-shot CLI agent contract should be JSON");
-    assert_eq!(contract["contractVersion"], 2);
+    assert_eq!(contract["contractVersion"], 3);
     assert_eq!(contract["transport"]["cliJsonl"]["reuseProcess"], true);
     assert_eq!(
         contract["identifiers"]["commandId"]["scope"],
@@ -143,7 +143,7 @@ fn cli_jsonl_agent_contract_is_available_without_the_desktop_app() {
         serde_json::from_str(&response_line).expect("CLI JSONL contract response should be JSON");
     assert_eq!(response["id"], "contract-1");
     assert_eq!(response["ok"], true);
-    assert_eq!(response["result"]["contractVersion"], 2);
+    assert_eq!(response["result"]["contractVersion"], 3);
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn mcp_agent_contract_is_available_without_the_desktop_app() {
     assert_eq!(contract_response["id"], 2);
     assert_eq!(
         contract_response["result"]["structuredContent"]["contractVersion"],
-        2
+        3
     );
 }
 

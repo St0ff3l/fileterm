@@ -505,18 +505,14 @@ async fn inspect_ssh_exec_capabilities(
 async fn verify_sftp_transfer_sha256(
     handle: &Handle<ClientHandler>,
     local_hash: &str,
-    remote_path: &str,
+    remote_paths: &[String],
     file_access_mode: &str,
     access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
     checksum_timeout: Duration,
 ) -> Result<bool, String> {
-    let command = format!(
-        "if command -v sha256sum >/dev/null 2>&1; then sha256sum -- {}; elif command -v shasum >/dev/null 2>&1; then shasum -a 256 -- {}; else printf '__FILETERM_SHA256_UNAVAILABLE__\\n'; fi",
-        shell_quote(remote_path),
-        shell_quote(remote_path),
-    );
+    let command = remote_sha256_command(remote_paths);
     let (output, exit_status) = if file_access_mode == "root" {
         match exec_shell_file_command_with_timeout(
             handle,
@@ -548,12 +544,46 @@ async fn verify_sftp_transfer_sha256(
     validate_transfer_sha256_output(local_hash, &output, exit_status)
 }
 
+fn remote_sha256_command(remote_paths: &[String]) -> String {
+    let candidates = remote_paths
+        .iter()
+        .map(|path| shell_quote(path))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "for candidate in {candidates}; do if [ -f \"$candidate\" ]; then if command -v sha256sum >/dev/null 2>&1; then sha256sum -- \"$candidate\"; elif command -v shasum >/dev/null 2>&1; then shasum -a 256 -- \"$candidate\"; else printf '__FILETERM_SHA256_UNAVAILABLE__\\n'; fi; exit $?; fi; done; printf '__FILETERM_CHECKSUM_PATH_NOT_FOUND__\\n'; exit 1"
+    )
+}
+
+/// SFTP aliases need an observed shell path for checksums run through SSH exec.
+fn sftp_transfer_checksum_paths(
+    remote_path: &str,
+    file_access_mode: &str,
+    shell_cwd: Option<&str>,
+) -> Vec<String> {
+    if file_access_mode == "user" {
+        let mut candidates = shell_file_path_candidates(remote_path, shell_cwd);
+        if let Some(shell_root) = shell_cwd.and_then(synology_volume_prefix) {
+            let shell_path = format!("{shell_root}/{}", remote_path.trim_start_matches('/'));
+            if let Some(index) = candidates.iter().position(|path| path == &shell_path) {
+                candidates.swap(0, index);
+            }
+        }
+        candidates
+    } else {
+        vec![remote_path.to_string()]
+    }
+}
+
 fn validate_transfer_sha256_output(
     local_hash: &str,
     output: &str,
     exit_status: Option<u32>,
 ) -> Result<bool, String> {
     let status = exit_status.ok_or_else(|| "远端 SHA-256 校验失败：命令未返回退出状态".to_string())?;
+    if output.trim() == "__FILETERM_CHECKSUM_PATH_NOT_FOUND__" {
+        return Err("远端 SHA-256 校验失败：SFTP 路径在 SSH shell 命名空间中不存在".to_string());
+    }
     if status != 0 {
         return Err(format!("远端 SHA-256 校验失败：命令退出码 {status}"));
     }

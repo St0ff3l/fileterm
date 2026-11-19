@@ -227,7 +227,7 @@ fn push_shell_file_candidate(candidates: &mut Vec<String>, candidate: &str) {
 
 /// Detect `/volumeN` without treating names such as `/volume10foo` as a
 /// volume root. The actual volume number is intentionally not fixed.
-fn synology_volume_prefix(path: &str) -> Option<&str> {
+pub(crate) fn synology_volume_prefix(path: &str) -> Option<&str> {
     const PREFIX: &str = "/volume";
     let suffix = path.strip_prefix(PREFIX)?;
     let digit_count = suffix

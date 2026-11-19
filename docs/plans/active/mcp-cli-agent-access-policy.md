@@ -1046,3 +1046,8 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] dsh 复用本机 CLI 检测，并识别 macOS 标准安装目录中 DeepSeek Harness 随附的 CLI。用户可复制 `cordis.patch.yml` 片段或点击启动 `dsh web`。
 
 阶段 1-6 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为、真实 SSH/FTP/设备连接仍待目标环境人工验证。
+
+### Synology 文件路径与失效会话
+
+- 为 MCP/CLI 的列目录、读取和单文件下载统一处理 SFTP 路径。原路径明确不存在且与当前 Shell 观察到的卷一致时，最多回退一次。
+- 路径错误引导修正参数。会话缺失引导刷新上下文，按原有审批流程恢复连接。真实 DSM 下载和断线后的恢复待设备验收。
