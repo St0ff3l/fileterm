@@ -102,7 +102,7 @@ fn agent_contract() -> Value {
             {
                 "id": "remote-paths-and-command-lookup",
                 "severity": "must",
-                "do": "Check fileAccessMode and use the current file view's namespace for directory tools: SSH user mode uses SFTP paths and root mode uses privileged shell paths. On Synology these roots can differ. Treat command -v as a PATH lookup only; inspect other evidence before concluding a service or its data is absent.",
+                "do": "Check fileNamespace and any pathRoots hint in session context, then use the current file view's namespace for file tools: SSH user mode uses SFTP paths and root mode uses privileged shell paths. On Synology these roots can differ. Treat command -v as a PATH lookup only; inspect other evidence before concluding a service or its data is absent.",
                 "never": "Assume a shell path is an SFTP path or that a missing executable in PATH means a service is not installed."
             },
             {
@@ -493,7 +493,21 @@ fn agent_error_metadata(action: &str, params: &Value, error: &str) -> Value {
     ) && !read_safe;
     let tab_id = params.get("tab_id").and_then(Value::as_str);
 
-    let recovery = if action == "read_remote_command" && read_safe && transport_retryable {
+    let reconnect_required = matches!(code, MCP_RECONNECT_REQUIRED | "FILETERM_SESSION_NOT_FOUND");
+    let recovery = if code == MCP_PATH_NOT_FOUND {
+        json!({
+            "type": "correct-path",
+            "reason": "Check the file namespace in session context, then submit a corrected path."
+        })
+    } else if reconnect_required {
+        json!({
+            "type": "refresh-session",
+            "mcpTool": "fileterm_get_session_context",
+            "cliJsonlAction": "get_session_context",
+            "cliCommand": "sessions",
+            "reason": "Find the current session. Reconnect an existing disconnected tab or open the saved connection through the normal approval flow if the tab is gone."
+        })
+    } else if action == "read_remote_command" && read_safe && transport_retryable {
         json!({
             "type": "retry-same-read",
             "mcpTool": "fileterm_read_remote_command",
@@ -576,6 +590,8 @@ fn agent_error_metadata(action: &str, params: &Value, error: &str) -> Value {
             "unknown"
         } else if interactive_input {
             "needs-user-input"
+        } else if code == MCP_PATH_NOT_FOUND || reconnect_required {
+            "not-accepted"
         } else {
             "not-accepted-or-needs-user-action"
         },

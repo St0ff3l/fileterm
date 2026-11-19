@@ -108,31 +108,14 @@ async fn list_remote_directory(app: &AppHandle, params: &Value) -> Result<Value,
     let tab_id = required_string(params, "tab_id", 256)?;
     let path = optional_string(params, "path", 4_096)?;
     let (limit, offset) = pagination(params)?;
-    let context = {
-        let state = app.state::<crate::services::workspace::WorkspaceState>();
-        let sessions = state.sessions.read().await;
-        sessions.get(&tab_id).map(|session| {
-            (
-                session.file_access_mode.clone(),
-                path.as_deref()
-                    .map(str::trim)
-                    .filter(|p| !p.is_empty())
-                    .unwrap_or(&session.remote_path)
-                    .to_string(),
-            )
+    let path = path
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty());
+    let (snapshot, resolved_path, namespace) =
+        with_mcp_file_path(app, &tab_id, path, |path| {
+            crate::commands::mcp_list_remote_directory(app.clone(), tab_id.clone(), path)
         })
-    };
-    let snapshot = crate::commands::mcp_list_remote_directory(app.clone(), tab_id, path)
-        .await
-        .map_err(|error| {
-            let message = public_app_error(error);
-            match &context {
-                Some((mode, path)) => format!(
-                    "{message} Requested path: {path:?}; file view mode at request: {mode}. In SSH user mode paths use the SFTP namespace; root mode uses the privileged shell namespace."
-                ),
-                None => message,
-            }
-        })?;
+        .await?;
     let items = snapshot
         .get("items")
         .and_then(Value::as_array)
@@ -149,6 +132,8 @@ async fn list_remote_directory(app: &AppHandle, params: &Value) -> Result<Value,
     Ok(json!({
         "tabId": snapshot.get("tabId"),
         "path": snapshot.get("path"),
+        "resolvedPath": resolved_path,
+        "namespace": namespace,
         "total": total,
         "count": items.len(),
         "offset": offset,
@@ -162,19 +147,23 @@ async fn read_remote_file(app: &AppHandle, params: &Value) -> Result<Value, Stri
     let tab_id = required_string(params, "tab_id", 256)?;
     let path = required_string(params, "path", 4_096)?;
     let encoding = optional_string(params, "encoding", 64)?;
-    let content = crate::commands::read_remote_file_bounded(
-        app,
-        &tab_id,
-        path.clone(),
-        encoding.clone(),
-        MCP_MAX_FILE_CONTENT_BYTES,
-    )
-    .await
-    .map_err(public_app_error)?;
+    let (content, resolved_path, namespace) =
+        with_mcp_file_path(app, &tab_id, Some(path.clone()), |path| {
+            crate::commands::read_remote_file_bounded(
+                app,
+                &tab_id,
+                path,
+                encoding.clone(),
+                MCP_MAX_FILE_CONTENT_BYTES,
+            )
+        })
+        .await?;
     let (content, truncated) = truncate_text_with_flag(&content, MCP_MAX_FILE_CONTENT_BYTES);
     Ok(json!({
         "tabId": tab_id,
         "path": path,
+        "resolvedPath": resolved_path,
+        "namespace": namespace,
         "encoding": encoding.unwrap_or_else(|| "utf-8".to_string()),
         "content": content,
         "truncated": truncated,

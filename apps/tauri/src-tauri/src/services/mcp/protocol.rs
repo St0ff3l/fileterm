@@ -254,6 +254,15 @@ fn tool_error_result(action: &str, params: &Value, error: String) -> Value {
 /// first and classify the common local bridge failures without exposing
 /// credentials, paths, prompts, or terminal content.
 fn mcp_error_code(error: &str) -> &'static str {
+    for code in [
+        MCP_PATH_NOT_FOUND,
+        MCP_RECONNECT_REQUIRED,
+        "FILETERM_SESSION_NOT_FOUND",
+    ] {
+        if error.strip_prefix(code).is_some_and(|rest| rest.starts_with(':')) {
+            return code;
+        }
+    }
     let upper = error.to_ascii_uppercase();
     for code in [
         MCP_POLICY_READ_ONLY,
@@ -345,7 +354,7 @@ fn tool_definitions() -> Vec<Value> {
             "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
             "offset": { "type": "integer", "minimum": 0 }
         }), &[], true, false, true, false),
-        tool_definition("fileterm_get_session_context", "Get FileTerm session context", "List open sessions with status, paths and capabilities. Credentials and terminal transcripts are never returned.", json!({
+        tool_definition("fileterm_get_session_context", "Get FileTerm session context", "List open sessions with status, fileNamespace, paths and capabilities. pathRoots is a possible Synology mapping inferred from shellCwd when available. Credentials and terminal transcripts are never returned.", json!({
             "profile_id": { "type": "string" }
         }), &[], true, false, true, false),
         tool_definition("fileterm_list_remote_commands", "List background remote commands", "List retained background SSH commands for one session without returning command text or output. Use this to recover commandIds after an Agent context loss; finished commands remain available until FileTerm's bounded retention window expires.", json!({
@@ -357,13 +366,13 @@ fn tool_definitions() -> Vec<Value> {
             "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
             "offset": { "type": "integer", "minimum": 0 }
         }), &[], true, false, true, false),
-        tool_definition("fileterm_list_remote_directory", "List a remote directory", "List entries through an already-open file-capable session. Paths use the current file view: SSH user mode uses the SFTP namespace; root mode uses the privileged shell namespace. These roots may differ on Synology (for example SFTP /docker and shell /volume1/docker). Check fileAccessMode with fileterm_get_session_context. Results are paginated.", json!({
+        tool_definition("fileterm_list_remote_directory", "List a remote directory", "List entries through an already-open file-capable session. Paths use the current file view: SSH user mode uses the SFTP namespace; root mode uses the privileged shell namespace. These roots may differ on Synology (for example SFTP /docker and shell /volume1/docker). Check fileNamespace and pathRoots with fileterm_get_session_context. For matching Synology volume paths, a missing SFTP path can fall back to its file-view alias. Results include resolvedPath and namespace and are paginated.", json!({
             "tab_id": { "type": "string" },
             "path": { "type": "string" },
             "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
             "offset": { "type": "integer", "minimum": 0 }
         }), &["tab_id"], true, false, true, true),
-        tool_definition("fileterm_read_remote_file", "Read a remote file", "Read text from an already-open remote session. Large output is bounded and marked truncated.", json!({
+        tool_definition("fileterm_read_remote_file", "Read a remote file", "Read text through the current file namespace. Results include resolvedPath and namespace. Large output is bounded and marked truncated.", json!({
             "tab_id": { "type": "string" },
             "path": { "type": "string" },
             "encoding": { "type": "string", "default": "utf-8" }
@@ -447,7 +456,7 @@ fn tool_definitions() -> Vec<Value> {
         tool_definition("fileterm_change_remote_permissions", "Change remote permissions", "Change remote mode bits after approval.", json!({ "tab_id": { "type": "string" }, "path": { "type": "string" }, "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" }, "recursive": { "type": "boolean" }, "apply_to": { "type": "string", "enum": ["all", "files", "directories"] } }), &["tab_id", "path", "mode"], false, true, true, true),
         tool_definition("fileterm_set_remote_file_access_mode", "Set remote file access mode", "Switch the existing session's file view between user and root mode. Root credentials are never accepted from MCP; FileTerm must already have reusable authorization or the operation fails.", json!({ "tab_id": { "type": "string" }, "mode": { "type": "string", "enum": ["user", "root"] } }), &["tab_id", "mode"], false, true, true, true),
         tool_definition("fileterm_upload_file", "Upload a local file", "Queue a resumable upload through FileTerm's transfer service after approval.", json!({ "tab_id": { "type": "string" }, "local_path": { "type": "string" }, "remote_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "local_path", "remote_directory"], false, false, false, true),
-        tool_definition("fileterm_download_file", "Download a remote file", "Queue a resumable download through FileTerm's transfer service after approval.", json!({ "tab_id": { "type": "string" }, "remote_path": { "type": "string" }, "local_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "remote_path", "local_directory"], false, false, false, true),
+        tool_definition("fileterm_download_file", "Download a remote file", "Queue a resumable download through FileTerm's transfer service after approval. Use the current file namespace; results include resolvedPath and namespace.", json!({ "tab_id": { "type": "string" }, "remote_path": { "type": "string" }, "local_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "remote_path", "local_directory"], false, false, false, true),
         tool_definition("fileterm_download_remote_directory", "Download a remote directory", "Queue a resumable directory download through FileTerm's transfer service after approval.", json!({ "tab_id": { "type": "string" }, "remote_path": { "type": "string" }, "local_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "remote_path", "local_directory"], false, false, false, true),
         tool_definition("fileterm_pause_transfer", "Pause a transfer", "Pause a FileTerm transfer and preserve its resumable checkpoint after approval.", json!({ "transfer_id": { "type": "string" } }), &["transfer_id"], false, false, true, false),
         tool_definition("fileterm_resume_transfer", "Resume a transfer", "Resume a paused FileTerm transfer after approval.", json!({ "transfer_id": { "type": "string" } }), &["transfer_id"], false, false, true, true),
@@ -681,11 +690,13 @@ fn tool_output_schema(name: &str) -> Value {
             "properties": {
                 "tabId": { "type": "string" },
                 "path": { "type": "string" },
+                "resolvedPath": { "type": "string" },
+                "namespace": { "type": "string" },
                 "encoding": { "type": "string" },
                 "content": { "type": "string" },
                 "truncated": { "type": "boolean" }
             },
-            "required": ["tabId", "path", "encoding", "content", "truncated"],
+            "required": ["tabId", "path", "resolvedPath", "namespace", "encoding", "content", "truncated"],
             "additionalProperties": false
         }),
         _ => json!({ "type": "object" }),

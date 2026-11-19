@@ -89,6 +89,59 @@ mod tests {
     }
 
     #[test]
+    fn synology_file_alias_is_limited_to_the_observed_volume() {
+        use super::{observed_sftp_volume, sftp_volume_alias};
+        let root = observed_sftp_volume("ssh", "user", Some("/volume1/homes/alice"));
+        assert_eq!(root, Some("/volume1"));
+        assert_eq!(
+            sftp_volume_alias("/volume1/docker/downloads/cover_proof.jpg", root).as_deref(),
+            Some("/docker/downloads/cover_proof.jpg")
+        );
+        for path in ["/volume2/docker", "/volume10/docker", "/volume1", "/volume1/../docker", "/volume1//docker", "/docker"] {
+            assert_eq!(sftp_volume_alias(path, root), None, "{path}");
+        }
+        assert_eq!(observed_sftp_volume("ssh", "root", Some("/volume1")), None);
+
+        let snapshot = compact_session(
+            &json!({"sessionType": "ssh"}),
+            &json!({"fileAccessMode": "user", "shellCwd": "/volume1/homes/alice"}),
+            "tab",
+        );
+        assert_eq!(snapshot["fileNamespace"], "sftp");
+        assert_eq!(snapshot["pathRoots"]["shell"], "/volume1");
+        assert_eq!(snapshot["pathRoots"]["fileView"], "/");
+    }
+
+    #[test]
+    fn file_recovery_distinguishes_lookup_misses_from_uncertain_downloads() {
+        use super::file_lookup_missed;
+        use crate::AppError;
+        assert!(file_lookup_missed(&AppError::Storage(
+            crate::sessions::ssh::SFTP_PATH_NOT_FOUND.to_string()
+        )));
+        assert!(file_lookup_missed(&AppError::Command("远端下载文件不存在".to_string())));
+        assert!(!file_lookup_missed(&AppError::Storage(
+            "SFTP READDIR /no such file: Permission denied".to_string()
+        )));
+        for (code, recovery) in [
+            ("FILETERM_PATH_NOT_FOUND", "correct-path"),
+            ("FILETERM_RECONNECT_REQUIRED", "refresh-session"),
+            ("FILETERM_SESSION_NOT_FOUND", "refresh-session"),
+        ] {
+            let error = agent_error_metadata("download_file", &json!({}), &format!("{code}: details"));
+            assert_eq!(error["code"], code);
+            assert_eq!(error["outcome"], "not-accepted");
+            assert_eq!(error["retryable"], false);
+            assert_eq!(error["safeToRetry"], false);
+            assert_eq!(error["recovery"]["type"], recovery);
+            assert!(error["recovery"].get("mustNotCall").is_none());
+        }
+        let uncertain = agent_error_metadata("download_file", &json!({}), "FILETERM_STORAGE_OPERATION_FAILED");
+        assert_eq!(uncertain["outcome"], "unknown");
+        assert_eq!(uncertain["recovery"]["mustNotCall"][0], "fileterm_download_file");
+    }
+
+    #[test]
     fn compact_session_exposes_cli_or_mcp_source_without_leaking_gui_defaults() {
         let cli = compact_session(
             &json!({ "source": "cli", "isBackground": true }),

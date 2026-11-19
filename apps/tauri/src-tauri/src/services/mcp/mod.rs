@@ -116,6 +116,7 @@ include!("background.rs");
 include!("runtime.rs");
 include!("policy.rs");
 include!("read.rs");
+include!("file_paths.rs");
 include!("connections.rs");
 include!("remote_operations.rs");
 include!("snapshots.rs");
