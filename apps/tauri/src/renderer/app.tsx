@@ -74,7 +74,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     fileEditorWindowEncoding,
     hasLoadedInitialSnapshot: shell.hasLoadedInitialSnapshot,
     locale: shell.locale,
-    tabBarLayout: shell.tabBarLayout,
     connectionDefaults: shell.connectionDefaults,
     filePanelRememberRatio: shell.filePanelRememberRatio,
     transferSidebarCollapsedByDefault: shell.transferSidebarCollapsedByDefault,

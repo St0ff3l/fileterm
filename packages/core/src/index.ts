@@ -2230,9 +2230,9 @@ export const DIAGNOSTIC_LOG_CATEGORIES = [
 export type DiagnosticLogCategory = (typeof DIAGNOSTIC_LOG_CATEGORIES)[number]
 export type DiagnosticLogCategories = Record<DiagnosticLogCategory, boolean>
 
-/** Session tabs grouped under a host list, or every tab in one row. */
-export type TabBarLayout = 'host-groups' | 'single-row'
-export const DEFAULT_TAB_BAR_LAYOUT: TabBarLayout = 'single-row'
+/** Independent workspace shells; server management keeps its own persistent navigation. */
+export type WorkspaceMode = 'standard' | 'server-management'
+export const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'standard'
 /** Compact tab bars are 36px tall; the original height is 48px. */
 export const DEFAULT_COMPACT_TAB_BAR = false
 
@@ -2256,7 +2256,7 @@ export interface UiPreferences {
   uiZoomLocked: boolean
   uiZoomPercent: number
   rememberWindowSize: boolean
-  tabBarLayout: TabBarLayout
+  workspaceMode: WorkspaceMode
   compactTabBar: boolean
   localTerminalShells: LocalTerminalShellPreferences
   filePanelRememberRatio: boolean
@@ -2290,7 +2290,7 @@ export interface UiPreferencesInput {
   uiZoomLocked?: boolean
   uiZoomPercent?: number
   rememberWindowSize?: boolean
-  tabBarLayout?: TabBarLayout
+  workspaceMode?: WorkspaceMode
   compactTabBar?: boolean
   localTerminalShells?: Partial<LocalTerminalShellPreferences>
   filePanelRememberRatio?: boolean

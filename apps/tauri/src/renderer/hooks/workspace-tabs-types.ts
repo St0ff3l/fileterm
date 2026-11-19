@@ -7,8 +7,7 @@ import type {
   PaneFocusDirection,
   SessionSnapshot,
   WorkspaceSnapshot,
-  WorkspaceTab,
-  TabBarLayout
+  WorkspaceTab
 } from '@fileterm/core'
 import type { OrderedTabEntry, TabContextTarget } from '../features/layout/tab-bar'
 import type { SendScope, SessionSendTarget } from '../features/common/session-send-targets'
@@ -54,7 +53,6 @@ export type WorkspaceNavigationDirection = 'up' | 'down'
 export type UseWorkspaceTabsOptions = {
   desktopApi?: FileTermDesktopApi
   workspace: WorkspaceSnapshot
-  tabBarLayout: TabBarLayout
   isMainWorkspaceWindow: boolean
   hasLoadedInitialSnapshot: boolean
   locale: AppLocale
@@ -99,7 +97,6 @@ export type WorkspaceTabsActionContext = Pick<
   UseWorkspaceTabsOptions,
   | 'desktopApi'
   | 'workspace'
-  | 'tabBarLayout'
   | 'isMainWorkspaceWindow'
   | 'hasLoadedInitialSnapshot'
   | 'isBusy'

@@ -1,0 +1,58 @@
+.fs-host-rail {
+  position: relative;
+  grid-column: 1;
+  grid-row: 2 / 4;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  z-index: 10;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--theme-sidebar-background, var(--surface-sidebar));
+  color: var(--text-primary);
+}
+
+.fs-shell.has-window-menubar .fs-host-rail {
+  grid-row: 3 / 5;
+}
+
+.fs-shell.is-local-terminal .fs-host-rail {
+  grid-row: 2 / 3;
+}
+
+.fs-shell.has-window-menubar.is-local-terminal .fs-host-rail {
+  grid-row: 3 / 4;
+}
+
+.fs-host-rail-title {
+  margin: 0;
+  padding: 12px 14px 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.fs-host-rail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  padding-right: 16px;
+}
+
+.fs-host-rail-header .fs-host-rail-title {
+  padding-block: 0;
+}
+
+.fs-host-rail.is-collapsed .fs-host-rail-header {
+  justify-content: center;
+  padding-right: 0;
+}
+
+.fs-host-rail .sidebar-resizer:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}

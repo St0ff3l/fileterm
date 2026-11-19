@@ -4,7 +4,7 @@ import type {
   WorkspaceSnapshot,
   WorkspaceTab
 } from '@fileterm/core'
-import { homeTabKey, sessionTabKey, settledResultsError } from '../app/app-utils'
+import { homeTabKey, sessionTabKey, settledResultsError, tabStatusClass } from '../app/app-utils'
 import { resolveSelectedTabIds, type SendScope } from '../features/common/session-send-targets'
 import { t } from '../i18n'
 import { runProfileOpenOnce } from './profile-open-guard'
@@ -132,7 +132,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     }
   }
 
-  const openProfileInCurrentWorkspace = (profileId: string) =>
+  const openProfileInCurrentWorkspace = (profileId: string, keepHomeVisible = false) =>
     runProfileOpenOnce(profileId, async () => {
       if (!desktopApi) {
         return
@@ -146,12 +146,19 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
               [...context.localTabs].reverse().find((tab) => tab.kind === 'home')?.id ??
               null)
             : null
-      const replacementKey = activeHomeId ? homeTabKey(activeHomeId) : null
+      const replacementKey = activeHomeId && !keepHomeVisible ? homeTabKey(activeHomeId) : null
       pendingHomeReplacementKeyRef.current = replacementKey
 
       try {
         onBusyChange(true)
-        const snapshot = await desktopApi.openProfile(profileId)
+        const disconnectedTab = keepHomeVisible
+          ? visibleWorkspaceTabs.find(
+              (tab) => tab.profileId === profileId && tabStatusClass(tab.status) === 'disconnected'
+            )
+          : undefined
+        const snapshot = disconnectedTab
+          ? await desktopApi.reconnectTab(disconnectedTab.id)
+          : await desktopApi.openProfile(profileId)
         applySnapshot(snapshot)
         onStatusMessage(null)
         if (activeHomeId && snapshot.activeTabId && replacementKey) {
@@ -166,7 +173,11 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
           setLocalTabs((current) => current.filter((tab) => tab.id !== activeHomeId))
         }
         pendingHomeReplacementKeyRef.current = null
-        setActiveLocalTabId(null)
+        if (keepHomeVisible) {
+          if (activeHomeId) setActiveLocalTabId(activeHomeId)
+        } else {
+          setActiveLocalTabId(null)
+        }
       } catch (error) {
         pendingHomeReplacementKeyRef.current = null
         onError('打开连接', error)
@@ -185,6 +196,8 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
 
     await openProfileInCurrentWorkspace(profileId)
   }
+
+  const connectProfile = (profileId: string) => openProfileInCurrentWorkspace(profileId, true)
 
   const openLocalTerminal = async (options?: LocalTerminalLaunchOptions, startupCommand?: string) => {
     if (!desktopApi) {
@@ -414,7 +427,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
       ? nextTabAfterClose(
           context.orderedTabs,
           activeLocalTabId ? homeTabKey(activeLocalTabId) : sessionTabKey(tabId),
-          context.tabBarLayout === 'host-groups',
+          false,
           [sessionTabKey(tabId), ...relatedLocalTabs.map(homeTabKey)]
         )
       : null
@@ -471,6 +484,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     closeBackgroundSession,
     closeHomeTabs,
     closeSessionTabById,
+    connectProfile,
     consumePendingProfileOpen,
     detachSessionToBackground,
     disconnectSessionTab,

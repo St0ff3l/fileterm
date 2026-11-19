@@ -65,8 +65,8 @@ pub struct UiPreferences {
     pub ui_zoom_percent: i32,
     #[serde(default = "default_remember_window_size")]
     pub remember_window_size: bool,
-    #[serde(default = "default_tab_bar_layout")]
-    pub tab_bar_layout: String,
+    #[serde(default = "default_workspace_mode", alias = "tabBarLayout")]
+    pub workspace_mode: String,
     #[serde(default = "default_compact_tab_bar")]
     pub compact_tab_bar: bool,
     // Preserve the previous file-list-only zoom when reading an older state
@@ -119,7 +119,8 @@ pub struct UiPreferencesInput {
     pub ui_zoom_locked: Option<bool>,
     pub ui_zoom_percent: Option<i32>,
     pub remember_window_size: Option<bool>,
-    pub tab_bar_layout: Option<String>,
+    #[serde(alias = "tabBarLayout")]
+    pub workspace_mode: Option<String>,
     pub compact_tab_bar: Option<bool>,
     pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
     pub file_panel_remember_ratio: Option<bool>,
@@ -250,8 +251,8 @@ fn default_remember_window_size() -> bool {
     false
 }
 
-fn default_tab_bar_layout() -> String {
-    "single-row".to_string()
+fn default_workspace_mode() -> String {
+    "standard".to_string()
 }
 
 fn default_compact_tab_bar() -> bool {
@@ -557,9 +558,11 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     if !matches!(preferences.update_channel.as_str(), "stable" | "beta") {
         preferences.update_channel = default_update_channel();
     }
-    if !matches!(preferences.tab_bar_layout.as_str(), "host-groups" | "single-row") {
-        preferences.tab_bar_layout = default_tab_bar_layout();
-    }
+    preferences.workspace_mode = match preferences.workspace_mode.as_str() {
+        "server-management" | "host-groups" => "server-management".to_string(),
+        "standard" | "single-row" => "standard".to_string(),
+        _ => default_workspace_mode(),
+    };
     if !matches!(
         preferences
             .connection_defaults

@@ -526,22 +526,22 @@
 
 /* fly-in 动画:内嵌管理器整体作为一个卡片飞入 */
 .page-transition > .overview-page > *,
-.page-transition > .quick-links-page > *,
-.page-transition > .manager-inline > * {
+.page-transition > .manager-inline > *,
+.page-transition > .server-management-overview > * {
   animation: page-card-in-up 0.42s var(--ease-out) both;
 }
 
 .page-transition[data-nav-direction='up'] > .overview-page > *,
-.page-transition[data-nav-direction='up'] > .quick-links-page > *,
-.page-transition[data-nav-direction='up'] > .manager-inline > * {
+.page-transition[data-nav-direction='up'] > .manager-inline > *,
+.page-transition[data-nav-direction='up'] > .server-management-overview > * {
   animation-name: page-card-in-down;
 }
 
 /* Switching to or closing into an existing home tab keeps its content visible;
  * the first launch and "+" tabs keep the original fly-in above. */
 .home-content-body.suppress-home-entrance .page-transition > .overview-page > *,
-.home-content-body.suppress-home-entrance .page-transition > .quick-links-page > *,
 .home-content-body.suppress-home-entrance .page-transition > .manager-inline > *,
+.home-content-body.suppress-home-entrance .page-transition > .server-management-overview > *,
 .workspace-stage-transition.is-transitioning
   .workspace-content-stack__item.is-active
   .home-content-body.suppress-home-entrance {
@@ -591,8 +591,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .page-transition > .overview-page > *,
-  .page-transition > .quick-links-page > *,
-  .page-transition > .manager-inline > * {
+  .page-transition > .manager-inline > *,
+  .page-transition > .server-management-overview > * {
     animation: none;
   }
 }

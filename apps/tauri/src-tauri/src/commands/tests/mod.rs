@@ -645,7 +645,7 @@ mod ui_preferences_tests {
     use super::{
         default_app_icon, default_basic_logging_enabled, default_local_terminal_shells, default_overview_section_order,
         default_terminal_renderer, default_terminal_font_weight,
-        default_compact_tab_bar, default_tab_bar_layout, default_ui_locale,
+        default_compact_tab_bar, default_workspace_mode, default_ui_locale,
         default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
         default_theme_config, default_update_channel, normalize_local_terminal_shells,
         normalize_mcp_operation_policy, normalize_resource_monitoring_metric_order,
@@ -845,7 +845,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -898,7 +898,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -942,7 +942,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: "sideways".to_string(),
+            workspace_mode: "sideways".to_string(),
             compact_tab_bar: default_compact_tab_bar(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -963,7 +963,7 @@ mod ui_preferences_tests {
         assert_eq!(preferences.locale, default_ui_locale());
         assert_eq!(preferences.terminal_renderer, "dom");
         assert_eq!(preferences.update_channel, "beta");
-        assert_eq!(preferences.tab_bar_layout, "single-row");
+        assert_eq!(preferences.workspace_mode, "standard");
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
         assert_eq!(
@@ -1056,7 +1056,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: false,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1120,7 +1120,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1185,7 +1185,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1240,7 +1240,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1412,7 +1412,7 @@ mod ui_preferences_tests {
         }))
         .expect("legacy preferences without the tray setting should deserialize");
         assert!(legacy.show_macos_menu_bar_icon);
-        assert_eq!(legacy.tab_bar_layout, "single-row");
+        assert_eq!(legacy.workspace_mode, "standard");
         assert!(!legacy.compact_tab_bar);
 
         let input: UiPreferencesInput = serde_json::from_value(serde_json::json!({
@@ -1434,7 +1434,7 @@ mod ui_preferences_tests {
         assert_eq!(input.auto_check_updates, Some(false));
         assert_eq!(input.show_macos_menu_bar_icon, Some(false));
         assert_eq!(input.update_channel.as_deref(), Some("beta"));
-        assert_eq!(input.tab_bar_layout.as_deref(), Some("host-groups"));
+        assert_eq!(input.workspace_mode.as_deref(), Some("host-groups"));
         assert_eq!(input.compact_tab_bar, Some(true));
         assert_eq!(input.overview_show_stats, Some(false));
         assert_eq!(input.overview_show_recent, Some(false));
@@ -1480,7 +1480,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: false,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: false,
-            tab_bar_layout: "host-groups".to_string(),
+            workspace_mode: "server-management".to_string(),
             compact_tab_bar: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1543,7 +1543,7 @@ mod ui_preferences_tests {
             assert_eq!(normalize_ui_preferences(loaded).terminal_font_weight, if weight == 600 { 600 } else { 400 });
         }
 
-        assert_eq!(preferences["tabBarLayout"], "host-groups");
+        assert_eq!(preferences["workspaceMode"], "server-management");
         assert_eq!(preferences["compactTabBar"], true);
         assert_eq!(preferences["overviewShowStats"], false);
         assert_eq!(preferences["overviewShowRecent"], false);

@@ -317,7 +317,7 @@ export function createDefaultTerminalDockSendState(): TerminalDockSendState {
   }
 }
 
-/** Prefer the visible neighbour on the right, then the left, before leaving a host group. */
+/** Prefer the selected host's neighbour when host grouping is enabled. */
 export function nextTabAfterClose(
   entries: OrderedTabEntry[],
   closedKey: string,

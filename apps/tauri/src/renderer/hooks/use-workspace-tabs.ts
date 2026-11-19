@@ -39,7 +39,6 @@ const MAIN_TAB_UI_STATE_KEY = 'main.tab-ui'
 export function useWorkspaceTabs({
   desktopApi,
   workspace: syncedWorkspace,
-  tabBarLayout,
   isMainWorkspaceWindow,
   hasLoadedInitialSnapshot,
   locale,
@@ -517,7 +516,6 @@ export function useWorkspaceTabs({
   const sessionActionContext: WorkspaceTabsActionContext = {
     desktopApi,
     workspace,
-    tabBarLayout,
     orderedTabs,
     isMainWorkspaceWindow,
     hasLoadedInitialSnapshot,
@@ -571,6 +569,7 @@ export function useWorkspaceTabs({
     closeBackgroundSession,
     closeHomeTabs,
     closeSessionTabById,
+    connectProfile,
     consumePendingProfileOpen,
     detachSessionToBackground,
     disconnectSessionTab,
@@ -711,6 +710,7 @@ export function useWorkspaceTabs({
     workspaceNavDirection,
     orderedTabs,
     sessionSendTargets,
+    connectProfile,
     openProfile,
     openLocalTerminal,
     activateSessionTab,

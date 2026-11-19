@@ -29,6 +29,7 @@ import { SystemInfoWorkspace } from '../system/system-info-workspace'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
 import type { ThemeMode } from '../../app/theme-config'
 import { HomeWorkspace } from './home-workspace'
+import type { ServerManagementNavigation } from '../server-management/server-management-types'
 import { LocalTerminalWorkspace } from './local-terminal-workspace'
 import { SessionWorkspace } from './session-workspace'
 import { DEFAULT_FILE_PANEL_SNAP_TARGET, type FilePanelSnapTarget } from './file-panel-snap'
@@ -118,6 +119,7 @@ function WorkspaceStageContent({
   onOpenLocalPath,
   onBackToLocalComputer,
   onOpenProfile,
+  onConnectProfile,
   onOpenLocalTerminal,
   onReconnectLocalTerminal,
   onOpenRemoteItem,
@@ -158,6 +160,7 @@ function WorkspaceStageContent({
   onOpenLogsDirectory,
   onLaunchLocalAgent,
   isSidebarCollapsed,
+  serverManagement,
   isWorkspaceFocusMode,
   isWorkspaceActive = true,
   suppressHomeEntrance = false,
@@ -252,6 +255,7 @@ function WorkspaceStageContent({
   onOpenLocalPath(path: string): void
   onBackToLocalComputer(): void
   onOpenProfile(profileId: string): void
+  onConnectProfile(profileId: string): void
   onOpenLocalTerminal(): void
   onReconnectLocalTerminal(tabId: string): Promise<void>
   onOpenRemoteItem(item: RemoteFileItem): void
@@ -296,6 +300,7 @@ function WorkspaceStageContent({
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
   isSidebarCollapsed: boolean
+  serverManagement?: ServerManagementNavigation
   isWorkspaceFocusMode: boolean
   isWorkspaceActive?: boolean
   suppressHomeEntrance?: boolean
@@ -472,6 +477,7 @@ function WorkspaceStageContent({
       overviewShowQuickActions={overviewShowQuickActions}
       overviewSectionOrder={overviewSectionOrder}
       onOpen={onOpenProfile}
+      onConnectProfile={onConnectProfile}
       onOpenFileTransfers={onOpenFileTransfers}
       backgroundTabs={backgroundTabs}
       sessions={sessions}
@@ -501,6 +507,7 @@ function WorkspaceStageContent({
       onOpenLogsDirectory={onOpenLogsDirectory}
       onLaunchLocalAgent={onLaunchLocalAgent}
       isSidebarCollapsed={isSidebarCollapsed}
+      serverManagement={serverManagement}
       profiles={profiles}
       tabBarProps={tabBarProps}
       isResizingSidebar={isResizingSidebar}

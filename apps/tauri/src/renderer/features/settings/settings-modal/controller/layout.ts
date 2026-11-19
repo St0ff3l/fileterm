@@ -1,36 +1,36 @@
 import { useState } from 'react'
-import type { TabBarLayout } from '@fileterm/core'
+import type { WorkspaceMode } from '@fileterm/core'
 import { t } from '../../../../i18n'
 import { useCompactTabBar } from '../../../layout/use-compact-tab-bar'
-import { useTabBarLayout } from '../../../layout/use-tab-bar-layout'
+import { useWorkspaceMode } from '../../../layout/use-workspace-mode'
 import type { SettingsModalState } from './state'
 
 export function useLayoutSettingsController({ state }: { state: SettingsModalState }) {
   const { desktopApi } = state
-  const [tabBarLayout, setTabBarLayout] = useTabBarLayout(desktopApi)
-  const [isSavingTabBarLayout, setIsSavingTabBarLayout] = useState(false)
-  const [tabBarLayoutError, setTabBarLayoutError] = useState<string | null>(null)
+  const [workspaceMode, setWorkspaceMode] = useWorkspaceMode(desktopApi)
+  const [isSavingWorkspaceMode, setIsSavingWorkspaceMode] = useState(false)
+  const [workspaceModeError, setWorkspaceModeError] = useState<string | null>(null)
   const [compactTabBar, setCompactTabBar] = useCompactTabBar(desktopApi)
   const [isSavingCompactTabBar, setIsSavingCompactTabBar] = useState(false)
   const [compactTabBarError, setCompactTabBarError] = useState<string | null>(null)
 
-  const setTabBarLayoutPreference = (nextValue: TabBarLayout) => {
-    if (!desktopApi || isSavingTabBarLayout || nextValue === tabBarLayout) {
+  const setWorkspaceModePreference = (nextValue: WorkspaceMode) => {
+    if (!desktopApi || isSavingWorkspaceMode || nextValue === workspaceMode) {
       return
     }
 
-    const previousValue = tabBarLayout
-    setTabBarLayout(nextValue)
-    setTabBarLayoutError(null)
-    setIsSavingTabBarLayout(true)
+    const previousValue = workspaceMode
+    setWorkspaceMode(nextValue)
+    setWorkspaceModeError(null)
+    setIsSavingWorkspaceMode(true)
     void desktopApi
-      .setUiPreferences({ tabBarLayout: nextValue })
-      .then((preferences) => setTabBarLayout(preferences.tabBarLayout))
+      .setUiPreferences({ workspaceMode: nextValue })
+      .then((preferences) => setWorkspaceMode(preferences.workspaceMode))
       .catch(() => {
-        setTabBarLayout(previousValue)
-        setTabBarLayoutError(t.tabBarLayoutSaveFailed)
+        setWorkspaceMode(previousValue)
+        setWorkspaceModeError(t.workspaceModeSaveFailed)
       })
-      .finally(() => setIsSavingTabBarLayout(false))
+      .finally(() => setIsSavingWorkspaceMode(false))
   }
 
   const setCompactTabBarPreference = (nextValue: boolean) => {
@@ -53,10 +53,10 @@ export function useLayoutSettingsController({ state }: { state: SettingsModalSta
   }
 
   return {
-    tabBarLayout,
-    isSavingTabBarLayout,
-    tabBarLayoutError,
-    setTabBarLayoutPreference,
+    workspaceMode,
+    isSavingWorkspaceMode,
+    workspaceModeError,
+    setWorkspaceModePreference,
     compactTabBar,
     isSavingCompactTabBar,
     compactTabBarError,

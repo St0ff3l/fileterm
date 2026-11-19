@@ -1,5 +1,5 @@
 import './layout-settings-section.css'
-import type { FileTermDesktopApi, TabBarLayout } from '@fileterm/core'
+import type { FileTermDesktopApi, WorkspaceMode } from '@fileterm/core'
 import { type LocaleMessages } from '../../../../i18n'
 import { RadioCardGroup } from '../../../common/radio-card-group'
 import { SelectionControl } from '../../../common/selection-control'
@@ -8,10 +8,10 @@ import { useSettingsModalContext } from '../context'
 type LayoutSettingsSectionContext = {
   t: LocaleMessages
   desktopApi: FileTermDesktopApi | undefined
-  tabBarLayout: TabBarLayout
-  isSavingTabBarLayout: boolean
-  tabBarLayoutError: string | null
-  setTabBarLayoutPreference(nextValue: TabBarLayout): void
+  workspaceMode: WorkspaceMode
+  isSavingWorkspaceMode: boolean
+  workspaceModeError: string | null
+  setWorkspaceModePreference(nextValue: WorkspaceMode): void
   compactTabBar: boolean
   isSavingCompactTabBar: boolean
   compactTabBarError: string | null
@@ -19,25 +19,25 @@ type LayoutSettingsSectionContext = {
 }
 
 /** A miniature window: tab row on top, then the panes in their real order. */
-function TabBarLayoutPreview({ layout }: { layout: TabBarLayout }) {
-  const tabCount = layout === 'host-groups' ? 2 : 4
+function WorkspaceModePreview({ mode }: { mode: WorkspaceMode }) {
+  const tabCount = mode === 'server-management' ? 2 : 4
 
   return (
-    <span aria-hidden="true" className={`tab-bar-layout-preview is-${layout}`}>
-      <span className="tab-bar-layout-preview-tabs">
+    <span aria-hidden="true" className={`workspace-mode-preview is-${mode}`}>
+      <span className="workspace-mode-preview-tabs">
         {Array.from({ length: tabCount }, (_, index) => (
           <span key={index} />
         ))}
       </span>
-      {layout === 'host-groups' ? (
-        <span className="tab-bar-layout-preview-hosts">
+      {mode === 'server-management' ? (
+        <span className="workspace-mode-preview-nav">
           <span />
           <span />
           <span />
         </span>
       ) : null}
-      <span className="tab-bar-layout-preview-info" />
-      <span className="tab-bar-layout-preview-terminal" />
+      <span className="workspace-mode-preview-info" />
+      <span className="workspace-mode-preview-terminal" />
     </span>
   )
 }
@@ -46,10 +46,10 @@ export function LayoutSettingsSection() {
   const {
     t,
     desktopApi,
-    tabBarLayout,
-    isSavingTabBarLayout,
-    tabBarLayoutError,
-    setTabBarLayoutPreference,
+    workspaceMode,
+    isSavingWorkspaceMode,
+    workspaceModeError,
+    setWorkspaceModePreference,
     compactTabBar,
     isSavingCompactTabBar,
     compactTabBarError,
@@ -58,42 +58,42 @@ export function LayoutSettingsSection() {
 
   return (
     <section className="settings-section">
-      <h3>{t.tabBarLayout}</h3>
-      <p className="settings-tools-hint">{t.tabBarLayoutHint}</p>
+      <h3>{t.workspaceMode}</h3>
+      <p className="settings-tools-hint">{t.workspaceModeHint}</p>
       <RadioCardGroup
-        ariaLabel={t.tabBarLayout}
-        className="tab-bar-layout-picker"
+        ariaLabel={t.workspaceMode}
+        className="workspace-mode-picker"
         copyClassName="tab-bar-layout-copy"
-        disabled={!desktopApi || isSavingTabBarLayout}
-        name="tab-bar-layout"
-        onChange={setTabBarLayoutPreference}
+        disabled={!desktopApi || isSavingWorkspaceMode}
+        name="workspace-mode"
+        onChange={setWorkspaceModePreference}
         options={[
           {
-            value: 'single-row',
+            value: 'standard',
             label: (
               <>
-                <TabBarLayoutPreview layout="single-row" />
-                <span>{t.tabBarLayoutSingleRow}</span>
+                <WorkspaceModePreview mode="standard" />
+                <span>{t.workspaceModeStandard}</span>
               </>
             ),
-            description: t.tabBarLayoutSingleRowHint
+            description: t.workspaceModeStandardHint
           },
           {
-            value: 'host-groups',
+            value: 'server-management',
             label: (
               <>
-                <TabBarLayoutPreview layout="host-groups" />
-                <span>{t.tabBarLayoutHostGroups}</span>
+                <WorkspaceModePreview mode="server-management" />
+                <span>{t.workspaceModeServerManagement}</span>
               </>
             ),
-            description: t.tabBarLayoutHostGroupsHint
+            description: t.workspaceModeServerManagementHint
           }
         ]}
-        value={tabBarLayout}
+        value={workspaceMode}
       />
-      {tabBarLayoutError ? (
+      {workspaceModeError ? (
         <p className="modal-error" role="alert">
-          {tabBarLayoutError}
+          {workspaceModeError}
         </p>
       ) : null}
       <div className="overview-preference-list">

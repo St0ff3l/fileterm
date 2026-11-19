@@ -65,9 +65,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
 
   const closeHomeTabById = (homeTabId: string) => {
     const next =
-      activeLocalTabId === homeTabId
-        ? nextTabAfterClose(context.orderedTabs, homeTabKey(homeTabId), context.tabBarLayout === 'host-groups')
-        : null
+      activeLocalTabId === homeTabId ? nextTabAfterClose(context.orderedTabs, homeTabKey(homeTabId), false) : null
     closeHomeTabs(
       [homeTabId],
       activeLocalTabId === homeTabId ? (next?.kind === 'local' ? next.id : null) : activeLocalTabId,
