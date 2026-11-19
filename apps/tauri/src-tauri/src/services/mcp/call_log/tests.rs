@@ -50,7 +50,7 @@ fn audit_omits_unstructured_secrets_even_for_rejected_calls() {
             action,
             json!({
                 "tab_id": "tab-1", "path": "/.env",
-                "command": "curl -H 'Authorization: Bearer sensitive-value'",
+                "command": if action == "execute_remote_command" { "sudo true" } else { "sensitive-value" },
                 "content": "API_KEY=sensitive-value",
                 "args": ["sensitive-value"],
                 "rule": {"privateKey": "sensitive-value"},
@@ -69,6 +69,18 @@ fn audit_omits_unstructured_secrets_even_for_rejected_calls() {
         .items
         .iter()
         .all(|entry| entry["approval"] == "rejected" && entry["ok"] == false));
+    let remote_command = page
+        .items
+        .iter()
+        .find(|entry| entry["action"] == "execute_remote_command")
+        .unwrap();
+    assert_eq!(remote_command["command"], "sudo true");
+    assert_eq!(remote_command["schemaVersion"], 3);
+    assert!(page
+        .items
+        .iter()
+        .filter(|entry| entry["action"] != "execute_remote_command")
+        .all(|entry| entry["command"].is_null()));
     assert_eq!(page.items[1]["params"]["path"], "/.env");
     assert_eq!(
         redact_params("unsupported", &json!({"path": "sensitive-value"})),
@@ -82,6 +94,29 @@ fn audit_omits_unstructured_secrets_even_for_rejected_calls() {
         "p1"
     );
     assert_eq!(safe_action("open_connection"), "open_connection");
+}
+
+#[test]
+fn audit_command_is_scoped_to_remote_execution_and_bounded() {
+    for action in [
+        "execute_remote_command",
+        "start_remote_command",
+        "execute_visible_command",
+    ] {
+        assert_eq!(
+            audit_command(action, &json!({"command":"uname -a"})).as_deref(),
+            Some("uname -a")
+        );
+    }
+    assert_eq!(
+        audit_command("execute_command_template", &json!({"command":"uname -a"})),
+        None
+    );
+    let long_command = "x".repeat(MCP_CALL_LOG_COMMAND_MAX_BYTES + 1);
+    let recorded =
+        audit_command("execute_remote_command", &json!({"command":long_command})).unwrap();
+    assert!(recorded.len() < MCP_CALL_LOG_COMMAND_MAX_BYTES + 64);
+    assert!(recorded.ends_with("[… command truncated by FileTerm …]"));
 }
 
 #[test]
@@ -239,6 +274,8 @@ fn legacy_records_are_sanitized_and_partial_lines_do_not_hide_new_calls() {
         "{\"ts\":\"2026-11-07T00:00:00Z\",\"source\":\"cli\",\"action\":\"write_remote_file\",",
         "\"clientId\":\"forged\",\"approval\":\"user\",\"ok\":true,\"error\":\"sensitive-value\",",
         "\"params\":{\"content\":\"sensitive-value\",\"path\":\"/.env\"}}\n",
+        "{\"schemaVersion\":2,\"ts\":\"2026-11-07T00:00:01Z\",\"source\":\"mcp\",",
+        "\"action\":\"execute_remote_command\",\"command\":\"old schema command\",\"params\":{}}\n",
         "{\"partial\":"
     ),
     )
@@ -251,7 +288,7 @@ fn legacy_records_are_sanitized_and_partial_lines_do_not_hide_new_calls() {
         Ok(json!({})),
     );
     let page = store::read_page(&dir.path(), 50, 0, None).unwrap();
-    assert_eq!(page.items.len(), 2);
+    assert_eq!(page.items.len(), 3);
     let legacy = page
         .items
         .iter()
@@ -259,6 +296,13 @@ fn legacy_records_are_sanitized_and_partial_lines_do_not_hide_new_calls() {
         .unwrap();
     assert_eq!(legacy["approval"], "legacy-unknown");
     assert_eq!(legacy["bridgeSessionId"], Value::Null);
+    let schema_two = page
+        .items
+        .iter()
+        .find(|entry| entry["ts"] == "2026-11-07T00:00:01Z")
+        .unwrap();
+    assert_eq!(schema_two["schemaVersion"], 2);
+    assert!(schema_two["command"].is_null());
     assert!(!serde_json::to_string(&page)
         .unwrap()
         .contains("sensitive-value"));

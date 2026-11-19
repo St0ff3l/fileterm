@@ -97,6 +97,7 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
   const pendingLoad = useRef(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLDivElement>(null)
+  const commandRef = useRef<HTMLPreElement>(null)
   const paramsRef = useRef<HTMLPreElement>(null)
 
   const load = useCallback(async (before?: string) => {
@@ -310,6 +311,18 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
                   </div>
                   {selected.error ? <p className="mcp-call-log-error">{selected.error}</p> : null}
                 </fieldset>
+                {selected.command ? (
+                  <fieldset className="external-operation-confirmation__group">
+                    <legend>{t.mcpCallDetailCommand}</legend>
+                    <p className="mcp-call-log-metadata-hint">{t.mcpCallCommandStorageHint}</p>
+                    <div className="external-operation-confirmation__code mcp-call-log-command">
+                      <pre ref={commandRef} tabIndex={0} aria-label={t.mcpCallDetailCommand}>
+                        {selected.command}
+                      </pre>
+                      <VerticalScrollbar ariaLabel={t.mcpCallDetailCommand} scrollRef={commandRef} />
+                    </div>
+                  </fieldset>
+                ) : null}
                 <fieldset className="external-operation-confirmation__group">
                   <legend>{t.mcpCallDetailParams}</legend>
                   <p className="mcp-call-log-metadata-hint">{t.mcpCallMetadataHint}</p>

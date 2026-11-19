@@ -2748,6 +2748,7 @@ export interface McpCallLogEntry {
   ok: boolean
   callOk: boolean | null
   error: string | null
+  command?: string | null
   params: Record<string, unknown>
   durationMs: number
 }

@@ -1,4 +1,4 @@
-// Audit metadata only. Shell text, file contents, arguments and raw errors may contain secrets.
+// Command text is retained for execution actions, so the local audit log can contain shell-embedded secrets.
 use super::*;
 use std::path::Path;
 
@@ -9,6 +9,28 @@ mod tests;
 const MCP_CALL_LOG_FILE: &str = "mcp-calls.jsonl";
 const MCP_CALL_LOG_ROTATED_FILE: &str = "mcp-calls.jsonl.1";
 const MCP_CALL_LOG_MAX_BYTES: u64 = 8 * 1024 * 1024;
+const MCP_CALL_LOG_COMMAND_MAX_BYTES: usize = 16 * 1024;
+
+fn audit_command(action: &str, params: &Value) -> Option<String> {
+    if !matches!(
+        action,
+        "execute_remote_command" | "start_remote_command" | "execute_visible_command"
+    ) {
+        return None;
+    }
+    let command = params.get("command")?.as_str()?;
+    if command.len() <= MCP_CALL_LOG_COMMAND_MAX_BYTES {
+        return Some(command.to_string());
+    }
+    let mut end = MCP_CALL_LOG_COMMAND_MAX_BYTES;
+    while !command.is_char_boundary(end) {
+        end -= 1;
+    }
+    Some(format!(
+        "{}\n[… command truncated by FileTerm …]",
+        &command[..end]
+    ))
+}
 
 fn redact_params(action: &str, params: &Value) -> Value {
     // Validate the action and its parameter names against the existing tool contract.
@@ -93,7 +115,7 @@ pub(super) struct McpCallAudit {
 impl McpCallAudit {
     pub(super) fn begin(path: Result<PathBuf, AppError>, request: &BridgeRequest) -> Self {
         let entry = json!({
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "id": uuid::Uuid::new_v4().to_string(),
             "ts": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
             "source": request.source,
@@ -105,6 +127,7 @@ impl McpCallAudit {
             "ok": false,
             "callOk": null,
             "error": null,
+            "command": audit_command(&request.action, &request.params),
             "params": redact_params(&request.action, &request.params),
             "target": null,
             "durationMs": 0,
