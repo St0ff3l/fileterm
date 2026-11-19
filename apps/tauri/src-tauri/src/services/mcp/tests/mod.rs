@@ -815,6 +815,7 @@ mod tests {
             "fileterm_list_remote_directory",
             "fileterm_read_remote_file",
             "fileterm_download_file",
+            "fileterm_upload_file",
         ] {
             let text = description(name);
             assert!(text.contains("fileNamespace"));
@@ -824,6 +825,8 @@ mod tests {
         let context = description("fileterm_get_session_context");
         assert!(context.contains("shell=/volume1 and fileView=/"));
         assert!(context.contains("do not hardcode this mapping for another server"));
+        assert!(description("fileterm_upload_file")
+            .contains("does not translate shell-path aliases for uploads"));
 
         for name in [
             "fileterm_execute_remote_command",
