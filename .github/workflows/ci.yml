@@ -387,6 +387,57 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  tauri-release-cache:
+    name: Warm Tauri release cache (${{ matrix.target }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26-intel
+            target: x86_64-apple-darwin
+            build-script: release:mac:x64
+          - os: windows-11-vs2026-arm
+            target: aarch64-pc-windows-msvc
+            build-script: release:win:arm64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        id: rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
+          shared-key: rust-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Setup Node
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Build shared packages and release binary
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build:packages
+          npm run ${{ matrix.build-script }} -w @fileterm/tauri -- --no-bundle --no-sign --ci
+
   tauri-arch-package-smoke:
     name: Tauri Arch package smoke
     needs: tauri-package-smoke
