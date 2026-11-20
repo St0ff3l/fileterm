@@ -17,6 +17,7 @@
 - 所有表单下拉框必须使用 DropdownSelect。下拉框与按钮并排的表单操作行默认对齐为 36px。下拉框使用默认高度，按钮使用 `size="md"` 或默认尺寸。
 - 禁止在业务组件中新增原生 select。
 - macOS 原生外壳和 Windows/Linux 自绘 Portal 都必须保持同一套语义变量和自适应箭头尺寸。
+- 展开菜单的选项字号应与收起时显示的字号一致。默认使用 `--font-size-sm`。自定义字号时验证 macOS 的 `select` 和 `option`，以及 Windows/Linux 的 Portal 菜单项。
 - 聚焦与展开态沿用 Input 的中性双层阴影，不额外设置彩色 outline 或改变边框为强调色。原生 select 的焦点画在外壳，菜单项键盘高亮和选择行为保持现有实现。
 
 ### Input
