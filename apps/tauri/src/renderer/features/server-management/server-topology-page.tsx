@@ -8,6 +8,7 @@ import { Input, Textarea } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { t } from '../../i18n'
 import { useProxyLibrary } from '../../hooks/use-proxy-library'
+import { ContextMenu } from '../common/context-menu'
 import { StatusIndicator } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import {
@@ -59,7 +60,7 @@ function NodeMemo({ memo, onSave }: { memo: string; onSave(value: string): void 
         rows={5}
         value={draft}
       />
-      <Button disabled={draft === memo} size="panel" type="submit" variant="primary">
+      <Button disabled={draft === memo} size="panel" type="submit" variant="ghost">
         {t.save}
       </Button>
     </form>
@@ -125,6 +126,7 @@ export function ServerTopologyPage({
   const [linkName, setLinkName] = useState('')
   const [linkTo, setLinkTo] = useState('')
   const [placing, setPlacing] = useState(false)
+  const [nodeMenu, setNodeMenu] = useState<{ anchor: HTMLButtonElement; x: number; y: number } | null>(null)
   const [showRoutes, setShowRoutes] = useState(true)
   const [pendingRemoval, setPendingRemoval] = useState<'node' | 'link' | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -209,6 +211,7 @@ export function ServerTopologyPage({
       setSelectedLinkKey('')
       setLinkTo('')
       setPlacing(false)
+      setNodeMenu(null)
       if (detailsScrollRef.current) detailsScrollRef.current.scrollTop = 0
     }
   }
@@ -509,7 +512,7 @@ export function ServerTopologyPage({
                     onLostPointerCapture={(event) => endDrag(event, node, false)}
                     onPointerUp={(event) => endDrag(event, node, true)}
                     style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
-                    title={`${nodeName(node.id)} · ${details}`}
+                    title={`${nodeName(node.id)} · ${details}\n${t.serverTopologyMoveHint}`}
                     type="button"
                   >
                     <span className="server-topology__node-meta">
@@ -540,7 +543,48 @@ export function ServerTopologyPage({
           aria-label={selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}
         >
           <div className="server-topology__details-scroll" ref={detailsScrollRef}>
-            <h2>{selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}</h2>
+            <div className="server-topology__details-heading">
+              <h2>{selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}</h2>
+              {selected && (
+                <Button
+                  aria-expanded={nodeMenu !== null}
+                  aria-haspopup="menu"
+                  aria-label={t.actions}
+                  icon={<MaterialIcon name="more_horiz" />}
+                  onClick={(event) => {
+                    if (nodeMenu) {
+                      setNodeMenu(null)
+                      return
+                    }
+                    const anchor = event.currentTarget
+                    const rect = anchor.getBoundingClientRect()
+                    anchor.focus()
+                    setNodeMenu({ anchor, x: rect.right, y: rect.bottom })
+                  }}
+                  size="sm"
+                  title={t.actions}
+                  variant="ghost"
+                />
+              )}
+              {selected && nodeMenu && (
+                <ContextMenu
+                  align="end"
+                  anchor={nodeMenu.anchor}
+                  items={[
+                    ...(selectedProfile ? [{ label: t.openConnection, action: () => onOpenProfile(selectedId) }] : []),
+                    { label: t.serverTopologyMove, checked: placing, action: () => setPlacing(!placing) },
+                    ...(routeNodeIds.has(selectedId)
+                      ? []
+                      : [
+                          { separator: true },
+                          { label: t.serverTopologyRemoveNode, danger: true, action: () => setPendingRemoval('node') }
+                        ])
+                  ]}
+                  onClose={() => setNodeMenu(null)}
+                  position={nodeMenu}
+                />
+              )}
+            </div>
             {selectedLink ? (
               <>
                 <div className="server-topology__identity">
@@ -639,26 +683,6 @@ export function ServerTopologyPage({
                     ) : null}
                   </dl>
                 ) : null}
-                <div className="server-topology__actions">
-                  {!selectedProxy && (
-                    <Button
-                      size="panel"
-                      variant="primary"
-                      disabled={!selectedProfile}
-                      onClick={() => onOpenProfile(selectedId)}
-                    >
-                      {t.openConnection}
-                    </Button>
-                  )}
-                  <Button
-                    size="panel"
-                    title={t.serverTopologyMoveHint}
-                    aria-pressed={placing}
-                    onClick={() => setPlacing(!placing)}
-                  >
-                    {t.serverTopologyMove}
-                  </Button>
-                </div>
                 {placing ? (
                   <p className="server-topology__hint" role="status">
                     {t.serverTopologyPlaceHint}
@@ -703,6 +727,7 @@ export function ServerTopologyPage({
                             save({ ...stored, links: [...stored.links, [selectedId, selectedTarget]] })
                           }
                         }}
+                        variant="ghost"
                       >
                         {linked ? t.serverTopologyRemoveLink : t.serverTopologyAddLink}
                       </Button>
@@ -714,11 +739,6 @@ export function ServerTopologyPage({
                   memo={selected.memo ?? ''}
                   onSave={(memo) => save(updateTopologyNodeMemo(storeLayout(), selected.id, memo))}
                 />
-                {!routeNodeIds.has(selectedId) && (
-                  <Button size="panel" variant="ghost" onClick={() => setPendingRemoval('node')}>
-                    {t.serverTopologyRemoveNode}
-                  </Button>
-                )}
               </>
             ) : (
               <p className="server-topology__hint">
