@@ -11,10 +11,6 @@
   gap: 12px;
 }
 
-.server-command-batch-dialog .ft-dialog__footer {
-  background-color: inherit;
-}
-
 .server-command-batch-dialog p {
   margin: 0;
 }

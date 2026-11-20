@@ -150,7 +150,11 @@ export function ServerSavedViews({
             title={t.serverSavedViewsSave}
           >
             <form id="server-saved-view-form" onSubmit={save}>
+              <p className="server-saved-view-hint" id="server-saved-view-hint">
+                {t.serverSavedViewsHint}
+              </p>
               <Input
+                aria-describedby="server-saved-view-hint"
                 aria-label={t.serverSavedViewsName}
                 autoFocus
                 disabled={saving}

@@ -71,6 +71,12 @@
   gap: 6px;
 }
 
+.server-saved-view-hint {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .server-dashboard-saved-views .server-dashboard-saved-views-select {
   width: auto;
   max-width: min(180px, 100%);
