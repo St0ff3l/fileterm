@@ -1,4 +1,29 @@
-/// Heal `group` / `parentId` consistency on every profile.
+fn normalize_profile_tags(profile: &mut Map<String, Value>) -> bool {
+    let Some(original) = profile.get("tags") else {
+        return false;
+    };
+    let Some(values) = original.as_array() else {
+        profile.remove("tags");
+        return true;
+    };
+    let mut seen = std::collections::HashSet::new();
+    let tags = values
+        .iter()
+        .filter_map(Value::as_str)
+        .flat_map(str::lines)
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty() && seen.insert(*tag))
+        .map(|tag| Value::String(tag.to_string()))
+        .collect();
+    let normalized = Value::Array(tags);
+    if *original == normalized {
+        return false;
+    }
+    profile.insert("tags".to_string(), normalized);
+    true
+}
+
+/// Heal `group` / `parentId` consistency and normalize connection tags.
 ///
 /// Returns `(healed_profiles, dirty)`. Callers should persist the result when
 /// `dirty` is true.
@@ -26,6 +51,7 @@ pub fn heal_profiles(profiles: &mut [Value], folders: &[Value]) -> bool {
             Some(o) => o,
             None => continue,
         };
+        dirty |= normalize_profile_tags(obj);
         let group = obj
             .get("group")
             .and_then(|v| v.as_str())
@@ -100,7 +126,8 @@ pub fn read_and_heal_profiles(app: &AppHandle) -> Result<(Vec<Value>, Vec<Value>
     }
     hydrate_profile_secrets(&secrets_path, &mut profiles)?;
     let folders = read_and_heal_connection_folders(app)?;
-    let dirty = secret_shape_dirty || heal_profiles(&mut profiles, &folders);
+    let profiles_dirty = heal_profiles(&mut profiles, &folders);
+    let dirty = secret_shape_dirty || profiles_dirty;
     reconcile_profile_secrets(app, &profiles)?;
     if dirty {
         // Strip secrets before writing back. Secrets live in

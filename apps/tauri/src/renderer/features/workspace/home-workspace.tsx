@@ -25,7 +25,6 @@ import { AppIcon } from '../common/app-icon'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { PortableUpdateDialog } from '../common/portable-update-dialog'
 import { OverviewPage } from './overview-page'
-import { QuickLinksPage } from './quick-links-page'
 import { ConnectionManagerModal } from '../connections/connection-manager-modal'
 import { ProxyManagerPage, type ProxyManagerStats } from '../proxies/proxy-manager-page'
 import { CommandManagerModal } from '../commands/command-manager-modal'
@@ -33,8 +32,10 @@ import { SshKeyManagerPage } from '../ssh-keys/ssh-key-manager-page'
 import { McpCallLogPage } from './mcp-call-log-page'
 import { SettingsModal } from '../settings/settings-modal'
 import { TabBar, type TabBarProps } from '../layout/tab-bar'
-import { HostGroupList } from '../layout/host-group-list'
 import { BackgroundSessionsPage } from './background-sessions-page'
+import type { ServerManagementNavigation } from '../server-management/server-management-types'
+import { ServerTopologyPage } from '../server-management/server-topology-page'
+import { ServerManagementOverview } from '../server-management/server-management-overview'
 
 export function HomeWorkspace({
   profiles,
@@ -55,6 +56,8 @@ export function HomeWorkspace({
   overviewShowQuickActions,
   overviewSectionOrder,
   onOpen,
+  onConnectProfile,
+  onDisconnectSession,
   onOpenFileTransfers,
   onOpenLocalTerminal,
   onCreateConnection,
@@ -80,6 +83,8 @@ export function HomeWorkspace({
   onOpenLogsDirectory,
   onLaunchLocalAgent,
   isSidebarCollapsed,
+  isWorkspaceActive,
+  serverManagement,
   tabBarProps,
   isResizingSidebar,
   onResizeStart,
@@ -104,6 +109,8 @@ export function HomeWorkspace({
   overviewShowQuickActions: boolean
   overviewSectionOrder: OverviewSectionId[]
   onOpen(profileId: string): void
+  onConnectProfile(profileId: string): void
+  onDisconnectSession(tabId: string): void | Promise<void>
   onOpenFileTransfers(): void
   onOpenLocalTerminal(): void
   onCreateConnection(): void
@@ -133,15 +140,18 @@ export function HomeWorkspace({
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
   isSidebarCollapsed: boolean
+  isWorkspaceActive: boolean
+  serverManagement?: ServerManagementNavigation
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
   onResizeStart(): void
   onAttachBackgroundSession(tabId: string): void | Promise<void>
   onCloseBackgroundSession(tabId: string): void | Promise<void>
 }) {
+  const isServerManagementMode = Boolean(serverManagement)
+  const managementPage = serverManagement?.page ?? 'overview'
   const [activeTab, setActiveTab] = useState<
     | 'overview'
-    | 'quick-links'
     | 'connection-manager'
     | 'proxy-manager'
     | 'command-manager'
@@ -151,8 +161,11 @@ export function HomeWorkspace({
     | 'settings'
   >(backgroundSessionsRequest === undefined ? 'overview' : 'background-sessions')
   useLayoutEffect(() => {
-    if (backgroundSessionsRequest !== undefined) setActiveTab('background-sessions')
-  }, [backgroundSessionsRequest])
+    if (backgroundSessionsRequest !== undefined) {
+      setActiveTab('background-sessions')
+      if (isServerManagementMode) serverManagement?.navigate('background-sessions')
+    }
+  }, [backgroundSessionsRequest, isServerManagementMode, serverManagement?.navigate])
   const contentBodyRef = useRef<HTMLDivElement | null>(null)
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [suppressEntrance, setSuppressEntrance] = useState(Boolean(suppressEntranceProp))
@@ -175,23 +188,97 @@ export function HomeWorkspace({
   // 侧栏页签的纵向顺序,用于判断切换方向(目标更靠下=向下飞入,更靠上=向上飞入)
   const tabOrder: Record<string, number> = {
     overview: 0,
-    'connection-manager': 1,
-    'proxy-manager': 2,
-    'command-manager': 3,
-    'ssh-key-manager': 4,
-    'background-sessions': 5,
-    'mcp-call-log': 6,
-    settings: 7,
-    'quick-links': 8
+    'server-topology': 1,
+    'connection-manager': 2,
+    'proxy-manager': 3,
+    'command-manager': 4,
+    'ssh-key-manager': 5,
+    'background-sessions': 6,
+    'mcp-call-log': 7,
+    settings: 8
   }
+  const resolveNavDirection = (fromPage: string, toPage: string) =>
+    (tabOrder[toPage] ?? 0) >= (tabOrder[fromPage] ?? 0) ? 'down' : 'up'
   const selectTab = (tab: typeof activeTab) => {
-    if (tab === activeTab) return
+    if (tab === currentPage) return
     setSuppressEntrance(false)
-    setNavDirection((tabOrder[tab] ?? 0) >= (tabOrder[activeTab] ?? 0) ? 'down' : 'up')
+    setNavDirection(resolveNavDirection(currentPage, tab))
     setActiveTab(tab)
+    if (isServerManagementMode) serverManagement?.navigate(tab)
   }
 
+  // Management navigation lives in the host rail, so it bypasses selectTab().
+  // Resolve the direction during render and remount the transition wrapper on
+  // every page change; otherwise revisits reuse the finished animation state
+  // and the fly-in disappears. React applies these render-phase updates before
+  // the new page commits, so the wrapper mounts with the right direction and
+  // without the suppressed-entrance class.
+  const requestedPage = isServerManagementMode ? managementPage : activeTab
+  const pageEntryRef = useRef({ page: requestedPage, seq: 0 })
+  const previousManagementMode = useRef(isServerManagementMode)
+  const keepSettings =
+    isWorkspaceActive &&
+    previousManagementMode.current !== isServerManagementMode &&
+    pageEntryRef.current.page === 'settings'
+  const currentPage = keepSettings ? 'settings' : requestedPage
+  const navigateManagement = serverManagement?.navigate
+  useLayoutEffect(() => {
+    previousManagementMode.current = isServerManagementMode
+    if (!keepSettings) return
+    if (navigateManagement) navigateManagement('settings')
+    else setActiveTab('settings')
+  }, [isServerManagementMode, keepSettings, navigateManagement])
+  if (pageEntryRef.current.page !== currentPage) {
+    const previousPage = pageEntryRef.current.page
+    pageEntryRef.current = { page: currentPage, seq: pageEntryRef.current.seq + 1 }
+    setNavDirection(resolveNavDirection(previousPage, currentPage))
+    if (suppressEntrance) setSuppressEntrance(false)
+  }
+  const pageEntryKey = (page: string) => `${page}:${pageEntryRef.current.seq}`
+  const pageEntrySeq = pageEntryRef.current.seq
+  // Restart the fly-in from scratch on every management page entry. React may
+  // reuse the page nodes when the stage remounts, and a completed CSS animation
+  // never replays on the same element, so reset it explicitly after commit.
+  useLayoutEffect(() => {
+    if (!isServerManagementMode) return
+    const pageRoot = contentBodyRef.current?.querySelector(':scope > .page-transition > *')
+    if (!pageRoot) return
+    for (const child of Array.from(pageRoot.children) as HTMLElement[]) {
+      child.style.animation = 'none'
+      void child.offsetWidth
+      child.style.animation = ''
+    }
+  }, [isServerManagementMode, pageEntrySeq])
+
   const desktopApi = window.fileterm
+  // Sessions the dashboard owns: visible tabs plus the background connections
+  // created by the connect action.
+  const managementTabs = [
+    ...tabBarProps.orderedTabs.flatMap((entry) => (entry.kind === 'session' ? [entry.tab] : [])),
+    ...backgroundTabs
+  ]
+  const lastActiveSessionTabId = useRef<string | null>(null)
+  if (tabBarProps.activeSessionTabId) {
+    lastActiveSessionTabId.current = tabBarProps.activeSessionTabId
+  }
+  // Remember the server and the exact session tab the user came from so
+  // returning to the overview lands on the matching connection, and the
+  // terminal entry reopens the tab that was last active.
+  const lastActiveSessionTab = managementTabs.find(
+    (tab) => tab.id === (tabBarProps.activeSessionTabId ?? lastActiveSessionTabId.current)
+  )
+  const focusedProfileId = lastActiveSessionTab?.profileId ?? null
+  // Bumping this request on every return from a terminal re-applies the
+  // remembered server even if the selection was changed manually in between.
+  const [overviewFocusRequest, setOverviewFocusRequest] = useState(0)
+  const previousActiveSessionTabId = useRef<string | null>(tabBarProps.activeSessionTabId)
+  useEffect(() => {
+    const previous = previousActiveSessionTabId.current
+    previousActiveSessionTabId.current = tabBarProps.activeSessionTabId
+    if (isServerManagementMode && previous && !tabBarProps.activeSessionTabId) {
+      setOverviewFocusRequest((current) => current + 1)
+    }
+  }, [isServerManagementMode, tabBarProps.activeSessionTabId])
   const { openExternalUrl, externalUrlError } = useExternalUrl(desktopApi, t.openExternalUrlFailed)
   // Keep Linux on the same compact home-shell layout as Windows. macOS keeps
   // its sidebar wordmark because it has native traffic lights above it.
@@ -277,16 +364,16 @@ export function HomeWorkspace({
             ? { icon: 'error', label: t.updateRetry, title: updateStatus.message ?? t.updateFailed }
             : null
 
-  const hostNavigation = tabBarProps.hostNavigation
-
   return (
-    <section className={`home-workspace ${isSidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
-      <div className="home-tabs-bar">
+    <section
+      className={`home-workspace ${isSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isServerManagementMode ? 'is-management-mode' : ''}`}
+    >
+      <div className="home-tabs-bar" hidden={isServerManagementMode}>
         <TabBar {...tabBarProps} homeBrandContent={homeBrandContent} showAiCopilotToggle={false} />
       </div>
 
       {/* SideNavBar Component */}
-      <aside className={`home-sidebar ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
+      <aside className={`home-sidebar ${isSidebarCollapsed ? 'is-collapsed' : ''}`} hidden={isServerManagementMode}>
         {!usesWindowsHomeLayout ? (
           <div className="sidebar-brand">
             <h2 className="brand-title">FileTerm</h2>
@@ -297,7 +384,7 @@ export function HomeWorkspace({
         {/* Navigation Section */}
         <nav className="sidebar-nav">
           <button
-            className={`sidebar-nav-link ${activeTab === 'overview' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'overview' ? 'active' : ''}`}
             onClick={() => selectTab('overview')}
             aria-label={t.overview}
             title={t.overview}
@@ -307,7 +394,7 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.overview}</SidebarAlignedLabel>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'connection-manager' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'connection-manager' ? 'active' : ''}`}
             onClick={() => selectTab('connection-manager')}
             aria-label={t.connectionManager}
             title={t.connectionManager}
@@ -317,7 +404,7 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.connectionManager}</SidebarAlignedLabel>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'proxy-manager' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'proxy-manager' ? 'active' : ''}`}
             onClick={() => selectTab('proxy-manager')}
             aria-label={t.proxyManager}
             title={t.proxyManager}
@@ -327,7 +414,7 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.proxyManager}</SidebarAlignedLabel>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'command-manager' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'command-manager' ? 'active' : ''}`}
             onClick={() => selectTab('command-manager')}
             aria-label={t.commandManager}
             title={t.commandManager}
@@ -337,7 +424,7 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.commandManager}</SidebarAlignedLabel>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'ssh-key-manager' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'ssh-key-manager' ? 'active' : ''}`}
             onClick={() => selectTab('ssh-key-manager')}
             aria-label={t.sshKeyManager}
             title={t.sshKeyManager}
@@ -347,7 +434,7 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.sshKeyManager}</SidebarAlignedLabel>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'background-sessions' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'background-sessions' ? 'active' : ''}`}
             onClick={() => selectTab('background-sessions')}
             aria-label={t.backgroundSessions}
             title={t.backgroundSessions}
@@ -357,7 +444,7 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.backgroundSessions}</SidebarAlignedLabel>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'mcp-call-log' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'mcp-call-log' ? 'active' : ''}`}
             onClick={() => selectTab('mcp-call-log')}
             aria-label={t.mcpCallRecordsTitle}
             title={t.mcpCallRecordsTitle}
@@ -377,7 +464,7 @@ export function HomeWorkspace({
             <SidebarAlignedLabel>{t.fileTransferWorkspace}</SidebarAlignedLabel>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}
+            className={`sidebar-nav-link ${currentPage === 'settings' ? 'active' : ''}`}
             onClick={() => selectTab('settings')}
             aria-label={t.settings}
             title={t.settings}
@@ -386,16 +473,8 @@ export function HomeWorkspace({
             <MaterialIcon name="settings" className="material-symbols-outlined" />
             <SidebarAlignedLabel>{t.settings}</SidebarAlignedLabel>
           </button>
-          {/* Quick Connect sidebar button hidden — code preserved in QuickLinksPage.tsx */}
           {/* Docs sidebar button hidden — handleOpenDocs still available */}
         </nav>
-
-        {hostNavigation && hostNavigation.groups.some((group) => group.kind !== 'home') ? (
-          <section aria-label={t.hostRailTitle} className="home-sidebar-hosts">
-            {!isSidebarCollapsed ? <h3 className="fs-host-rail-title">{t.hostRailTitle}</h3> : null}
-            <HostGroupList collapsed={isSidebarCollapsed} includeHome={false} navigation={hostNavigation} />
-          </section>
-        ) : null}
 
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
@@ -439,40 +518,64 @@ export function HomeWorkspace({
       {/* Main Content Area */}
       <main className="home-main-content">
         <div
-          className={`home-content-body scrollbar-scroll ${suppressEntrance ? 'suppress-home-entrance' : ''}`}
+          className={`home-content-body scrollbar-scroll ${suppressEntrance && !isServerManagementMode ? 'suppress-home-entrance' : ''} ${isServerManagementMode && managementPage === 'overview' ? 'is-server-management-overview' : ''}`}
           ref={contentBodyRef}
         >
-          {activeTab === 'overview' && (
-            <div key="overview" className="page-transition" data-nav-direction={navDirection}>
-              <OverviewPage
+          {currentPage === 'overview' && (
+            <div key={pageEntryKey('overview')} className="page-transition" data-nav-direction={navDirection}>
+              {isServerManagementMode ? (
+                <ServerManagementOverview
+                  commandFolders={commandFolders}
+                  commandTemplates={commandTemplates}
+                  profiles={profiles}
+                  folders={folders}
+                  sessions={sessions}
+                  workspaceTabs={managementTabs}
+                  focusedProfileId={focusedProfileId}
+                  focusedSessionTabId={lastActiveSessionTab?.id ?? null}
+                  focusRequest={overviewFocusRequest}
+                  isFocusMode={tabBarProps.isWorkspaceFocusMode}
+                  onToggleFocusMode={tabBarProps.onToggleWorkspaceFocus}
+                  selectedFolderId={serverManagement?.selectedFolderId ?? null}
+                  onSelectFolder={(folderId) => serverManagement?.navigate('overview', folderId)}
+                  onConnectProfile={onConnectProfile}
+                  onDisconnectSession={onDisconnectSession}
+                  onActivateSession={tabBarProps.onActivateSession}
+                  onCreateConnection={onCreateConnection}
+                  onEditConnection={onEditConnection}
+                  onUpdateConnectionOrder={onUpdateConnectionOrder}
+                />
+              ) : (
+                <OverviewPage
+                  profiles={profiles}
+                  folders={folders}
+                  onOpenProfile={onOpen}
+                  showStats={overviewShowStats}
+                  showRecent={overviewShowRecent}
+                  showAllConnections={overviewShowAllConnections}
+                  showQuickActions={overviewShowQuickActions}
+                  sectionOrder={overviewSectionOrder}
+                  onOpenLocalTerminal={onOpenLocalTerminal}
+                  onOpenNewConnection={handleOpenNewConnection}
+                  onOpenConnectionManager={() => selectTab('connection-manager')}
+                  onOpenCommandManager={() => selectTab('command-manager')}
+                  onOpenDocs={handleOpenDocs}
+                />
+              )}
+            </div>
+          )}
+          {currentPage === 'server-topology' && (
+            <div key={pageEntryKey('server-topology')} className="page-transition" data-nav-direction={navDirection}>
+              <ServerTopologyPage
                 profiles={profiles}
-                folders={folders}
+                sessions={sessions}
+                workspaceTabs={managementTabs}
                 onOpenProfile={onOpen}
-                showStats={overviewShowStats}
-                showRecent={overviewShowRecent}
-                showAllConnections={overviewShowAllConnections}
-                showQuickActions={overviewShowQuickActions}
-                sectionOrder={overviewSectionOrder}
-                onOpenLocalTerminal={onOpenLocalTerminal}
-                onOpenNewConnection={handleOpenNewConnection}
-                onOpenConnectionManager={() => selectTab('connection-manager')}
-                onOpenCommandManager={() => selectTab('command-manager')}
-                onOpenDocs={handleOpenDocs}
               />
             </div>
           )}
-          {activeTab === 'quick-links' && (
-            <div key="quick-links" className="page-transition" data-nav-direction={navDirection}>
-              <QuickLinksPage
-                profiles={profiles}
-                folders={folders}
-                onOpen={onOpen}
-                onOpenNewConnection={handleOpenNewConnection}
-              />
-            </div>
-          )}
-          {activeTab === 'connection-manager' && (
-            <div key="connection-manager" className="page-transition" data-nav-direction={navDirection}>
+          {currentPage === 'connection-manager' && (
+            <div key={pageEntryKey('connection-manager')} className="page-transition" data-nav-direction={navDirection}>
               <ConnectionManagerModal
                 profiles={profiles}
                 folders={folders}
@@ -492,13 +595,13 @@ export function HomeWorkspace({
               />
             </div>
           )}
-          {activeTab === 'proxy-manager' && (
-            <div key="proxy-manager" className="page-transition" data-nav-direction={navDirection}>
+          {currentPage === 'proxy-manager' && (
+            <div key={pageEntryKey('proxy-manager')} className="page-transition" data-nav-direction={navDirection}>
               <ProxyManagerPage onStatsChange={setProxyStats} onActiveFilterChange={setActiveProxyFilterLabel} />
             </div>
           )}
-          {activeTab === 'command-manager' && (
-            <div key="command-manager" className="page-transition" data-nav-direction={navDirection}>
+          {currentPage === 'command-manager' && (
+            <div key={pageEntryKey('command-manager')} className="page-transition" data-nav-direction={navDirection}>
               <CommandManagerModal
                 commandFolders={commandFolders}
                 commandTemplates={commandTemplates}
@@ -515,13 +618,17 @@ export function HomeWorkspace({
               />
             </div>
           )}
-          {activeTab === 'ssh-key-manager' && (
-            <div key="ssh-key-manager" className="page-transition" data-nav-direction={navDirection}>
+          {currentPage === 'ssh-key-manager' && (
+            <div key={pageEntryKey('ssh-key-manager')} className="page-transition" data-nav-direction={navDirection}>
               <SshKeyManagerPage onActiveFolderChange={setActiveSshKeyFolderName} onStatsChange={setSshKeyStats} />
             </div>
           )}
-          {activeTab === 'background-sessions' && (
-            <div key="background-sessions" className="page-transition" data-nav-direction={navDirection}>
+          {currentPage === 'background-sessions' && (
+            <div
+              key={pageEntryKey('background-sessions')}
+              className="page-transition"
+              data-nav-direction={navDirection}
+            >
               <BackgroundSessionsPage
                 profiles={profiles}
                 tabs={backgroundTabs}
@@ -531,13 +638,13 @@ export function HomeWorkspace({
               />
             </div>
           )}
-          {activeTab === 'mcp-call-log' && (
-            <div key="mcp-call-log" className="page-transition" data-nav-direction={navDirection}>
+          {currentPage === 'mcp-call-log' && (
+            <div key={pageEntryKey('mcp-call-log')} className="page-transition" data-nav-direction={navDirection}>
               <McpCallLogPage onTotalChange={setMcpCallCount} />
             </div>
           )}
-          {activeTab === 'settings' && (
-            <div key="settings" className="page-transition" data-nav-direction={navDirection}>
+          {currentPage === 'settings' && (
+            <div key={pageEntryKey('settings')} className="page-transition" data-nav-direction={navDirection}>
               <SettingsModal
                 theme={theme}
                 themeConfig={themeConfig}
@@ -563,7 +670,7 @@ export function HomeWorkspace({
         <footer className="home-footer">
           <div className="footer-copyright">
             <span>© 2026 FileTerm Team. MIT Licensed.</span>
-            {activeTab === 'connection-manager' && (
+            {currentPage === 'connection-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
                 <span>
@@ -581,7 +688,7 @@ export function HomeWorkspace({
                 )}
               </>
             )}
-            {activeTab === 'proxy-manager' && (
+            {currentPage === 'proxy-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
                 <span>
@@ -603,7 +710,7 @@ export function HomeWorkspace({
                 )}
               </>
             )}
-            {activeTab === 'command-manager' && (
+            {currentPage === 'command-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
                 <span>
@@ -621,7 +728,7 @@ export function HomeWorkspace({
                 )}
               </>
             )}
-            {activeTab === 'ssh-key-manager' && (
+            {currentPage === 'ssh-key-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
                 <span>{t.keyCount.replace('{count}', String(sshKeyStats.keyCount))}</span>
@@ -631,7 +738,7 @@ export function HomeWorkspace({
                 <span>{activeSshKeyFolderName}</span>
               </>
             )}
-            {activeTab === 'mcp-call-log' && (
+            {currentPage === 'mcp-call-log' && (
               <>
                 <span className="footer-meta-separator">|</span>
                 <span>{t.mcpCallRecordsCount.replace('{count}', String(mcpCallCount))}</span>

@@ -153,6 +153,7 @@ test('connection target hints are contextual and low-resource help expands separ
       '@fileterm/shared': { normalizeConnectionHost: (host) => host },
       '../../i18n': { t },
       '../../components/common/button/button': { Button: () => null },
+      '../../components/common/input/input': { Textarea: 'textarea' },
       '../../components/common/segmented-control/segmented-control': { SegmentedControl: () => null },
       '../common/app-icon': { AppIcon: () => null },
       '../common/dropdown-select': { DropdownSelect: () => null },

@@ -1,4 +1,4 @@
-import type { PaneFocusDirection, PaneNode, WorkspaceSnapshot, WorkspaceTab } from '@fileterm/core'
+import type { PaneFocusDirection, PaneNode, SessionSnapshot, WorkspaceSnapshot, WorkspaceTab } from '@fileterm/core'
 import { t } from '../i18n'
 import type { LocalTab, StoredMainTabUiState, TerminalDockSendState } from './workspace-tabs-types'
 import type { OrderedTabEntry } from '../features/layout/tab-bar'
@@ -80,7 +80,8 @@ export function buildOrderedTabs(
       title: tab.title,
       tabKind: tab.kind,
       backgroundSessionsRequest: tab.kind === 'home' ? tab.backgroundSessionsRequest : undefined,
-      sessionTabId: tab.kind === 'system' ? tab.sessionTabId : undefined
+      sessionTabId: tab.kind === 'system' ? tab.sessionTabId : undefined,
+      initialTabId: tab.kind === 'transfers' ? tab.initialTabId : undefined
     })),
     ...sessionTabs.map((tab) => ({ key: `session:${tab.id}`, kind: 'session' as const, tab }))
   ]
@@ -309,6 +310,49 @@ export function isTabActivelyConnected(tab: WorkspaceTab | null | undefined) {
   return Boolean(tab && (tab.status === 'connecting' || tab.status === 'connected'))
 }
 
+/**
+ * Server-management mode starts connections from the overview while the
+ * dashboard stays visible, so a failed attempt would otherwise linger as an
+ * invisible tab. Only plain UI-created tabs that never reached a usable
+ * connection are eligible: the tab on screen, panes, CLI/MCP background
+ * sessions, and auto-reconnect tabs stay untouched.
+ */
+export function findFailedTabToAutoClose(
+  tabs: WorkspaceTab[],
+  sessions: Record<string, SessionSnapshot | undefined>,
+  displayedSessionTabId: string | null,
+  closingTabIds?: ReadonlySet<string>
+) {
+  return (
+    tabs.find((tab) => {
+      if (tab.status !== 'error' || tab.id === displayedSessionTabId) {
+        return false
+      }
+      if (tab.isBackground || tab.source || tab.paneRoot || tab.paneRootTabId) {
+        return false
+      }
+      if (closingTabIds?.has(tab.id)) {
+        return false
+      }
+      const session = sessions[tab.id]
+      return Boolean(session && !session.connected && session.reconnectMode !== 'auto')
+    }) ?? null
+  )
+}
+
+/** Last worker message in the transcript is the failure text appended before the status flip. */
+export function resolveSessionFailureDetail(transcript: string | undefined) {
+  if (!transcript) {
+    return ''
+  }
+
+  const lines = transcript
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  return (lines.at(-1) ?? '').replace(/^连接失败[:：]\s*/, '')
+}
+
 export function createDefaultTerminalDockSendState(): TerminalDockSendState {
   return {
     scope: 'current',
@@ -317,7 +361,7 @@ export function createDefaultTerminalDockSendState(): TerminalDockSendState {
   }
 }
 
-/** Prefer the visible neighbour on the right, then the left, before leaving a host group. */
+/** Prefer the selected host's neighbour when host grouping is enabled. */
 export function nextTabAfterClose(
   entries: OrderedTabEntry[],
   closedKey: string,
@@ -337,4 +381,21 @@ export function nextTabAfterClose(
     candidates[0] ??
     null
   )
+}
+
+/**
+ * Neighbour inside the host group of the closed tab. `null` means the group
+ * has no tabs left once `removedKeys` are closed as well, so grouped closing
+ * never falls through to another host or to the home tab.
+ */
+export function nextTabInHostGroup(entries: OrderedTabEntry[], closedKey: string, removedKeys: string[] = [closedKey]) {
+  const closed = entries.find((entry) => entry.key === closedKey)
+  if (!closed) return null
+  const sessions = entries.flatMap((entry) => (entry.kind === 'session' ? [entry.tab] : []))
+  const groupKey = entryHostGroupKey(closed, sessions)
+  const index = entries.indexOf(closed)
+  const candidates = [...entries.slice(index + 1), ...entries.slice(0, index).reverse()].filter(
+    (entry) => !removedKeys.includes(entry.key)
+  )
+  return candidates.find((entry) => entryHostGroupKey(entry, sessions) === groupKey) ?? null
 }

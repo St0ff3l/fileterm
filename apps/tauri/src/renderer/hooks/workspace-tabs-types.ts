@@ -7,8 +7,7 @@ import type {
   PaneFocusDirection,
   SessionSnapshot,
   WorkspaceSnapshot,
-  WorkspaceTab,
-  TabBarLayout
+  WorkspaceTab
 } from '@fileterm/core'
 import type { OrderedTabEntry, TabContextTarget } from '../features/layout/tab-bar'
 import type { SendScope, SessionSendTarget } from '../features/common/session-send-targets'
@@ -54,9 +53,12 @@ export type WorkspaceNavigationDirection = 'up' | 'down'
 export type UseWorkspaceTabsOptions = {
   desktopApi?: FileTermDesktopApi
   workspace: WorkspaceSnapshot
-  tabBarLayout: TabBarLayout
   isMainWorkspaceWindow: boolean
   hasLoadedInitialSnapshot: boolean
+  /** Server-management mode hides connection tabs, so failed attempts must not linger. */
+  autoCloseFailedHiddenTabs?: boolean
+  /** Server-management mode groups tabs by host, so closing stays inside the active host group. */
+  serverManagementMode?: boolean
   locale: AppLocale
   transferSidebarCollapsedByDefault: boolean
   isBusy: boolean
@@ -99,9 +101,9 @@ export type WorkspaceTabsActionContext = Pick<
   UseWorkspaceTabsOptions,
   | 'desktopApi'
   | 'workspace'
-  | 'tabBarLayout'
   | 'isMainWorkspaceWindow'
   | 'hasLoadedInitialSnapshot'
+  | 'serverManagementMode'
   | 'isBusy'
   | 'closeActiveRequestVersion'
   | 'newTabRequestVersion'

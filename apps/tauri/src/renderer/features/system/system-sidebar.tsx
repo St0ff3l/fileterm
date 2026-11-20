@@ -37,6 +37,7 @@ export function SystemSidebar({
   onMonitoringSnapshot,
   onOpenSystemInfo,
   onOpenNetworkConnections,
+  toggleSide = 'left',
   onToggleCollapsed
 }: {
   activeProfile: ConnectionProfile | null
@@ -50,6 +51,8 @@ export function SystemSidebar({
   onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
   onOpenSystemInfo(): void
   onOpenNetworkConnections(): void
+  /** Management mode mirrors the collapse glyph; the default layout keeps it. */
+  toggleSide?: 'left' | 'right'
   onToggleCollapsed(): void
 }) {
   const logMonitoringAction = useMonitoringDiagnostics({
@@ -155,6 +158,7 @@ export function SystemSidebar({
           className="system-sidebar-toggle"
           collapsed={collapsed}
           label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+          side={toggleSide}
           onClick={() => {
             logMonitoringAction('toggle-sidebar')
             onToggleCollapsed()

@@ -8,6 +8,8 @@ import { Channel, invoke } from '@tauri-apps/api/core'
 import { getRuntimeMetadata } from './runtime-metadata'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
+  CommandBatchRun,
+  CommandBatchTarget,
   AppUpdateStatus,
   NetworkConnectionsSnapshot,
   BackupDownloadMode,
@@ -645,6 +647,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         args,
         options: options ?? null
       }),
+    runCommandBatch: (
+      commandId: string,
+      expectedTemplate: string,
+      args: Record<number, string>,
+      targets: CommandBatchTarget[]
+    ) => invoke<CommandBatchRun>('app_run_command_batch', { commandId, expectedTemplate, args, targets }),
+    listCommandBatches: () => invoke<CommandBatchRun[]>('app_list_command_batches'),
     executeRemoteCommand: (
       tabId: string,
       command: string,
@@ -671,11 +680,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         saveSuPassword: credentials?.saveSuPassword ?? null
       }),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
+    openProfileBackground: (profileId: string) =>
+      invoke<WorkspaceSnapshot>('app_open_profile_background', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
     attachBackgroundSession: (tabId: string) => invoke<WorkspaceSnapshot>('app_attach_background_session', { tabId }),
     detachSessionToBackground: (tabId: string) =>
       invoke<WorkspaceSnapshot>('app_detach_session_to_background', { tabId }),
+    hideSessionToBackground: (tabId: string) => invoke<WorkspaceSnapshot>('app_hide_session_to_background', { tabId }),
     setMonitoringEnabled: (tabId, generation, enabled) =>
       invoke<WorkspaceSnapshot>('app_set_monitoring_enabled', { tabId, generation, enabled }),
     getNetworkConnections: (tabId: string) =>

@@ -1,18 +1,18 @@
-.tab-bar-layout-picker {
+.workspace-mode-picker {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   max-width: 560px;
 }
 
-.tab-bar-layout-copy {
+.workspace-mode-copy {
   flex: 1;
 }
 
-.tab-bar-layout-copy strong {
+.workspace-mode-copy strong {
   display: grid;
   gap: 8px;
 }
 
-.tab-bar-layout-preview {
+.workspace-mode-preview {
   display: grid;
   grid-template-rows: 12px minmax(0, 1fr);
   width: 100%;
@@ -24,21 +24,21 @@
   background: var(--surface-terminal);
 }
 
-.tab-bar-layout-preview.is-host-groups {
+.workspace-mode-preview.is-server-management {
   grid-template-columns: 26% minmax(0, 1fr) 24%;
   grid-template-areas:
     'tabs tabs tabs'
     'hosts terminal info';
 }
 
-.tab-bar-layout-preview.is-single-row {
+.workspace-mode-preview.is-standard {
   grid-template-columns: 26% minmax(0, 1fr);
   grid-template-areas:
     'tabs tabs'
     'info terminal';
 }
 
-.tab-bar-layout-preview-tabs {
+.workspace-mode-preview-tabs {
   grid-area: tabs;
   display: flex;
   align-items: flex-end;
@@ -48,19 +48,19 @@
   background: var(--surface-titlebar);
 }
 
-.tab-bar-layout-preview-tabs > span {
+.workspace-mode-preview-tabs > span {
   width: 18px;
   height: 7px;
   border-radius: 2px 2px 0 0;
   background: var(--surface-active);
 }
 
-.tab-bar-layout-preview-tabs > span:first-child,
-.tab-bar-layout-preview-hosts > span:first-child {
+.workspace-mode-preview-tabs > span:first-child,
+.workspace-mode-preview-nav > span:first-child {
   background: var(--accent-secondary);
 }
 
-.tab-bar-layout-preview-hosts {
+.workspace-mode-preview-nav {
   grid-area: hosts;
   display: grid;
   align-content: start;
@@ -70,25 +70,25 @@
   background: var(--surface-sidebar);
 }
 
-.tab-bar-layout-preview-hosts > span {
+.workspace-mode-preview-nav > span {
   height: 5px;
   border-radius: 2px;
   background: var(--surface-active);
 }
 
-.tab-bar-layout-preview-info {
+.workspace-mode-preview-info {
   grid-area: info;
   background: var(--surface-sidebar);
 }
 
-.tab-bar-layout-preview.is-host-groups .tab-bar-layout-preview-info {
+.workspace-mode-preview.is-server-management .workspace-mode-preview-info {
   border-left: 1px solid var(--border-subtle);
 }
 
-.tab-bar-layout-preview.is-single-row .tab-bar-layout-preview-info {
+.workspace-mode-preview.is-standard .workspace-mode-preview-info {
   border-right: 1px solid var(--border-subtle);
 }
 
-.tab-bar-layout-preview-terminal {
+.workspace-mode-preview-terminal {
   grid-area: terminal;
 }

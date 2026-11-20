@@ -1,0 +1,11 @@
+.command-table .command-template-select {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+}
+
+.command-template-select:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}

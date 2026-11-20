@@ -6,6 +6,7 @@ import bundledNotices from '../../../../../../../../THIRD_PARTY_NOTICES.md?raw'
 import themeNotices from '../../../../../../../../docs/quality/iterm2-color-scheme-attribution.md?raw'
 import { useExternalUrl } from '../../../../hooks/use-external-url'
 import type { LocaleMessages } from '../../../../i18n'
+import { SettingsDisclosureSummary } from '../settings-disclosure-summary'
 
 const projectGroups = {
   openSourceInterface: {
@@ -60,7 +61,7 @@ export function OpenSourceNotices({
         ))}
       </dl>
       <details className="third-party-license">
-        <summary>{t.thirdPartyLicense}</summary>
+        <SettingsDisclosureSummary>{t.thirdPartyLicense}</SettingsDisclosureSummary>
         <div className="open-source-license-text">
           <ReactMarkdown
             components={{

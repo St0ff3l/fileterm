@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '../../components/common/button/button'
+import { Textarea } from '../../components/common/input/input'
 import type {
   CreateProfileInput,
   SerialPortInfo,
@@ -566,6 +567,17 @@ export function ConnectionSshGeneralSection({
             ) : null}
           </div>
         ) : null}
+        <label className="full">
+          {t.connectionTagsPerLine}
+          <Textarea
+            rows={2}
+            value={form.tags?.join('\n') ?? ''}
+            onChange={(event) => {
+              const tags = event.target.value.split('\n')
+              setForm((prev) => ({ ...prev, tags }))
+            }}
+          />
+        </label>
         <label className="full">
           {t.note}:
           <textarea

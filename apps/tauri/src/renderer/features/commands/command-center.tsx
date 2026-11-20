@@ -9,12 +9,11 @@ import type {
 } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/close-button'
-import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
-import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { WorkspaceLoadingState } from '../common/workspace-loading-state'
 import { CommandPreviewPane } from './command-preview-pane'
-import { extractCommandParams, groupCommands, sortByOrder } from './command-utils'
+import { CommandTemplateLibrary } from './command-template-library'
+import { commandTemplatesForFolder, extractCommandParams, sortByOrder } from './command-utils'
 import {
   TEMPORARY_EDITOR_ID,
   TEMPORARY_HISTORY_LIMIT,
@@ -59,11 +58,6 @@ export function CommandCenter({
   paneWidth: number
   onPaneWidthChange(width: number): void
 }) {
-  const grouped = useMemo(() => groupCommands(commandFolders, commandTemplates), [commandFolders, commandTemplates])
-  const ungrouped = useMemo(
-    () => sortByOrder(commandTemplates.filter((template) => !template.parentId)),
-    [commandTemplates]
-  )
   const [activeFolderId, setActiveFolderId] = useState<string>('all')
   const [selectedCommandId, setSelectedCommandId] = useState<string | null>(() => {
     const initialSorted = sortByOrder(commandTemplates)
@@ -87,22 +81,13 @@ export function CommandCenter({
   const isTemporaryEditor = activeFolderId === TEMPORARY_EDITOR_ID
 
   const splitRef = useRef<HTMLDivElement | null>(null)
-  const templateListScrollRef = useRef<HTMLDivElement | null>(null)
   const isResizingCommandSplit = useRef(false)
   const temporaryHistoryRef = useRef<TemporaryHistoryEntry[]>([])
 
-  const visibleTemplates = useMemo(() => {
-    if (isTemporaryEditor) {
-      return []
-    }
-    if (activeFolderId === 'all') {
-      return sortByOrder(commandTemplates)
-    }
-    if (activeFolderId === 'ungrouped') {
-      return ungrouped
-    }
-    return sortByOrder(commandTemplates.filter((template) => template.parentId === activeFolderId))
-  }, [activeFolderId, commandTemplates, isTemporaryEditor, ungrouped])
+  const visibleTemplates = useMemo(
+    () => (isTemporaryEditor ? [] : commandTemplatesForFolder(commandTemplates, activeFolderId)),
+    [activeFolderId, commandTemplates, isTemporaryEditor]
+  )
 
   const selectedTemplate = useMemo(() => {
     if (isTemporaryEditor) {
@@ -461,166 +446,102 @@ export function CommandCenter({
           ref={splitRef}
           style={{ '--list-pane-width': `${paneWidth}px` } as React.CSSProperties}
         >
-          <section className="command-pane command-pane-list">
-            <div className="command-folder-bar">
-              <div className="command-folder-tabs-scroll" onWheel={handleHorizontalWheelScroll}>
-                <div className="command-folder-tabs">
-                  <button
-                    className={`command-folder-tab-temporary ${isTemporaryEditor ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => setActiveFolderId(TEMPORARY_EDITOR_ID)}
-                  >
-                    <MaterialIcon name="edit_note" className="material-symbols-outlined" aria-hidden="true" />
-                    <span>{t.commandTemporaryEditor}</span>
-                  </button>
-                  <button
-                    className={activeFolderId === 'all' ? 'active' : ''}
-                    type="button"
-                    onClick={() => setActiveFolderId('all')}
-                  >
-                    <span>{t.all}</span>
-                    <small>{commandTemplates.length}</small>
-                  </button>
-                  {grouped.map(({ folder, templates }) => (
+          <CommandTemplateLibrary
+            folderId={activeFolderId}
+            folders={commandFolders}
+            leadingTab={
+              <button
+                className={`command-folder-tab-temporary ${isTemporaryEditor ? 'active' : ''}`}
+                type="button"
+                onClick={() => setActiveFolderId(TEMPORARY_EDITOR_ID)}
+              >
+                <MaterialIcon name="edit_note" className="material-symbols-outlined" aria-hidden="true" />
+                <span>{t.commandTemporaryEditor}</span>
+              </button>
+            }
+            onFolderChange={setActiveFolderId}
+            onSelect={setSelectedCommandId}
+            selectedId={selectedTemplate?.id}
+            templates={commandTemplates}
+            visibleTemplates={visibleTemplates}
+          >
+            {isTemporaryEditor ? (
+              <div className="command-temporary-history">
+                <div className="command-temporary-history-head">
+                  <div className="command-temporary-history-title">
+                    <MaterialIcon name="history" className="material-symbols-outlined" aria-hidden="true" />
+                    <strong>{t.history}</strong>
+                    <small>{temporaryHistory.length}</small>
+                  </div>
+                  <div className="command-temporary-history-actions">
                     <button
-                      key={folder.id}
-                      className={activeFolderId === folder.id ? 'active' : ''}
+                      className="flat-button compact command-temporary-history-clear"
+                      disabled={!temporaryHistory.length}
                       type="button"
-                      onClick={() => setActiveFolderId(folder.id)}
+                      title={t.clear}
+                      onClick={handleTemporaryHistoryClear}
                     >
-                      <span>{folder.name}</span>
-                      <small>{templates.length}</small>
+                      <MaterialIcon name="delete_sweep" className="material-symbols-outlined" aria-hidden="true" />
+                      <span>{t.clear}</span>
                     </button>
-                  ))}
-                  {ungrouped.length ? (
                     <button
-                      className={activeFolderId === 'ungrouped' ? 'active' : ''}
+                      className="flat-button compact command-temporary-history-new"
                       type="button"
-                      onClick={() => setActiveFolderId('ungrouped')}
+                      aria-label={t.commandTemporaryHistoryNew}
+                      title={t.commandTemporaryHistoryNew}
+                      onClick={handleTemporaryHistoryNew}
                     >
-                      <span>{t.commandUncategorized}</span>
-                      <small>{ungrouped.length}</small>
+                      <MaterialIcon name="add" className="material-symbols-outlined" aria-hidden="true" />
+                      <span>{t.commandTemporaryHistoryNew}</span>
                     </button>
-                  ) : null}
+                  </div>
+                </div>
+                <div className="command-temporary-history-list scrollbar-scroll">
+                  {temporaryHistory.length ? (
+                    temporaryHistory.map((entry) => {
+                      const key = temporaryHistoryKey(entry)
+                      return (
+                        <article
+                          aria-pressed={selectedTemporaryHistoryKey === key}
+                          className={`command-temporary-history-item ${selectedTemporaryHistoryKey === key ? 'is-selected' : ''}`}
+                          key={key}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleTemporaryHistorySelect(entry)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              handleTemporaryHistorySelect(entry)
+                            }
+                          }}
+                        >
+                          <time dateTime={new Date(entry.createdAt).toISOString()}>
+                            {formatTemporaryHistoryTime(entry.createdAt)}
+                          </time>
+                          <code title={entry.command}>{entry.command}</code>
+                          <CloseButton
+                            aria-label={t.delete}
+                            className="command-temporary-history-delete"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handleTemporaryHistoryDelete(entry)
+                            }}
+                            size="tab"
+                            title={t.delete}
+                          />
+                        </article>
+                      )
+                    })
+                  ) : (
+                    <div className="command-temporary-history-empty">
+                      <MaterialIcon name="history" className="material-symbols-outlined" aria-hidden="true" />
+                      <span>{t.commandTemporaryHistoryEmpty}</span>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-
-            <div className="command-template-list-region">
-              <div className="command-template-list scrollbar-scroll" ref={templateListScrollRef}>
-                {isTemporaryEditor ? (
-                  <div className="command-temporary-history">
-                    <div className="command-temporary-history-head">
-                      <div className="command-temporary-history-title">
-                        <MaterialIcon name="history" className="material-symbols-outlined" aria-hidden="true" />
-                        <strong>{t.history}</strong>
-                        <small>{temporaryHistory.length}</small>
-                      </div>
-                      <div className="command-temporary-history-actions">
-                        <button
-                          className="flat-button compact command-temporary-history-clear"
-                          disabled={!temporaryHistory.length}
-                          type="button"
-                          title={t.clear}
-                          onClick={handleTemporaryHistoryClear}
-                        >
-                          <MaterialIcon name="delete_sweep" className="material-symbols-outlined" aria-hidden="true" />
-                          <span>{t.clear}</span>
-                        </button>
-                        <button
-                          className="flat-button compact command-temporary-history-new"
-                          type="button"
-                          aria-label={t.commandTemporaryHistoryNew}
-                          title={t.commandTemporaryHistoryNew}
-                          onClick={handleTemporaryHistoryNew}
-                        >
-                          <MaterialIcon name="add" className="material-symbols-outlined" aria-hidden="true" />
-                          <span>{t.commandTemporaryHistoryNew}</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="command-temporary-history-list scrollbar-scroll">
-                      {temporaryHistory.length ? (
-                        temporaryHistory.map((entry) => {
-                          const key = temporaryHistoryKey(entry)
-                          return (
-                            <article
-                              aria-pressed={selectedTemporaryHistoryKey === key}
-                              className={`command-temporary-history-item ${selectedTemporaryHistoryKey === key ? 'is-selected' : ''}`}
-                              key={key}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => handleTemporaryHistorySelect(entry)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                  event.preventDefault()
-                                  handleTemporaryHistorySelect(entry)
-                                }
-                              }}
-                            >
-                              <time dateTime={new Date(entry.createdAt).toISOString()}>
-                                {formatTemporaryHistoryTime(entry.createdAt)}
-                              </time>
-                              <code title={entry.command}>{entry.command}</code>
-                              <CloseButton
-                                aria-label={t.delete}
-                                className="command-temporary-history-delete"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  handleTemporaryHistoryDelete(entry)
-                                }}
-                                size="tab"
-                                title={t.delete}
-                              />
-                            </article>
-                          )
-                        })
-                      ) : (
-                        <div className="command-temporary-history-empty">
-                          <MaterialIcon name="history" className="material-symbols-outlined" aria-hidden="true" />
-                          <span>{t.commandTemporaryHistoryEmpty}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <table className="fs-file-table compact command-table">
-                      <colgroup>
-                        <col style={{ width: '100%' }} />
-                      </colgroup>
-                      <thead>
-                        <tr>
-                          <th>{t.name}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleTemplates.map((template) => (
-                          <tr
-                            key={template.id}
-                            className={selectedTemplate?.id === template.id ? 'is-selected' : ''}
-                            onClick={() => setSelectedCommandId(template.id)}
-                          >
-                            <td>
-                              <div className="col-name-wrapper">
-                                <strong>{template.name}</strong>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {!visibleTemplates.length ? (
-                      <div className="command-empty-state">
-                        <span>{t.commandEmpty}</span>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </div>
-              <VerticalScrollbar ariaLabel={t.scrollCommandList} scrollRef={templateListScrollRef} topInset={24} />
-            </div>
-          </section>
+            ) : null}
+          </CommandTemplateLibrary>
 
           <div
             className="file-split-resizer"

@@ -2,8 +2,9 @@ import { DIAGNOSTIC_SCOPES, writeDiagnosticLog } from '../lib/diagnostic-log'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ConnectionProfile, PaneFocusDirection, SessionSnapshot } from '@fileterm/core'
 import { homeTabKey, sessionTabKey } from '../app/app-utils'
+import { rememberSessionTab } from './session-tab-memory'
 import type { SessionSendTarget } from '../features/common/session-send-targets'
-import { setLocale, t } from '../i18n'
+import { setLocale, formatMessage, t } from '../i18n'
 import type { OrderedTabEntry } from '../features/layout/tab-bar'
 import type {
   LocalTab,
@@ -24,11 +25,13 @@ import {
   collectPaneLeafTabIds,
   createDefaultTerminalDockSendState,
   createInitialMainTabUiState,
+  findFailedTabToAutoClose,
   formatSystemInfoTabTitle,
   isDefaultPlaceholderHomeTab,
   parseStoredMainTabUiState,
   reconcileTabOrder,
   resolveFallbackHomeTabId,
+  resolveSessionFailureDetail,
   uniqueItemsById,
   withPendingActiveTab,
   uniqueStrings
@@ -39,9 +42,10 @@ const MAIN_TAB_UI_STATE_KEY = 'main.tab-ui'
 export function useWorkspaceTabs({
   desktopApi,
   workspace: syncedWorkspace,
-  tabBarLayout,
   isMainWorkspaceWindow,
   hasLoadedInitialSnapshot,
+  autoCloseFailedHiddenTabs = false,
+  serverManagementMode = false,
   locale,
   transferSidebarCollapsedByDefault,
   isBusy,
@@ -281,6 +285,12 @@ export function useWorkspaceTabs({
       if (current && nextLocalTabs.some((tab) => tab.id === current)) {
         return current
       }
+      // A session activation is in flight (for example attaching a background
+      // session); keep the home tab inactive so the incoming snapshot can open
+      // the terminal on the first click.
+      if (pendingActiveTabId) {
+        return null
+      }
       if (visibleWorkspaceTabs.length > 0) {
         return null
       }
@@ -292,6 +302,7 @@ export function useWorkspaceTabs({
     hasLoadedInitialSnapshot,
     isMainWorkspaceWindow,
     localTabs,
+    pendingActiveTabId,
     tabOrder,
     visibleWorkspaceTabs
   ])
@@ -345,6 +356,12 @@ export function useWorkspaceTabs({
     : visibleWorkspaceTabs.some((tab) => tab.id === workspace.activeTabId)
       ? workspace.activeTabId
       : (visibleSessionTabOrder.at(-1) ?? visibleWorkspaceTabs.at(-1)?.id ?? null)
+  // Every path that makes a tab active (click, new tab, reconnect, snapshot)
+  // refreshes the per-server memory used when returning from the overview.
+  useEffect(() => {
+    const activeSessionTab = visibleWorkspaceTabs.find((tab) => tab.id === visibleActiveSessionTabId)
+    if (activeSessionTab) rememberSessionTab(activeSessionTab.id, activeSessionTab.profileId)
+  }, [visibleActiveSessionTabId, visibleWorkspaceTabs])
   const displayedSessionTabId = activeLocalTab
     ? activeLocalTab.kind === 'system'
       ? activeLocalTab.sessionTabId
@@ -517,10 +534,10 @@ export function useWorkspaceTabs({
   const sessionActionContext: WorkspaceTabsActionContext = {
     desktopApi,
     workspace,
-    tabBarLayout,
     orderedTabs,
     isMainWorkspaceWindow,
     hasLoadedInitialSnapshot,
+    serverManagementMode,
     isBusy,
     closeActiveRequestVersion,
     newTabRequestVersion,
@@ -565,12 +582,14 @@ export function useWorkspaceTabs({
     pendingProfileOpenIdRef
   }
   const {
+    activateManagementHome,
     activateSessionTab,
     applySnapshot,
     attachBackgroundSession,
     closeBackgroundSession,
     closeHomeTabs,
     closeSessionTabById,
+    connectProfile,
     consumePendingProfileOpen,
     detachSessionToBackground,
     disconnectSessionTab,
@@ -587,6 +606,58 @@ export function useWorkspaceTabs({
     consumePendingProfileOpen()
   }, [hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow])
 
+  // Connections started from the server-management overview stay off-screen;
+  // close a failed attempt instead of keeping an invisible tab around.
+  const autoCloseRequestedTabIdsRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (
+      !autoCloseFailedHiddenTabs ||
+      !isMainWorkspaceWindow ||
+      !hasLoadedInitialSnapshot ||
+      !hasHydratedMainTabUiState
+    ) {
+      return
+    }
+
+    const pendingTabIds = autoCloseRequestedTabIdsRef.current
+    const liveTabIds = new Set(workspace.tabs.map((tab) => tab.id))
+    for (const tabId of pendingTabIds) {
+      if (!liveTabIds.has(tabId)) {
+        pendingTabIds.delete(tabId)
+      }
+    }
+
+    const failedTab = findFailedTabToAutoClose(
+      workspace.tabs,
+      workspace.sessions,
+      displayedSessionTabId,
+      closingSessionTabIdSet
+    )
+    if (!failedTab || pendingTabIds.has(failedTab.id)) {
+      return
+    }
+
+    pendingTabIds.add(failedTab.id)
+    const detail = resolveSessionFailureDetail(workspace.sessions[failedTab.id]?.terminalTranscript)
+    onStatusMessage(
+      formatMessage(t.connectionFailedTabAutoClosed, {
+        title: failedTab.title || t.untitledTab,
+        error: detail || t.disconnected
+      })
+    )
+    void closeSessionTabById(failedTab.id)
+  }, [
+    autoCloseFailedHiddenTabs,
+    closingSessionTabIdSet,
+    displayedSessionTabId,
+    hasHydratedMainTabUiState,
+    hasLoadedInitialSnapshot,
+    isMainWorkspaceWindow,
+    onStatusMessage,
+    workspace.sessions,
+    workspace.tabs
+  ])
+
   // ==========================================
   // 分屏（Split Pane）操作
   // ==========================================
@@ -596,6 +667,7 @@ export function useWorkspaceTabs({
   const { activatePane, closePane, focusAdjacentPane, setPaneWeights, splitCurrentPane, splitPane } = paneActions
   const contextActions = createWorkspaceTabsContextActions({
     ...sessionActionContext,
+    activateManagementHome,
     activateSessionTab,
     ...paneActions,
     closeHomeTabs,
@@ -711,6 +783,7 @@ export function useWorkspaceTabs({
     workspaceNavDirection,
     orderedTabs,
     sessionSendTargets,
+    connectProfile,
     openProfile,
     openLocalTerminal,
     activateSessionTab,

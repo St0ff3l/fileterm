@@ -1,0 +1,146 @@
+.server-management-list {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.server-management-list-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.server-management-list-scroll::-webkit-scrollbar:vertical {
+  display: none;
+}
+
+.server-management-list-scroll:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}
+
+.server-management-list table {
+  width: 100%;
+  min-width: 480px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: start;
+  font-size: var(--font-size-sm);
+}
+
+.server-management-list thead {
+  position: sticky;
+  z-index: 1;
+  inset-block-start: 0;
+  background: var(--surface-section);
+}
+
+.server-management-list .server-management-list-check {
+  width: 38px;
+  padding-inline: 12px;
+}
+
+.server-management-list thead th[data-column='name'] {
+  width: 22%;
+}
+
+.server-management-list thead th[data-column='address'] {
+  width: 28%;
+}
+
+.server-management-list thead th[data-column='protocol'] {
+  width: 12%;
+}
+
+.server-management-list thead th[data-column='status'] {
+  width: 17%;
+}
+
+.server-management-list th,
+.server-management-list td {
+  height: 34px;
+  padding: 0 8px;
+  text-align: start;
+  overflow: hidden;
+  border-block-end: 1px solid var(--border-default);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-management-list tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+.server-management-list tbody tr {
+  cursor: pointer;
+}
+
+.server-management-list tbody tr.is-selected {
+  background: var(--surface-hover);
+}
+
+@media (hover: hover) {
+  .server-management-list tbody tr:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.server-management-list tbody tr.is-selected > :first-child {
+  position: relative;
+}
+
+.server-management-list tbody tr.is-selected > :first-child::before {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: 0;
+  width: 3px;
+  border-start-end-radius: 2px;
+  border-end-end-radius: 2px;
+  background: var(--text-primary);
+  content: '';
+}
+
+.server-management-list thead .server-management-list-sort {
+  display: flex;
+  justify-content: flex-start;
+  text-align: start;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 0;
+}
+
+.server-management-list tbody .ft-btn {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  padding-inline: 0;
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.server-management-list tbody .ft-btn:is(:hover, :active):not(:disabled) {
+  background: transparent;
+}
+
+.server-management-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-management-list td > .server-dashboard-status {
+  margin-inline-start: 0;
+}
+
+.server-management-list tbody .ft-btn:focus-visible {
+  box-shadow: none;
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}

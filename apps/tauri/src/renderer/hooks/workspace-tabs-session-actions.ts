@@ -4,12 +4,13 @@ import type {
   WorkspaceSnapshot,
   WorkspaceTab
 } from '@fileterm/core'
-import { homeTabKey, sessionTabKey, settledResultsError } from '../app/app-utils'
+import { homeTabKey, sessionTabKey, settledResultsError, tabStatusClass } from '../app/app-utils'
 import { resolveSelectedTabIds, type SendScope } from '../features/common/session-send-targets'
 import { t } from '../i18n'
 import { runProfileOpenOnce } from './profile-open-guard'
+import { rememberSessionTab } from './session-tab-memory'
 import type { WorkspaceTabsActionContext } from './workspace-tabs-types'
-import { nextTabAfterClose, uniqueStrings } from './workspace-tabs-utils'
+import { isTabActivelyConnected, nextTabAfterClose, nextTabInHostGroup, uniqueStrings } from './workspace-tabs-utils'
 
 export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionContext) {
   const {
@@ -132,7 +133,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     }
   }
 
-  const openProfileInCurrentWorkspace = (profileId: string) =>
+  const openProfileInCurrentWorkspace = (profileId: string, keepHomeVisible = false) =>
     runProfileOpenOnce(profileId, async () => {
       if (!desktopApi) {
         return
@@ -146,12 +147,19 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
               [...context.localTabs].reverse().find((tab) => tab.kind === 'home')?.id ??
               null)
             : null
-      const replacementKey = activeHomeId ? homeTabKey(activeHomeId) : null
+      const replacementKey = activeHomeId && !keepHomeVisible ? homeTabKey(activeHomeId) : null
       pendingHomeReplacementKeyRef.current = replacementKey
 
       try {
         onBusyChange(true)
-        const snapshot = await desktopApi.openProfile(profileId)
+        const disconnectedTab = keepHomeVisible
+          ? visibleWorkspaceTabs.find(
+              (tab) => tab.profileId === profileId && tabStatusClass(tab.status) === 'disconnected'
+            )
+          : undefined
+        const snapshot = disconnectedTab
+          ? await desktopApi.reconnectTab(disconnectedTab.id)
+          : await desktopApi.openProfile(profileId)
         applySnapshot(snapshot)
         onStatusMessage(null)
         if (activeHomeId && snapshot.activeTabId && replacementKey) {
@@ -166,7 +174,11 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
           setLocalTabs((current) => current.filter((tab) => tab.id !== activeHomeId))
         }
         pendingHomeReplacementKeyRef.current = null
-        setActiveLocalTabId(null)
+        if (keepHomeVisible) {
+          if (activeHomeId) setActiveLocalTabId(activeHomeId)
+        } else {
+          setActiveLocalTabId(null)
+        }
       } catch (error) {
         pendingHomeReplacementKeyRef.current = null
         onError('打开连接', error)
@@ -185,6 +197,36 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
 
     await openProfileInCurrentWorkspace(profileId)
   }
+
+  /**
+   * Dashboard connect keeps the overview in front: the session runs in the
+   * background so monitoring can fill in the server configuration, and only
+   * the terminal action attaches it to a visible tab.
+   */
+  const connectProfile = (profileId: string) =>
+    context.serverManagementMode
+      ? runProfileOpenOnce(profileId, async () => {
+          if (!desktopApi) {
+            return
+          }
+
+          const disconnectedTab = visibleWorkspaceTabs.find(
+            (tab) => tab.profileId === profileId && tabStatusClass(tab.status) === 'disconnected'
+          )
+          try {
+            onBusyChange(true)
+            const snapshot = disconnectedTab
+              ? await desktopApi.reconnectTab(disconnectedTab.id)
+              : await desktopApi.openProfileBackground(profileId)
+            applySnapshot(snapshot)
+            onStatusMessage(null)
+          } catch (error) {
+            onError('连接服务器', error)
+          } finally {
+            onBusyChange(false)
+          }
+        })
+      : openProfileInCurrentWorkspace(profileId, true)
 
   const openLocalTerminal = async (options?: LocalTerminalLaunchOptions, startupCommand?: string) => {
     if (!desktopApi) {
@@ -225,6 +267,27 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
 
   const activateSessionTab = async (tabId: string) => {
     if (!desktopApi) {
+      return
+    }
+
+    // Background sessions have no tab yet; attaching is what opens the terminal.
+    const targetTab = workspace.tabs.find((tab) => tab.id === tabId)
+    if (targetTab) rememberSessionTab(targetTab.id, targetTab.profileId)
+    if (targetTab?.isBackground) {
+      const requestId = ++tabActivationRequestRef.current
+      setPendingActiveTabId(tabId)
+      setActiveLocalTabId(null)
+      try {
+        onBusyChange(true)
+        const snapshot = await desktopApi.attachBackgroundSession(tabId)
+        applySnapshot(snapshot)
+      } catch (error) {
+        if (tabActivationRequestRef.current === requestId) setActiveLocalTabId(activeLocalTabId)
+        onError('打开终端', error)
+      } finally {
+        if (tabActivationRequestRef.current === requestId) setPendingActiveTabId(null)
+        onBusyChange(false)
+      }
       return
     }
 
@@ -388,13 +451,54 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
 
     try {
       onBusyChange(true)
-      const snapshot = await desktopApi.disconnectTab(tabId)
+      // Dashboard connections only exist in the background, so dropping the
+      // connection also drops the hidden session instead of leaving a stale entry.
+      const isBackground = workspace.tabs.find((tab) => tab.id === tabId)?.isBackground === true
+      const snapshot = isBackground ? await desktopApi.closeTab(tabId) : await desktopApi.disconnectTab(tabId)
       applySnapshot(snapshot)
     } catch (error) {
       onError('断开标签页', error)
     } finally {
       onBusyChange(false)
     }
+  }
+
+  /**
+   * Server-management mode returns to the overview once the active host group
+   * runs out of tabs. The overview is the home tab, which stays hidden in the
+   * grouped tab bar, so make sure one exists before activating it.
+   */
+  const activateManagementHome = () => {
+    const homeTab = localTabsRef.current.find((tab) => tab.kind === 'home')
+    if (homeTab) {
+      setActiveLocalTabId(homeTab.id)
+      return
+    }
+
+    const homeId = `home-${nextHomeTabNumber}`
+    setLocalTabs((current) =>
+      current.some((tab) => tab.kind === 'home')
+        ? current
+        : [...current, { id: homeId, kind: 'home', title: t.untitledTab }]
+    )
+    setTabOrder((current) => (current.includes(homeTabKey(homeId)) ? current : [...current, homeTabKey(homeId)]))
+    setNextHomeTabNumber((current) => current + 1)
+    setActiveLocalTabId((current) => current ?? homeId)
+  }
+
+  // Closing a managed server's last terminal view should not tear down the
+  // connection that backs the overview; hide it in the background instead.
+  const shouldHideLastManagedSession = (tabId: string) => {
+    if (!context.serverManagementMode) {
+      return false
+    }
+    const closingTab = workspace.tabs.find((tab) => tab.id === tabId)
+    if (!closingTab?.profileId || !isTabActivelyConnected(closingTab)) {
+      return false
+    }
+    return !workspace.tabs.some(
+      (tab) => tab.id !== tabId && !tab.paneRootTabId && tab.profileId === closingTab.profileId
+    )
   }
 
   const closeSessionTabById = async (tabId: string) => {
@@ -410,13 +514,14 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     const closingActive =
       (!activeLocalTabId && context.visibleActiveSessionTabId === tabId) ||
       relatedLocalTabs.includes(activeLocalTabId ?? '')
+    const closedKey = activeLocalTabId ? homeTabKey(activeLocalTabId) : sessionTabKey(tabId)
+    const removedKeys = [sessionTabKey(tabId), ...relatedLocalTabs.map(homeTabKey)]
+    // Grouped closing stays inside the current host group; no neighbour means
+    // the group is now empty and the overview takes over.
     const next = closingActive
-      ? nextTabAfterClose(
-          context.orderedTabs,
-          activeLocalTabId ? homeTabKey(activeLocalTabId) : sessionTabKey(tabId),
-          context.tabBarLayout === 'host-groups',
-          [sessionTabKey(tabId), ...relatedLocalTabs.map(homeTabKey)]
-        )
+      ? context.serverManagementMode
+        ? nextTabInHostGroup(context.orderedTabs, closedKey, removedKeys)
+        : nextTabAfterClose(context.orderedTabs, closedKey, false, removedKeys)
       : null
     // Select the neighbour before closing so the backend cannot choose its last tab.
     if (next?.kind === 'session') applySnapshot(await desktopApi.activateTab(next.tab.id))
@@ -434,9 +539,17 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
     }
 
     if (next) setActiveLocalTabId(next.kind === 'local' ? next.id : null)
+    if (context.serverManagementMode && closingActive && !next) activateManagementHome()
 
-    const snapshot = await desktopApi.closeTab(tabId)
+    const snapshot = shouldHideLastManagedSession(tabId)
+      ? await desktopApi.hideSessionToBackground(tabId)
+      : await desktopApi.closeTab(tabId)
     applySnapshot(snapshot)
+    // A hidden session stays in the snapshot, so applySnapshot keeps it in the
+    // closing set; clear it so attaching the same tab again is not filtered out.
+    if (shouldHideLastManagedSession(tabId)) {
+      setClosingSessionTabIds((current) => current.filter((id) => id !== tabId))
+    }
     if (snapshot.activeTabId === null) {
       setLocalTabs((current) => (current.length ? current : [{ id: 'home-1', kind: 'home', title: t.untitledTab }]))
       setTabOrder((current) => {
@@ -465,12 +578,14 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
   }
 
   return {
+    activateManagementHome,
     activateSessionTab,
     applySnapshot,
     attachBackgroundSession,
     closeBackgroundSession,
     closeHomeTabs,
     closeSessionTabById,
+    connectProfile,
     consumePendingProfileOpen,
     detachSessionToBackground,
     disconnectSessionTab,

@@ -2318,34 +2318,6 @@
   border-bottom-color: var(--border-subtle);
 }
 
-.theme-config-section-summary::-webkit-details-marker {
-  display: none;
-}
-
-.theme-config-section-summary::before {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  margin-right: 2px;
-  color: var(--text-muted);
-  content: '›';
-  font-size: 18px;
-  line-height: 1;
-  transform: rotate(0deg);
-  transition:
-    transform var(--duration-hover) var(--ease-out),
-    color var(--duration-hover) var(--ease-out);
-}
-
-.theme-config-section-summary:hover::before {
-  color: var(--text-primary);
-}
-
-.theme-advanced-section[open] > .theme-config-section-summary::before {
-  transform: rotate(90deg);
-}
-
 .theme-config-section-summary-copy {
   display: flex;
   min-width: 0;
@@ -3000,7 +2972,6 @@
   .command-manager-item,
   .update-progress > span,
   .theme-card,
-  .theme-config-section-summary::before,
   .lang-card,
   .tool-shortcut-card {
     transition-property: background-color, border-color, color, box-shadow, opacity;

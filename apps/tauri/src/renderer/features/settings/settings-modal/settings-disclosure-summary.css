@@ -1,0 +1,26 @@
+:where(.settings-disclosure-summary) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.settings-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure-chevron {
+  flex: none;
+  transition: transform var(--duration-hover) var(--ease-out);
+}
+
+details[open] > .settings-disclosure-summary > .settings-disclosure-chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-disclosure-chevron {
+    transition: none;
+  }
+}

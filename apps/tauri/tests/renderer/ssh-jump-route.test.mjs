@@ -95,6 +95,40 @@ function loadComponent(path, dependencies) {
   return moduleExports
 }
 
+test('topology derives directed legacy and ordered routes without exposing proxy credentials', () => {
+  const { configuredTopologyRoutes } = loadComponent(
+    '../../src/renderer/features/server-management/server-topology-routes.ts',
+    { '../../app/ssh-jump-route': exports }
+  )
+  const result = configuredTopologyRoutes(
+    [
+      hop('current', undefined, { jumpProfileIds: ['entry', 'middle'] }),
+      hop('entry', undefined, { proxyProfileId: 'proxy-1' }),
+      hop('middle', 'entry'),
+      hop('legacy', 'middle'),
+      hop('broken', 'missing'),
+      hop('inline', undefined, { proxy: { type: 'http', host: '2001:db8::1', port: 8080, password: 'secret' } })
+    ],
+    [{ id: 'proxy-1', name: 'Shared', type: 'socks5', host: 'proxy.example', port: 1080 }]
+  )
+  const nodes = [...result.proxyNodes.values()]
+  assert.deepEqual(
+    nodes.map(({ name }) => name),
+    ['Shared', '[2001:db8::1]:8080']
+  )
+  assert.ok(!JSON.stringify(nodes).includes('secret'))
+  assert.deepEqual(
+    Array.from(result.links, ({ from, to, kind }) => [from, to, kind]),
+    [
+      [nodes[0].id, 'entry', 'proxy'],
+      ['entry', 'middle', 'jump'],
+      ['middle', 'current', 'jump'],
+      ['middle', 'legacy', 'jump'],
+      [nodes[1].id, 'inline', 'proxy']
+    ]
+  )
+})
+
 test('connection settings show the complete route and explain invalid references', () => {
   const { ConnectionNetworkSection } = loadComponent(
     '../../src/renderer/features/connections/connection-network-section.tsx',

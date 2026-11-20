@@ -15,8 +15,7 @@ import type {
   McpAgentClientStatus,
   ResourceMonitoringMetric,
   SshConnectionDefaults,
-  WorkspaceSnapshot,
-  TabBarLayout
+  WorkspaceSnapshot
 } from '@fileterm/core'
 import { DEFAULT_COMMAND_LIST_WIDTH, DEFAULT_FILE_PANEL_RATIO, retainOpenTabUiState } from '../app/app-shell-utils'
 import type { ErrorDetails } from '../app/app-error-utils'
@@ -33,6 +32,7 @@ import { useBackupPasswordInteractions } from './use-backup-password-interaction
 import { useSudoPasswordPrompt } from './use-sudo-password-prompt'
 import type { WorkspacePaneFocusRequest, WorkspaceSplitPaneRequest } from './use-workspace-ipc-sync'
 import type { AppLocale } from '../i18n'
+import { useServerInsightsObserver } from '../features/server-management/use-server-insights-observer'
 import { DEFAULT_FILE_PANEL_SNAP_TARGET, type FilePanelSnapTarget } from '../features/workspace/file-panel-snap'
 
 type ErrorFormatter = (scope: string, error: unknown, details?: ErrorDetails) => string
@@ -41,7 +41,6 @@ type ErrorReporter = (scope: string, error: unknown, details?: ErrorDetails) => 
 export type AppWorkspaceOptions = {
   desktopApi?: FileTermDesktopApi
   workspace: WorkspaceSnapshot
-  tabBarLayout: TabBarLayout
   isMainWorkspaceWindow: boolean
   isConnectionFormWindow: boolean
   isFileEditorWindow: boolean
@@ -56,6 +55,10 @@ export type AppWorkspaceOptions = {
   fileEditorWindowTabId: string | null
   fileEditorWindowEncoding: string
   hasLoadedInitialSnapshot: boolean
+  /** Server-management mode hides connection tabs, so failed attempts must not linger. */
+  autoCloseFailedHiddenTabs?: boolean
+  /** Server-management mode groups tabs by host, so closing stays inside the active host group. */
+  serverManagementMode?: boolean
   locale: AppLocale
   connectionDefaults: SshConnectionDefaults
   filePanelRememberRatio: boolean
@@ -98,7 +101,6 @@ export type AppWorkspaceOptions = {
 export function useAppWorkspace({
   desktopApi,
   workspace,
-  tabBarLayout,
   isMainWorkspaceWindow,
   isConnectionFormWindow,
   isFileEditorWindow,
@@ -113,6 +115,8 @@ export function useAppWorkspace({
   fileEditorWindowTabId,
   fileEditorWindowEncoding,
   hasLoadedInitialSnapshot,
+  autoCloseFailedHiddenTabs = false,
+  serverManagementMode = false,
   locale,
   connectionDefaults,
   filePanelRememberRatio,
@@ -184,6 +188,7 @@ export function useAppWorkspace({
     updateTerminalDockSendScope,
     updateTerminalDockSelectedTabIds,
     sendTerminalCommand,
+    connectProfile,
     openProfile,
     openLocalTerminal,
     activateSessionTab,
@@ -191,6 +196,7 @@ export function useAppWorkspace({
     detachSessionToBackground,
     closeBackgroundSession,
     reconnectSessionTab,
+    disconnectSessionTab,
     confirmShortcutClose,
     handleTabContextAction,
     openTabContextMenu,
@@ -214,9 +220,10 @@ export function useAppWorkspace({
   } = useWorkspaceTabs({
     desktopApi,
     workspace,
-    tabBarLayout,
     isMainWorkspaceWindow,
     hasLoadedInitialSnapshot,
+    autoCloseFailedHiddenTabs,
+    serverManagementMode,
     locale,
     transferSidebarCollapsedByDefault,
     isBusy,
@@ -231,6 +238,12 @@ export function useAppWorkspace({
     onCloseCurrentWindow: closeCurrentWindow,
     onRequestQuit: requestQuitApp
   } satisfies UseWorkspaceTabsOptions)
+
+  useServerInsightsObserver({
+    tabs: workspace.tabs,
+    sessions: workspace.sessions,
+    enabled: isMainWorkspaceWindow && hasLoadedInitialSnapshot
+  })
 
   const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
   const { activeSidebarWidth, setActiveSidebarWidth } = useWorkspaceSidebarWidth(
@@ -737,6 +750,7 @@ export function useAppWorkspace({
     updateTerminalDockSendScope,
     updateTerminalDockSelectedTabIds,
     sendTerminalCommand,
+    connectProfile,
     openProfile,
     openLocalTerminal,
     activateSessionTab,
@@ -744,6 +758,7 @@ export function useAppWorkspace({
     detachSessionToBackground,
     closeBackgroundSession,
     reconnectSessionTab,
+    disconnectSessionTab,
     confirmShortcutClose,
     handleTabContextAction,
     openTabContextMenu,

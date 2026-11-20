@@ -904,7 +904,6 @@
 
 :root[data-theme*='light'] .status-message {
   color: var(--warning);
-  background: color-mix(in srgb, var(--status-warning) 10%, transparent);
 }
 
 :root[data-theme*='light'] .status-message-close:hover {

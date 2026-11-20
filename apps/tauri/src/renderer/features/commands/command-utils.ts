@@ -27,3 +27,10 @@ export function groupCommands(folders: CommandFolder[], templates: CommandTempla
     templates: sortedTemplates.filter((template) => template.parentId === folder.id)
   }))
 }
+
+export function commandTemplatesForFolder(templates: CommandTemplate[], folderId: string) {
+  if (folderId === 'all') return sortByOrder(templates)
+  return sortByOrder(
+    templates.filter((template) => (folderId === 'ungrouped' ? !template.parentId : template.parentId === folderId))
+  )
+}

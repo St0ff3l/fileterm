@@ -35,6 +35,42 @@ pub async fn app_open_profile(
     get_workspace_snapshot_and_emit(&app).await
 }
 
+/// Connect a profile without opening a visible terminal tab. The dashboard's
+/// connect action uses this so a server can be monitored (system metrics,
+/// connection history) while the overview stays in front; entering the
+/// terminal remains an explicit action that attaches the session.
+#[tauri::command]
+pub async fn app_open_profile_background(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
+    let profiles = read_json_array(&app, "profiles.json")?;
+    let profile = profiles
+        .iter()
+        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+
+    crate::services::profile_ops::touch_profile(&app, &profile_id)?;
+
+    spawn_session_for_profile(
+        &app,
+        &state,
+        profile,
+        &profile_id,
+        None,
+        None,
+        SessionSpawnOptions {
+            is_background: true,
+            source: None,
+        },
+    )
+    .await?;
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
 /// Open a saved profile for an external CLI/MCP caller and return the tab id
 /// together with the initial workspace snapshot. Background sessions remain
 /// attached to the App worker without appearing in the top-level tab bar;
@@ -555,6 +591,46 @@ fn detach_session_to_background_in_tabs(
     }
     tab.is_background = true;
     Ok(top_level_tab_id)
+}
+
+/// Hide a GUI session in the background without closing its connection.
+/// Management mode uses this when the last terminal view for a server is
+/// closed: the view disappears, but the managed server stays connected.
+#[tauri::command]
+pub async fn app_hide_session_to_background(
+    app: AppHandle,
+    tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let active_tab_id = state.active_tab_id.read().await.clone();
+    let (top_level_tab_id, next_active_tab_id) = {
+        let mut tabs = state.tabs.write().await;
+        let top_level_tab_id = tabs
+            .iter()
+            .find(|tab| tab.id == tab_id)
+            .map(|tab| {
+                tab.pane_root_tab_id
+                    .clone()
+                    .unwrap_or_else(|| tab.id.clone())
+            })
+            .ok_or_else(|| AppError::Storage(format!("Session not found: {tab_id}")))?;
+        let tab = tabs
+            .iter_mut()
+            .find(|tab| tab.id == top_level_tab_id)
+            .ok_or_else(|| AppError::Storage(format!("Root session not found: {top_level_tab_id}")))?;
+        tab.is_background = true;
+        let next_active_tab_id = (active_tab_id.as_deref() == Some(top_level_tab_id.as_str()))
+            .then(|| next_visible_top_level_tab_id(&tabs, &top_level_tab_id))
+            .flatten();
+        (top_level_tab_id, next_active_tab_id)
+    };
+
+    if active_tab_id.as_deref() == Some(top_level_tab_id.as_str()) {
+        let mut active = state.active_tab_id.write().await;
+        *active = next_active_tab_id;
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
 }
 
 fn next_visible_top_level_tab_id(

@@ -1,0 +1,38 @@
+.server-management-page-header {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.server-management-page-header h1 {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.server-management-page-header h1 > .material-symbols-outlined {
+  flex: none;
+  color: var(--accent-secondary);
+  font-size: 26px;
+}
+
+@media (max-width: 640px) {
+  .server-management-page-header h1 {
+    gap: 8px;
+    font-size: 19px;
+  }
+
+  .server-management-page-header h1 > .material-symbols-outlined {
+    font-size: 20px;
+  }
+}

@@ -1,32 +1,42 @@
-import { AppIcon } from '../common/app-icon'
-import { SidebarAlignedLabel } from '../../components/common/icon-label/icon-label'
+import './host-rail.css'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
 import { DEFAULT_SIDEBAR_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '../../app/app-shell-utils'
 import { t } from '../../i18n'
-import { HostGroupList } from './host-group-list'
-import type { HostNavigation } from './use-host-navigation'
+import type { ConnectionFolder, ConnectionProfile, SessionSnapshot, WorkspaceTab } from '@fileterm/core'
+import { ServerManagementSidebar } from '../server-management/server-management-sidebar'
+import type { ServerManagementNavigation } from '../server-management/server-management-types'
 
 export function HostRail({
-  navigation,
   collapsed,
   width,
   isResizing,
   onToggleCollapsed,
   onResizeStart,
   onWidthChange,
-  onOpenFileTransfers
+  management
 }: {
-  navigation: HostNavigation
   collapsed: boolean
   width: number
   isResizing: boolean
   onToggleCollapsed(): void
   onResizeStart(): void
   onWidthChange(width: number): void
-  onOpenFileTransfers(): void
+  management: ServerManagementNavigation & {
+    profiles: ConnectionProfile[]
+    folders: ConnectionFolder[]
+    sessions: Record<string, SessionSnapshot>
+    workspaceTabs: WorkspaceTab[]
+    activeSessionTabId: string | null
+    onActivateSession(tabId: string): void
+  }
 }) {
+  const { navigate, ...sidebarProps } = management
+
   return (
-    <aside aria-label={t.hostRailTitle} className={`fs-host-rail ${collapsed ? 'is-collapsed' : ''}`}>
+    <aside
+      aria-label={t.serverManagementNavigation}
+      className={`fs-host-rail is-server-management-rail ${collapsed ? 'is-collapsed' : ''}`}
+    >
       <div className="fs-host-rail-header">
         {!collapsed ? <h2 className="fs-host-rail-title">{t.hostRailTitle}</h2> : null}
         <SidebarToggle
@@ -36,17 +46,7 @@ export function HostRail({
           onClick={onToggleCollapsed}
         />
       </div>
-      <HostGroupList navigation={navigation} collapsed={collapsed} />
-      <button
-        className="sidebar-nav-link"
-        onClick={onOpenFileTransfers}
-        aria-label={t.fileTransferWorkspace}
-        title={t.fileTransferWorkspace}
-        type="button"
-      >
-        <AppIcon name="transfer" size={18} />
-        {!collapsed ? <SidebarAlignedLabel>{t.fileTransferWorkspace}</SidebarAlignedLabel> : null}
-      </button>
+      <ServerManagementSidebar {...sidebarProps} collapsed={collapsed} onNavigate={navigate} />
       {!collapsed ? (
         <div
           aria-label={t.resizeSidebar}

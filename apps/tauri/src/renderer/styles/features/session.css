@@ -2576,7 +2576,6 @@
   background: var(--bg-card);
   color: var(--text-main);
   font-family: inherit;
-  font-size: inherit;
   line-height: 1.4;
   text-align: left;
   cursor: pointer;

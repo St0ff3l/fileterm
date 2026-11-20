@@ -198,7 +198,6 @@ input:where(
 .fs-main {
   grid-column: 2;
   grid-row: 2;
-  grid-template-rows: auto minmax(0, 1fr);
   height: auto;
 }
 
@@ -208,14 +207,6 @@ input:where(
 
 .fs-main.full-width {
   grid-column: 1 / -1;
-}
-
-.fs-main.no-status {
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.fs-main.has-status {
-  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .fs-tabbar {
@@ -1062,7 +1053,8 @@ input:where(
 }
 
 .grid-chart {
-  height: 52px;
+  /* Bottom edge lands on the file panel frame line. */
+  height: 55.5px;
   padding: 4px 2px 0;
   border: 0;
   border-radius: 0;

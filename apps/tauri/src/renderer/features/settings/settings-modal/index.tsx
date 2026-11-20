@@ -19,6 +19,7 @@ import { AboutSettingsPanel } from './panels/about-settings-panel'
 import { LogsSettingsPanel } from './panels/logs-settings-panel'
 import { ToolsSettingsPanel } from './panels/tools-settings-panel'
 import { UpdatesSettingsPanel } from './panels/updates-settings-panel'
+import { WorkspaceModeSettingsPanel } from './panels/workspace-mode-settings-panel'
 
 import { SETTINGS_SIDEBAR_ITEMS, type SettingsTab } from './constants'
 
@@ -150,6 +151,8 @@ export function SettingsModal({
             {activeTab === 'connections' ? <ConnectionsSettingsPanel /> : null}
 
             {activeTab === 'interface' ? <InterfaceSettingsPanel /> : null}
+
+            {activeTab === 'workspace-mode' ? <WorkspaceModeSettingsPanel /> : null}
 
             {activeTab === 'tools' ? <ToolsSettingsPanel /> : null}
 

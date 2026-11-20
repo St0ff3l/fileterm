@@ -52,7 +52,6 @@ ${[
   'AppIcon',
   'VerticalScrollbar',
   'PortableUpdateDialog',
-  'QuickLinksPage',
   'ProxyManagerPage',
   'CommandManagerModal',
   'SshKeyManagerPage',

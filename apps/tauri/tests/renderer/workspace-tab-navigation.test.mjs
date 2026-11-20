@@ -33,6 +33,7 @@ const { createWorkspaceTabsSessionActions } = load('../../src/renderer/hooks/wor
   '../features/common/session-send-targets': {},
   '../i18n': i18n,
   './profile-open-guard': profileOpenGuard,
+  './session-tab-memory': load('../../src/renderer/hooks/session-tab-memory.ts'),
   './workspace-tabs-utils': utils
 })
 const tabs = ['a', 'b', 'c', 'd'].map((id) => ({
@@ -50,6 +51,34 @@ test('the first new-session snapshot keeps the host tab bar populated before ord
   assert.deepEqual(
     Array.from(group.entries, (entry) => entry.key),
     ['session:b', 'session:a', 'session:c']
+  )
+})
+
+test('transfer and system pages follow the host group of the session they were opened from', () => {
+  const sources = [
+    { id: 'a', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a' },
+    { id: 'b', profileId: 'beta', sessionType: 'ssh', status: 'connected', title: 'b' }
+  ]
+  const local = [
+    { id: 'file-transfers', kind: 'transfers', title: 'File Transfer', initialTabId: 'b' },
+    { id: 'network-a', kind: 'system', view: 'network', title: 'Network', sessionTabId: 'a', sourceTabTitle: 'a' }
+  ]
+  const entries = buildOrderedTabs(['home:file-transfers', 'home:network-a'], local, sources)
+  const keyOf = (key) =>
+    groups.entryHostGroupKey(
+      entries.find((entry) => entry.key === key),
+      sources
+    )
+  assert.equal(keyOf('home:file-transfers'), 'profile:beta')
+  assert.equal(keyOf('home:network-a'), 'profile:alpha')
+
+  const orphan = buildOrderedTabs(['home:file-transfers'], [local[0]], sources)
+  assert.equal(
+    groups.entryHostGroupKey(
+      orphan[0],
+      sources.filter((tab) => tab.id !== 'b')
+    ),
+    groups.HOME_HOST_GROUP_KEY
   )
 })
 
@@ -86,7 +115,230 @@ test('closing selects the right neighbour, then the left, using dragged and grou
   assert.equal(nextTabAfterClose(mixed, 'session:a', false).tab.id, 'b')
 })
 
-function fixture(api, activeLocalTabId = null, homeTabId = null, sessionTabs = tabs) {
+test('grouped closing never leaves the host group or falls back to the home tab', () => {
+  const sources = [
+    { id: 'a1', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a1' },
+    { id: 'b1', profileId: 'beta', sessionType: 'ssh', status: 'connected', title: 'b1' },
+    { id: 'a2', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a2' }
+  ]
+  const local = [
+    { id: 'home-1', kind: 'home', title: 'New Tab' },
+    { id: 'network-a2', kind: 'system', view: 'network', title: 'Network', sessionTabId: 'a2', sourceTabTitle: 'a2' }
+  ]
+  const entries = buildOrderedTabs(
+    ['home:home-1', 'session:a1', 'session:b1', 'session:a2', 'home:network-a2'],
+    local,
+    sources
+  )
+  assert.equal(utils.nextTabInHostGroup(entries, 'session:a1').key, 'session:a2')
+  assert.equal(utils.nextTabInHostGroup(entries, 'home:network-a2').key, 'session:a2')
+  assert.equal(utils.nextTabInHostGroup(entries, 'session:a2', ['session:a2', 'home:network-a2', 'session:a1']), null)
+})
+
+test('management close selects the next tab of the same host instead of another server', async () => {
+  const sessions = [
+    { id: 'a1', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a1' },
+    { id: 'b1', profileId: 'beta', sessionType: 'ssh', status: 'connected', title: 'b1' },
+    { id: 'a2', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a2' }
+  ]
+  const calls = []
+  const { state, actions } = fixture(
+    {
+      activateTab: async (id) => {
+        calls.push(`activate:${id}`)
+        return { tabs: sessions, activeTabId: id }
+      },
+      closeTab: async (id) => {
+        calls.push(`close:${id}`)
+        return { tabs: sessions.filter((tab) => tab.id !== id), activeTabId: 'a2' }
+      }
+    },
+    null,
+    'home-1',
+    sessions,
+    {
+      serverManagementMode: true,
+      workspace: { tabs: sessions, activeTabId: 'a1' },
+      visibleActiveSessionTabId: 'a1'
+    }
+  )
+  await actions.closeSessionTabById('a1')
+  assert.deepEqual(calls, ['activate:a2', 'close:a1'])
+  assert.equal(state.activeLocalTabId, null)
+})
+
+test('management close returns to the overview only when the host group runs out of tabs', async () => {
+  const sessions = [
+    { id: 'b1', profileId: 'beta', sessionType: 'ssh', status: 'connected', title: 'b1' },
+    { id: 'a2', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a2' }
+  ]
+  const calls = []
+  const { state, actions } = fixture(
+    {
+      activateTab: async (id) => {
+        calls.push(`activate:${id}`)
+        return { tabs: sessions, activeTabId: id }
+      },
+      closeTab: async (id) => {
+        calls.push(`close:${id}`)
+        return { tabs: sessions.filter((tab) => tab.id !== id), activeTabId: 'b1' }
+      },
+      hideSessionToBackground: async (id) => {
+        calls.push(`hide:${id}`)
+        return {
+          tabs: sessions.map((tab) => (tab.id === id ? { ...tab, isBackground: true } : tab)),
+          activeTabId: 'b1'
+        }
+      }
+    },
+    null,
+    'home-1',
+    sessions,
+    {
+      serverManagementMode: true,
+      workspace: { tabs: sessions, activeTabId: 'a2' },
+      visibleActiveSessionTabId: 'a2'
+    }
+  )
+  await actions.closeSessionTabById('a2')
+  assert.deepEqual(calls, ['hide:a2'])
+  assert.equal(state.activeLocalTabId, 'home-1')
+})
+
+test('closing a managed terminal keeps the server connection in the background', async () => {
+  const sessions = [{ id: 'a1', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a1' }]
+  const calls = []
+  const { state, actions } = fixture(
+    {
+      closeTab: async (id) => {
+        calls.push(`close:${id}`)
+        return { tabs: [], activeTabId: null }
+      },
+      hideSessionToBackground: async (id) => {
+        calls.push(`hide:${id}`)
+        return { tabs: [{ ...sessions[0], isBackground: true }], activeTabId: null }
+      }
+    },
+    null,
+    'home-1',
+    sessions,
+    {
+      serverManagementMode: true,
+      workspace: { tabs: sessions, activeTabId: 'a1' },
+      visibleActiveSessionTabId: 'a1'
+    }
+  )
+  await actions.closeSessionTabById('a1')
+  assert.deepEqual(calls, ['hide:a1'])
+  assert.equal(state.closing.length, 0)
+  assert.equal(state.activeLocalTabId, 'home-1')
+})
+
+test('closing one of several managed terminals still closes that session', async () => {
+  const sessions = [
+    { id: 'a1', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a1' },
+    { id: 'a2', profileId: 'alpha', sessionType: 'ssh', status: 'connected', title: 'a2' }
+  ]
+  const calls = []
+  const { actions } = fixture(
+    {
+      activateTab: async (id) => {
+        calls.push(`activate:${id}`)
+        return { tabs: sessions, activeTabId: id }
+      },
+      closeTab: async (id) => {
+        calls.push(`close:${id}`)
+        return { tabs: sessions.filter((tab) => tab.id !== id), activeTabId: 'a2' }
+      },
+      hideSessionToBackground: async (id) => {
+        calls.push(`hide:${id}`)
+        return { tabs: sessions, activeTabId: 'a2' }
+      }
+    },
+    null,
+    'home-1',
+    sessions,
+    {
+      serverManagementMode: true,
+      workspace: { tabs: sessions, activeTabId: 'a1' },
+      visibleActiveSessionTabId: 'a1'
+    }
+  )
+  await actions.closeSessionTabById('a1')
+  assert.deepEqual(calls, ['activate:a2', 'close:a1'])
+})
+
+test('management connect runs the session in the background instead of opening a tab', async () => {
+  const calls = []
+  const { state, actions } = fixture(
+    {
+      openProfile: async (id) => {
+        calls.push(`open:${id}`)
+        return { tabs, activeTabId: 'a' }
+      },
+      openProfileBackground: async (id) => {
+        calls.push(`background:${id}`)
+        return { tabs, activeTabId: null }
+      }
+    },
+    'home-1',
+    'home-1',
+    tabs,
+    { serverManagementMode: true }
+  )
+  await actions.connectProfile('a')
+  assert.deepEqual(calls, ['background:a'])
+  assert.equal(state.activeLocalTabId, 'home-1')
+})
+
+test('management terminal entry attaches a background session instead of activating it', async () => {
+  const calls = []
+  const backgroundTab = { ...tabs[0], id: 'bg', isBackground: true, status: 'connected' }
+  const { state, actions } = fixture(
+    {
+      activateTab: async (id) => {
+        calls.push(`activate:${id}`)
+        return { tabs: [backgroundTab], activeTabId: id }
+      },
+      attachBackgroundSession: async (id) => {
+        calls.push(`attach:${id}`)
+        return { tabs: [{ ...backgroundTab, isBackground: false }], activeTabId: id }
+      }
+    },
+    'home-1',
+    'home-1',
+    [backgroundTab],
+    { serverManagementMode: true, workspace: { tabs: [backgroundTab], activeTabId: null } }
+  )
+  await actions.activateSessionTab('bg')
+  assert.deepEqual(calls, ['attach:bg'])
+  assert.equal(state.activeLocalTabId, null)
+})
+
+test('disconnecting a background session closes the hidden connection', async () => {
+  const calls = []
+  const backgroundTab = { ...tabs[0], id: 'bg', isBackground: true, status: 'connected' }
+  const { actions } = fixture(
+    {
+      disconnectTab: async (id) => {
+        calls.push(`disconnect:${id}`)
+        return { tabs: [backgroundTab], activeTabId: null }
+      },
+      closeTab: async (id) => {
+        calls.push(`close:${id}`)
+        return { tabs: [], activeTabId: null }
+      }
+    },
+    null,
+    null,
+    [backgroundTab],
+    { serverManagementMode: true, workspace: { tabs: [backgroundTab], activeTabId: null } }
+  )
+  await actions.disconnectSessionTab('bg')
+  assert.deepEqual(calls, ['close:bg'])
+})
+
+function fixture(api, activeLocalTabId = null, homeTabId = null, sessionTabs = tabs, overrides = {}) {
   const homeTabs = homeTabId ? [{ id: homeTabId, kind: 'home', title: 'New Tab' }] : []
   const state = {
     activeLocalTabId,
@@ -127,7 +379,8 @@ function fixture(api, activeLocalTabId = null, homeTabId = null, sessionTabs = t
     onSnapshot: (snapshot) => state.snapshots.push(snapshot),
     onBusyChange: () => {},
     onStatusMessage: () => {},
-    onError: (...args) => state.errors.push(args)
+    onError: (...args) => state.errors.push(args),
+    ...overrides
   }
   return { state, actions: createWorkspaceTabsSessionActions(context) }
 }
@@ -253,4 +506,36 @@ test('a failed hide keeps the current view and tab order', async () => {
   assert.equal(state.localTabs.length, 0)
   assert.deepEqual(state.order, order)
   assert.equal(state.errors.length, 1)
+})
+
+test('only hidden, never-connected UI tabs are auto-closed after a failed connection', () => {
+  const sessions = {
+    a: { connected: false },
+    b: { connected: false, reconnectMode: 'auto' },
+    c: { connected: false },
+    d: { connected: false }
+  }
+  const failed = [
+    { ...tabs[0], status: 'error' },
+    { ...tabs[1], status: 'error' },
+    { ...tabs[2], status: 'error', isBackground: true },
+    { ...tabs[3], status: 'error', source: 'mcp' }
+  ]
+  assert.equal(utils.findFailedTabToAutoClose(failed, sessions, null).id, 'a')
+  assert.equal(utils.findFailedTabToAutoClose(failed, sessions, 'a'), null)
+  assert.equal(utils.findFailedTabToAutoClose(failed, sessions, null, new Set(['a'])), null)
+  assert.equal(utils.findFailedTabToAutoClose(failed.slice(1), sessions, null), null)
+  assert.equal(
+    utils.findFailedTabToAutoClose([{ ...tabs[0], status: 'connected' }], { a: { connected: true } }, null),
+    null
+  )
+})
+
+test('the failure detail is the last transcript line without the failure prefix', () => {
+  assert.equal(
+    utils.resolveSessionFailureDetail('连接主机...\r\n连接失败: SSH hop 1: timed out after 30 seconds\r\n'),
+    'SSH hop 1: timed out after 30 seconds'
+  )
+  assert.equal(utils.resolveSessionFailureDetail(''), '')
+  assert.equal(utils.resolveSessionFailureDetail(undefined), '')
 })

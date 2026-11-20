@@ -1,0 +1,249 @@
+.server-command-batch-dialog .ft-dialog__body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0;
+  overflow: hidden;
+}
+
+.server-command-batch-content {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.server-command-batch-dialog p {
+  margin: 0;
+}
+
+.server-command-batch-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.server-command-batch-message > :is(svg, .material-symbols-outlined) {
+  flex: none;
+  font-size: 18px;
+}
+
+.server-command-batch-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.server-command-batch-picker {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) minmax(0, 3fr);
+  block-size: clamp(200px, 38vh, 320px);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.server-command-batch-picker .command-pane-list {
+  border-inline-end: 1px solid var(--border-default);
+}
+
+.server-command-batch-picker .command-editor-dialog-textarea {
+  flex: 1;
+  min-block-size: 0;
+}
+
+.server-command-batch-picker .command-code-area {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+
+@media (max-width: 550px) {
+  .server-command-batch-picker {
+    block-size: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 160px 170px;
+  }
+
+  .server-command-batch-picker .command-pane-list {
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--border-default);
+  }
+}
+
+.server-command-batch-targets {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.server-command-batch-targets > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 8px;
+}
+
+.server-command-batch-targets > li + li {
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.server-command-batch-targets .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.server-command-batch-targets strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.server-command-batch-targets small {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.server-command-batch-results {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.server-command-batch-results table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--font-size-sm);
+}
+
+.server-command-batch-results :is(th, td) {
+  padding: 8px 10px;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.server-command-batch-results thead {
+  background: var(--surface-section);
+}
+
+.server-command-batch-results thead th {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.server-command-batch-results thead th:nth-child(2) {
+  width: 36%;
+}
+
+.server-command-batch-results thead th:last-child {
+  width: 66px;
+}
+
+.server-command-batch-results tbody {
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.server-command-batch-result th {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.server-command-batch-result th small,
+.server-command-batch-output small {
+  display: block;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+}
+
+.server-command-batch-status {
+  display: inline-block;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-section);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.server-command-batch-status[data-status='success'] {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+
+.server-command-batch-status:is([data-status='failed'], [data-status='error']) {
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+}
+
+.server-command-batch-status:is([data-status='timedOut'], [data-status='inputRequired']) {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+
+.server-command-batch-exit-code {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.server-command-batch-output td {
+  padding-block-start: 0;
+}
+
+.server-command-batch-output summary {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.server-command-batch-output summary::-webkit-details-marker {
+  display: none;
+}
+
+.server-command-batch-output details[open] summary .app-icon {
+  transform: rotate(90deg);
+}
+
+.server-command-batch-output .server-command-batch-text {
+  margin-block-start: 6px;
+}
+
+.server-command-batch-history-note {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.server-command-batch-history-select,
+.server-command-batch-history-select :is(.ft-select-shell__value, select, option),
+.server-command-batch-history-menu.context-menu button {
+  font-size: var(--font-size-sm);
+}
+
+.server-command-batch-history-menu.dropdown-select-menu {
+  max-width: calc(100vw - 16px);
+  max-height: min(280px, calc(100vh - 16px));
+  overscroll-behavior: contain;
+}
+
+.server-command-batch-text {
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-section);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

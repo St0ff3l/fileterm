@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 import './button.css'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
-export type ButtonSize = 'sm' | 'md' | 'lg' | 'compact' | 'regular' | 'prominent'
+export type ButtonSize = 'sm' | 'md' | 'lg' | 'compact' | 'regular' | 'prominent' | 'panel'
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   ref?: Ref<HTMLButtonElement>

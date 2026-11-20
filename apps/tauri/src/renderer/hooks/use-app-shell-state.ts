@@ -28,7 +28,7 @@ import { resolveRendererPlatform } from '../lib/renderer-platform'
 import { useWorkspaceIpcSync } from './use-workspace-ipc-sync'
 import { useSessionSecurity } from './use-session-security'
 import { useThemeMode, type ThemeMode } from './use-theme-mode'
-import { useTabBarLayout } from '../features/layout/use-tab-bar-layout'
+import { useWorkspaceMode } from '../features/layout/use-workspace-mode'
 import { useCompactTabBar } from '../features/layout/use-compact-tab-bar'
 import {
   DEFAULT_FILE_PANEL_SNAP_TARGET,
@@ -47,7 +47,7 @@ export type InitialUiPreferences = Pick<
   | 'uiZoomLocked'
   | 'uiZoomPercent'
   | 'rememberWindowSize'
-  | 'tabBarLayout'
+  | 'workspaceMode'
   | 'compactTabBar'
   | 'filePanelRememberRatio'
   | 'transferSidebarCollapsedByDefault'
@@ -144,7 +144,7 @@ export function useAppShellState({
     () => initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT
   )
   const [rememberWindowSize, setRememberWindowSize] = useState(() => initialUiPreferences?.rememberWindowSize ?? false)
-  const [tabBarLayout] = useTabBarLayout(desktopApi, initialUiPreferences?.tabBarLayout)
+  const [workspaceMode] = useWorkspaceMode(desktopApi, initialUiPreferences?.workspaceMode)
   const [compactTabBar] = useCompactTabBar(desktopApi, initialUiPreferences?.compactTabBar)
   useLayoutEffect(() => {
     void applyUiZoomPercent(uiZoomPercent)
@@ -514,7 +514,7 @@ export function useAppShellState({
     setUiZoomPercent,
     rememberWindowSize,
     setRememberWindowSize,
-    tabBarLayout,
+    workspaceMode,
     compactTabBar,
     filePanelRememberRatio,
     setFilePanelRememberRatio,

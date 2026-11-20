@@ -91,6 +91,7 @@ export type FilePaneMode = 'local' | 'remote-tree'
 
 export interface BaseProfile extends BaseEntity {
   type: SessionType
+  tags?: string[]
   /** Serial profiles keep these inert placeholders; devicePath remains their only endpoint. */
   host: string
   port: number
@@ -1330,6 +1331,7 @@ export interface SshKeyImportResult {
 
 export interface CreateProfileInput {
   type: SessionType
+  tags?: string[]
   name: string
   host: string
   port: number
@@ -1693,6 +1695,33 @@ export interface CommandExecutionResult {
 
 export interface CommandExecutionOptions {
   appendCarriageReturn?: boolean
+}
+
+export const COMMAND_BATCH_TARGET_LIMIT = 16
+
+export interface CommandBatchTarget {
+  profileId: string
+  tabId: string
+  sessionRevision: string
+}
+
+export interface CommandBatchResult {
+  profileId: string
+  name: string
+  status: 'unknown' | 'success' | 'failed' | 'timedOut' | 'inputRequired' | 'error'
+  exitCode: number | null
+  output?: string
+  error?: string
+  outputTruncated: boolean
+}
+
+export interface CommandBatchRun {
+  id: string
+  templateName: string
+  startedAt: number
+  finishedAt: number | null
+  results: CommandBatchResult[]
+  historyError?: string
 }
 
 export interface TerminalCommandHistoryEntry {
@@ -2230,9 +2259,9 @@ export const DIAGNOSTIC_LOG_CATEGORIES = [
 export type DiagnosticLogCategory = (typeof DIAGNOSTIC_LOG_CATEGORIES)[number]
 export type DiagnosticLogCategories = Record<DiagnosticLogCategory, boolean>
 
-/** Session tabs grouped under a host list, or every tab in one row. */
-export type TabBarLayout = 'host-groups' | 'single-row'
-export const DEFAULT_TAB_BAR_LAYOUT: TabBarLayout = 'single-row'
+/** Independent workspace shells; server management keeps its own persistent navigation. */
+export type WorkspaceMode = 'standard' | 'server-management'
+export const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'standard'
 /** Compact tab bars are 36px tall; the original height is 48px. */
 export const DEFAULT_COMPACT_TAB_BAR = false
 
@@ -2256,7 +2285,7 @@ export interface UiPreferences {
   uiZoomLocked: boolean
   uiZoomPercent: number
   rememberWindowSize: boolean
-  tabBarLayout: TabBarLayout
+  workspaceMode: WorkspaceMode
   compactTabBar: boolean
   localTerminalShells: LocalTerminalShellPreferences
   filePanelRememberRatio: boolean
@@ -2290,7 +2319,7 @@ export interface UiPreferencesInput {
   uiZoomLocked?: boolean
   uiZoomPercent?: number
   rememberWindowSize?: boolean
-  tabBarLayout?: TabBarLayout
+  workspaceMode?: WorkspaceMode
   compactTabBar?: boolean
   localTerminalShells?: Partial<LocalTerminalShellPreferences>
   filePanelRememberRatio?: boolean
@@ -2927,6 +2956,13 @@ export interface FileTermDesktopApi {
     args?: string[],
     options?: CommandExecutionOptions
   ): Promise<CommandExecutionResult>
+  runCommandBatch(
+    commandId: string,
+    expectedTemplate: string,
+    args: Record<number, string>,
+    targets: CommandBatchTarget[]
+  ): Promise<CommandBatchRun>
+  listCommandBatches(): Promise<CommandBatchRun[]>
   executeRemoteCommand(
     tabId: string,
     command: string,
@@ -2957,10 +2993,12 @@ export interface FileTermDesktopApi {
   testConnection(input: CreateProfileInput, profileId?: string): Promise<void>
   deleteProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfile(profileId: string): Promise<WorkspaceSnapshot>
+  openProfileBackground(profileId: string): Promise<WorkspaceSnapshot>
   openProfileFromManager(profileId: string): Promise<WorkspaceSnapshot>
   activateTab(tabId: string): Promise<WorkspaceSnapshot>
   attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
   detachSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
+  hideSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
   setMonitoringEnabled(tabId: string, generation: number, enabled: boolean): Promise<WorkspaceSnapshot>
   getNetworkConnections(tabId: string): Promise<NetworkConnectionsSnapshot>
   retryMonitoring(tabId: string, generation: number): Promise<void>

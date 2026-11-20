@@ -1,6 +1,6 @@
 use super::{
     build_compatible_profile_payload, build_export_payload, collect_import_files, export_filename,
-    fingerprint, normalize_external_profile, parse_ssh_config, IMPORT_FILE_LIMIT,
+    fingerprint, normalize_external_profile, parse_json, parse_ssh_config, IMPORT_FILE_LIMIT,
 };
 use serde_json::json;
 use std::collections::HashSet;
@@ -24,6 +24,31 @@ fn normalizes_compatible_json() {
     assert_eq!(profile["type"], "ssh");
     assert_eq!(profile["username"], "ops");
     assert_eq!(profile["authType"], "privateKey");
+}
+
+#[test]
+fn native_export_and_import_preserve_tags_and_accept_legacy_profiles() {
+    let mut profiles = vec![
+        json!({"name":"prod", "type":"ssh", "host":"prod.example", "tags":[" 生产 ", "", "生产", "db\r\nprimary", 42]}),
+        json!({"name":"legacy", "type":"ssh", "host":"legacy.example"}),
+        json!({"name":"empty", "type":"ssh", "host":"empty.example", "tags":[]}),
+    ];
+    assert!(crate::services::profile_ops::heal_profiles(
+        &mut profiles,
+        &[]
+    ));
+    assert_eq!(profiles[0]["tags"], json!(["生产", "db", "primary"]));
+    assert!(!crate::services::profile_ops::heal_profiles(
+        &mut profiles,
+        &[]
+    ));
+
+    let bundle = build_export_payload(&profiles, "fileterm").unwrap();
+    let entries = parse_json(&bundle.to_string(), "fileterm.json", &[]).unwrap();
+    let tags = |index: usize| entries[index].input.as_ref().unwrap().get("tags").cloned();
+    assert_eq!(tags(0), Some(json!(["生产", "db", "primary"])));
+    assert_eq!(tags(1), None);
+    assert_eq!(tags(2), Some(json!([])));
 }
 
 #[test]
