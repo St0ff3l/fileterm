@@ -25,6 +25,7 @@ export function ServerManagementList({
   selectedId,
   onSortChange,
   onCheck,
+  onClearSelection,
   onSelect
 }: {
   label: string
@@ -36,6 +37,7 @@ export function ServerManagementList({
   selectedId: string | undefined
   onSortChange(sort: ServerListSort | null): void
   onCheck(id: string, checked: boolean): void
+  onClearSelection(): void
   onSelect(id: string): void
 }) {
   const headers: Array<[ServerListColumn, string]> = [
@@ -51,7 +53,16 @@ export function ServerManagementList({
 
   return (
     <div className="server-management-list">
-      <div className="server-management-list-scroll" ref={scrollRef} role="region" aria-label={label} tabIndex={0}>
+      <div
+        aria-label={label}
+        className="server-management-list-scroll"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClearSelection()
+        }}
+        ref={scrollRef}
+        role="region"
+        tabIndex={0}
+      >
         <table aria-label={label}>
           <thead>
             <tr>

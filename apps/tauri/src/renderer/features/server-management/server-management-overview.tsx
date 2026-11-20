@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import {
   COMMAND_BATCH_TARGET_LIMIT,
   type CommandTemplate,
@@ -194,7 +194,7 @@ export function ServerManagementOverview({
   const [listSort, setListSort] = useState<ServerListSort | null>(null)
   const [checkedProfiles, setCheckedProfiles] = useState<Set<string>>(() => new Set())
   const [batchDialog, setBatchDialog] = useState<ServerCommandBatchDialogMode | null>(null)
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null | undefined>(undefined)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false)
   // Focus mode owns the side panels, so the inspector folds away with it and the
   // expand affordance leaves focus mode instead of fighting the forced state.
@@ -262,10 +262,11 @@ export function ServerManagementOverview({
   }
   const firstBaseProfileId = baseProfiles[0]?.id ?? null
   useEffect(() => {
-    // Default to the first connection and recover when the selected one disappears.
-    setSelectedProfileId((current) =>
-      current && baseProfiles.some((profile) => profile.id === current) ? current : firstBaseProfileId
-    )
+    setSelectedProfileId((current) => {
+      // An explicit clear must survive connection and metrics updates.
+      if (current === null || baseProfiles.some((profile) => profile.id === current)) return current
+      return firstBaseProfileId ?? undefined
+    })
   }, [baseProfiles, firstBaseProfileId])
   useEffect(() => {
     // Leaving focus mode restores the inspector even if it was manually
@@ -290,7 +291,9 @@ export function ServerManagementOverview({
     }
   }, [baseProfiles, focusRequest, focusedProfileId])
   const selectedProfile =
-    visibleProfiles.find((profile) => profile.id === selectedProfileId) ?? visibleProfiles[0] ?? null
+    selectedProfileId === null
+      ? null
+      : (visibleProfiles.find((profile) => profile.id === selectedProfileId) ?? visibleProfiles[0] ?? null)
   const selectedStatus = selectedProfile ? statusByProfile.get(selectedProfile.id) : null
   const selectedBadgeStatus: StatusIndicatorStatus =
     selectedStatus?.status === 'connected' || selectedStatus?.status === 'connecting' ? selectedStatus.status : 'idle'
@@ -356,6 +359,10 @@ export function ServerManagementOverview({
       : (displayedInsight?.diskSize ?? null)
   const insightDiskPercent = displayedInsight?.diskPercent ?? null
   const title = selectedFolder?.type === 'folder' ? selectedFolder.name : t.serverDashboardTitle
+  const clearSelection = () => setSelectedProfileId(null)
+  const clearOnBackgroundClick = (event: MouseEvent<HTMLElement>) => {
+    if (event.target === event.currentTarget) clearSelection()
+  }
 
   const openBatch = () => {
     if (!commandTemplates.length) {
@@ -438,7 +445,11 @@ export function ServerManagementOverview({
       className={`server-management-overview ${selectedProfile ? 'has-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}
     >
       <div className="server-dashboard-main-scroll">
-        <main className={`server-dashboard-main${view === 'list' ? ' is-list-view' : ''}`} ref={mainScrollRef}>
+        <main
+          className={`server-dashboard-main${view === 'list' ? ' is-list-view' : ''}`}
+          onClick={clearOnBackgroundClick}
+          ref={mainScrollRef}
+        >
           <header className="server-management-page-header">
             <h1>
               <MaterialIcon name="dashboard" />
@@ -532,6 +543,7 @@ export function ServerManagementOverview({
               checkedProfiles={checkedProfiles}
               label={title}
               onCheck={checkBatchProfile}
+              onClearSelection={clearSelection}
               onSelect={setSelectedProfileId}
               onSortChange={setListSort}
               rows={visibleProfiles.map((profile) => ({
@@ -546,7 +558,7 @@ export function ServerManagementOverview({
               sort={listSort}
             />
           ) : visibleProfiles.length ? (
-            <section aria-label={title} className="server-dashboard-grid">
+            <section aria-label={title} className="server-dashboard-grid" onClick={clearOnBackgroundClick}>
               {visibleProfiles.map((profile) => {
                 const connectionBadgeStatus = filterStatus(statusByProfile.get(profile.id)?.status)
                 const metrics = liveMetrics(profile.id, workspaceTabs, sessions)
