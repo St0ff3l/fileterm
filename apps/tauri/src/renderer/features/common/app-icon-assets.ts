@@ -58,6 +58,7 @@ import closeIcon from '../../assets/icons/navigation/app-close.svg?raw'
 import windowMinimizeIcon from '../../assets/icons/navigation/app-window-minimize.svg?raw'
 import windowMaximizeIcon from '../../assets/icons/navigation/app-window-maximize.svg?raw'
 import windowRestoreIcon from '../../assets/icons/navigation/app-window-restore.svg?raw'
+import workspaceModeIcon from '../../assets/icons/navigation/app-workspace-mode.svg?raw'
 
 import { parseSvgIconAsset } from './svg-icon-asset'
 
@@ -122,7 +123,8 @@ const sources = {
   close: closeIcon,
   'window-minimize': windowMinimizeIcon,
   'window-maximize': windowMaximizeIcon,
-  'window-restore': windowRestoreIcon
+  'window-restore': windowRestoreIcon,
+  'workspace-mode': workspaceModeIcon
 } as const
 
 export type AppIconName = keyof typeof sources

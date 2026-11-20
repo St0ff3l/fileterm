@@ -55,11 +55,17 @@ function NodeMemo({ memo, onSave }: { memo: string; onSave(value: string): void 
         id={id}
         maxLength={TOPOLOGY_MEMO_LIMIT}
         onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+            event.preventDefault()
+            if (draft !== memo) onSave(draft)
+          }
+        }}
         placeholder={t.serverTopologyMemoPlaceholder}
         rows={5}
         value={draft}
       />
-      <Button disabled={draft === memo} size="panel" type="submit" variant="primary">
+      <Button disabled={draft === memo} size="panel" type="submit">
         {t.save}
       </Button>
     </form>
@@ -121,6 +127,7 @@ export function ServerTopologyPage({
   const [board, setBoard] = useState(loadBoard)
   const [saveFailed, setSaveFailed] = useState(false)
   const [selectedId, setSelectedId] = useState('')
+  const [nodeCandidateId, setNodeCandidateId] = useState('')
   const [selectedLinkKey, setSelectedLinkKey] = useState('')
   const [linkName, setLinkName] = useState('')
   const [linkTo, setLinkTo] = useState('')
@@ -175,6 +182,7 @@ export function ServerTopologyPage({
   const visibleRouteLinks = routeLinks.filter(({ from, to }) => nodesById.has(from) && nodesById.has(to))
   const manualLinks = board.links.filter(([first, second]) => nodesById.has(first) && nodesById.has(second))
   const available = profiles.filter((profile) => !nodesById.has(profile.id))
+  const nodeCandidate = available.find((profile) => profile.id === nodeCandidateId)
   const selected = nodesById.get(selectedId)
   const selectedProfile = profilesById.get(selectedId)
   const selectedProxy = configured.proxyNodes.get(selectedId)
@@ -252,13 +260,17 @@ export function ServerTopologyPage({
     nodes: stored.nodes.map((node) => (ids.includes(node.id) ? { ...node, routeOnly: undefined } : node))
   })
 
-  const addNode = (profileId: string) => {
-    if (!available.some((profile) => profile.id === profileId)) return
+  const addNode = () => {
+    if (!nodeCandidate) return
+    const profileId = nodeCandidate.id
     const stored = storeLayout()
     const next = stored.nodes.some(({ id }) => id === profileId)
       ? pinNodes(stored, [profileId])
       : addTopologyNode(stored, profileId)
-    if (next !== stored && save(next)) selectNode(profileId)
+    if (next !== stored && save(next)) {
+      setNodeCandidateId('')
+      selectNode(profileId)
+    }
   }
 
   const moveNode = (node: TopologyNode, x: number, y: number) => {
@@ -373,20 +385,32 @@ export function ServerTopologyPage({
               setShowRoutes(!showRoutes)
             }}
             size="panel"
+            title={t.serverTopologyConfiguredRoutesHint}
           >
             {t.serverTopologyConfiguredRoutes}
           </Button>
-          <DropdownSelect
-            ariaLabel={t.serverTopologyAddNode}
-            className="server-topology__select"
-            disabled={!available.length}
-            onChange={addNode}
-            options={[
-              { value: '', label: t.serverTopologyAddNode, disabled: true },
-              ...available.map((profile) => ({ value: profile.id, label: profile.name }))
-            ]}
-            value=""
-          />
+          <div className="server-topology__add-node">
+            <DropdownSelect
+              ariaLabel={t.serverTopologySelectConnection}
+              className="server-topology__select"
+              disabled={!available.length}
+              menuClassName="server-topology__add-node-menu"
+              onChange={setNodeCandidateId}
+              options={[
+                { value: '', label: t.serverTopologySelectConnection, disabled: true },
+                ...available.map((profile) => ({ value: profile.id, label: profile.name }))
+              ]}
+              value={nodeCandidate?.id ?? ''}
+            />
+            <Button
+              aria-label={t.serverTopologyAddNode}
+              disabled={!nodeCandidate}
+              icon={<MaterialIcon name="add" />}
+              onClick={addNode}
+              size="panel"
+              title={t.serverTopologyAddNode}
+            />
+          </div>
         </div>
       </header>
       <div className="server-topology__body">
@@ -561,12 +585,7 @@ export function ServerTopologyPage({
                     value={linkName}
                   />
                   <div className="server-topology__actions">
-                    <Button
-                      disabled={linkName.trim() === (selectedLink[2] ?? '')}
-                      size="panel"
-                      type="submit"
-                      variant="primary"
-                    >
+                    <Button disabled={linkName.trim() === (selectedLink[2] ?? '')} size="panel" type="submit">
                       {t.save}
                     </Button>
                     <Button onClick={() => setPendingRemoval('link')} size="panel" variant="ghost">
@@ -639,24 +658,26 @@ export function ServerTopologyPage({
                     ) : null}
                   </dl>
                 ) : null}
-                <div className="server-topology__actions">
+                <div className="server-topology__node-actions">
                   {!selectedProxy && (
                     <Button
                       size="panel"
-                      variant="primary"
+                      icon={<MaterialIcon name="terminal" />}
                       disabled={!selectedProfile}
                       onClick={() => onOpenProfile(selectedId)}
+                      title={t.openConnection}
                     >
-                      {t.openConnection}
+                      <span>{t.openConnection}</span>
                     </Button>
                   )}
                   <Button
                     size="panel"
+                    icon={<MaterialIcon name="drag_indicator" />}
                     title={t.serverTopologyMoveHint}
                     aria-pressed={placing}
                     onClick={() => setPlacing(!placing)}
                   >
-                    {t.serverTopologyMove}
+                    <span>{t.serverTopologyMove}</span>
                   </Button>
                 </div>
                 {placing ? (
@@ -703,6 +724,7 @@ export function ServerTopologyPage({
                             save({ ...stored, links: [...stored.links, [selectedId, selectedTarget]] })
                           }
                         }}
+                        size="panel"
                       >
                         {linked ? t.serverTopologyRemoveLink : t.serverTopologyAddLink}
                       </Button>

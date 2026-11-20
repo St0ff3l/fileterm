@@ -3,11 +3,11 @@
   max-width: 560px;
 }
 
-.tab-bar-layout-copy {
+.workspace-mode-copy {
   flex: 1;
 }
 
-.tab-bar-layout-copy strong {
+.workspace-mode-copy strong {
   display: grid;
   gap: 8px;
 }

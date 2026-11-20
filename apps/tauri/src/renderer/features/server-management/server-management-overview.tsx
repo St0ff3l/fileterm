@@ -699,7 +699,6 @@ export function ServerManagementOverview({
                       icon={<MaterialIcon name="cloud_sync" />}
                       onClick={() => onConnectProfile(selectedProfile.id)}
                       size="panel"
-                      variant="primary"
                     >
                       <span className="server-inspector-action-label">
                         {selectedStatus?.status === 'connecting' ? t.serverDashboardConnecting : t.connect}

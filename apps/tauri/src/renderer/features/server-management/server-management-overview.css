@@ -494,6 +494,15 @@
   gap: 7px;
 }
 
+.server-inspector-actions .ft-btn {
+  background-color: var(--surface-card);
+}
+
+.server-inspector-actions .ft-btn:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  border-color: var(--border-default);
+}
+
 .server-inspector-action-label {
   min-width: 0;
   overflow: hidden;

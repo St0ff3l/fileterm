@@ -24,6 +24,7 @@ export type SettingsTab =
   | 'agent'
   | 'connections'
   | 'interface'
+  | 'workspace-mode'
   | 'local-terminal'
   | 'security'
   | 'sync'
@@ -50,7 +51,8 @@ export type SettingsSidebarItem = {
 
 export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'interface', labelKey: 'interfaceSettings', materialIcon: 'palette' },
-  { tab: 'local-terminal', labelKey: 'localTerminalSettings', appIcon: 'terminal-file' },
+  { tab: 'workspace-mode', labelKey: 'workspaceMode', appIcon: 'workspace-mode' },
+  { tab: 'local-terminal', labelKey: 'terminalSettings', appIcon: 'terminal-file' },
   { tab: 'ai', labelKey: 'aiSettings', materialIcon: 'auto_awesome' },
   { tab: 'agent', labelKey: 'agentMcpSettings', appIcon: 'terminal-file' },
   { tab: 'connections', labelKey: 'connectionDefaults', materialIcon: 'settings_ethernet' },
@@ -65,8 +67,11 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
 
 export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
   interface:
-    'appearance overview theme color font ui window startup size menu bar tray icon macos renderer dom webgl terminal weight 字重 渲染器 终端 外观 概览 主题 颜色 字体 窗口 启动 大小 菜单栏 托盘 图标 layout tab tabs host group row compact height titlebar 布局 标签 标签页 二级 主机 分组 单行 紧凑 高度 标题栏',
-  'local-terminal': 'terminal shell powershell pwsh bash zsh fish nushell 本地终端 shell',
+    'appearance theme color font ui window startup size menu bar tray icon macos layout tab tabs host group row compact height titlebar file panel 外观 界面 主题 颜色 字体 窗口 启动 大小 菜单栏 托盘 图标 布局 标签 标签页 二级 主机 分组 单行 紧凑 高度 标题栏 文件区域',
+  'workspace-mode':
+    'work mode workspace mode standard mode server management multi-server overview recent connections quick actions 默认模式 多服务器管理模式 概览内容 连接统计 最近使用 所有连接 快速操作',
+  'local-terminal':
+    'terminal display renderer dom webgl font weight zoom local shell powershell pwsh bash zsh fish nushell 终端显示 渲染器 字重 终端缩放 本地终端 本地 Shell',
   ai: 'ai provider model api key openai anthropic 模型 服务 密钥',
   agent: 'agent mcp cli command tool automation 代理 命令 工具',
   connections:
