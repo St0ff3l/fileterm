@@ -1,0 +1,53 @@
+.server-command-batch-dialog .ft-dialog__body {
+  display: grid;
+  padding: 0;
+  overflow: hidden;
+}
+
+.server-command-batch-dialog p {
+  margin: 0;
+}
+
+.server-command-batch-targets {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+  overflow-wrap: anywhere;
+}
+
+.server-command-batch-results {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.server-command-batch-results > li {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.server-command-batch-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+
+.server-command-batch-result > strong {
+  flex: 1 0 160px;
+  min-width: 0;
+}
+
+.server-command-batch-text {
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-section);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

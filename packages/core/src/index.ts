@@ -1697,6 +1697,33 @@ export interface CommandExecutionOptions {
   appendCarriageReturn?: boolean
 }
 
+export const COMMAND_BATCH_TARGET_LIMIT = 16
+
+export interface CommandBatchTarget {
+  profileId: string
+  tabId: string
+  sessionRevision: string
+}
+
+export interface CommandBatchResult {
+  profileId: string
+  name: string
+  status: 'unknown' | 'success' | 'failed' | 'timedOut' | 'inputRequired' | 'error'
+  exitCode: number | null
+  output?: string
+  error?: string
+  outputTruncated: boolean
+}
+
+export interface CommandBatchRun {
+  id: string
+  templateName: string
+  startedAt: number
+  finishedAt: number | null
+  results: CommandBatchResult[]
+  historyError?: string
+}
+
 export interface TerminalCommandHistoryEntry {
   command: string
   createdAt: number
@@ -2929,6 +2956,13 @@ export interface FileTermDesktopApi {
     args?: string[],
     options?: CommandExecutionOptions
   ): Promise<CommandExecutionResult>
+  runCommandBatch(
+    commandId: string,
+    expectedTemplate: string,
+    args: Record<number, string>,
+    targets: CommandBatchTarget[]
+  ): Promise<CommandBatchRun>
+  listCommandBatches(): Promise<CommandBatchRun[]>
   executeRemoteCommand(
     tabId: string,
     command: string,

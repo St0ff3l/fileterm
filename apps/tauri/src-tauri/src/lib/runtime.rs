@@ -678,6 +678,8 @@ pub fn run() {
             crate::commands::app_update_command_template,
             crate::commands::app_delete_command_template,
             crate::commands::app_execute_command_template,
+            crate::commands::app_run_command_batch,
+            crate::commands::app_list_command_batches,
             crate::commands::app_resolve_mcp_approval,
             crate::commands::app_resolve_action_approval,
             crate::commands::app_execute_ai_terminal_handoff,

@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
-import type { ConnectionFolder, ConnectionProfile, SessionSnapshot, SystemMetrics, WorkspaceTab } from '@fileterm/core'
+import {
+  COMMAND_BATCH_TARGET_LIMIT,
+  type CommandTemplate,
+  type ConnectionFolder,
+  type ConnectionProfile,
+  type SessionSnapshot,
+  type SystemMetrics,
+  type WorkspaceTab
+} from '@fileterm/core'
 import { Button } from '../../components/common/button/button'
 import { DropdownSelect } from '../../components/common/dropdown-select/dropdown-select'
 import { Input } from '../../components/common/input/input'
@@ -7,7 +15,7 @@ import { MaterialIcon } from '../../components/common/material-icon/material-ico
 import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
-import { getLocale, t } from '../../i18n'
+import { formatMessage, getLocale, t } from '../../i18n'
 import {
   getConnectionHistory,
   getServerInsight,
@@ -27,6 +35,8 @@ import { resolveMonitoringSource } from '../system/shared-monitoring'
 import { statusForProfile, statusLabel } from './server-profile-status'
 import { ServerManagementList } from './server-management-list'
 import type { ServerListSort } from './server-management-list-model'
+import { ServerCommandBatchDialog, type ServerCommandBatchDialogMode } from './server-command-batch-dialog'
+import { getCommandBatchTargets } from './server-command-batch-model'
 import './server-management-overview.css'
 import './server-management-page-header.css'
 
@@ -132,6 +142,7 @@ function useServerInsightStore() {
 
 export function ServerManagementOverview({
   profiles,
+  commandTemplates,
   folders,
   sessions,
   workspaceTabs,
@@ -150,6 +161,7 @@ export function ServerManagementOverview({
   onToggleFocusMode
 }: {
   profiles: ConnectionProfile[]
+  commandTemplates: CommandTemplate[]
   folders: ConnectionFolder[]
   sessions: Record<string, SessionSnapshot>
   workspaceTabs: WorkspaceTab[]
@@ -175,7 +187,9 @@ export function ServerManagementOverview({
   const [statusFilter, setStatusFilter] = useState<DashboardFilter>('all')
   const [selectedTag, setSelectedTag] = useState('')
   const [view, setView] = useState<'cards' | 'list'>('cards')
-  const [listSort, setListSort] = useState<ServerListSort>({ column: 'name', direction: 'ascending' })
+  const [listSort, setListSort] = useState<ServerListSort | null>(null)
+  const [checkedProfiles, setCheckedProfiles] = useState<Set<string>>(() => new Set())
+  const [batchDialog, setBatchDialog] = useState<ServerCommandBatchDialogMode | null>(null)
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false)
   // Focus mode owns the side panels, so the inspector folds away with it and the
@@ -221,6 +235,13 @@ export function ServerManagementOverview({
   const visibleProfiles = matchingProfiles.filter(
     (profile) => statusFilter === 'all' || filterStatus(statusByProfile.get(profile.id)?.status) === statusFilter
   )
+  const batchTargets = getCommandBatchTargets(workspaceTabs, sessions)
+  const selectedTargets = visibleProfiles.flatMap((profile) => {
+    const target = batchTargets.get(profile.id)
+    return target && checkedProfiles.has(profile.id)
+      ? [{ ...target, label: `${profile.name} · ${connectionProfileSummary(profile)}` }]
+      : []
+  })
   const filterLabels = {
     all: t.allConnections,
     connected: t.hostStatusConnected,
@@ -442,9 +463,46 @@ export function ServerManagementOverview({
             </div>
           </div>
 
+          <div className="server-dashboard-batch-actions">
+            {view === 'list' && (
+              <>
+                <Button
+                  disabled={
+                    !window.fileterm ||
+                    !commandTemplates.length ||
+                    !selectedTargets.length ||
+                    selectedTargets.length > COMMAND_BATCH_TARGET_LIMIT
+                  }
+                  onClick={() => setBatchDialog({ type: 'run', targets: selectedTargets })}
+                  size="panel"
+                >
+                  {t.serverBatchRun}
+                  {selectedTargets.length ? ` (${selectedTargets.length})` : ''}
+                </Button>
+                <span>
+                  {commandTemplates.length
+                    ? formatMessage(t.serverBatchSelectionHint, { count: COMMAND_BATCH_TARGET_LIMIT })
+                    : t.serverBatchNoTemplates}
+                </span>
+              </>
+            )}
+            <Button disabled={!window.fileterm} onClick={() => setBatchDialog({ type: 'history' })} size="panel">
+              {t.serverBatchHistory}
+            </Button>
+          </div>
+
           {visibleProfiles.length && view === 'list' ? (
             <ServerManagementList
+              batchEligible={(id) => batchTargets.has(id)}
+              batchLimitReached={selectedTargets.length >= COMMAND_BATCH_TARGET_LIMIT}
+              checkedProfiles={checkedProfiles}
               label={title}
+              onCheck={(id, checked) => {
+                const next = new Set(selectedTargets.map(({ profileId }) => profileId))
+                if (checked) next.add(id)
+                else next.delete(id)
+                setCheckedProfiles(next)
+              }}
               onSelect={setSelectedProfileId}
               onSortChange={setListSort}
               rows={visibleProfiles.map((profile) => ({
@@ -524,6 +582,13 @@ export function ServerManagementOverview({
         </main>
         <VerticalScrollbar ariaLabel={title} scrollRef={mainScrollRef} />
       </div>
+      {batchDialog && (
+        <ServerCommandBatchDialog
+          mode={batchDialog}
+          onClose={() => setBatchDialog(null)}
+          templates={commandTemplates}
+        />
+      )}
 
       {selectedProfile ? (
         <section className="server-dashboard-inspector-region">

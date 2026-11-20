@@ -31,7 +31,7 @@
 .server-dashboard-main {
   display: grid;
   align-content: start;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto 1fr;
   gap: 16px;
   width: 100%;
   height: 100%;
@@ -86,6 +86,18 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.server-dashboard-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.server-dashboard-batch-actions > span {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .server-dashboard-search {

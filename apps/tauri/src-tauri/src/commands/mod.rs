@@ -82,4 +82,5 @@ include!("proxy_commands.rs");
 include!("interaction_commands.rs");
 include!("mcp_record_commands.rs");
 include!("profile_commands.rs");
+include!("command_batch.rs");
 include!("tests/mod.rs");

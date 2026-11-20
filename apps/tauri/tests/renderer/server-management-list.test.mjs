@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { sortServerListRows } from '../../src/renderer/features/server-management/server-management-list-model.ts'
+import {
+  buildConnectionTree,
+  flattenConnectionProfiles
+} from '../../src/renderer/features/connections/connection-tree.ts'
+import {
+  nextServerListSort,
+  sortServerListRows
+} from '../../src/renderer/features/server-management/server-management-list-model.ts'
 
 const rows = [
   { id: 'a', name: 'Host 10', address: 'ops@host10', protocol: 'ssh', status: 'idle', tags: 'test' },
@@ -25,4 +32,28 @@ test('server list sorts each column in both directions without changing the card
     rows.map(({ id }) => id),
     ['a', 'b', 'c']
   )
+})
+
+test('server list defaults to saved connection order and returns to it after descending sort', () => {
+  const profiles = [
+    { ...rows[0], order: 20 },
+    { ...rows[1], order: 30, parentId: 'folder' },
+    { ...rows[2], order: 10 }
+  ]
+  const { roots } = buildConnectionTree(profiles, [{ id: 'folder', name: 'Folder', type: 'folder', order: 15 }])
+  const saved = flattenConnectionProfiles(roots)
+  const ascending = nextServerListSort(null, 'name')
+  const descending = nextServerListSort(ascending, 'name')
+  const restored = nextServerListSort(descending, 'name')
+  assert.deepEqual(
+    saved.map(({ id }) => id),
+    ['c', 'b', 'a']
+  )
+  assert.deepEqual(
+    sortServerListRows(saved, descending).map(({ id }) => id),
+    ['a', 'c', 'b']
+  )
+  assert.equal(restored, null)
+  assert.equal(sortServerListRows(saved, restored), saved)
+  assert.deepEqual(nextServerListSort(descending, 'status'), { column: 'status', direction: 'ascending' })
 })
