@@ -54,13 +54,6 @@
   font-weight: 600;
 }
 
-.server-topology__details-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: var(--control-height-sm);
-}
-
 .server-topology__identity {
   display: grid;
   gap: 5px;
@@ -140,6 +133,10 @@
 .server-topology__link-actions .server-topology__select {
   flex: 1 1 108px;
   min-width: 0;
+}
+
+.server-topology__details-scroll > .ft-btn {
+  justify-self: start;
 }
 
 @container (max-width: 620px) {
@@ -281,6 +278,8 @@
   display: grid;
   gap: 8px;
   min-width: 0;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--border-subtle);
 }
 
 .server-topology__memo > label {

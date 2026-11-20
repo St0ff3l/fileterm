@@ -14,7 +14,6 @@ export type ContextMenuEntry = {
 
 export function ContextMenu({
   align = 'start',
-  anchor,
   autoFocus = true,
   className,
   items,
@@ -23,7 +22,6 @@ export function ContextMenu({
   viewportMargin = 8
 }: {
   align?: 'start' | 'end'
-  anchor?: HTMLElement
   /** Pointer-opened menus should not draw an initial keyboard focus ring. */
   autoFocus?: boolean
   className?: string
@@ -66,7 +64,7 @@ export function ContextMenu({
         onCloseRef.current()
         return
       }
-      if (!menu.contains(target) && !anchor?.contains(target)) {
+      if (!menu.contains(target)) {
         onCloseRef.current()
       }
     }
@@ -99,7 +97,7 @@ export function ContextMenu({
         previousFocus.focus()
       }
     }
-  }, [anchor])
+  }, [])
 
   useEffect(() => {
     if (!autoFocus) {
