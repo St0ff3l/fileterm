@@ -1,7 +1,14 @@
 .server-command-batch-dialog .ft-dialog__body {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   padding: 0;
   overflow: hidden;
+}
+
+.server-command-batch-content {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
 }
 
 .server-command-batch-dialog .ft-dialog__footer {
@@ -221,6 +228,18 @@
 .server-command-batch-history-note {
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
+}
+
+.server-command-batch-history-select,
+.server-command-batch-history-select :is(.ft-select-shell__value, select, option),
+.server-command-batch-history-menu.context-menu button {
+  font-size: var(--font-size-sm);
+}
+
+.server-command-batch-history-menu.dropdown-select-menu {
+  max-width: calc(100vw - 16px);
+  max-height: min(280px, calc(100vh - 16px));
+  overscroll-behavior: contain;
 }
 
 .server-command-batch-text {
