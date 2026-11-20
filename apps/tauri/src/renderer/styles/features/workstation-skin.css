@@ -1062,7 +1062,8 @@ input:where(
 }
 
 .grid-chart {
-  height: 52px;
+  /* Bottom edge lands on the file panel frame line. */
+  height: 55.5px;
   padding: 4px 2px 0;
   border: 0;
   border-radius: 0;
