@@ -1229,17 +1229,15 @@
 
 .status-message {
   position: absolute;
-  inset: 8px 12px auto;
+  inset: 0 0 auto;
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-bottom: 1px solid var(--border-subtle);
   background: linear-gradient(var(--status-warning-bg), var(--status-warning-bg)), var(--surface-canvas);
-  box-shadow: var(--shadow-md);
   font-size: 13px;
   font-weight: 500;
 }

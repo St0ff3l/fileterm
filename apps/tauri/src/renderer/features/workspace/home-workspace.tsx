@@ -83,6 +83,7 @@ export function HomeWorkspace({
   onOpenLogsDirectory,
   onLaunchLocalAgent,
   isSidebarCollapsed,
+  isWorkspaceActive,
   serverManagement,
   tabBarProps,
   isResizingSidebar,
@@ -139,6 +140,7 @@ export function HomeWorkspace({
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
   isSidebarCollapsed: boolean
+  isWorkspaceActive: boolean
   serverManagement?: ServerManagementNavigation
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
@@ -198,7 +200,6 @@ export function HomeWorkspace({
   const resolveNavDirection = (fromPage: string, toPage: string) =>
     (tabOrder[toPage] ?? 0) >= (tabOrder[fromPage] ?? 0) ? 'down' : 'up'
   const selectTab = (tab: typeof activeTab) => {
-    const currentPage = isServerManagementMode ? managementPage : activeTab
     if (tab === currentPage) return
     setSuppressEntrance(false)
     setNavDirection(resolveNavDirection(currentPage, tab))
@@ -212,8 +213,21 @@ export function HomeWorkspace({
   // and the fly-in disappears. React applies these render-phase updates before
   // the new page commits, so the wrapper mounts with the right direction and
   // without the suppressed-entrance class.
-  const currentPage = isServerManagementMode ? managementPage : activeTab
-  const pageEntryRef = useRef({ page: currentPage, seq: 0 })
+  const requestedPage = isServerManagementMode ? managementPage : activeTab
+  const pageEntryRef = useRef({ page: requestedPage, seq: 0 })
+  const previousManagementMode = useRef(isServerManagementMode)
+  const keepSettings =
+    isWorkspaceActive &&
+    previousManagementMode.current !== isServerManagementMode &&
+    pageEntryRef.current.page === 'settings'
+  const currentPage = keepSettings ? 'settings' : requestedPage
+  const navigateManagement = serverManagement?.navigate
+  useLayoutEffect(() => {
+    previousManagementMode.current = isServerManagementMode
+    if (!keepSettings) return
+    if (navigateManagement) navigateManagement('settings')
+    else setActiveTab('settings')
+  }, [isServerManagementMode, keepSettings, navigateManagement])
   if (pageEntryRef.current.page !== currentPage) {
     const previousPage = pageEntryRef.current.page
     pageEntryRef.current = { page: currentPage, seq: pageEntryRef.current.seq + 1 }

@@ -510,6 +510,7 @@ function WorkspaceStageContent({
       onOpenLogsDirectory={onOpenLogsDirectory}
       onLaunchLocalAgent={onLaunchLocalAgent}
       isSidebarCollapsed={isSidebarCollapsed}
+      isWorkspaceActive={isWorkspaceActive}
       serverManagement={serverManagement}
       profiles={profiles}
       tabBarProps={tabBarProps}

@@ -258,11 +258,12 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     (page: ServerManagementPage, folderId?: string | null) => {
       setServerManagementPage(page)
       if (page === 'overview') setServerManagementFolderId(folderId ?? null)
+      if (activeLocalTab?.kind === 'home') return
       const homeTab = orderedTabs.find((entry) => entry.kind === 'local' && entry.tabKind === 'home')
       if (homeTab?.kind === 'local') void activateHomeTab(homeTab.id)
       else addHomeTab()
     },
-    [activateHomeTab, addHomeTab, orderedTabs]
+    [activeLocalTab?.kind, activateHomeTab, addHomeTab, orderedTabs]
   )
   const serverManagementNavigation = useMemo<ServerManagementNavigation>(
     () => ({

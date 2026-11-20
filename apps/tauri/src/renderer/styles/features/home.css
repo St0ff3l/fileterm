@@ -1016,8 +1016,8 @@
 }
 
 .fs-shell.is-home-active .status-message {
-  inset-block-start: calc(var(--window-tabbar-height) + 8px);
-  inset-inline-start: calc(var(--sidebar-width, 214px) + 12px);
+  inset-block-start: var(--window-tabbar-height);
+  inset-inline-start: var(--sidebar-width, 214px);
 }
 
 /* ============================================================
