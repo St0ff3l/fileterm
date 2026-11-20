@@ -2,6 +2,7 @@ import { DIAGNOSTIC_SCOPES, writeDiagnosticLog } from '../lib/diagnostic-log'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ConnectionProfile, PaneFocusDirection, SessionSnapshot } from '@fileterm/core'
 import { homeTabKey, sessionTabKey } from '../app/app-utils'
+import { rememberSessionTab } from './session-tab-memory'
 import type { SessionSendTarget } from '../features/common/session-send-targets'
 import { setLocale, formatMessage, t } from '../i18n'
 import type { OrderedTabEntry } from '../features/layout/tab-bar'
@@ -355,6 +356,12 @@ export function useWorkspaceTabs({
     : visibleWorkspaceTabs.some((tab) => tab.id === workspace.activeTabId)
       ? workspace.activeTabId
       : (visibleSessionTabOrder.at(-1) ?? visibleWorkspaceTabs.at(-1)?.id ?? null)
+  // Every path that makes a tab active (click, new tab, reconnect, snapshot)
+  // refreshes the per-server memory used when returning from the overview.
+  useEffect(() => {
+    const activeSessionTab = visibleWorkspaceTabs.find((tab) => tab.id === visibleActiveSessionTabId)
+    if (activeSessionTab) rememberSessionTab(activeSessionTab.id, activeSessionTab.profileId)
+  }, [visibleActiveSessionTabId, visibleWorkspaceTabs])
   const displayedSessionTabId = activeLocalTab
     ? activeLocalTab.kind === 'system'
       ? activeLocalTab.sessionTabId

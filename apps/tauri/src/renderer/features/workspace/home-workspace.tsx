@@ -230,11 +230,24 @@ export function HomeWorkspace({
   if (tabBarProps.activeSessionTabId) {
     lastActiveSessionTabId.current = tabBarProps.activeSessionTabId
   }
-  // Remember the server the user came from so returning to the overview lands
-  // on the matching connection instead of whatever was selected before.
-  const focusedProfileId =
-    managementTabs.find((tab) => tab.id === (tabBarProps.activeSessionTabId ?? lastActiveSessionTabId.current))
-      ?.profileId ?? null
+  // Remember the server and the exact session tab the user came from so
+  // returning to the overview lands on the matching connection, and the
+  // terminal entry reopens the tab that was last active.
+  const lastActiveSessionTab = managementTabs.find(
+    (tab) => tab.id === (tabBarProps.activeSessionTabId ?? lastActiveSessionTabId.current)
+  )
+  const focusedProfileId = lastActiveSessionTab?.profileId ?? null
+  // Bumping this request on every return from a terminal re-applies the
+  // remembered server even if the selection was changed manually in between.
+  const [overviewFocusRequest, setOverviewFocusRequest] = useState(0)
+  const previousActiveSessionTabId = useRef<string | null>(tabBarProps.activeSessionTabId)
+  useEffect(() => {
+    const previous = previousActiveSessionTabId.current
+    previousActiveSessionTabId.current = tabBarProps.activeSessionTabId
+    if (isServerManagementMode && previous && !tabBarProps.activeSessionTabId) {
+      setOverviewFocusRequest((current) => current + 1)
+    }
+  }, [isServerManagementMode, tabBarProps.activeSessionTabId])
   const { openExternalUrl, externalUrlError } = useExternalUrl(desktopApi, t.openExternalUrlFailed)
   // Keep Linux on the same compact home-shell layout as Windows. macOS keeps
   // its sidebar wordmark because it has native traffic lights above it.
@@ -488,6 +501,8 @@ export function HomeWorkspace({
                   sessions={sessions}
                   workspaceTabs={managementTabs}
                   focusedProfileId={focusedProfileId}
+                  focusedSessionTabId={lastActiveSessionTab?.id ?? null}
+                  focusRequest={overviewFocusRequest}
                   isFocusMode={tabBarProps.isWorkspaceFocusMode}
                   onToggleFocusMode={tabBarProps.onToggleWorkspaceFocus}
                   selectedFolderId={serverManagement?.selectedFolderId ?? null}

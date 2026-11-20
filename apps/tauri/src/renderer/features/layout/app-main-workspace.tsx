@@ -411,6 +411,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             showResourceMeters={isResourceMonitoringAvailable}
             visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
+            toggleSide={isServerManagementMode ? 'right' : 'left'}
             onMonitoringSnapshot={shell.applySnapshot}
             onOpenSystemInfo={openSystemInfo}
             onOpenNetworkConnections={openNetworkConnections}

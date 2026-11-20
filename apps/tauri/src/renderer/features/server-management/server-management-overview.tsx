@@ -18,6 +18,7 @@ import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { buildConnectionTree, flattenConnectionProfiles, type ConnectionTreeNode } from '../connections/connection-tree'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/use-pointer-sort-fallback'
+import { lastSessionTabIdForProfile } from '../../hooks/session-tab-memory'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
 import './server-management-overview.css'
 
@@ -146,6 +147,8 @@ export function ServerManagementOverview({
   sessions,
   workspaceTabs,
   focusedProfileId,
+  focusedSessionTabId,
+  focusRequest,
   isFocusMode,
   selectedFolderId,
   onSelectFolder,
@@ -163,6 +166,8 @@ export function ServerManagementOverview({
   sessions: Record<string, SessionSnapshot>
   workspaceTabs: WorkspaceTab[]
   focusedProfileId?: string | null
+  focusedSessionTabId?: string | null
+  focusRequest?: number
   isFocusMode?: boolean
   selectedFolderId: string | null
   onSelectFolder(folderId: string | null): void
@@ -218,17 +223,22 @@ export function ServerManagementOverview({
     if (!isFocusMode) setIsInspectorCollapsed(false)
   }, [isFocusMode])
 
-  const focusedProfileRef = useRef<string | null>(null)
+  const focusedProfileRef = useRef<{ profileId: string; request: number } | null>(null)
   useEffect(() => {
-    // Coming back from a terminal selects the server that session belongs to.
-    if (!focusedProfileId || focusedProfileRef.current === focusedProfileId) {
+    // Coming back from a terminal selects the server that session belongs to,
+    // including when that server was remembered before a manual selection.
+    if (!focusedProfileId) {
       return
     }
-    focusedProfileRef.current = focusedProfileId
+    const request = focusRequest ?? 0
+    if (focusedProfileRef.current?.profileId === focusedProfileId && focusedProfileRef.current.request === request) {
+      return
+    }
+    focusedProfileRef.current = { profileId: focusedProfileId, request }
     if (baseProfiles.some((profile) => profile.id === focusedProfileId)) {
       setSelectedProfileId(focusedProfileId)
     }
-  }, [baseProfiles, focusedProfileId])
+  }, [baseProfiles, focusRequest, focusedProfileId])
   const selectedProfile =
     visibleProfiles.find((profile) => profile.id === selectedProfileId) ?? visibleProfiles[0] ?? null
   const selectedStatus = selectedProfile ? statusForProfile(selectedProfile.id, workspaceTabs, sessions) : null
@@ -302,7 +312,13 @@ export function ServerManagementOverview({
 
   const openWorkspace = () => {
     if (!selectedProfile) return
-    if (selectedSessionTab && selectedStatus?.status !== 'disconnected') onActivateSession(selectedSessionTab.id)
+    // Reopen the tab that was last active for this server instead of the first.
+    const rememberedTab = [lastSessionTabIdForProfile(selectedProfile.id), focusedSessionTabId]
+      .filter((tabId): tabId is string => Boolean(tabId))
+      .map((tabId) => workspaceTabs.find((tab) => tab.id === tabId && tab.profileId === selectedProfile.id))
+      .find((tab) => tab && sessions[tab.id]?.connected)
+    if (rememberedTab) onActivateSession(rememberedTab.id)
+    else if (selectedSessionTab && selectedStatus?.status !== 'disconnected') onActivateSession(selectedSessionTab.id)
     else onOpenProfile(selectedProfile.id)
   }
 
@@ -466,6 +482,7 @@ export function ServerManagementOverview({
               className="server-dashboard-inspector-toggle"
               collapsed={inspectorCollapsed}
               label={inspectorCollapsed ? t.showConnectionDetails : t.hideConnectionDetails}
+              side="right"
               onClick={() => {
                 if (isFocusMode) {
                   onToggleFocusMode?.()

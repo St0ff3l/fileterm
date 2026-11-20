@@ -8,6 +8,7 @@ import { AppIcon } from '../common/app-icon'
 import { StatusIndicator } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { buildConnectionTree, type ConnectionTreeNode } from '../connections/connection-tree'
+import { lastSessionTabIdForProfile } from '../../hooks/session-tab-memory'
 import type { ServerManagementPage as Page } from './server-management-types'
 import './server-management-sidebar.css'
 
@@ -65,7 +66,10 @@ export function ServerManagementSidebar({
     () => new Set(folders.filter((folder) => folder.isExpanded === false).map((folder) => folder.id))
   )
   const selectProfile = (profileId: string) => {
-    const openTab = tabsByProfile.get(profileId)?.[0]
+    const profileTabs = tabsByProfile.get(profileId) ?? []
+    // Reopen the terminal tab the user last used for this server.
+    const rememberedTabId = lastSessionTabIdForProfile(profileId)
+    const openTab = profileTabs.find((tab) => tab.id === rememberedTabId) ?? profileTabs[0]
     if (openTab) onActivateSession(openTab.id)
   }
 
@@ -110,15 +114,18 @@ export function ServerManagementSidebar({
     }
 
     const profileTabs = tabsByProfile.get(node.id) ?? []
-    const openTab = profileTabs.find((tab) => sessions[tab.id]?.connected)
+    // Highlight the server whenever any of its terminal tabs is the active one,
+    // not only the first tab of the group.
+    const isCurrentProfile = profileTabs.some((tab) => tab.id === activeSessionTabId)
+    const hasConnectedTab = profileTabs.some((tab) => sessions[tab.id]?.connected)
     const tabCountLabel = profileTabs.length ? `${profileTabs.length} ${t.hostRailTabCount}` : null
     const accessibleLabel = [node.name, connectionProfileSummary(node), tabCountLabel].filter(Boolean).join(' · ')
     return (
       <li className="management-tree-profile" key={node.id}>
         <button
           aria-label={accessibleLabel}
-          aria-current={openTab?.id === activeSessionTabId ? 'true' : undefined}
-          className={`management-tree-item ${openTab?.id === activeSessionTabId ? 'is-current' : ''}`}
+          aria-current={isCurrentProfile ? 'true' : undefined}
+          className={`management-tree-item ${isCurrentProfile ? 'is-current' : ''}`}
           onClick={() => selectProfile(node.id)}
           style={{ '--tree-depth': depth } as CSSProperties}
           title={accessibleLabel}
@@ -136,7 +143,9 @@ export function ServerManagementSidebar({
               {profileTabs.length}
             </span>
           ) : null}
-          {!collapsed && openTab ? <StatusIndicator aria-label={t.hostStatusConnected} status="connected" /> : null}
+          {!collapsed && hasConnectedTab ? (
+            <StatusIndicator aria-label={t.hostStatusConnected} status="connected" />
+          ) : null}
         </button>
       </li>
     )

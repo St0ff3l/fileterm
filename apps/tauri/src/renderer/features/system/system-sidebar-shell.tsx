@@ -19,6 +19,7 @@ export function SystemSidebarShell({
   showResourceMeters,
   visibleMetrics,
   isResizing,
+  toggleSide,
   onMonitoringSnapshot,
   onOpenSystemInfo,
   onOpenNetworkConnections,
@@ -35,6 +36,8 @@ export function SystemSidebarShell({
   showResourceMeters: boolean
   visibleMetrics: ResourceMonitoringMetric[]
   isResizing: boolean
+  /** Management mode mirrors the collapse glyph; the default layout keeps it. */
+  toggleSide?: 'left' | 'right'
   onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
   onOpenSystemInfo(): void
   onOpenNetworkConnections(): void
@@ -56,6 +59,7 @@ export function SystemSidebarShell({
         onMonitoringSnapshot={onMonitoringSnapshot}
         onOpenSystemInfo={onOpenSystemInfo}
         onOpenNetworkConnections={onOpenNetworkConnections}
+        toggleSide={toggleSide}
         onToggleCollapsed={() => {
           const nextCollapsed = !collapsed
           if (!nextCollapsed) {

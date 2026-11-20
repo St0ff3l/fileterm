@@ -39,6 +39,11 @@
   -webkit-mask: url('../../../assets/icons/navigation/sidebar-toggle.svg') center / contain no-repeat;
 }
 
+/* Right-hand sidebars show the mirrored glyph. */
+.sidebar-toggle.is-right .sidebar-toggle-icon {
+  transform: scaleX(-1);
+}
+
 :root[data-theme*='light'] .sidebar-toggle.ft-btn {
   border-color: var(--system-sidebar-control-border);
 }

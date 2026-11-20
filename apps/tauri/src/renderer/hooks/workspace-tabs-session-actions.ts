@@ -8,6 +8,7 @@ import { homeTabKey, sessionTabKey, settledResultsError, tabStatusClass } from '
 import { resolveSelectedTabIds, type SendScope } from '../features/common/session-send-targets'
 import { t } from '../i18n'
 import { runProfileOpenOnce } from './profile-open-guard'
+import { rememberSessionTab } from './session-tab-memory'
 import type { WorkspaceTabsActionContext } from './workspace-tabs-types'
 import { isTabActivelyConnected, nextTabAfterClose, nextTabInHostGroup, uniqueStrings } from './workspace-tabs-utils'
 
@@ -271,6 +272,7 @@ export function createWorkspaceTabsSessionActions(context: WorkspaceTabsActionCo
 
     // Background sessions have no tab yet; attaching is what opens the terminal.
     const targetTab = workspace.tabs.find((tab) => tab.id === tabId)
+    if (targetTab) rememberSessionTab(targetTab.id, targetTab.profileId)
     if (targetTab?.isBackground) {
       const requestId = ++tabActivationRequestRef.current
       setPendingActiveTabId(tabId)

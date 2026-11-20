@@ -33,6 +33,7 @@ const { createWorkspaceTabsSessionActions } = load('../../src/renderer/hooks/wor
   '../features/common/session-send-targets': {},
   '../i18n': i18n,
   './profile-open-guard': profileOpenGuard,
+  './session-tab-memory': load('../../src/renderer/hooks/session-tab-memory.ts'),
   './workspace-tabs-utils': utils
 })
 const tabs = ['a', 'b', 'c', 'd'].map((id) => ({
