@@ -204,7 +204,6 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     setDismissedInteractiveGatewayNoticeTabId((current) => (current === activeTab.id ? null : current))
   }, [activeTab?.id, interactiveGatewayNoticeTabId])
 
-  const hasStatusMessage = Boolean(error || isInteractiveGatewayNoticeVisible)
   const isServerManagementMode = workspaceMode === 'server-management'
   const resolvedSidebarWidth = isSystemSidebarCollapsed
     ? 44
@@ -421,9 +420,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           />
         ) : null}
 
-        <main
-          className={`fs-main ${hasStatusMessage ? 'has-status' : 'no-status'} ${shouldShowSystemSidebar ? '' : 'full-width'}`}
-        >
+        <main className={`fs-main ${shouldShowSystemSidebar ? '' : 'full-width'}`}>
           {error ? (
             <div className="status-message" role="alert">
               <span className="status-message-text">{error}</span>

@@ -1015,28 +1015,9 @@
   display: none;
 }
 
-/* Home workspace error status banner styling overrides */
-.fs-shell.is-home-active .fs-main {
-  position: relative;
-}
-
-.fs-shell.is-home-active .fs-main.has-status {
-  grid-template-rows: minmax(0, 1fr) !important;
-}
-
 .fs-shell.is-home-active .status-message {
-  position: absolute;
-  top: var(--window-tabbar-height);
-  left: var(--sidebar-width, 214px);
-  right: 0;
-  z-index: 100;
-  box-shadow: var(--shadow-md);
-  border-bottom: 1px solid var(--border-light);
-  border-left: 1px solid var(--border-light);
-}
-
-:root[data-platform='darwin'] .fs-shell.is-home-active .status-message {
-  padding-left: 12px !important;
+  inset-block-start: calc(var(--window-tabbar-height) + 8px);
+  inset-inline-start: calc(var(--sidebar-width, 214px) + 12px);
 }
 
 /* ============================================================
