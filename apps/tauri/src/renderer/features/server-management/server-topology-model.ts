@@ -10,7 +10,7 @@ const INSET = 20
 const AUTO_LAYOUT_COLUMNS = 5
 const MAX_POSITION = 200_000
 
-export type TopologyNode = { id: string; x: number; y: number; memo?: string }
+export type TopologyNode = { id: string; x: number; y: number; memo?: string; routeOnly?: true }
 export type TopologyLink = [first: string, second: string, name?: string]
 export type TopologyBoard = { nodes: TopologyNode[]; links: TopologyLink[] }
 
@@ -37,11 +37,17 @@ export function decodeTopologyBoard(raw: string | null): TopologyBoard {
       throw new Error('Invalid topology node')
     }
     ids.add(node.id)
-    const { memo } = node
+    const { memo, routeOnly } = node
     if (memo !== undefined && (typeof memo !== 'string' || memo.length > TOPOLOGY_MEMO_LIMIT)) {
       throw new Error('Invalid topology memo')
     }
-    nodes.push(memo ? { id: node.id, x, y, memo } : { id: node.id, x, y })
+    nodes.push({
+      id: node.id,
+      x,
+      y,
+      ...(memo ? { memo } : {}),
+      ...(routeOnly === true ? { routeOnly: true } : {})
+    })
   }
   const links: TopologyLink[] = []
   for (const link of value.links) {
@@ -62,19 +68,42 @@ export function decodeTopologyBoard(raw: string | null): TopologyBoard {
 }
 
 export function addTopologyNode(board: TopologyBoard, id: string): TopologyBoard {
-  if (!id || board.nodes.some((node) => node.id === id)) return board
-  for (let index = 0; ; index++) {
-    const x = INSET + (index % AUTO_LAYOUT_COLUMNS) * COLUMN_WIDTH
-    const y = INSET + Math.floor(index / AUTO_LAYOUT_COLUMNS) * ROW_HEIGHT
-    if (y > MAX_POSITION) return board
-    if (
-      !board.nodes.some(
-        (node) => Math.abs(node.x - x) < TOPOLOGY_NODE_WIDTH && Math.abs(node.y - y) < TOPOLOGY_NODE_HEIGHT
-      )
-    ) {
-      return { ...board, nodes: [...board.nodes, { id, x, y }] }
+  return addTopologyNodes(board, [id])
+}
+
+export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>): TopologyBoard {
+  const nodes = [...board.nodes]
+  const present = new Set(nodes.map(({ id }) => id))
+  let index = 0
+  for (const id of ids) {
+    if (!id || present.has(id)) continue
+    for (;;) {
+      const x = INSET + (index % AUTO_LAYOUT_COLUMNS) * COLUMN_WIDTH
+      const y = INSET + Math.floor(index / AUTO_LAYOUT_COLUMNS) * ROW_HEIGHT
+      if (y > MAX_POSITION) return nodes.length === board.nodes.length ? board : { ...board, nodes }
+      index++
+      if (
+        !nodes.some((node) => Math.abs(node.x - x) < TOPOLOGY_NODE_WIDTH && Math.abs(node.y - y) < TOPOLOGY_NODE_HEIGHT)
+      ) {
+        nodes.push({ id, x, y })
+        present.add(id)
+        break
+      }
     }
   }
+  return nodes.length === board.nodes.length ? board : { ...board, nodes }
+}
+
+export function topologyLinkEndpoints(first: TopologyNode, second: TopologyNode, directed: boolean) {
+  const x = first.x + TOPOLOGY_NODE_WIDTH / 2
+  const y = first.y + TOPOLOGY_NODE_HEIGHT / 2
+  const dx = second.x - first.x
+  const dy = second.y - first.y
+  // Keep the arrow tip outside the target card, including while either card is dragged.
+  const inset = directed
+    ? Math.min(0.45, (TOPOLOGY_NODE_WIDTH / 2 + 4) / Math.abs(dx), (TOPOLOGY_NODE_HEIGHT / 2 + 4) / Math.abs(dy))
+    : 0
+  return { x1: x + dx * inset, y1: y + dy * inset, x2: x + dx * (1 - inset), y2: y + dy * (1 - inset) }
 }
 
 export function moveTopologyNode(board: TopologyBoard, id: string, x: number, y: number): TopologyBoard {

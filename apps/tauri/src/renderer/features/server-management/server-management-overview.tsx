@@ -39,11 +39,12 @@ import { ServerManagementList } from './server-management-list'
 import type { ServerListSort } from './server-management-list-model'
 import { ServerCommandBatchDialog, type ServerCommandBatchDialogMode } from './server-command-batch-dialog'
 import { getCommandBatchTargets } from './server-command-batch-model'
+import { ServerSavedViews } from './server-saved-views'
+import { SERVER_STATUS_FILTERS, type ServerViewFilters } from './server-saved-views-model'
 import './server-management-overview.css'
 import './server-management-page-header.css'
 
 const MAX_METRIC_AGE_MS = 120_000
-type DashboardFilter = 'all' | 'connected' | 'connecting' | 'idle'
 
 function findFolder(nodes: ConnectionTreeNode[], folderId: string): ConnectionTreeNode | undefined {
   for (const node of nodes) {
@@ -188,7 +189,7 @@ export function ServerManagementOverview({
   onToggleFocusMode?(): void
 }) {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<DashboardFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<ServerViewFilters['status']>('all')
   const [selectedTag, setSelectedTag] = useState('')
   const [view, setView] = useState<'cards' | 'list'>('cards')
   const [listSort, setListSort] = useState<ServerListSort | null>(null)
@@ -217,7 +218,8 @@ export function ServerManagementOverview({
   const tags = [...new Set(profiles.flatMap((profile) => profile.tags ?? []))].sort((first, second) =>
     first.localeCompare(second)
   )
-  const tagFilter = tags.includes(selectedTag) ? selectedTag : ''
+  const tagFilter = selectedTag
+  if (tagFilter && !tags.includes(tagFilter)) tags.push(tagFilter)
   const statusByProfile = new Map(
     baseProfiles.map((profile) => [profile.id, statusForProfile(profile.id, workspaceTabs, sessions)])
   )
@@ -462,7 +464,7 @@ export function ServerManagementOverview({
 
           <div className="server-dashboard-toolbar">
             <div className="server-dashboard-filters" role="group" aria-label={t.serverDashboardStatusFilter}>
-              {(['all', 'connected', 'connecting', 'idle'] as const).map((status) => (
+              {SERVER_STATUS_FILTERS.map((status) => (
                 <Button
                   aria-pressed={statusFilter === status}
                   key={status}
@@ -486,6 +488,14 @@ export function ServerManagementOverview({
                   value={tagFilter}
                 />
               ) : null}
+              <ServerSavedViews
+                filters={{ query, status: statusFilter, tag: tagFilter }}
+                onApply={({ query, status, tag }) => {
+                  setQuery(query)
+                  setStatusFilter(status)
+                  setSelectedTag(tag)
+                }}
+              />
             </div>
             <div className="server-dashboard-search-row">
               <Input

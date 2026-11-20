@@ -64,6 +64,19 @@
   gap: 6px;
 }
 
+.server-dashboard-saved-views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.server-dashboard-saved-views .server-dashboard-saved-views-select {
+  width: auto;
+  max-width: min(180px, 100%);
+  height: 32px;
+}
+
 .server-dashboard-filters .ft-btn[aria-pressed='true'] {
   border-color: var(--border-strong);
   background: var(--surface-hover);

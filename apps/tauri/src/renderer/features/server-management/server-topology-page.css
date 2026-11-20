@@ -16,6 +16,10 @@
   gap: 8px;
 }
 
+.server-topology .server-management-page-header {
+  flex-wrap: wrap;
+}
+
 .server-topology__body {
   display: grid;
   flex: 1;
@@ -226,6 +230,16 @@
 .server-topology__link-line {
   stroke: var(--text-secondary);
   stroke-width: 2px;
+}
+
+.server-topology__route-line {
+  stroke: var(--accent-secondary);
+  stroke-width: 2px;
+  stroke-dasharray: 5 4;
+}
+
+.server-topology__route-arrow {
+  fill: var(--accent-secondary);
 }
 
 .server-topology__links g:is(.is-selected, :hover, :focus-visible) .server-topology__link-line {

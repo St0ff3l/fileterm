@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { ConnectionProfile, SessionSnapshot, WorkspaceTab } from '@fileterm/core'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { Button } from '../../components/common/button/button'
@@ -7,10 +7,12 @@ import { DropdownSelect } from '../../components/common/dropdown-select/dropdown
 import { Input, Textarea } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { t } from '../../i18n'
+import { useProxyLibrary } from '../../hooks/use-proxy-library'
 import { StatusIndicator } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import {
   addTopologyNode,
+  addTopologyNodes,
   decodeTopologyBoard,
   moveTopologyNode,
   removeTopologyNode,
@@ -19,12 +21,14 @@ import {
   TOPOLOGY_NODE_HEIGHT as NODE_HEIGHT,
   TOPOLOGY_NODE_WIDTH as NODE_WIDTH,
   TOPOLOGY_STORAGE_KEY,
+  topologyLinkEndpoints,
   topologyLinkMatches,
   updateTopologyNodeMemo,
   type TopologyBoard,
   type TopologyLink,
   type TopologyNode
 } from './server-topology-model'
+import { configuredTopologyRoutes, isTopologyProxyNode, topologyProxyAddress } from './server-topology-routes'
 import { statusForProfile, statusLabel } from './server-profile-status'
 import './server-management-page-header.css'
 import './server-topology-page.css'
@@ -69,18 +73,29 @@ type NodeDrag = {
   scrollLeft: number
   scrollTop: number
   moved: boolean
-  ends: { lines: NodeListOf<SVGLineElement>; label: SVGTextElement | null; x: number; y: number; end: 1 | 2 }[]
+  ends: {
+    lines: NodeListOf<SVGLineElement>
+    label: SVGTextElement | null
+    first: TopologyNode
+    second: TopologyNode
+    directed: boolean
+  }[]
 }
 
 function previewNode(button: HTMLButtonElement, node: TopologyNode, drag: NodeDrag, dx: number, dy: number) {
   button.style.transform = dx || dy ? `translate3d(${dx}px, ${dy}px, 0)` : ''
-  for (const { lines, label, x, y, end } of drag.ends) {
+  const moved = { ...node, x: node.x + dx, y: node.y + dy }
+  for (const { lines, label, first, second, directed } of drag.ends) {
+    const endpoints = topologyLinkEndpoints(
+      first.id === node.id ? moved : first,
+      second.id === node.id ? moved : second,
+      directed
+    )
     for (const line of lines) {
-      line.setAttribute(`x${end}`, String(node.x + dx + NODE_WIDTH / 2))
-      line.setAttribute(`y${end}`, String(node.y + dy + NODE_HEIGHT / 2))
+      for (const [key, value] of Object.entries(endpoints)) line.setAttribute(key, String(value))
     }
-    label?.setAttribute('x', String(x + dx / 2))
-    label?.setAttribute('y', String(y + dy / 2))
+    label?.setAttribute('x', String((endpoints.x1 + endpoints.x2) / 2))
+    label?.setAttribute('y', String((endpoints.y1 + endpoints.y2) / 2))
   }
 }
 
@@ -110,11 +125,29 @@ export function ServerTopologyPage({
   const [linkName, setLinkName] = useState('')
   const [linkTo, setLinkTo] = useState('')
   const [placing, setPlacing] = useState(false)
+  const [showRoutes, setShowRoutes] = useState(true)
   const [pendingRemoval, setPendingRemoval] = useState<'node' | 'link' | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const detailsScrollRef = useRef<HTMLDivElement>(null)
   const linksRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<NodeDrag | null>(null)
+  const arrowId = useId()
+  const { proxies, error: proxyError } = useProxyLibrary()
+  const configured = useMemo(() => configuredTopologyRoutes(profiles, proxies), [profiles, proxies])
+  const routeLinks = showRoutes ? configured.links : []
+  const routeNodeIds = new Set(routeLinks.flatMap(({ from, to }) => [from, to]))
+  const canvas = useMemo(() => {
+    if (!board) return null
+    const links = showRoutes ? configured.links : []
+    const ids = new Set(links.flatMap(({ from, to }) => [from, to]))
+    return addTopologyNodes(
+      {
+        nodes: board.nodes.filter(({ id, routeOnly }) => ids.has(id) || (!routeOnly && !isTopologyProxyNode(id))),
+        links: board.links
+      },
+      ids
+    )
+  }, [board, configured, showRoutes])
 
   const save = (next: TopologyBoard) => {
     try {
@@ -128,7 +161,7 @@ export function ServerTopologyPage({
     }
   }
 
-  if (!board) {
+  if (!board || !canvas) {
     return (
       <section className="server-topology">
         <h1>{t.serverTopology}</h1>
@@ -138,15 +171,25 @@ export function ServerTopologyPage({
   }
 
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]))
-  const nodesById = new Map(board.nodes.map((node) => [node.id, node]))
+  const nodesById = new Map(canvas.nodes.map((node) => [node.id, node]))
+  const visibleRouteLinks = routeLinks.filter(({ from, to }) => nodesById.has(from) && nodesById.has(to))
+  const manualLinks = board.links.filter(([first, second]) => nodesById.has(first) && nodesById.has(second))
   const available = profiles.filter((profile) => !nodesById.has(profile.id))
   const selected = nodesById.get(selectedId)
   const selectedProfile = profilesById.get(selectedId)
-  const statuses = new Map(board.nodes.map(({ id }) => [id, statusForProfile(id, workspaceTabs, sessions)]))
+  const selectedProxy = configured.proxyNodes.get(selectedId)
+  const statuses = new Map(canvas.nodes.map(({ id }) => [id, statusForProfile(id, workspaceTabs, sessions)]))
   const selectedConnection = statuses.get(selectedId)
   const selectedSystem = selectedConnection && sessions[selectedConnection.tab.id]?.systemMetrics?.identity.osName
-  const relatedIds = (id: string) =>
-    board.links.filter(([first, second]) => first === id || second === id).map(([a, b]) => (a === id ? b : a))
+  const relatedIds = (id: string) => {
+    const manual = manualLinks
+      .filter(([first, second]) => first === id || second === id)
+      .map(([a, b]) => (a === id ? b : a))
+    const routes = visibleRouteLinks
+      .filter(({ from, to }) => from === id || to === id)
+      .map(({ from, to }) => (from === id ? to : from))
+    return [...new Set([...manual, ...routes])]
+  }
   const selectedRelations = relatedIds(selectedId)
   const protocol = (profile: ConnectionProfile) =>
     profile.type === 'ftp' && profile.secure ? 'FTPS' : profile.type.toUpperCase()
@@ -154,10 +197,11 @@ export function ServerTopologyPage({
   const linked = board.links.find((link) => topologyLinkMatches(link, selectedId, selectedTarget))
   const selectedLink = board.links.find((link) => linkKey(link) === selectedLinkKey)
   const linkToRemove = selectedLink ?? linked
-  const nodeName = (id: string) => profilesById.get(id)?.name ?? t.serverTopologyMissingProfile
+  const nodeName = (id: string) =>
+    profilesById.get(id)?.name ?? configured.proxyNodes.get(id)?.name ?? t.serverTopologyMissingProfile
   const linkEndpoints = ([first, second]: TopologyLink) => `${nodeName(first)} ↔ ${nodeName(second)}`
-  const minWidth = Math.max(320, ...board.nodes.map((node) => node.x + NODE_WIDTH + 40))
-  const minHeight = Math.max(200, ...board.nodes.map((node) => node.y + NODE_HEIGHT + 40))
+  const minWidth = Math.max(320, ...canvas.nodes.map((node) => node.x + NODE_WIDTH + 40))
+  const minHeight = Math.max(200, ...canvas.nodes.map((node) => node.y + NODE_HEIGHT + 40))
 
   const selectNode = (id: string) => {
     if (id !== selectedId || selectedLinkKey) {
@@ -195,15 +239,32 @@ export function ServerTopologyPage({
     target?.focus()
   }
 
+  const storeLayout = () => {
+    const storedIds = new Set(board.nodes.map(({ id }) => id))
+    const added = canvas.nodes.filter(({ id }) => !storedIds.has(id))
+    return added.length
+      ? { ...board, nodes: [...board.nodes, ...added.map((node) => ({ ...node, routeOnly: true as const }))] }
+      : board
+  }
+
+  const pinNodes = (stored: TopologyBoard, ids: string[]) => ({
+    ...stored,
+    nodes: stored.nodes.map((node) => (ids.includes(node.id) ? { ...node, routeOnly: undefined } : node))
+  })
+
   const addNode = (profileId: string) => {
     if (!available.some((profile) => profile.id === profileId)) return
-    const next = addTopologyNode(board, profileId)
-    if (next !== board && save(next)) selectNode(profileId)
+    const stored = storeLayout()
+    const next = stored.nodes.some(({ id }) => id === profileId)
+      ? pinNodes(stored, [profileId])
+      : addTopologyNode(stored, profileId)
+    if (next !== stored && save(next)) selectNode(profileId)
   }
 
   const moveNode = (node: TopologyNode, x: number, y: number) => {
-    const next = moveTopologyNode(board, node.id, Math.max(0, x), Math.max(0, y))
-    if (next !== board && save(next)) setPlacing(false)
+    const stored = storeLayout()
+    const next = moveTopologyNode(stored, node.id, Math.max(0, x), Math.max(0, y))
+    if (next !== stored && save(next)) setPlacing(false)
   }
 
   const handleNodeKeys = (event: KeyboardEvent<HTMLButtonElement>, node: TopologyNode) => {
@@ -225,16 +286,16 @@ export function ServerTopologyPage({
     const ends = Array.from(linksRef.current?.querySelectorAll<SVGGElement>('g[data-first]') ?? []).flatMap<
       NodeDrag['ends'][number]
     >((group) => {
-      const end = group.dataset.first === node.id ? 1 : group.dataset.second === node.id ? 2 : null
-      if (!end) return []
-      const label = group.querySelector('text')
+      const first = nodesById.get(group.dataset.first ?? '')
+      const second = nodesById.get(group.dataset.second ?? '')
+      if (!first || !second || (first.id !== node.id && second.id !== node.id)) return []
       return [
         {
           lines: group.querySelectorAll('line'),
-          label,
-          x: Number(label?.getAttribute('x')),
-          y: Number(label?.getAttribute('y')),
-          end
+          label: group.querySelector('text'),
+          first,
+          second,
+          directed: group.dataset.configured !== undefined
         }
       ]
     })
@@ -304,17 +365,29 @@ export function ServerTopologyPage({
           <MaterialIcon name="edit_note" />
           <span>{t.serverTopology}</span>
         </h1>
-        <DropdownSelect
-          ariaLabel={t.serverTopologyAddNode}
-          className="server-topology__select"
-          disabled={!available.length}
-          onChange={addNode}
-          options={[
-            { value: '', label: t.serverTopologyAddNode, disabled: true },
-            ...available.map((profile) => ({ value: profile.id, label: profile.name }))
-          ]}
-          value=""
-        />
+        <div className="server-topology__actions">
+          <Button
+            aria-pressed={showRoutes}
+            onClick={() => {
+              selectNode('')
+              setShowRoutes(!showRoutes)
+            }}
+            size="panel"
+          >
+            {t.serverTopologyConfiguredRoutes}
+          </Button>
+          <DropdownSelect
+            ariaLabel={t.serverTopologyAddNode}
+            className="server-topology__select"
+            disabled={!available.length}
+            onChange={addNode}
+            options={[
+              { value: '', label: t.serverTopologyAddNode, disabled: true },
+              ...available.map((profile) => ({ value: profile.id, label: profile.name }))
+            ]}
+            value=""
+          />
+        </div>
       </header>
       <div className="server-topology__body">
         <div className="server-topology__viewport">
@@ -338,18 +411,42 @@ export function ServerTopologyPage({
               }}
             >
               <svg className="server-topology__links" ref={linksRef}>
-                {board.links.map((link) => {
+                <defs>
+                  <marker
+                    id={arrowId}
+                    markerHeight="8"
+                    markerWidth="8"
+                    markerUnits="userSpaceOnUse"
+                    orient="auto"
+                    refX="8"
+                    refY="4"
+                  >
+                    <path className="server-topology__route-arrow" d="M0 0 L8 4 L0 8 Z" />
+                  </marker>
+                </defs>
+                {visibleRouteLinks.map(({ from, to, kind }) => (
+                  <g
+                    aria-hidden="true"
+                    className="server-topology__route"
+                    data-configured={kind}
+                    data-first={from}
+                    data-second={to}
+                    key={JSON.stringify([from, to, kind])}
+                  >
+                    <line
+                      className="server-topology__route-line"
+                      markerEnd={`url(#${arrowId})`}
+                      {...topologyLinkEndpoints(nodesById.get(from)!, nodesById.get(to)!, true)}
+                    />
+                  </g>
+                ))}
+                {manualLinks.map((link) => {
                   const [first, second, name] = link
                   const a = nodesById.get(first)!
                   const b = nodesById.get(second)!
                   const key = linkKey(link)
                   const isSelected = selectedLinkKey === key
-                  const endpoints = {
-                    x1: a.x + NODE_WIDTH / 2,
-                    x2: b.x + NODE_WIDTH / 2,
-                    y1: a.y + NODE_HEIGHT / 2,
-                    y2: b.y + NODE_HEIGHT / 2
-                  }
+                  const endpoints = topologyLinkEndpoints(a, b, false)
                   return (
                     <g
                       aria-label={name ? `${name} · ${linkEndpoints(link)}` : linkEndpoints(link)}
@@ -386,9 +483,14 @@ export function ServerTopologyPage({
                   )
                 })}
               </svg>
-              {board.nodes.map((node) => {
+              {canvas.nodes.map((node) => {
                 const profile = profilesById.get(node.id)
-                const details = profile ? connectionProfileSummary(profile) : t.serverTopologyMissingProfile
+                const proxy = configured.proxyNodes.get(node.id)
+                const details = profile
+                  ? connectionProfileSummary(profile)
+                  : proxy
+                    ? topologyProxyAddress(proxy)
+                    : t.serverTopologyMissingProfile
                 const related = relatedIds(node.id).map(nodeName)
                 const status = statuses.get(node.id)?.status ?? 'idle'
                 return (
@@ -412,7 +514,9 @@ export function ServerTopologyPage({
                   >
                     <span className="server-topology__node-meta">
                       <MaterialIcon name={profile?.type === 'serial' ? 'usb' : 'dns'} />
-                      <span>{profile ? protocol(profile) : t.serverTopologyMissingProfile}</span>
+                      <span>
+                        {profile ? protocol(profile) : (proxy?.type.toUpperCase() ?? t.serverTopologyMissingProfile)}
+                      </span>
                       {profile ? (
                         <StatusIndicator
                           role="img"
@@ -423,7 +527,7 @@ export function ServerTopologyPage({
                       ) : null}
                     </span>
                     <strong>{nodeName(node.id)}</strong>
-                    {profile ? <small>{details}</small> : null}
+                    {profile || proxy ? <small>{details}</small> : null}
                   </button>
                 )
               })}
@@ -480,6 +584,10 @@ export function ServerTopologyPage({
                       <StatusIndicator aria-hidden="true" status={selectedConnection?.status ?? 'idle'} />
                       {statusLabel(selectedConnection?.status ?? 'idle')}
                     </span>
+                  ) : selectedProxy ? (
+                    <span className="server-topology__connection-status">
+                      {selectedProxy.type.toUpperCase()} · {topologyProxyAddress(selectedProxy)}
+                    </span>
                   ) : null}
                 </div>
                 {selectedProfile ? (
@@ -532,14 +640,16 @@ export function ServerTopologyPage({
                   </dl>
                 ) : null}
                 <div className="server-topology__actions">
-                  <Button
-                    size="panel"
-                    variant="primary"
-                    disabled={!selectedProfile}
-                    onClick={() => onOpenProfile(selectedId)}
-                  >
-                    {t.openConnection}
-                  </Button>
+                  {!selectedProxy && (
+                    <Button
+                      size="panel"
+                      variant="primary"
+                      disabled={!selectedProfile}
+                      onClick={() => onOpenProfile(selectedId)}
+                    >
+                      {t.openConnection}
+                    </Button>
+                  )}
                   <Button
                     size="panel"
                     title={t.serverTopologyMoveHint}
@@ -569,43 +679,50 @@ export function ServerTopologyPage({
                   ) : (
                     <p className="server-topology__hint">{t.serverTopologyNoRelations}</p>
                   )}
-                  <div className="server-topology__actions server-topology__link-actions">
-                    <DropdownSelect
-                      ariaLabel={t.serverTopologyPickNode}
-                      className="server-topology__select"
-                      disabled={board.nodes.length < 2}
-                      onChange={setLinkTo}
-                      options={[
-                        { value: '', label: t.serverTopologyPickNode, disabled: true },
-                        ...board.nodes
-                          .filter((node) => node.id !== selectedId)
-                          .map((node) => ({ value: node.id, label: nodeName(node.id) }))
-                      ]}
-                      value={selectedTarget}
-                    />
-                    <Button
-                      disabled={!selectedTarget}
-                      onClick={() => {
-                        if (linked) setPendingRemoval('link')
-                        else save({ ...board, links: [...board.links, [selectedId, selectedTarget]] })
-                      }}
-                    >
-                      {linked ? t.serverTopologyRemoveLink : t.serverTopologyAddLink}
-                    </Button>
-                  </div>
+                  {!selectedProxy && (
+                    <div className="server-topology__actions server-topology__link-actions">
+                      <DropdownSelect
+                        ariaLabel={t.serverTopologyPickNode}
+                        className="server-topology__select"
+                        disabled={canvas.nodes.filter(({ id }) => !isTopologyProxyNode(id)).length < 2}
+                        onChange={setLinkTo}
+                        options={[
+                          { value: '', label: t.serverTopologyPickNode, disabled: true },
+                          ...canvas.nodes
+                            .filter((node) => node.id !== selectedId && !isTopologyProxyNode(node.id))
+                            .map((node) => ({ value: node.id, label: nodeName(node.id) }))
+                        ]}
+                        value={selectedTarget}
+                      />
+                      <Button
+                        disabled={!selectedTarget}
+                        onClick={() => {
+                          if (linked) setPendingRemoval('link')
+                          else {
+                            const stored = pinNodes(storeLayout(), [selectedId, selectedTarget])
+                            save({ ...stored, links: [...stored.links, [selectedId, selectedTarget]] })
+                          }
+                        }}
+                      >
+                        {linked ? t.serverTopologyRemoveLink : t.serverTopologyAddLink}
+                      </Button>
+                    </div>
+                  )}
                 </section>
                 <NodeMemo
                   key={selected.id}
                   memo={selected.memo ?? ''}
-                  onSave={(memo) => save(updateTopologyNodeMemo(board, selected.id, memo))}
+                  onSave={(memo) => save(updateTopologyNodeMemo(storeLayout(), selected.id, memo))}
                 />
-                <Button size="panel" variant="ghost" onClick={() => setPendingRemoval('node')}>
-                  {t.serverTopologyRemoveNode}
-                </Button>
+                {!routeNodeIds.has(selectedId) && (
+                  <Button size="panel" variant="ghost" onClick={() => setPendingRemoval('node')}>
+                    {t.serverTopologyRemoveNode}
+                  </Button>
+                )}
               </>
             ) : (
               <p className="server-topology__hint">
-                {board.nodes.length ? t.serverTopologySelectNode : t.serverTopologyEmpty}
+                {canvas.nodes.length ? t.serverTopologySelectNode : t.serverTopologyEmpty}
               </p>
             )}
             {saveFailed ? (
@@ -613,6 +730,11 @@ export function ServerTopologyPage({
                 {t.serverTopologySaveError}
               </p>
             ) : null}
+            {showRoutes && proxyError && (
+              <p className="server-topology__error" role="alert">
+                {t.serverTopologyProxyLoadError}
+              </p>
+            )}
           </div>
           <VerticalScrollbar ariaLabel={t.serverDashboardDetails} scrollRef={detailsScrollRef} />
         </aside>
