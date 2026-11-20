@@ -353,7 +353,7 @@ export function ServerManagementOverview({
   const title = selectedFolder ? selectedFolder.name : t.serverDashboardTitle
   const clearSelection = () => setSelectedProfileId(null)
   const clearOnBackgroundClick = (event: MouseEvent<HTMLElement>) => {
-    if (event.target === event.currentTarget) clearSelection()
+    if (event.target instanceof HTMLElement && event.target.hasAttribute('data-clear-selection')) clearSelection()
   }
 
   const openBatch = () => {
@@ -439,10 +439,11 @@ export function ServerManagementOverview({
       <div className="server-dashboard-main-scroll">
         <main
           className={`server-dashboard-main${view === 'list' ? ' is-list-view' : ''}`}
+          data-clear-selection
           onClick={clearOnBackgroundClick}
           ref={mainScrollRef}
         >
-          <header className="server-management-page-header">
+          <header className="server-management-page-header" data-clear-selection>
             <h1>
               <MaterialIcon name="dashboard" />
               <span>{title}</span>
@@ -452,8 +453,13 @@ export function ServerManagementOverview({
             </Button>
           </header>
 
-          <div className="server-dashboard-toolbar">
-            <div className="server-dashboard-filters" role="group" aria-label={t.serverDashboardStatusFilter}>
+          <div className="server-dashboard-toolbar" data-clear-selection>
+            <div
+              aria-label={t.serverDashboardStatusFilter}
+              className="server-dashboard-filters"
+              data-clear-selection
+              role="group"
+            >
               {folderOptions.length > 0 && (
                 <DropdownSelect
                   ariaLabel={t.folder}
@@ -490,7 +496,7 @@ export function ServerManagementOverview({
                 />
               ) : null}
             </div>
-            <div className="server-dashboard-search-row">
+            <div className="server-dashboard-search-row" data-clear-selection>
               <Input
                 aria-label={t.serverDashboardSearchPlaceholder}
                 className="server-dashboard-search"
@@ -513,7 +519,7 @@ export function ServerManagementOverview({
             </div>
           </div>
 
-          <div className="server-dashboard-batch-actions">
+          <div className="server-dashboard-batch-actions" data-clear-selection>
             <Button
               disabled={!window.fileterm || selectedTargets.length > COMMAND_BATCH_TARGET_LIMIT}
               onClick={openBatch}
@@ -554,7 +560,7 @@ export function ServerManagementOverview({
               sort={listSort}
             />
           ) : visibleProfiles.length ? (
-            <section aria-label={title} className="server-dashboard-grid" onClick={clearOnBackgroundClick}>
+            <section aria-label={title} className="server-dashboard-grid" data-clear-selection>
               {visibleProfiles.map((profile) => {
                 const connectionBadgeStatus = filterStatus(statusByProfile.get(profile.id)?.status)
                 const metrics = liveMetrics(profile.id, workspaceTabs, sessions)
@@ -620,7 +626,7 @@ export function ServerManagementOverview({
               })}
             </section>
           ) : (
-            <div className="server-dashboard-empty">
+            <div className="server-dashboard-empty" data-clear-selection>
               <MaterialIcon name={isFiltered ? 'search' : 'dns'} />
               <p>{isFiltered ? t.serverDashboardNoResults : t.noSavedConnections}</p>
             </div>
