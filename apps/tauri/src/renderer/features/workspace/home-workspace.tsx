@@ -33,7 +33,7 @@ import { McpCallLogPage } from './mcp-call-log-page'
 import { SettingsModal } from '../settings/settings-modal'
 import { TabBar, type TabBarProps } from '../layout/tab-bar'
 import { BackgroundSessionsPage } from './background-sessions-page'
-import type { ServerManagementNavigation, ServerManagementPage } from '../server-management/server-management-types'
+import type { ServerManagementNavigation } from '../server-management/server-management-types'
 import { ServerManagementOverview } from '../server-management/server-management-overview'
 
 export function HomeWorkspace({
@@ -205,19 +205,34 @@ export function HomeWorkspace({
   }
 
   // Management navigation lives in the host rail, so it bypasses selectTab().
-  // Mirror the default-mode page transition whenever the page changes there.
-  const previousManagementPageRef = useRef<ServerManagementPage | null>(null)
+  // Resolve the direction during render and remount the transition wrapper on
+  // every page change; otherwise revisits reuse the finished animation state
+  // and the fly-in disappears. React applies these render-phase updates before
+  // the new page commits, so the wrapper mounts with the right direction and
+  // without the suppressed-entrance class.
+  const currentPage = isServerManagementMode ? managementPage : activeTab
+  const pageEntryRef = useRef({ page: currentPage, seq: 0 })
+  if (pageEntryRef.current.page !== currentPage) {
+    const previousPage = pageEntryRef.current.page
+    pageEntryRef.current = { page: currentPage, seq: pageEntryRef.current.seq + 1 }
+    setNavDirection(resolveNavDirection(previousPage, currentPage))
+    if (suppressEntrance) setSuppressEntrance(false)
+  }
+  const pageEntryKey = (page: string) => `${page}:${pageEntryRef.current.seq}`
+  const pageEntrySeq = pageEntryRef.current.seq
+  // Restart the fly-in from scratch on every management page entry. React may
+  // reuse the page nodes when the stage remounts, and a completed CSS animation
+  // never replays on the same element, so reset it explicitly after commit.
   useLayoutEffect(() => {
-    if (!isServerManagementMode) {
-      previousManagementPageRef.current = null
-      return
+    if (!isServerManagementMode) return
+    const pageRoot = contentBodyRef.current?.querySelector(':scope > .page-transition > *')
+    if (!pageRoot) return
+    for (const child of Array.from(pageRoot.children) as HTMLElement[]) {
+      child.style.animation = 'none'
+      void child.offsetWidth
+      child.style.animation = ''
     }
-    const previousPage = previousManagementPageRef.current
-    previousManagementPageRef.current = managementPage
-    if (previousPage === null || previousPage === managementPage) return
-    setSuppressEntrance(false)
-    setNavDirection(resolveNavDirection(previousPage, managementPage))
-  }, [isServerManagementMode, managementPage])
+  }, [isServerManagementMode, pageEntrySeq])
 
   const desktopApi = window.fileterm
   // Sessions the dashboard owns: visible tabs plus the background connections
@@ -332,8 +347,6 @@ export function HomeWorkspace({
           : updateStatus?.state === 'error'
             ? { icon: 'error', label: t.updateRetry, title: updateStatus.message ?? t.updateFailed }
             : null
-
-  const currentPage = isServerManagementMode ? managementPage : activeTab
 
   return (
     <section
@@ -489,11 +502,11 @@ export function HomeWorkspace({
       {/* Main Content Area */}
       <main className="home-main-content">
         <div
-          className={`home-content-body scrollbar-scroll ${suppressEntrance ? 'suppress-home-entrance' : ''} ${isServerManagementMode && managementPage === 'overview' ? 'is-server-management-overview' : ''}`}
+          className={`home-content-body scrollbar-scroll ${suppressEntrance && !isServerManagementMode ? 'suppress-home-entrance' : ''} ${isServerManagementMode && managementPage === 'overview' ? 'is-server-management-overview' : ''}`}
           ref={contentBodyRef}
         >
           {currentPage === 'overview' && (
-            <div key="overview" className="page-transition" data-nav-direction={navDirection}>
+            <div key={pageEntryKey('overview')} className="page-transition" data-nav-direction={navDirection}>
               {isServerManagementMode ? (
                 <ServerManagementOverview
                   profiles={profiles}
@@ -535,7 +548,7 @@ export function HomeWorkspace({
             </div>
           )}
           {currentPage === 'connection-manager' && (
-            <div key="connection-manager" className="page-transition" data-nav-direction={navDirection}>
+            <div key={pageEntryKey('connection-manager')} className="page-transition" data-nav-direction={navDirection}>
               <ConnectionManagerModal
                 profiles={profiles}
                 folders={folders}
@@ -556,12 +569,12 @@ export function HomeWorkspace({
             </div>
           )}
           {currentPage === 'proxy-manager' && (
-            <div key="proxy-manager" className="page-transition" data-nav-direction={navDirection}>
+            <div key={pageEntryKey('proxy-manager')} className="page-transition" data-nav-direction={navDirection}>
               <ProxyManagerPage onStatsChange={setProxyStats} onActiveFilterChange={setActiveProxyFilterLabel} />
             </div>
           )}
           {currentPage === 'command-manager' && (
-            <div key="command-manager" className="page-transition" data-nav-direction={navDirection}>
+            <div key={pageEntryKey('command-manager')} className="page-transition" data-nav-direction={navDirection}>
               <CommandManagerModal
                 commandFolders={commandFolders}
                 commandTemplates={commandTemplates}
@@ -579,12 +592,16 @@ export function HomeWorkspace({
             </div>
           )}
           {currentPage === 'ssh-key-manager' && (
-            <div key="ssh-key-manager" className="page-transition" data-nav-direction={navDirection}>
+            <div key={pageEntryKey('ssh-key-manager')} className="page-transition" data-nav-direction={navDirection}>
               <SshKeyManagerPage onActiveFolderChange={setActiveSshKeyFolderName} onStatsChange={setSshKeyStats} />
             </div>
           )}
           {currentPage === 'background-sessions' && (
-            <div key="background-sessions" className="page-transition" data-nav-direction={navDirection}>
+            <div
+              key={pageEntryKey('background-sessions')}
+              className="page-transition"
+              data-nav-direction={navDirection}
+            >
               <BackgroundSessionsPage
                 profiles={profiles}
                 tabs={backgroundTabs}
@@ -595,12 +612,12 @@ export function HomeWorkspace({
             </div>
           )}
           {currentPage === 'mcp-call-log' && (
-            <div key="mcp-call-log" className="page-transition" data-nav-direction={navDirection}>
+            <div key={pageEntryKey('mcp-call-log')} className="page-transition" data-nav-direction={navDirection}>
               <McpCallLogPage onTotalChange={setMcpCallCount} />
             </div>
           )}
           {currentPage === 'settings' && (
-            <div key="settings" className="page-transition" data-nav-direction={navDirection}>
+            <div key={pageEntryKey('settings')} className="page-transition" data-nav-direction={navDirection}>
               <SettingsModal
                 theme={theme}
                 themeConfig={themeConfig}
