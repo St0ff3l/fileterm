@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } 
 import {
   COMMAND_BATCH_TARGET_LIMIT,
   type CommandTemplate,
+  type CommandFolder,
   type ConnectionFolder,
   type ConnectionProfile,
   type SessionSnapshot,
@@ -143,6 +144,7 @@ function useServerInsightStore() {
 
 export function ServerManagementOverview({
   profiles,
+  commandFolders,
   commandTemplates,
   folders,
   sessions,
@@ -162,6 +164,7 @@ export function ServerManagementOverview({
   onToggleFocusMode
 }: {
   profiles: ConnectionProfile[]
+  commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
   folders: ConnectionFolder[]
   sessions: Record<string, SessionSnapshot>
@@ -619,6 +622,7 @@ export function ServerManagementOverview({
       </div>
       {batchDialog && (
         <ServerCommandBatchDialog
+          folders={commandFolders}
           mode={batchDialog}
           onClose={() => setBatchDialog(null)}
           templates={commandTemplates}

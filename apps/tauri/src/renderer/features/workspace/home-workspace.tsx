@@ -511,6 +511,7 @@ export function HomeWorkspace({
             <div key={pageEntryKey('overview')} className="page-transition" data-nav-direction={navDirection}>
               {isServerManagementMode ? (
                 <ServerManagementOverview
+                  commandFolders={commandFolders}
                   commandTemplates={commandTemplates}
                   profiles={profiles}
                   folders={folders}

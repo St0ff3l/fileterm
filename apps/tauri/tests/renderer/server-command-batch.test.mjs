@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { commandTemplatesForFolder } from '../../src/renderer/features/commands/command-utils.ts'
 import { getCommandBatchTargets } from '../../src/renderer/features/server-management/server-command-batch-model.ts'
 
 test('batch selection binds one eligible SSH session per profile to its current revision', () => {
@@ -41,4 +42,17 @@ test('batch selection binds one eligible SSH session per profile to its current 
       { profileId: 'b', tabId: 'overview-background', sessionRevision: '13' }
     ]
   )
+})
+
+test('the shared command list keeps saved ordering and respects the selected folder', () => {
+  const templates = [
+    { id: 'c', name: 'Third', order: 300, parentId: 'ops' },
+    { id: 'a', name: 'First', order: 100, parentId: 'ops' },
+    { id: 'b', name: 'Second', order: 200 }
+  ]
+  const ids = (folder) => commandTemplatesForFolder(templates, folder).map(({ id }) => id)
+  assert.deepEqual(ids('all'), ['a', 'b', 'c'])
+  assert.deepEqual(ids('ops'), ['a', 'c'])
+  assert.deepEqual(ids('ungrouped'), ['b'])
+  assert.deepEqual(ids('empty'), [])
 })

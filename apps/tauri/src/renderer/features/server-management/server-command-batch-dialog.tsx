@@ -1,4 +1,4 @@
-import type { CommandBatchRun, CommandBatchTarget, CommandTemplate } from '@fileterm/core'
+import type { CommandBatchRun, CommandBatchTarget, CommandFolder, CommandTemplate } from '@fileterm/core'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '../../components/common/button/button'
@@ -8,7 +8,9 @@ import { DropdownSelect } from '../../components/common/dropdown-select/dropdown
 import { Input } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { formatMessage, t } from '../../i18n'
-import { extractCommandParams, sortByOrder } from '../commands/command-utils'
+import { CommandCodeEditor } from '../commands/command-code-editor'
+import { CommandTemplateLibrary } from '../commands/command-template-library'
+import { commandTemplatesForFolder, extractCommandParams } from '../commands/command-utils'
 import { AppIcon } from '../common/app-icon'
 import './server-command-batch-dialog.css'
 
@@ -19,15 +21,18 @@ export type ServerCommandBatchDialogMode =
 
 export function ServerCommandBatchDialog({
   mode,
+  folders,
   templates,
   onClose
 }: {
   mode: ServerCommandBatchDialogMode
+  folders: CommandFolder[]
   templates: CommandTemplate[]
   onClose(): void
 }) {
   const desktopApi = window.fileterm
-  const [templateId, setTemplateId] = useState(() => sortByOrder(templates)[0]?.id ?? '')
+  const [folderId, setFolderId] = useState('all')
+  const [templateId, setTemplateId] = useState('')
   const [args, setArgs] = useState<Record<number, string>>({})
   const [run, setRun] = useState<CommandBatchRun | null>(null)
   const [history, setHistory] = useState<CommandBatchRun[] | null>(null)
@@ -39,7 +44,10 @@ export function ServerCommandBatchDialog({
   const compact = mode.type === 'prepare' || (browsing && !history?.length)
   const connect = mode.type === 'prepare' ? mode.connect : undefined
   const selectedRun = browsing ? history?.find(({ id }) => id === historyId) : run
-  const template = templates.find(({ id }) => id === templateId)
+  const visibleTemplates = commandTemplatesForFolder(templates, folderId)
+  const template = visibleTemplates.find(({ id }) => id === templateId) ?? visibleTemplates[0]
+  const preview =
+    template?.command.replace(/\[p#(\d+)\]/g, (token, index: string) => args[Number(index)] ?? token) ?? ''
   const params = template ? extractCommandParams(template.command).filter((i) => Number.isSafeInteger(i) && i > 0) : []
   const canRun = mode.type === 'run' && Boolean(template?.command.trim()) && Boolean(desktopApi) && !run
   const title = browsing ? t.serverBatchHistory : run ? t.serverBatchResults : t.serverBatchRun
@@ -132,7 +140,7 @@ export function ServerCommandBatchDialog({
       isOpen
       onClose={close}
       showCloseButton={!running}
-      size={compact ? 'sm' : 'md'}
+      size={compact ? 'sm' : mode.type === 'run' && !run ? 'lg' : 'md'}
       title={title}
     >
       <FormDialogBody>
@@ -146,21 +154,33 @@ export function ServerCommandBatchDialog({
         )}
         {mode.type === 'run' && !run && (
           <>
-            <div className="server-command-batch-field">
-              <label htmlFor="server-batch-template">{t.serverBatchTemplate}</label>
-              <DropdownSelect
+            <div className="server-command-batch-picker">
+              <CommandTemplateLibrary
                 disabled={running}
-                id="server-batch-template"
-                onChange={(id) => {
+                folderId={folderId}
+                folders={folders}
+                onFolderChange={(id) => {
+                  if (id === folderId) return
+                  setArgs({})
+                  setFolderId(id)
+                }}
+                onSelect={(id) => {
+                  if (id === template?.id) return
                   setArgs({})
                   setTemplateId(id)
                 }}
-                options={sortByOrder(templates).map(({ id, name }) => ({ value: id, label: name }))}
-                value={templateId}
+                selectedId={template?.id}
+                templates={templates}
+                visibleTemplates={visibleTemplates}
               />
-              {template && template.command.trim() !== template.name.trim() && (
-                <pre className="server-command-batch-text">{template.command}</pre>
-              )}
+              <section aria-label={t.commandPreview} className="command-pane command-pane-preview">
+                <div className="command-pane-head">
+                  <strong>{t.commandPreview}</strong>
+                </div>
+                <div className="command-editor-dialog-textarea">
+                  <CommandCodeEditor ariaLabel={t.commandPreview} readOnly value={preview} />
+                </div>
+              </section>
             </div>
             {params.map((index) => (
               <label className="server-command-batch-field" key={index}>
@@ -202,7 +222,6 @@ export function ServerCommandBatchDialog({
                 }))}
                 value={historyId}
               />
-              <p>{t.serverBatchHistoryMetadata}</p>
             </>
           ) : (
             <div className="server-command-batch-message" role="status">
@@ -217,28 +236,57 @@ export function ServerCommandBatchDialog({
                 {t.serverBatchHistoryError} {selectedRun.historyError}
               </p>
             )}
-            <ul className="server-command-batch-results">
-              {selectedRun.results.map((result) => (
-                <li key={result.profileId}>
-                  <div className="server-command-batch-result">
-                    <strong>
-                      {mode.type === 'run'
-                        ? (mode.targets.find(({ profileId }) => profileId === result.profileId)?.name ?? result.name)
-                        : result.name}
-                    </strong>
-                    <span>{statuses[result.status]}</span>
-                    <span>{formatMessage(t.serverBatchExitCode, { code: result.exitCode ?? '—' })}</span>
-                  </div>
-                  {(result.output || result.error) && (
-                    <details>
-                      <summary>{result.error ? t.serverBatchError : t.serverBatchOutput}</summary>
-                      <pre className="server-command-batch-text">{result.error ?? result.output}</pre>
-                    </details>
-                  )}
-                  {result.outputTruncated && <small>{t.serverBatchOutputTruncated}</small>}
-                </li>
-              ))}
-            </ul>
+            <div className="server-command-batch-results">
+              <table aria-label={t.serverBatchResults}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t.host}</th>
+                    <th scope="col">{t.serverDashboardColumnStatus}</th>
+                    <th scope="col">{t.serverBatchExitCode}</th>
+                  </tr>
+                </thead>
+                {selectedRun.results.map((result) => {
+                  const target =
+                    mode.type === 'run'
+                      ? mode.targets.find(({ profileId }) => profileId === result.profileId)
+                      : undefined
+                  const output = result.error ?? result.output
+                  return (
+                    <tbody key={result.profileId}>
+                      <tr className="server-command-batch-result">
+                        <th scope="row">
+                          {target?.name ?? result.name}
+                          {target && <small>{target.address}</small>}
+                        </th>
+                        <td>
+                          <span className="server-command-batch-status" data-status={result.status}>
+                            {statuses[result.status]}
+                          </span>
+                        </td>
+                        <td className="server-command-batch-exit-code">{result.exitCode ?? '—'}</td>
+                      </tr>
+                      {(output || result.outputTruncated) && (
+                        <tr className="server-command-batch-output">
+                          <td colSpan={3}>
+                            {output && (
+                              <details>
+                                <summary>
+                                  <AppIcon name="chevron-right" size={12} />
+                                  {result.error ? t.serverBatchError : t.serverBatchOutput}
+                                </summary>
+                                <pre className="server-command-batch-text">{output}</pre>
+                              </details>
+                            )}
+                            {result.outputTruncated && <small>{t.serverBatchOutputTruncated}</small>}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  )
+                })}
+              </table>
+            </div>
+            {browsing && <p className="server-command-batch-history-note">{t.serverBatchHistoryMetadata}</p>}
           </>
         )}
       </FormDialogBody>
