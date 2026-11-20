@@ -34,6 +34,7 @@ import { SettingsModal } from '../settings/settings-modal'
 import { TabBar, type TabBarProps } from '../layout/tab-bar'
 import { BackgroundSessionsPage } from './background-sessions-page'
 import type { ServerManagementNavigation } from '../server-management/server-management-types'
+import { ServerTopologyPage } from '../server-management/server-topology-page'
 import { ServerManagementOverview } from '../server-management/server-management-overview'
 
 export function HomeWorkspace({
@@ -185,13 +186,14 @@ export function HomeWorkspace({
   // 侧栏页签的纵向顺序,用于判断切换方向(目标更靠下=向下飞入,更靠上=向上飞入)
   const tabOrder: Record<string, number> = {
     overview: 0,
-    'connection-manager': 1,
-    'proxy-manager': 2,
-    'command-manager': 3,
-    'ssh-key-manager': 4,
-    'background-sessions': 5,
-    'mcp-call-log': 6,
-    settings: 7
+    'server-topology': 1,
+    'connection-manager': 2,
+    'proxy-manager': 3,
+    'command-manager': 4,
+    'ssh-key-manager': 5,
+    'background-sessions': 6,
+    'mcp-call-log': 7,
+    settings: 8
   }
   const resolveNavDirection = (fromPage: string, toPage: string) =>
     (tabOrder[toPage] ?? 0) >= (tabOrder[fromPage] ?? 0) ? 'down' : 'up'
@@ -520,7 +522,6 @@ export function HomeWorkspace({
                   onToggleFocusMode={tabBarProps.onToggleWorkspaceFocus}
                   selectedFolderId={serverManagement?.selectedFolderId ?? null}
                   onSelectFolder={(folderId) => serverManagement?.navigate('overview', folderId)}
-                  onOpenProfile={onOpen}
                   onConnectProfile={onConnectProfile}
                   onDisconnectSession={onDisconnectSession}
                   onActivateSession={tabBarProps.onActivateSession}
@@ -545,6 +546,16 @@ export function HomeWorkspace({
                   onOpenDocs={handleOpenDocs}
                 />
               )}
+            </div>
+          )}
+          {currentPage === 'server-topology' && (
+            <div key={pageEntryKey('server-topology')} className="page-transition" data-nav-direction={navDirection}>
+              <ServerTopologyPage
+                profiles={profiles}
+                sessions={sessions}
+                workspaceTabs={managementTabs}
+                onOpenProfile={onOpen}
+              />
             </div>
           )}
           {currentPage === 'connection-manager' && (

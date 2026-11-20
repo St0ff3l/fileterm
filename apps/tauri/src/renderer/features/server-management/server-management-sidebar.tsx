@@ -152,7 +152,8 @@ export function ServerManagementSidebar({
   }
 
   const navItems: Array<{ page: Page; label: string; icon: MaterialIconName | 'history' | 'log' }> = [
-    { page: 'overview', label: t.overview, icon: 'dashboard' },
+    { page: 'overview', label: t.serverDashboardTitle, icon: 'dashboard' },
+    { page: 'server-topology', label: t.serverTopology, icon: 'edit_note' },
     { page: 'connection-manager', label: t.connectionManager, icon: 'settings_ethernet' },
     { page: 'proxy-manager', label: t.proxyManager, icon: 'shield' },
     { page: 'command-manager', label: t.commandManager, icon: 'terminal' },

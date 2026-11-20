@@ -1,0 +1,363 @@
+.server-topology {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  color: var(--text-primary);
+  container-type: inline-size;
+}
+
+.server-topology__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.server-topology__body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: 12px;
+  min-height: 0;
+}
+
+.server-topology__details {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.server-topology__details-scroll {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  height: 100%;
+  padding: 14px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.server-topology__details h2,
+.server-topology__details h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.server-topology__identity {
+  display: grid;
+  gap: 5px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.server-topology__identity > strong {
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+
+.server-topology__connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.server-topology__facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.server-topology__facts > div {
+  display: grid;
+  grid-template-columns: minmax(48px, 1fr) minmax(0, 2fr);
+  gap: 6px;
+}
+
+.server-topology__facts dt {
+  color: var(--text-secondary);
+}
+
+.server-topology__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.server-topology__facts > .server-topology__note {
+  grid-template-columns: 1fr;
+}
+
+.server-topology__note dd {
+  white-space: pre-wrap;
+}
+
+.server-topology__relations {
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+  border-block: 1px solid var(--border-subtle);
+}
+
+.server-topology__relations ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.server-topology__relations li {
+  min-width: 0;
+}
+
+.server-topology__relations li .ft-btn {
+  justify-content: flex-start;
+  width: 100%;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.server-topology__link-actions .server-topology__select {
+  flex: 1 1 108px;
+  min-width: 0;
+}
+
+.server-topology__details-scroll > .ft-btn {
+  justify-self: start;
+}
+
+@container (max-width: 620px) {
+  .server-topology__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(100px, 1fr) minmax(90px, 32%);
+  }
+}
+
+.server-topology__hint,
+.server-topology__error {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.server-topology .server-topology__select {
+  width: 158px;
+  max-width: 100%;
+}
+
+.server-topology__select.ft-select-shell select {
+  font-size: var(--font-size-sm);
+}
+
+.server-topology__actions .ft-btn[aria-pressed='true'] {
+  background: var(--surface-hover);
+  border-color: var(--focus-outline);
+}
+
+.server-topology__error {
+  color: var(--status-danger);
+}
+
+.server-topology__viewport {
+  position: relative;
+  flex: 1;
+  min-height: 100px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.server-topology__scroll {
+  height: 100%;
+  overflow: auto;
+}
+
+.server-topology__scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 0;
+}
+
+.server-topology__scroll::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-md);
+  background: var(--border-strong);
+}
+
+.server-topology__canvas {
+  position: relative;
+  height: 100%;
+  background-image: radial-gradient(var(--border-default) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.server-topology__canvas[data-placing='true'] {
+  cursor: crosshair;
+}
+
+.server-topology__links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.server-topology__links g {
+  cursor: pointer;
+  outline: none;
+}
+
+.server-topology__link-hit {
+  stroke: transparent;
+  stroke-width: 20px;
+  pointer-events: stroke;
+}
+
+.server-topology__link-line {
+  stroke: var(--text-secondary);
+  stroke-width: 2px;
+}
+
+.server-topology__links g:is(.is-selected, :hover, :focus-visible) .server-topology__link-line {
+  stroke: var(--accent-secondary);
+  stroke-width: 3px;
+}
+
+.server-topology__links text {
+  fill: var(--text-primary);
+  stroke: var(--surface-card);
+  stroke-width: 6px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  pointer-events: all;
+  user-select: none;
+}
+
+.server-topology__links g:is(.is-selected, :hover, :focus-visible) text {
+  fill: var(--accent-secondary);
+}
+
+.server-topology__link-editor {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.server-topology__link-editor > label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.server-topology__memo {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.server-topology__memo > label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.server-topology__memo > .ft-btn {
+  justify-self: start;
+}
+
+.server-topology__link-editor .ft-input {
+  min-width: 0;
+}
+
+.server-topology__node {
+  position: absolute;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-content: stretch;
+  gap: 2px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  /* The shared button transition also animates transform, which delays pointer tracking. */
+  transition-property: border-color, box-shadow;
+}
+
+.server-topology__node:hover {
+  border-color: var(--border-strong);
+}
+
+.server-topology__node[aria-pressed='true'] {
+  z-index: 1;
+  border-color: var(--focus-outline);
+  box-shadow: inset 0 0 0 1px var(--focus-outline);
+}
+
+.server-topology__node:active {
+  z-index: 2;
+  cursor: grabbing;
+  will-change: transform;
+}
+
+.server-topology__node:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+.server-topology__node-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.server-topology__node-meta > .material-symbols-outlined {
+  flex: none;
+  color: var(--accent-secondary);
+  font-size: 12px;
+}
+
+.server-topology__node-meta > .status-indicator {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.server-topology__node strong,
+.server-topology__node small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.server-topology__node strong {
+  font-size: 13px;
+}
+
+.server-topology__node small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}

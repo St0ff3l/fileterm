@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
 import type { ConnectionFolder, ConnectionProfile, SessionSnapshot, SystemMetrics, WorkspaceTab } from '@fileterm/core'
+import { Button } from '../../components/common/button/button'
+import { Input } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
-import { tabStatusClass } from '../../app/app-utils'
 import { getLocale, t } from '../../i18n'
 import {
   getConnectionHistory,
@@ -13,6 +14,7 @@ import {
   subscribeServerInsights,
   type ServerInsight
 } from './server-insights-store'
+import { AppIcon } from '../common/app-icon'
 import { StatusIndicator, type StatusIndicatorStatus } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { buildConnectionTree, flattenConnectionProfiles, type ConnectionTreeNode } from '../connections/connection-tree'
@@ -20,22 +22,12 @@ import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition 
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/use-pointer-sort-fallback'
 import { lastSessionTabIdForProfile } from '../../hooks/session-tab-memory'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
+import { statusForProfile, statusLabel } from './server-profile-status'
 import './server-management-overview.css'
+import './server-management-page-header.css'
 
 const MAX_METRIC_AGE_MS = 120_000
-
-function statusForProfile(profileId: string, tabs: WorkspaceTab[], sessions: Record<string, SessionSnapshot>) {
-  const profileTabs = tabs.filter((tab) => tab.profileId === profileId)
-  const statusTab =
-    profileTabs.find((tab) => sessions[tab.id]?.connected) ??
-    profileTabs.find((tab) => tab.status === 'connecting') ??
-    profileTabs[0]
-  if (!statusTab) return null
-  const normalized = tabStatusClass(statusTab.status)
-  const status: StatusIndicatorStatus =
-    normalized === 'connected' || normalized === 'connecting' || normalized === 'disconnected' ? normalized : 'idle'
-  return { status, tab: statusTab }
-}
+type DashboardFilter = 'all' | 'connected' | 'connecting' | 'idle'
 
 function findFolder(nodes: ConnectionTreeNode[], folderId: string): ConnectionTreeNode | undefined {
   for (const node of nodes) {
@@ -103,13 +95,6 @@ function getResourceMetrics(metrics: SystemMetrics | null) {
   }
 }
 
-function statusLabel(status: StatusIndicatorStatus) {
-  if (status === 'connected') return t.hostStatusConnected
-  if (status === 'connecting') return t.hostStatusConnecting
-  // A closed session is just "not connected"; never surface "disconnected".
-  return t.serverDashboardNotConnected
-}
-
 function formatConnectionHistoryTime(at: number) {
   try {
     return new Intl.DateTimeFormat(getLocale() === 'zhCN' ? 'zh-CN' : 'en-US', {
@@ -152,7 +137,6 @@ export function ServerManagementOverview({
   isFocusMode,
   selectedFolderId,
   onSelectFolder,
-  onOpenProfile,
   onConnectProfile,
   onDisconnectSession,
   onActivateSession,
@@ -171,7 +155,6 @@ export function ServerManagementOverview({
   isFocusMode?: boolean
   selectedFolderId: string | null
   onSelectFolder(folderId: string | null): void
-  onOpenProfile(profileId: string): void
   onConnectProfile(profileId: string): void
   onDisconnectSession(tabId: string): void | Promise<void>
   onActivateSession(tabId: string): void
@@ -185,6 +168,7 @@ export function ServerManagementOverview({
   onToggleFocusMode?(): void
 }) {
   const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<DashboardFilter>('all')
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false)
   // Focus mode owns the side panels, so the inspector folds away with it and the
@@ -205,11 +189,29 @@ export function ServerManagementOverview({
       ? flattenConnectionProfiles([selectedFolder])
       : flattenConnectionProfiles(tree.roots)
   const search = query.trim().toLocaleLowerCase()
-  const visibleProfiles = baseProfiles.filter((profile) =>
-    [profile.name, profile.host, profile.note, profile.username].some((value) =>
-      value?.toLocaleLowerCase().includes(search)
-    )
+  const statusByProfile = new Map(
+    baseProfiles.map((profile) => [profile.id, statusForProfile(profile.id, workspaceTabs, sessions)])
   )
+  const statusCounts = { all: baseProfiles.length, connected: 0, connecting: 0, idle: 0 }
+  const filterStatus = (status: StatusIndicatorStatus | undefined) =>
+    status === 'connected' || status === 'connecting' ? status : 'idle'
+  for (const connection of statusByProfile.values()) {
+    statusCounts[filterStatus(connection?.status)]++
+  }
+  const isFiltered = Boolean(search) || statusFilter !== 'all'
+  const visibleProfiles = baseProfiles.filter(
+    (profile) =>
+      (statusFilter === 'all' || filterStatus(statusByProfile.get(profile.id)?.status) === statusFilter) &&
+      [profile.name, profile.host, profile.note, profile.username].some((value) =>
+        value?.toLocaleLowerCase().includes(search)
+      )
+  )
+  const filterLabels = {
+    all: t.allConnections,
+    connected: t.hostStatusConnected,
+    connecting: t.hostStatusConnecting,
+    idle: t.serverDashboardNotConnected
+  }
   const firstBaseProfileId = baseProfiles[0]?.id ?? null
   useEffect(() => {
     // Default to the first connection and recover when the selected one disappears.
@@ -241,7 +243,7 @@ export function ServerManagementOverview({
   }, [baseProfiles, focusRequest, focusedProfileId])
   const selectedProfile =
     visibleProfiles.find((profile) => profile.id === selectedProfileId) ?? visibleProfiles[0] ?? null
-  const selectedStatus = selectedProfile ? statusForProfile(selectedProfile.id, workspaceTabs, sessions) : null
+  const selectedStatus = selectedProfile ? statusByProfile.get(selectedProfile.id) : null
   const selectedBadgeStatus: StatusIndicatorStatus =
     selectedStatus?.status === 'connected' || selectedStatus?.status === 'connecting' ? selectedStatus.status : 'idle'
   const selectedSessionTab = selectedStatus?.tab ?? null
@@ -305,21 +307,16 @@ export function ServerManagementOverview({
       ? `${displayedInsight.diskUsed} / ${displayedInsight.diskSize}`
       : (displayedInsight?.diskSize ?? null)
   const insightDiskPercent = displayedInsight?.diskPercent ?? null
-  const connectedCount = baseProfiles.filter((profile) =>
-    workspaceTabs.some((tab) => tab.profileId === profile.id && sessions[tab.id]?.connected)
-  ).length
-  const title = selectedFolder?.type === 'folder' ? selectedFolder.name : t.serverManagementOverview
+  const title = selectedFolder?.type === 'folder' ? selectedFolder.name : t.serverDashboardTitle
 
   const openWorkspace = () => {
-    if (!selectedProfile) return
+    if (!selectedProfile || !selectedSessionTab || !selectedSessionConnected) return
     // Reopen the tab that was last active for this server instead of the first.
     const rememberedTab = [lastSessionTabIdForProfile(selectedProfile.id), focusedSessionTabId]
       .filter((tabId): tabId is string => Boolean(tabId))
       .map((tabId) => workspaceTabs.find((tab) => tab.id === tabId && tab.profileId === selectedProfile.id))
       .find((tab) => tab && sessions[tab.id]?.connected)
-    if (rememberedTab) onActivateSession(rememberedTab.id)
-    else if (selectedSessionTab && selectedStatus?.status !== 'disconnected') onActivateSession(selectedSessionTab.id)
-    else onOpenProfile(selectedProfile.id)
+    onActivateSession(rememberedTab?.id ?? selectedSessionTab.id)
   }
 
   const positionForTarget = (target: PointerSortTarget, clientY: number) =>
@@ -363,57 +360,62 @@ export function ServerManagementOverview({
     >
       <div className="server-dashboard-main-scroll">
         <main className="server-dashboard-main" ref={mainScrollRef}>
-          <header className="server-dashboard-header">
-            <div>
-              <h1>
-                <MaterialIcon name="dashboard" />
-                {title}
-              </h1>
-              <p>
-                {t.serverDashboardSummary
-                  .replace('{total}', String(baseProfiles.length))
-                  .replace('{online}', String(connectedCount))}
-              </p>
-            </div>
-            <button className="server-dashboard-new" onClick={onCreateConnection} type="button">
-              <MaterialIcon name="add" />
-              <span>{t.newConnection}</span>
-            </button>
+          <header className="server-management-page-header">
+            <h1>
+              <MaterialIcon name="dashboard" />
+              <span>{title}</span>
+            </h1>
+            <Button icon={<MaterialIcon name="add" />} onClick={onCreateConnection} variant="primary">
+              {t.newConnection}
+            </Button>
           </header>
 
-          <label className="server-dashboard-search">
-            <MaterialIcon name="search" />
-            <input
+          <div className="server-dashboard-toolbar">
+            <div className="server-dashboard-filters" role="group" aria-label={t.serverDashboardStatusFilter}>
+              {(['all', 'connected', 'connecting', 'idle'] as const).map((status) => (
+                <Button
+                  aria-pressed={statusFilter === status}
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  size="panel"
+                >
+                  {status !== 'all' ? <StatusIndicator aria-hidden="true" status={status} /> : null}
+                  {filterLabels[status]}
+                  <span className="server-dashboard-filter-count">{statusCounts[status]}</span>
+                </Button>
+              ))}
+            </div>
+            <Input
               aria-label={t.serverDashboardSearchPlaceholder}
+              className="server-dashboard-search"
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t.serverDashboardSearchPlaceholder}
+              prefix={<AppIcon name="search" size={14} />}
+              suffix={
+                selectedFolder ? (
+                  <Button onClick={() => onSelectFolder(null)} size="sm" variant="ghost">
+                    {t.allConnections}
+                  </Button>
+                ) : null
+              }
               type="search"
               value={query}
             />
-            {selectedFolderId ? (
-              <button onClick={() => onSelectFolder(null)} title={t.serverManagementOverview} type="button">
-                {t.serverManagementOverview}
-              </button>
-            ) : null}
-          </label>
+          </div>
 
           {visibleProfiles.length ? (
             <section aria-label={title} className="server-dashboard-grid">
               {visibleProfiles.map((profile) => {
-                const connectionStatus = statusForProfile(profile.id, workspaceTabs, sessions)
-                const connectionBadgeStatus: StatusIndicatorStatus =
-                  connectionStatus?.status === 'connected' || connectionStatus?.status === 'connecting'
-                    ? connectionStatus.status
-                    : 'idle'
+                const connectionBadgeStatus = filterStatus(statusByProfile.get(profile.id)?.status)
                 const metrics = liveMetrics(profile.id, workspaceTabs, sessions)
                 const resources = getResourceMetrics(metrics)
                 const isSelected = selectedProfile?.id === profile.id
                 return (
                   <article
                     aria-pressed={isSelected}
-                    className={`server-dashboard-card ${isSelected ? 'is-selected' : ''} ${search ? 'is-sort-disabled' : ''} ${dragState.draggingId === profile.id ? 'is-dragging' : ''} ${managerDropClass(dragState.targetId === profile.id, dragState.position)}`}
-                    data-fileterm-sort-id={search ? undefined : profile.id}
-                    data-fileterm-sort-kind={search ? undefined : 'profile'}
+                    className={`server-dashboard-card ${isSelected ? 'is-selected' : ''} ${isFiltered ? 'is-sort-disabled' : ''} ${dragState.draggingId === profile.id ? 'is-dragging' : ''} ${managerDropClass(dragState.targetId === profile.id, dragState.position)}`}
+                    data-fileterm-sort-id={isFiltered ? undefined : profile.id}
+                    data-fileterm-sort-kind={isFiltered ? undefined : 'profile'}
                     key={profile.id}
                     onClick={() => setSelectedProfileId(profile.id)}
                     onKeyDown={(event) => {
@@ -423,7 +425,7 @@ export function ServerManagementOverview({
                       }
                     }}
                     onPointerDown={(event) => {
-                      if (!search) handlePointerSort(event, profile.id)
+                      if (!isFiltered) handlePointerSort(event, profile.id)
                     }}
                     role="button"
                     tabIndex={0}
@@ -439,8 +441,8 @@ export function ServerManagementOverview({
                           {statusLabel(connectionBadgeStatus)}
                         </span>
                       )}
+                      <span className="server-dashboard-address">{connectionProfileSummary(profile)}</span>
                     </span>
-                    <span className="server-dashboard-address">{connectionProfileSummary(profile)}</span>
                     <span className="server-dashboard-resources">
                       <ResourceRing label="CPU" value={resources.cpu} />
                       <ResourceRing label={t.memory} value={resources.memory} detail={resources.memoryDetail} />
@@ -460,14 +462,8 @@ export function ServerManagementOverview({
             </section>
           ) : (
             <div className="server-dashboard-empty">
-              <MaterialIcon name={search ? 'search' : 'dns'} />
-              <p>{search ? t.serverDashboardNoResults : t.noSavedConnections}</p>
-              {!search ? (
-                <button className="server-dashboard-new" onClick={onCreateConnection} type="button">
-                  <MaterialIcon name="add" />
-                  <span>{t.newConnection}</span>
-                </button>
-              ) : null}
+              <MaterialIcon name={isFiltered ? 'search' : 'dns'} />
+              <p>{isFiltered ? t.serverDashboardNoResults : t.noSavedConnections}</p>
             </div>
           )}
         </main>
@@ -477,7 +473,6 @@ export function ServerManagementOverview({
       {selectedProfile ? (
         <section className="server-dashboard-inspector-region">
           <header className="server-dashboard-inspector-header">
-            {!inspectorCollapsed ? <h2>{t.serverDashboardDetails}</h2> : null}
             <SidebarToggle
               className="server-dashboard-inspector-toggle"
               collapsed={inspectorCollapsed}
@@ -491,6 +486,7 @@ export function ServerManagementOverview({
                 setIsInspectorCollapsed((current) => !current)
               }}
             />
+            {!inspectorCollapsed ? <h2>{t.serverDashboardDetails}</h2> : null}
           </header>
           {!inspectorCollapsed ? (
             <div className="server-dashboard-inspector-scroll">
@@ -516,37 +512,42 @@ export function ServerManagementOverview({
 
                 <div className="server-inspector-actions">
                   {selectedSessionConnected && selectedSessionTab ? (
-                    <button
-                      className="server-inspector-action is-danger"
+                    <Button
+                      className="server-inspector-disconnect"
+                      icon={<MaterialIcon name="stop" />}
                       onClick={() => void onDisconnectSession(selectedSessionTab.id)}
-                      type="button"
+                      size="panel"
                     >
-                      <MaterialIcon name="stop" />
                       {t.disconnect}
-                    </button>
+                    </Button>
                   ) : (
-                    <button
-                      className="server-inspector-action is-primary"
+                    <Button
                       disabled={selectedStatus?.status === 'connecting'}
+                      icon={<MaterialIcon name="cloud_sync" />}
                       onClick={() => onConnectProfile(selectedProfile.id)}
-                      type="button"
+                      size="panel"
+                      variant="primary"
                     >
-                      <MaterialIcon name="cloud_sync" />
-                      {selectedStatus?.status === 'connecting' ? t.serverDashboardConnecting : t.connect}
-                    </button>
+                      <span className="server-inspector-action-label">
+                        {selectedStatus?.status === 'connecting' ? t.serverDashboardConnecting : t.connect}
+                      </span>
+                    </Button>
                   )}
-                  <button className="server-inspector-action" onClick={openWorkspace} type="button">
-                    <MaterialIcon name="terminal" />
-                    {t.serverInspectorTerminal}
-                  </button>
-                  <button
-                    className="server-inspector-action"
-                    onClick={() => onEditConnection(selectedProfile)}
-                    type="button"
+                  <Button
+                    disabled={!selectedSessionConnected}
+                    icon={<MaterialIcon name="terminal" />}
+                    onClick={openWorkspace}
+                    size="panel"
                   >
-                    <MaterialIcon name="edit" />
+                    <span className="server-inspector-action-label">{t.serverInspectorTerminal}</span>
+                  </Button>
+                  <Button
+                    icon={<MaterialIcon name="edit" />}
+                    onClick={() => onEditConnection(selectedProfile)}
+                    size="panel"
+                  >
                     {t.edit}
-                  </button>
+                  </Button>
                 </div>
 
                 <section className="server-inspector-card">

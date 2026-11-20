@@ -106,3 +106,14 @@
 .home-workspace.is-management-mode .home-main-content > .vertical-scrollbar {
   bottom: 24px;
 }
+
+.home-workspace.is-management-mode .home-content-body:has(.server-topology) {
+  margin-bottom: 4px;
+  padding: 22px 24px 8px;
+}
+
+@media (max-width: 640px) {
+  .home-workspace.is-management-mode .home-content-body:has(.server-topology) {
+    padding: 16px 14px 8px;
+  }
+}

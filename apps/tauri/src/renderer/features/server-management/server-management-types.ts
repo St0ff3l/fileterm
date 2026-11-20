@@ -1,5 +1,6 @@
 export type ServerManagementPage =
   | 'overview'
+  | 'server-topology'
   | 'connection-manager'
   | 'proxy-manager'
   | 'command-manager'

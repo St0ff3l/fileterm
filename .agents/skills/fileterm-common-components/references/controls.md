@@ -7,12 +7,14 @@
 - 统一使用 components/common/button/。
 - 变体使用 primary、secondary、ghost、danger 等语义命名。
 - 同一操作组的按钮必须共享高度、圆角和内边距。
+- 侧栏面板中 32px 高的文字操作按钮使用公共 `size="panel"`。保存、取消等两字按钮最窄 72px，长文案可自然撑宽。主操作和同一区域的次要操作使用同一尺寸。
+- 带文字的操作按钮把装饰图标传给公共 `Button` 的 `icon`。32px 面板按钮使用 11px 文字，36px 标准按钮使用 12px 文字，配套图标使用 14px，图文间距为 6px。`MaterialIcon` 在按钮内由公共样式定尺寸，`AppIcon` 显式传 `size={14}`。
 - 主按钮使用 --action-primary-*，不能用 --focus-outline 填充。
 - 异步操作必须有 busy/submitting 状态：禁用重复提交、显示 spinner、保留失败反馈。
 
 ### DropdownSelect
 
-- 所有表单下拉框必须使用 DropdownSelect。
+- 所有表单下拉框必须使用 DropdownSelect。下拉框与按钮并排的表单操作行默认对齐为 36px。下拉框使用默认高度，按钮使用 `size="md"` 或默认尺寸。
 - 禁止在业务组件中新增原生 select。
 - macOS 原生外壳和 Windows/Linux 自绘 Portal 都必须保持同一套语义变量和自适应箭头尺寸。
 - 聚焦与展开态沿用 Input 的中性双层阴影，不额外设置彩色 outline 或改变边框为强调色。原生 select 的焦点画在外壳，菜单项键盘高亮和选择行为保持现有实现。

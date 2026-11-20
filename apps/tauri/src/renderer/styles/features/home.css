@@ -525,23 +525,22 @@
 }
 
 /* fly-in 动画:内嵌管理器整体作为一个卡片飞入 */
-.page-transition > .overview-page > *,
-.page-transition > .manager-inline > *,
-.page-transition > .server-management-overview > * {
+.page-transition > :is(.overview-page, .manager-inline, .server-management-overview, .server-topology) > * {
   animation: page-card-in-up 0.42s var(--ease-out) both;
 }
 
-.page-transition[data-nav-direction='up'] > .overview-page > *,
-.page-transition[data-nav-direction='up'] > .manager-inline > *,
-.page-transition[data-nav-direction='up'] > .server-management-overview > * {
+.page-transition[data-nav-direction='up']
+  > :is(.overview-page, .manager-inline, .server-management-overview, .server-topology)
+  > * {
   animation-name: page-card-in-down;
 }
 
 /* Switching to or closing into an existing home tab keeps its content visible;
  * the first launch and "+" tabs keep the original fly-in above. */
-.home-content-body.suppress-home-entrance .page-transition > .overview-page > *,
-.home-content-body.suppress-home-entrance .page-transition > .manager-inline > *,
-.home-content-body.suppress-home-entrance .page-transition > .server-management-overview > *,
+.home-content-body.suppress-home-entrance
+  .page-transition
+  > :is(.overview-page, .manager-inline, .server-management-overview, .server-topology)
+  > *,
 .workspace-stage-transition.is-transitioning
   .workspace-content-stack__item.is-active
   .home-content-body.suppress-home-entrance {
@@ -549,19 +548,19 @@
 }
 
 /* stagger direct child sections so cards cascade in */
-.page-transition > div > *:nth-child(1) {
+.page-transition > :where(div, .server-topology) > *:nth-child(1) {
   animation-delay: 0.02s;
 }
-.page-transition > div > *:nth-child(2) {
+.page-transition > :where(div, .server-topology) > *:nth-child(2) {
   animation-delay: 0.08s;
 }
-.page-transition > div > *:nth-child(3) {
+.page-transition > :where(div, .server-topology) > *:nth-child(3) {
   animation-delay: 0.14s;
 }
-.page-transition > div > *:nth-child(4) {
+.page-transition > :where(div, .server-topology) > *:nth-child(4) {
   animation-delay: 0.2s;
 }
-.page-transition > div > *:nth-child(n + 5) {
+.page-transition > :where(div, .server-topology) > *:nth-child(n + 5) {
   animation-delay: 0.26s;
 }
 
@@ -590,9 +589,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-transition > .overview-page > *,
-  .page-transition > .manager-inline > *,
-  .page-transition > .server-management-overview > * {
+  .page-transition > :is(.overview-page, .manager-inline, .server-management-overview, .server-topology) > * {
     animation: none;
   }
 }
