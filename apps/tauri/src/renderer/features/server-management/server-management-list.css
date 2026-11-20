@@ -1,0 +1,95 @@
+.server-management-list {
+  align-self: start;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.server-management-list:focus-visible {
+  outline: 2px solid var(--focus-outline);
+}
+
+.server-management-list table {
+  width: 100%;
+  min-width: 480px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: start;
+  font-size: var(--font-size-sm);
+}
+
+.server-management-list thead {
+  background: var(--surface-section);
+}
+
+.server-management-list thead th:nth-child(1) {
+  width: 23%;
+}
+
+.server-management-list thead th:nth-child(2) {
+  width: 30%;
+}
+
+.server-management-list thead th:nth-child(3) {
+  width: 12%;
+}
+
+.server-management-list thead th:nth-child(4) {
+  width: 17%;
+}
+
+.server-management-list th,
+.server-management-list td {
+  height: 34px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-block-end: 1px solid var(--border-default);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-management-list tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+.server-management-list tbody tr {
+  cursor: pointer;
+}
+
+.server-management-list tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.server-management-list tbody tr.is-selected {
+  background: var(--surface-hover);
+}
+
+.server-management-list tbody tr.is-selected th {
+  box-shadow: inset 2px 0 0 var(--focus-outline);
+}
+
+.server-management-list thead .ft-btn {
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 4px;
+}
+
+.server-management-list tbody button {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  padding-inline: 4px;
+}
+
+.server-management-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-management-list tbody button:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}

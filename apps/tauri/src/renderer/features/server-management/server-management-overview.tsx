@@ -4,6 +4,7 @@ import { Button } from '../../components/common/button/button'
 import { DropdownSelect } from '../../components/common/dropdown-select/dropdown-select'
 import { Input } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
+import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { getLocale, t } from '../../i18n'
@@ -24,6 +25,8 @@ import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/use-
 import { lastSessionTabIdForProfile } from '../../hooks/session-tab-memory'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
 import { statusForProfile, statusLabel } from './server-profile-status'
+import { ServerManagementList } from './server-management-list'
+import type { ServerListSort } from './server-management-list-model'
 import './server-management-overview.css'
 import './server-management-page-header.css'
 
@@ -171,6 +174,8 @@ export function ServerManagementOverview({
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<DashboardFilter>('all')
   const [selectedTag, setSelectedTag] = useState('')
+  const [view, setView] = useState<'cards' | 'list'>('cards')
+  const [listSort, setListSort] = useState<ServerListSort>({ column: 'name', direction: 'ascending' })
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false)
   // Focus mode owns the side panels, so the inspector folds away with it and the
@@ -407,25 +412,53 @@ export function ServerManagementOverview({
                 />
               ) : null}
             </div>
-            <Input
-              aria-label={t.serverDashboardSearchPlaceholder}
-              className="server-dashboard-search"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t.serverDashboardSearchPlaceholder}
-              prefix={<AppIcon name="search" size={14} />}
-              suffix={
-                selectedFolder ? (
-                  <Button onClick={() => onSelectFolder(null)} size="sm" variant="ghost">
-                    {t.allConnections}
-                  </Button>
-                ) : null
-              }
-              type="search"
-              value={query}
-            />
+            <div className="server-dashboard-search-row">
+              <Input
+                aria-label={t.serverDashboardSearchPlaceholder}
+                className="server-dashboard-search"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t.serverDashboardSearchPlaceholder}
+                prefix={<AppIcon name="search" size={14} />}
+                suffix={
+                  selectedFolder ? (
+                    <Button onClick={() => onSelectFolder(null)} size="sm" variant="ghost">
+                      {t.allConnections}
+                    </Button>
+                  ) : null
+                }
+                type="search"
+                value={query}
+              />
+              <SegmentedControl<typeof view>
+                ariaLabel={t.serverDashboardView}
+                onChange={setView}
+                options={[
+                  { value: 'cards', label: t.serverDashboardCards },
+                  { value: 'list', label: t.serverDashboardList }
+                ]}
+                value={view}
+                variant="neutral"
+              />
+            </div>
           </div>
 
-          {visibleProfiles.length ? (
+          {visibleProfiles.length && view === 'list' ? (
+            <ServerManagementList
+              label={title}
+              onSelect={setSelectedProfileId}
+              onSortChange={setListSort}
+              rows={visibleProfiles.map((profile) => ({
+                id: profile.id,
+                name: profile.name,
+                address: connectionProfileSummary(profile),
+                protocol: profile.type,
+                status: filterStatus(statusByProfile.get(profile.id)?.status),
+                tags: (profile.tags ?? []).join(', ')
+              }))}
+              selectedId={selectedProfile?.id}
+              sort={listSort}
+            />
+          ) : visibleProfiles.length ? (
             <section aria-label={title} className="server-dashboard-grid">
               {visibleProfiles.map((profile) => {
                 const connectionBadgeStatus = filterStatus(statusByProfile.get(profile.id)?.status)

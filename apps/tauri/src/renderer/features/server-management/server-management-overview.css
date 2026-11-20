@@ -81,7 +81,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.server-dashboard-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .server-dashboard-search {
+  flex: 1 1 200px;
+  min-width: 0;
   min-height: 36px;
   border-radius: var(--radius-md);
 }
