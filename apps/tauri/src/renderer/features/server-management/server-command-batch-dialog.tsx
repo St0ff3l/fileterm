@@ -6,13 +6,14 @@ import { Dialog } from '../../components/common/dialog/dialog'
 import { FormDialogBody } from '../../components/common/dialog/form-dialog-body'
 import { DropdownSelect } from '../../components/common/dropdown-select/dropdown-select'
 import { Input } from '../../components/common/input/input'
+import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { formatMessage, t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from '../commands/command-utils'
 import { AppIcon } from '../common/app-icon'
 import './server-command-batch-dialog.css'
 
 export type ServerCommandBatchDialogMode =
-  | { type: 'run'; targets: Array<CommandBatchTarget & { label: string }> }
+  | { type: 'run'; targets: Array<CommandBatchTarget & { name: string; address: string }> }
   | { type: 'history' }
   | { type: 'prepare'; message: string; connect?: { label: string; onConnect(): void } }
 
@@ -36,6 +37,7 @@ export function ServerCommandBatchDialog({
   const submitting = useRef(false)
   const browsing = mode.type === 'history'
   const compact = mode.type === 'prepare' || (browsing && !history?.length)
+  const connect = mode.type === 'prepare' ? mode.connect : undefined
   const selectedRun = browsing ? history?.find(({ id }) => id === historyId) : run
   const template = templates.find(({ id }) => id === templateId)
   const params = template ? extractCommandParams(template.command).filter((i) => Number.isSafeInteger(i) && i > 0) : []
@@ -114,6 +116,17 @@ export function ServerCommandBatchDialog({
               {t.serverBatchRun}
             </Button>
           </>
+        ) : connect ? (
+          <Button
+            onClick={() => {
+              connect.onConnect()
+              close()
+            }}
+            size="panel"
+            variant="primary"
+          >
+            {connect.label}
+          </Button>
         ) : undefined
       }
       isOpen
@@ -126,38 +139,31 @@ export function ServerCommandBatchDialog({
         {error && <p role="alert">{error}</p>}
         {running && <p role="status">{t.serverBatchRunning}</p>}
         {mode.type === 'prepare' && (
-          <div className="server-command-batch-empty">
+          <div className="server-command-batch-message">
+            <MaterialIcon aria-hidden="true" name="dns" />
             <p>{mode.message}</p>
-            {mode.connect && (
-              <Button
-                onClick={() => {
-                  mode.connect?.onConnect()
-                  close()
-                }}
-                size="panel"
-                variant="primary"
-              >
-                {mode.connect.label}
-              </Button>
-            )}
           </div>
         )}
         {mode.type === 'run' && !run && (
           <>
-            <label htmlFor="server-batch-template">{t.serverBatchTemplate}</label>
-            <DropdownSelect
-              disabled={running}
-              id="server-batch-template"
-              onChange={(id) => {
-                setArgs({})
-                setTemplateId(id)
-              }}
-              options={sortByOrder(templates).map(({ id, name }) => ({ value: id, label: name }))}
-              value={templateId}
-            />
-            {template && <pre className="server-command-batch-text">{template.command}</pre>}
+            <div className="server-command-batch-field">
+              <label htmlFor="server-batch-template">{t.serverBatchTemplate}</label>
+              <DropdownSelect
+                disabled={running}
+                id="server-batch-template"
+                onChange={(id) => {
+                  setArgs({})
+                  setTemplateId(id)
+                }}
+                options={sortByOrder(templates).map(({ id, name }) => ({ value: id, label: name }))}
+                value={templateId}
+              />
+              {template && template.command.trim() !== template.name.trim() && (
+                <pre className="server-command-batch-text">{template.command}</pre>
+              )}
+            </div>
             {params.map((index) => (
-              <label key={index}>
+              <label className="server-command-batch-field" key={index}>
                 {t.commandParam} {index}
                 <Input
                   disabled={running}
@@ -169,11 +175,15 @@ export function ServerCommandBatchDialog({
                 />
               </label>
             ))}
-            <div>
-              <strong>{formatMessage(t.serverBatchTargets, { count: mode.targets.length })}</strong>
+            <div className="server-command-batch-field">
+              <span>{formatMessage(t.serverBatchTargets, { count: mode.targets.length })}</span>
               <ul className="server-command-batch-targets">
-                {mode.targets.map(({ profileId, label }) => (
-                  <li key={profileId}>{label}</li>
+                {mode.targets.map(({ profileId, name, address }) => (
+                  <li key={profileId}>
+                    <MaterialIcon aria-hidden="true" name="dns" />
+                    <strong>{name}</strong>
+                    <small>{address}</small>
+                  </li>
                 ))}
               </ul>
             </div>
@@ -195,8 +205,8 @@ export function ServerCommandBatchDialog({
               <p>{t.serverBatchHistoryMetadata}</p>
             </>
           ) : (
-            <div className="server-command-batch-empty" role="status">
-              {history && <AppIcon name="history" size={24} />}
+            <div className="server-command-batch-message" role="status">
+              {history && <AppIcon name="history" size={18} />}
               <p>{history ? t.serverBatchNoHistory : t.serverBatchLoading}</p>
             </div>
           ))}
@@ -213,7 +223,7 @@ export function ServerCommandBatchDialog({
                   <div className="server-command-batch-result">
                     <strong>
                       {mode.type === 'run'
-                        ? (mode.targets.find(({ profileId }) => profileId === result.profileId)?.label ?? result.name)
+                        ? (mode.targets.find(({ profileId }) => profileId === result.profileId)?.name ?? result.name)
                         : result.name}
                     </strong>
                     <span>{statuses[result.status]}</span>

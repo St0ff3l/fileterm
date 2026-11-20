@@ -42,8 +42,8 @@
 }
 
 .server-management-list .server-management-list-check {
-  width: 20px;
-  text-align: center;
+  width: 38px;
+  padding-inline: 12px;
 }
 
 .server-management-list thead th[data-column='name'] {
@@ -66,6 +66,7 @@
 .server-management-list td {
   height: 34px;
   padding: 0 8px;
+  text-align: start;
   overflow: hidden;
   border-block-end: 1px solid var(--border-default);
   text-overflow: ellipsis;
@@ -105,19 +106,21 @@
   content: '';
 }
 
-.server-management-list thead .ft-btn {
+.server-management-list thead .server-management-list-sort {
+  display: flex;
   justify-content: flex-start;
+  text-align: start;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding-inline: 4px;
+  padding-inline: 0;
 }
 
 .server-management-list tbody .ft-btn {
   justify-content: flex-start;
   width: 100%;
   min-width: 0;
-  padding-inline: 4px;
+  padding-inline: 0;
   color: var(--text-primary);
   font-weight: 400;
 }
@@ -130,6 +133,10 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.server-management-list td > .server-dashboard-status {
+  margin-inline-start: 0;
 }
 
 .server-management-list tbody .ft-btn:focus-visible {

@@ -66,17 +66,16 @@ export function ServerManagementList({
                   scope="col"
                 >
                   <Button
-                    icon={
-                      column === sort?.column ? (
-                        <AppIcon name={sort.direction === 'ascending' ? 'arrow-up' : 'arrow-down'} size={12} />
-                      ) : null
-                    }
+                    className="server-management-list-sort"
                     onClick={() => onSortChange(nextServerListSort(sort, column))}
                     size="panel"
                     title={t.serverDashboardSortHint}
                     variant="ghost"
                   >
                     {heading}
+                    {column === sort?.column && (
+                      <AppIcon name={sort.direction === 'ascending' ? 'arrow-up' : 'arrow-down'} size={12} />
+                    )}
                   </Button>
                 </th>
               ))}

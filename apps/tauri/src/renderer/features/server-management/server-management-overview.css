@@ -186,7 +186,7 @@
   box-shadow: inset 0 -3px 0 var(--focus-outline);
 }
 
-.server-dashboard-card:focus-visible {
+.server-dashboard-card-name:focus-visible {
   outline: 2px solid var(--focus-outline);
   outline-offset: 2px;
 }
@@ -204,11 +204,19 @@
   font-size: 18px;
 }
 
-.server-dashboard-card-heading > strong {
+.server-dashboard-card-name {
+  display: block;
   min-width: 0;
+  padding: 0;
   overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  background: transparent;
+  font: inherit;
   font-size: 12px;
   font-weight: 600;
+  text-align: start;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -345,6 +353,14 @@
 .server-dashboard-card-type {
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.server-dashboard-card-check {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 3px 4px;
+  cursor: pointer;
 }
 
 .server-dashboard-empty {

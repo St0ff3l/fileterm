@@ -4,24 +4,69 @@
   overflow: hidden;
 }
 
+.server-command-batch-dialog .ft-dialog__footer {
+  background-color: inherit;
+}
+
 .server-command-batch-dialog p {
   margin: 0;
 }
 
-.server-command-batch-empty {
-  display: grid;
-  justify-items: center;
+.server-command-batch-message {
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
-  padding: 14px 8px;
   color: var(--text-secondary);
-  text-align: center;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.server-command-batch-message > :is(svg, .material-symbols-outlined) {
+  flex: none;
+  font-size: 18px;
+}
+
+.server-command-batch-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-secondary);
   font-size: var(--font-size-sm);
 }
 
 .server-command-batch-targets {
-  margin: 6px 0 0;
-  padding-inline-start: 20px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  list-style: none;
   overflow-wrap: anywhere;
+}
+
+.server-command-batch-targets > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 8px;
+}
+
+.server-command-batch-targets > li + li {
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.server-command-batch-targets .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.server-command-batch-targets strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.server-command-batch-targets small {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
 }
 
 .server-command-batch-results {

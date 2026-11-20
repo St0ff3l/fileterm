@@ -25,6 +25,7 @@ import {
   type ServerInsight
 } from './server-insights-store'
 import { AppIcon } from '../common/app-icon'
+import { SelectionControl } from '../common/selection-control'
 import { StatusIndicator, type StatusIndicatorStatus } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { buildConnectionTree, flattenConnectionProfiles, type ConnectionTreeNode } from '../connections/connection-tree'
@@ -239,9 +240,16 @@ export function ServerManagementOverview({
   const selectedTargets = visibleProfiles.flatMap((profile) => {
     const target = batchTargets.get(profile.id)
     return target && checkedProfiles.has(profile.id)
-      ? [{ ...target, label: `${profile.name} · ${connectionProfileSummary(profile)}` }]
+      ? [{ ...target, name: profile.name, address: connectionProfileSummary(profile) }]
       : []
   })
+  const batchLimitReached = selectedTargets.length >= COMMAND_BATCH_TARGET_LIMIT
+  const checkBatchProfile = (id: string, checked: boolean) => {
+    const next = new Set(selectedTargets.map(({ profileId }) => profileId))
+    if (checked) next.add(id)
+    else next.delete(id)
+    setCheckedProfiles(next)
+  }
   const hasVisibleBatchTarget = visibleProfiles.some(({ id }) => batchTargets.has(id))
   const filterLabels = {
     all: t.allConnections,
@@ -496,40 +504,31 @@ export function ServerManagementOverview({
           </div>
 
           <div className="server-dashboard-batch-actions">
-            {view === 'list' && (
-              <Button
-                disabled={!window.fileterm || selectedTargets.length > COMMAND_BATCH_TARGET_LIMIT}
-                onClick={openBatch}
-                size="panel"
-              >
-                {t.serverBatchRun}
-                {selectedTargets.length ? ` (${selectedTargets.length})` : ''}
-              </Button>
-            )}
+            <Button
+              disabled={!window.fileterm || selectedTargets.length > COMMAND_BATCH_TARGET_LIMIT}
+              onClick={openBatch}
+              size="panel"
+            >
+              {t.serverBatchRun}
+              {selectedTargets.length ? ` (${selectedTargets.length})` : ''}
+            </Button>
             <Button disabled={!window.fileterm} onClick={() => setBatchDialog({ type: 'history' })} size="panel">
               {t.serverBatchHistory}
             </Button>
-            {view === 'list' && (
-              <span>
-                {hasVisibleBatchTarget
-                  ? formatMessage(t.serverBatchSelectionHint, { count: COMMAND_BATCH_TARGET_LIMIT })
-                  : t.serverBatchConnectFirst}
-              </span>
-            )}
+            <span>
+              {hasVisibleBatchTarget
+                ? formatMessage(t.serverBatchSelectionHint, { count: COMMAND_BATCH_TARGET_LIMIT })
+                : t.serverBatchConnectFirst}
+            </span>
           </div>
 
           {visibleProfiles.length && view === 'list' ? (
             <ServerManagementList
               batchEligible={(id) => batchTargets.has(id)}
-              batchLimitReached={selectedTargets.length >= COMMAND_BATCH_TARGET_LIMIT}
+              batchLimitReached={batchLimitReached}
               checkedProfiles={checkedProfiles}
               label={title}
-              onCheck={(id, checked) => {
-                const next = new Set(selectedTargets.map(({ profileId }) => profileId))
-                if (checked) next.add(id)
-                else next.delete(id)
-                setCheckedProfiles(next)
-              }}
+              onCheck={checkBatchProfile}
               onSelect={setSelectedProfileId}
               onSortChange={setListSort}
               rows={visibleProfiles.map((profile) => ({
@@ -550,29 +549,23 @@ export function ServerManagementOverview({
                 const metrics = liveMetrics(profile.id, workspaceTabs, sessions)
                 const resources = getResourceMetrics(metrics)
                 const isSelected = selectedProfile?.id === profile.id
+                const checked = checkedProfiles.has(profile.id)
                 return (
                   <article
-                    aria-pressed={isSelected}
                     className={`server-dashboard-card ${isSelected ? 'is-selected' : ''} ${isFiltered ? 'is-sort-disabled' : ''} ${dragState.draggingId === profile.id ? 'is-dragging' : ''} ${managerDropClass(dragState.targetId === profile.id, dragState.position)}`}
                     data-fileterm-sort-id={isFiltered ? undefined : profile.id}
                     data-fileterm-sort-kind={isFiltered ? undefined : 'profile'}
                     key={profile.id}
                     onClick={() => setSelectedProfileId(profile.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        setSelectedProfileId(profile.id)
-                      }
-                    }}
                     onPointerDown={(event) => {
                       if (!isFiltered) handlePointerSort(event, profile.id)
                     }}
-                    role="button"
-                    tabIndex={0}
                   >
                     <span className="server-dashboard-card-heading">
                       <MaterialIcon name={profile.type === 'serial' ? 'usb' : 'dns'} />
-                      <strong>{profile.name}</strong>
+                      <button aria-pressed={isSelected} className="server-dashboard-card-name" type="button">
+                        {profile.name}
+                      </button>
                       {connectionBadgeStatus === 'idle' ? (
                         <span className="server-dashboard-status is-idle">{t.serverDashboardNotConnected}</span>
                       ) : (
@@ -595,6 +588,21 @@ export function ServerManagementOverview({
                         </span>
                       ) : null}
                       <span className="server-dashboard-card-type">{profile.type.toUpperCase()}</span>
+                      {batchTargets.has(profile.id) && (
+                        <label
+                          className="server-dashboard-card-check"
+                          onClick={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => event.stopPropagation()}
+                        >
+                          <SelectionControl
+                            aria-label={formatMessage(t.serverBatchSelectHost, { name: profile.name })}
+                            checked={checked}
+                            disabled={!checked && batchLimitReached}
+                            onChange={(event) => checkBatchProfile(profile.id, event.target.checked)}
+                            type="checkbox"
+                          />
+                        </label>
+                      )}
                     </span>
                   </article>
                 )
