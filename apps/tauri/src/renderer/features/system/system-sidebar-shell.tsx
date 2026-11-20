@@ -17,6 +17,7 @@ export function SystemSidebarShell({
   collapsed,
   connectionStatus,
   showResourceMeters,
+  maskConnectionAddresses,
   visibleMetrics,
   isResizing,
   onMonitoringSnapshot,
@@ -32,6 +33,7 @@ export function SystemSidebarShell({
   collapsed: boolean
   connectionStatus: TabStatus | null
   showResourceMeters: boolean
+  maskConnectionAddresses: boolean
   visibleMetrics: ResourceMonitoringMetric[]
   isResizing: boolean
   onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
@@ -50,6 +52,7 @@ export function SystemSidebarShell({
         collapsed={collapsed}
         connectionStatus={connectionStatus}
         showResourceMeters={showResourceMeters}
+        maskConnectionAddresses={maskConnectionAddresses}
         visibleMetrics={visibleMetrics}
         onMonitoringSnapshot={onMonitoringSnapshot}
         onOpenSystemInfo={onOpenSystemInfo}

@@ -71,6 +71,60 @@
   height: 22px;
 }
 
+/*
+ * Masked connection addresses stay laid out as before so the sidebar does not
+ * shift, but the characters start blurred and washed out. Resting the pointer on
+ * a row reveals it and restores the normal copy affordance, so the blur only
+ * defeats a glance or a screenshot rather than the user's own inspection.
+ */
+.system-sidebar-layout .connection-summary .address-row strong.is-masked {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.system-sidebar-layout .connection-summary .address-row .address-masked-text {
+  display: block;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: clip;
+  white-space: nowrap;
+  filter: blur(4px);
+  opacity: 0.75;
+  transition:
+    filter var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    opacity var(--duration-hover) var(--ease-out);
+}
+
+/* Hovering the row lifts the blur on both addresses it is scoped to. */
+.system-sidebar-layout .connection-summary .address-row:hover strong.is-masked .address-masked-text,
+.system-sidebar-layout .connection-summary .address-row strong.is-masked:hover .address-masked-text,
+.system-sidebar-layout .connection-summary .address-row strong.is-masked:focus-visible .address-masked-text {
+  color: var(--copy-link);
+  filter: blur(0);
+  opacity: 1;
+}
+
+/* Keep the copied confirmation visible even while the value is still blurred. */
+.system-sidebar-layout .connection-summary .address-row strong.is-masked.copied .address-masked-text {
+  color: var(--status-success);
+  filter: blur(0);
+  opacity: 1;
+}
+
+.system-sidebar-layout .connection-summary .address-row strong.is-masked:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-sidebar-layout .connection-summary .address-row .address-masked-text {
+    transition: none;
+  }
+}
+
 .system-sidebar-layout .system-title {
   overflow: hidden;
   white-space: nowrap;

@@ -69,6 +69,8 @@ pub struct UiPreferences {
     pub tab_bar_layout: String,
     #[serde(default = "default_compact_tab_bar")]
     pub compact_tab_bar: bool,
+    #[serde(default = "default_mask_connection_addresses")]
+    pub mask_connection_addresses: bool,
     // Preserve the previous file-list-only zoom when reading an older state
     // file, then omit the legacy key on the next preference save.
     #[serde(default, skip_serializing, alias = "fileListFontSize")]
@@ -121,6 +123,7 @@ pub struct UiPreferencesInput {
     pub remember_window_size: Option<bool>,
     pub tab_bar_layout: Option<String>,
     pub compact_tab_bar: Option<bool>,
+    pub mask_connection_addresses: Option<bool>,
     pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
     pub file_panel_remember_ratio: Option<bool>,
     pub transfer_sidebar_collapsed_by_default: Option<bool>,
@@ -255,6 +258,10 @@ fn default_tab_bar_layout() -> String {
 }
 
 fn default_compact_tab_bar() -> bool {
+    false
+}
+
+fn default_mask_connection_addresses() -> bool {
     false
 }
 

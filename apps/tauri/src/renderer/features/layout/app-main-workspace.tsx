@@ -45,6 +45,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     setSidebarWidth,
     tabBarLayout,
     compactTabBar,
+    maskConnectionAddresses,
     aiCopilotWidth,
     isResizingSidebar,
     isResizingAiCopilot,
@@ -356,6 +357,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             collapsed={isSystemSidebarCollapsed}
             connectionStatus={activeTab?.status ?? null}
             showResourceMeters={isResourceMonitoringAvailable}
+            maskConnectionAddresses={maskConnectionAddresses}
             visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
             onMonitoringSnapshot={shell.applySnapshot}
