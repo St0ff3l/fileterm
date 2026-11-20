@@ -8,6 +8,16 @@
   margin: 0;
 }
 
+.server-command-batch-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 14px 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: var(--font-size-sm);
+}
+
 .server-command-batch-targets {
   margin: 6px 0 0;
   padding-inline-start: 20px;

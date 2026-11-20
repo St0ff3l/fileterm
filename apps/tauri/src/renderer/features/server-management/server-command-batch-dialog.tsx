@@ -8,10 +8,13 @@ import { DropdownSelect } from '../../components/common/dropdown-select/dropdown
 import { Input } from '../../components/common/input/input'
 import { formatMessage, t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from '../commands/command-utils'
+import { AppIcon } from '../common/app-icon'
 import './server-command-batch-dialog.css'
 
 export type ServerCommandBatchDialogMode =
-  { type: 'run'; targets: Array<CommandBatchTarget & { label: string }> } | { type: 'history' }
+  | { type: 'run'; targets: Array<CommandBatchTarget & { label: string }> }
+  | { type: 'history' }
+  | { type: 'prepare'; message: string; connect?: { label: string; onConnect(): void } }
 
 export function ServerCommandBatchDialog({
   mode,
@@ -32,6 +35,7 @@ export function ServerCommandBatchDialog({
   const [error, setError] = useState('')
   const submitting = useRef(false)
   const browsing = mode.type === 'history'
+  const compact = mode.type === 'prepare' || (browsing && !history?.length)
   const selectedRun = browsing ? history?.find(({ id }) => id === historyId) : run
   const template = templates.find(({ id }) => id === templateId)
   const params = template ? extractCommandParams(template.command).filter((i) => Number.isSafeInteger(i) && i > 0) : []
@@ -101,26 +105,43 @@ export function ServerCommandBatchDialog({
       closeOnBackdropClick={!running}
       closeOnEscape={!running}
       footer={
-        <>
-          <Button disabled={running} onClick={close} size="panel">
-            {browsing || run ? t.serverBatchClose : t.cancel}
-          </Button>
-          {!browsing && !run && (
+        mode.type === 'run' && !run ? (
+          <>
+            <Button disabled={running} onClick={close} size="panel">
+              {t.cancel}
+            </Button>
             <Button disabled={!canRun} loading={running} onClick={() => void start()} size="panel" variant="primary">
               {t.serverBatchRun}
             </Button>
-          )}
-        </>
+          </>
+        ) : undefined
       }
       isOpen
       onClose={close}
       showCloseButton={!running}
-      size="lg"
+      size={compact ? 'sm' : 'md'}
       title={title}
     >
       <FormDialogBody>
         {error && <p role="alert">{error}</p>}
         {running && <p role="status">{t.serverBatchRunning}</p>}
+        {mode.type === 'prepare' && (
+          <div className="server-command-batch-empty">
+            <p>{mode.message}</p>
+            {mode.connect && (
+              <Button
+                onClick={() => {
+                  mode.connect?.onConnect()
+                  close()
+                }}
+                size="panel"
+                variant="primary"
+              >
+                {mode.connect.label}
+              </Button>
+            )}
+          </div>
+        )}
         {mode.type === 'run' && !run && (
           <>
             <label htmlFor="server-batch-template">{t.serverBatchTemplate}</label>
@@ -174,7 +195,10 @@ export function ServerCommandBatchDialog({
               <p>{t.serverBatchHistoryMetadata}</p>
             </>
           ) : (
-            <p role="status">{history ? t.serverBatchNoHistory : t.serverBatchLoading}</p>
+            <div className="server-command-batch-empty" role="status">
+              {history && <AppIcon name="history" size={24} />}
+              <p>{history ? t.serverBatchNoHistory : t.serverBatchLoading}</p>
+            </div>
           ))}
         {selectedRun && (
           <>

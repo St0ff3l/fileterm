@@ -48,6 +48,10 @@
   display: none;
 }
 
+.server-dashboard-main.is-list-view {
+  grid-template-rows: auto auto auto minmax(100px, 1fr);
+}
+
 .server-dashboard-toolbar {
   display: grid;
   gap: 10px;

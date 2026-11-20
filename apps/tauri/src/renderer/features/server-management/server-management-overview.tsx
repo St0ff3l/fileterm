@@ -242,6 +242,7 @@ export function ServerManagementOverview({
       ? [{ ...target, label: `${profile.name} · ${connectionProfileSummary(profile)}` }]
       : []
   })
+  const hasVisibleBatchTarget = visibleProfiles.some(({ id }) => batchTargets.has(id))
   const filterLabels = {
     all: t.allConnections,
     connected: t.hostStatusConnected,
@@ -345,6 +346,37 @@ export function ServerManagementOverview({
   const insightDiskPercent = displayedInsight?.diskPercent ?? null
   const title = selectedFolder?.type === 'folder' ? selectedFolder.name : t.serverDashboardTitle
 
+  const openBatch = () => {
+    if (!commandTemplates.length) {
+      setBatchDialog({ type: 'prepare', message: t.serverBatchNoTemplates })
+      return
+    }
+    if (selectedTargets.length) {
+      setBatchDialog({ type: 'run', targets: selectedTargets })
+      return
+    }
+    const canConnect = (profile: ConnectionProfile) =>
+      profile.type === 'ssh' &&
+      profile.deviceMode !== 'network-device' &&
+      filterStatus(statusByProfile.get(profile.id)?.status) === 'idle'
+    const profile = selectedProfile && canConnect(selectedProfile) ? selectedProfile : visibleProfiles.find(canConnect)
+    setBatchDialog({
+      type: 'prepare',
+      message: hasVisibleBatchTarget ? t.serverBatchSelectFirst : t.serverBatchConnectFirst,
+      connect:
+        !hasVisibleBatchTarget && profile
+          ? {
+              label: formatMessage(t.serverBatchConnectHost, { name: profile.name }),
+              onConnect: () => {
+                if (statusFilter === 'idle') setStatusFilter('all')
+                setSelectedProfileId(profile.id)
+                onConnectProfile(profile.id)
+              }
+            }
+          : undefined
+    })
+  }
+
   const openWorkspace = () => {
     if (!selectedProfile || !selectedSessionTab || !selectedSessionConnected) return
     // Reopen the tab that was last active for this server instead of the first.
@@ -395,7 +427,7 @@ export function ServerManagementOverview({
       className={`server-management-overview ${selectedProfile ? 'has-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}
     >
       <div className="server-dashboard-main-scroll">
-        <main className="server-dashboard-main" ref={mainScrollRef}>
+        <main className={`server-dashboard-main${view === 'list' ? ' is-list-view' : ''}`} ref={mainScrollRef}>
           <header className="server-management-page-header">
             <h1>
               <MaterialIcon name="dashboard" />
@@ -465,30 +497,25 @@ export function ServerManagementOverview({
 
           <div className="server-dashboard-batch-actions">
             {view === 'list' && (
-              <>
-                <Button
-                  disabled={
-                    !window.fileterm ||
-                    !commandTemplates.length ||
-                    !selectedTargets.length ||
-                    selectedTargets.length > COMMAND_BATCH_TARGET_LIMIT
-                  }
-                  onClick={() => setBatchDialog({ type: 'run', targets: selectedTargets })}
-                  size="panel"
-                >
-                  {t.serverBatchRun}
-                  {selectedTargets.length ? ` (${selectedTargets.length})` : ''}
-                </Button>
-                <span>
-                  {commandTemplates.length
-                    ? formatMessage(t.serverBatchSelectionHint, { count: COMMAND_BATCH_TARGET_LIMIT })
-                    : t.serverBatchNoTemplates}
-                </span>
-              </>
+              <Button
+                disabled={!window.fileterm || selectedTargets.length > COMMAND_BATCH_TARGET_LIMIT}
+                onClick={openBatch}
+                size="panel"
+              >
+                {t.serverBatchRun}
+                {selectedTargets.length ? ` (${selectedTargets.length})` : ''}
+              </Button>
             )}
             <Button disabled={!window.fileterm} onClick={() => setBatchDialog({ type: 'history' })} size="panel">
               {t.serverBatchHistory}
             </Button>
+            {view === 'list' && (
+              <span>
+                {hasVisibleBatchTarget
+                  ? formatMessage(t.serverBatchSelectionHint, { count: COMMAND_BATCH_TARGET_LIMIT })
+                  : t.serverBatchConnectFirst}
+              </span>
+            )}
           </div>
 
           {visibleProfiles.length && view === 'list' ? (
