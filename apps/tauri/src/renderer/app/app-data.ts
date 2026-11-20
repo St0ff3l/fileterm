@@ -200,6 +200,7 @@ export function profileToForm(
     transferSidebarCollapsedByDefault: profile.transferSidebarCollapsedByDefault,
     sftpNoDelete: profile.sftpNoDelete ?? false,
     note: profile.note ?? '',
+    tags: profile.tags,
     sessionLogEnabled: profile.sessionLogEnabled ?? false,
     sessionLogDirectory: profile.sessionLogDirectory ?? '',
     otpSecret: '',

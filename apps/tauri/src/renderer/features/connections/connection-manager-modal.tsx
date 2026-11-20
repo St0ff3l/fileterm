@@ -191,6 +191,7 @@ export function ConnectionManagerModal({
                 node.username,
                 node.type,
                 node.note ?? '',
+                ...(node.tags ?? []),
                 connectionProfileSummary(node)
               ].join(' ')
 

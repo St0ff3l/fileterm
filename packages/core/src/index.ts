@@ -91,6 +91,7 @@ export type FilePaneMode = 'local' | 'remote-tree'
 
 export interface BaseProfile extends BaseEntity {
   type: SessionType
+  tags?: string[]
   /** Serial profiles keep these inert placeholders; devicePath remains their only endpoint. */
   host: string
   port: number
@@ -1330,6 +1331,7 @@ export interface SshKeyImportResult {
 
 export interface CreateProfileInput {
   type: SessionType
+  tags?: string[]
   name: string
   host: string
   port: number

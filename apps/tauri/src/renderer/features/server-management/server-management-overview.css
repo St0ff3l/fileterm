@@ -70,6 +70,12 @@
   height: 7px;
 }
 
+.server-dashboard-filters .server-dashboard-tag-filter {
+  width: auto;
+  max-width: 100%;
+  height: 32px;
+}
+
 .server-dashboard-filter-count {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;

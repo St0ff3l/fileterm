@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
 import type { ConnectionFolder, ConnectionProfile, SessionSnapshot, SystemMetrics, WorkspaceTab } from '@fileterm/core'
 import { Button } from '../../components/common/button/button'
+import { DropdownSelect } from '../../components/common/dropdown-select/dropdown-select'
 import { Input } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
@@ -169,6 +170,7 @@ export function ServerManagementOverview({
 }) {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<DashboardFilter>('all')
+  const [selectedTag, setSelectedTag] = useState('')
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false)
   // Focus mode owns the side panels, so the inspector folds away with it and the
@@ -189,22 +191,30 @@ export function ServerManagementOverview({
       ? flattenConnectionProfiles([selectedFolder])
       : flattenConnectionProfiles(tree.roots)
   const search = query.trim().toLocaleLowerCase()
+  const tags = [...new Set(profiles.flatMap((profile) => profile.tags ?? []))].sort((first, second) =>
+    first.localeCompare(second)
+  )
+  const tagFilter = tags.includes(selectedTag) ? selectedTag : ''
   const statusByProfile = new Map(
     baseProfiles.map((profile) => [profile.id, statusForProfile(profile.id, workspaceTabs, sessions)])
   )
   const statusCounts = { all: baseProfiles.length, connected: 0, connecting: 0, idle: 0 }
   const filterStatus = (status: StatusIndicatorStatus | undefined) =>
     status === 'connected' || status === 'connecting' ? status : 'idle'
-  for (const connection of statusByProfile.values()) {
-    statusCounts[filterStatus(connection?.status)]++
-  }
-  const isFiltered = Boolean(search) || statusFilter !== 'all'
-  const visibleProfiles = baseProfiles.filter(
+  const matchingProfiles = baseProfiles.filter(
     (profile) =>
-      (statusFilter === 'all' || filterStatus(statusByProfile.get(profile.id)?.status) === statusFilter) &&
-      [profile.name, profile.host, profile.note, profile.username].some((value) =>
+      (!tagFilter || profile.tags?.includes(tagFilter)) &&
+      [profile.name, profile.host, profile.note, profile.username, ...(profile.tags ?? [])].some((value) =>
         value?.toLocaleLowerCase().includes(search)
       )
+  )
+  statusCounts.all = matchingProfiles.length
+  for (const profile of matchingProfiles) {
+    statusCounts[filterStatus(statusByProfile.get(profile.id)?.status)]++
+  }
+  const isFiltered = Boolean(search || tagFilter) || statusFilter !== 'all'
+  const visibleProfiles = matchingProfiles.filter(
+    (profile) => statusFilter === 'all' || filterStatus(statusByProfile.get(profile.id)?.status) === statusFilter
   )
   const filterLabels = {
     all: t.allConnections,
@@ -384,6 +394,18 @@ export function ServerManagementOverview({
                   <span className="server-dashboard-filter-count">{statusCounts[status]}</span>
                 </Button>
               ))}
+              {tags.length ? (
+                <DropdownSelect
+                  ariaLabel={t.connectionTagFilter}
+                  className="server-dashboard-tag-filter"
+                  onChange={setSelectedTag}
+                  options={[
+                    { value: '', label: t.connectionAllTags },
+                    ...tags.map((tag) => ({ value: tag, label: tag }))
+                  ]}
+                  value={tagFilter}
+                />
+              ) : null}
             </div>
             <Input
               aria-label={t.serverDashboardSearchPlaceholder}
