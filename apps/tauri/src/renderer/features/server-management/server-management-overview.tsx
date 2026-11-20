@@ -29,7 +29,7 @@ import { AppIcon } from '../common/app-icon'
 import { SelectionControl } from '../common/selection-control'
 import { StatusIndicator, type StatusIndicatorStatus } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
-import { buildConnectionTree, flattenConnectionProfiles, type ConnectionTreeNode } from '../connections/connection-tree'
+import { buildConnectionTree, connectionFolderOptions, flattenConnectionProfiles } from '../connections/connection-tree'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/use-pointer-sort-fallback'
 import { lastSessionTabIdForProfile } from '../../hooks/session-tab-memory'
@@ -39,23 +39,12 @@ import { ServerManagementList } from './server-management-list'
 import type { ServerListSort } from './server-management-list-model'
 import { ServerCommandBatchDialog, type ServerCommandBatchDialogMode } from './server-command-batch-dialog'
 import { getCommandBatchTargets } from './server-command-batch-model'
-import { ServerSavedViews } from './server-saved-views'
-import { SERVER_STATUS_FILTERS, type ServerViewFilters } from './server-saved-views-model'
 import './server-management-overview.css'
 import './server-management-page-header.css'
 
 const MAX_METRIC_AGE_MS = 120_000
 
-function findFolder(nodes: ConnectionTreeNode[], folderId: string): ConnectionTreeNode | undefined {
-  for (const node of nodes) {
-    if (node.type === 'folder' && node.id === folderId) return node
-    if (node.type === 'folder') {
-      const found = findFolder(node.children, folderId)
-      if (found) return found
-    }
-  }
-  return undefined
-}
+const SERVER_STATUS_FILTERS = ['all', 'connected', 'connecting', 'idle'] as const
 
 function liveMetrics(profileId: string, tabs: WorkspaceTab[], sessions: Record<string, SessionSnapshot>) {
   const sessionTab = tabs.find((tab) => tab.profileId === profileId && sessions[tab.id]?.connected)
@@ -189,7 +178,7 @@ export function ServerManagementOverview({
   onToggleFocusMode?(): void
 }) {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ServerViewFilters['status']>('all')
+  const [statusFilter, setStatusFilter] = useState<(typeof SERVER_STATUS_FILTERS)[number]>('all')
   const [selectedTag, setSelectedTag] = useState('')
   const [view, setView] = useState<'cards' | 'list'>('cards')
   const [listSort, setListSort] = useState<ServerListSort | null>(null)
@@ -209,11 +198,12 @@ export function ServerManagementOverview({
   const inspectorScrollRef = useRef<HTMLElement>(null)
   useServerInsightStore()
   const tree = useMemo(() => buildConnectionTree(profiles, folders), [profiles, folders])
-  const selectedFolder = selectedFolderId ? findFolder(tree.roots, selectedFolderId) : undefined
-  const baseProfiles =
-    selectedFolder?.type === 'folder'
-      ? flattenConnectionProfiles([selectedFolder])
-      : flattenConnectionProfiles(tree.roots)
+  const folderOptions = useMemo(() => connectionFolderOptions(tree.roots), [tree])
+  const folderNode = selectedFolderId ? tree.map.get(selectedFolderId) : undefined
+  const selectedFolder = folderNode?.type === 'folder' ? folderNode : undefined
+  const baseProfiles = selectedFolder
+    ? flattenConnectionProfiles([selectedFolder])
+    : flattenConnectionProfiles(tree.roots)
   const search = query.trim().toLocaleLowerCase()
   const tags = [...new Set(profiles.flatMap((profile) => profile.tags ?? []))].sort((first, second) =>
     first.localeCompare(second)
@@ -360,7 +350,7 @@ export function ServerManagementOverview({
       ? `${displayedInsight.diskUsed} / ${displayedInsight.diskSize}`
       : (displayedInsight?.diskSize ?? null)
   const insightDiskPercent = displayedInsight?.diskPercent ?? null
-  const title = selectedFolder?.type === 'folder' ? selectedFolder.name : t.serverDashboardTitle
+  const title = selectedFolder ? selectedFolder.name : t.serverDashboardTitle
   const clearSelection = () => setSelectedProfileId(null)
   const clearOnBackgroundClick = (event: MouseEvent<HTMLElement>) => {
     if (event.target === event.currentTarget) clearSelection()
@@ -464,6 +454,17 @@ export function ServerManagementOverview({
 
           <div className="server-dashboard-toolbar">
             <div className="server-dashboard-filters" role="group" aria-label={t.serverDashboardStatusFilter}>
+              {folderOptions.length > 0 && (
+                <DropdownSelect
+                  ariaLabel={t.folder}
+                  className="server-dashboard-folder-filter"
+                  menuPlacement="auto"
+                  menuWidth="auto"
+                  onChange={(id) => onSelectFolder(id || null)}
+                  options={[{ value: '', label: t.allConnections }, ...folderOptions]}
+                  value={selectedFolder?.id ?? ''}
+                />
+              )}
               {SERVER_STATUS_FILTERS.map((status) => (
                 <Button
                   aria-pressed={statusFilter === status}
@@ -488,14 +489,6 @@ export function ServerManagementOverview({
                   value={tagFilter}
                 />
               ) : null}
-              <ServerSavedViews
-                filters={{ query, status: statusFilter, tag: tagFilter }}
-                onApply={({ query, status, tag }) => {
-                  setQuery(query)
-                  setStatusFilter(status)
-                  setSelectedTag(tag)
-                }}
-              />
             </div>
             <div className="server-dashboard-search-row">
               <Input
@@ -504,13 +497,6 @@ export function ServerManagementOverview({
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t.serverDashboardSearchPlaceholder}
                 prefix={<AppIcon name="search" size={14} />}
-                suffix={
-                  selectedFolder ? (
-                    <Button onClick={() => onSelectFolder(null)} size="sm" variant="ghost">
-                      {t.allConnections}
-                    </Button>
-                  ) : null
-                }
                 type="search"
                 value={query}
               />

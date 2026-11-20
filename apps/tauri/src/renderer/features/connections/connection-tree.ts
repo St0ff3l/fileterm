@@ -59,3 +59,19 @@ export function flattenConnectionProfiles(nodes: ConnectionTreeNode[]) {
   visit(nodes)
   return profiles
 }
+
+export function connectionFolderOptions(nodes: ConnectionTreeNode[]) {
+  const options: { value: string; label: string }[] = []
+
+  const visit = (items: ConnectionTreeNode[], prefix: string) => {
+    for (const item of items) {
+      if (item.type !== 'folder') continue
+      const label = prefix + item.name
+      options.push({ value: item.id, label })
+      visit(item.children, label + ' / ')
+    }
+  }
+
+  visit(nodes, '')
+  return options
+}
