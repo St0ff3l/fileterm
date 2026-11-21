@@ -3,7 +3,21 @@ pub fn get_config(app: &AppHandle) -> Result<Value, AppError> {
 }
 
 pub fn save_config(app: &AppHandle, input: Value) -> Result<Value, AppError> {
-    let previous = read_config(app)?;
+    let next = config_from_input(read_config(app)?, &input)?;
+    write_config(app, &next)?;
+    crate::services::logging::info(
+        app,
+        "webdav",
+        format!(
+            "configuration saved enabled={} insecure_tls={}",
+            next.enabled,
+            next.allow_insecure_tls == Some(true)
+        ),
+    );
+    Ok(public_config(&next))
+}
+
+fn config_from_input(previous: StoredConfig, input: &Value) -> Result<StoredConfig, AppError> {
     let enabled = input
         .get("enabled")
         .and_then(Value::as_bool)
@@ -47,25 +61,16 @@ pub fn save_config(app: &AppHandle, input: Value) -> Result<Value, AppError> {
         last_etag: previous.last_etag,
         content_hash: previous.content_hash,
     };
-    write_config(app, &next)?;
-    crate::services::logging::info(
-        app,
-        "webdav",
-        format!(
-            "configuration saved enabled={} insecure_tls={}",
-            next.enabled,
-            next.allow_insecure_tls == Some(true)
-        ),
-    );
-    Ok(public_config(&next))
+    Ok(next)
 }
 
-/// Checks the saved endpoint and credentials without enabling synchronization
-/// or changing the remote backup object.
-pub async fn test_connection(app: &AppHandle) -> Result<Value, AppError> {
+/// Checks draft endpoint settings without enabling synchronization, saving the
+/// draft, or changing the remote backup object.
+pub async fn test_connection(app: &AppHandle, input: &Value) -> Result<Value, AppError> {
     crate::services::logging::info(app, "webdav", "connection test started");
     let result = async {
-        let config = configured(app, false)?;
+        let config = config_from_input(read_config(app)?, input)?;
+        validate_config(&config, false)?;
         let response = authenticated(client()?.head(remote_url(&config)?), &config)
             .send()
             .await

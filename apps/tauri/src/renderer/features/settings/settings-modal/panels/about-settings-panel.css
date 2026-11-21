@@ -17,7 +17,7 @@
   justify-content: space-between;
   gap: 4px 16px;
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .about-info-list > div + div {
@@ -51,7 +51,7 @@
 .open-source-projects dt {
   margin-bottom: 3px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }
 
@@ -60,7 +60,7 @@
   flex-wrap: wrap;
   gap: 4px 16px;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   line-height: 1.6;
 }
 
@@ -82,7 +82,7 @@
 
 .open-source-license-text {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -91,7 +91,7 @@
 .open-source-license-text h5 {
   margin: 14px 0 4px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .open-source-license-text p,
@@ -108,7 +108,7 @@
 .third-party-license summary {
   padding: 6px 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
   cursor: pointer;
 }
@@ -132,6 +132,6 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }

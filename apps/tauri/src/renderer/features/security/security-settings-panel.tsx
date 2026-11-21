@@ -23,12 +23,14 @@ export function SecuritySettingsPanel({
   notice,
   focusBackupPasswordRequest = 0,
   onBackupPasswordFocusHandled,
+  onNoticeDismissed,
   onBackupPasswordSaved
 }: {
   desktopApi?: FileTermDesktopApi
   notice?: string | null
   focusBackupPasswordRequest?: number
   onBackupPasswordFocusHandled?: () => void
+  onNoticeDismissed?: () => void
   onBackupPasswordSaved?: () => void
 }) {
   const [settings, setSettings] = useState<SecuritySettings | null>(null)
@@ -330,11 +332,9 @@ export function SecuritySettingsPanel({
     ? { message: t.securityLoading, tone: 'loading' as const }
     : errorMessage && !actionFeedback
       ? { message: errorMessage, tone: 'error' as const }
-      : notice
-        ? { message: notice, tone: 'info' as const }
-        : feedbackMessage && !actionFeedback
-          ? { message: feedbackMessage, tone: 'success' as const }
-          : null
+      : feedbackMessage && !actionFeedback
+        ? { message: feedbackMessage, tone: 'success' as const }
+        : null
 
   return (
     <div className="settings-panel security-settings-panel">
@@ -343,6 +343,12 @@ export function SecuritySettingsPanel({
         <p className="settings-tools-hint">{t.securitySettingsHint}</p>
 
         {topFeedback ? <FeedbackText message={topFeedback.message} tone={topFeedback.tone} /> : null}
+        <FeedbackBubble
+          message={notice}
+          onClose={onNoticeDismissed}
+          sourceKey="settings.security.backup-password-required"
+          tone="info"
+        />
 
         <div className="security-card">
           <div className="security-card-header">

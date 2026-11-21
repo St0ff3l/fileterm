@@ -7,13 +7,13 @@
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 
   /* Font Sizes */
-  --font-size-xs: 11px;
-  --font-size-sm: 12px;
-  --font-size-md: 13px;
-  --font-size-base: 14px;
-  --font-size-lg: 16px;
-  --font-size-xl: 18px;
-  --font-size-2xl: 20px;
+  --font-size-xs: var(--ui-font-size-11px, 11px);
+  --font-size-sm: var(--ui-font-size-12px, 12px);
+  --font-size-md: var(--ui-font-size-13px, 13px);
+  --font-size-base: var(--ui-font-size-14px, 14px);
+  --font-size-lg: var(--ui-font-size-16px, 16px);
+  --font-size-xl: var(--ui-font-size-18px, 18px);
+  --font-size-2xl: var(--ui-font-size-20px, 20px);
 
   /* Line Heights */
   --line-height-tight: 1.25;
@@ -31,7 +31,7 @@
 
   /* Dialog title bars */
   --dialog-header-height: 44px;
-  --dialog-header-font-size: 13px;
+  --dialog-header-font-size: var(--ui-font-size-13px, 13px);
 
   /* Control Heights & Metrics */
   --control-height-sm: 28px;
@@ -50,12 +50,12 @@
   --button-padding-x-md: 20px;
   --button-padding-x-lg: 24px;
   --button-gap-md: 8px;
-  --button-font-size-compact: 11px;
-  --button-font-size-regular: 12px;
-  --button-font-size-prominent: 13px;
-  --button-font-size-sm: 11px;
-  --button-font-size-md: 12px;
-  --button-font-size-lg: 13px;
+  --button-font-size-compact: var(--ui-font-size-11px, 11px);
+  --button-font-size-regular: var(--ui-font-size-12px, 12px);
+  --button-font-size-prominent: var(--ui-font-size-13px, 13px);
+  --button-font-size-sm: var(--ui-font-size-11px, 11px);
+  --button-font-size-md: var(--ui-font-size-12px, 12px);
+  --button-font-size-lg: var(--ui-font-size-13px, 13px);
   --button-font-weight: 600;
   --button-line-height: 1;
 

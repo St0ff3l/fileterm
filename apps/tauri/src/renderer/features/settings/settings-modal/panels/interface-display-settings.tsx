@@ -1,5 +1,14 @@
 import type { AppIconVariant, FileTermDesktopApi } from '@fileterm/core'
-import { MAX_UI_ZOOM_PERCENT, MIN_UI_ZOOM_PERCENT, UI_ZOOM_PERCENT_STEP } from '@fileterm/core'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
+import {
+  MAX_EFFECTIVE_UI_TEXT_SCALE_PERCENT,
+  MAX_UI_FONT_SCALE_PERCENT,
+  MAX_UI_ZOOM_PERCENT,
+  MIN_UI_FONT_SCALE_PERCENT,
+  MIN_UI_ZOOM_PERCENT,
+  UI_FONT_SCALE_PERCENT_STEP,
+  UI_ZOOM_PERCENT_STEP
+} from '@fileterm/core'
 import { DropdownSelect } from '../../../common/dropdown-select'
 import { RadioCardGroup } from '../../../common/radio-card-group'
 import { SelectionControl } from '../../../common/selection-control'
@@ -43,6 +52,10 @@ type InterfaceDisplaySettingsContext = {
   isSavingUiZoomPercent: boolean
   uiZoomPercentError: string | null
   setUiZoomPercentPreference(nextValue: number): void
+  uiFontScalePercent: number
+  isSavingUiFontScalePercent: boolean
+  uiFontScalePercentError: string | null
+  setUiFontScalePercentPreference(nextValue: number): void
   maskConnectionAddresses: boolean
   isSavingMaskConnectionAddresses: boolean
   maskConnectionAddressesError: string | null
@@ -82,6 +95,10 @@ export function InterfaceDisplaySettingsSections() {
     isSavingUiZoomPercent,
     uiZoomPercentError,
     setUiZoomPercentPreference,
+    uiFontScalePercent,
+    isSavingUiFontScalePercent,
+    uiFontScalePercentError,
+    setUiFontScalePercentPreference,
     maskConnectionAddresses,
     isSavingMaskConnectionAddresses,
     maskConnectionAddressesError,
@@ -97,6 +114,11 @@ export function InterfaceDisplaySettingsSections() {
     desktopApi?.platform === 'darwin'
       ? { classic: dockClassic, material: dockMaterial, clean: dockClean }
       : { classic: platformClassic, material: platformMaterial, clean: platformClean }
+  const effectiveUiTextScalePercent = Math.min(
+    MAX_EFFECTIVE_UI_TEXT_SCALE_PERCENT,
+    Math.round((uiZoomPercent * uiFontScalePercent) / 100)
+  )
+  const uiTextScaleWasCapped = (uiZoomPercent * uiFontScalePercent) / 100 > MAX_EFFECTIVE_UI_TEXT_SCALE_PERCENT
 
   return (
     <>
@@ -120,7 +142,33 @@ export function InterfaceDisplaySettingsSections() {
             value={String(uiZoomPercent)}
           />
         </div>
-        {uiZoomPercentError ? <p className="modal-error">{uiZoomPercentError}</p> : null}
+        <FeedbackBubble message={uiZoomPercentError} sourceKey="settings.interface.zoom-percent" tone="error" />
+        <div aria-busy={isSavingUiFontScalePercent} className="theme-config-control" inert={isSavingUiFontScalePercent}>
+          <span className="theme-config-label">{t.uiFontScalePercent}</span>
+          <DropdownSelect
+            ariaLabel={t.uiFontScalePercent}
+            className="theme-config-select"
+            disabled={!desktopApi}
+            onChange={(value) => setUiFontScalePercentPreference(Number(value))}
+            options={Array.from(
+              { length: (MAX_UI_FONT_SCALE_PERCENT - MIN_UI_FONT_SCALE_PERCENT) / UI_FONT_SCALE_PERCENT_STEP + 1 },
+              (_, index) => {
+                const percent = MIN_UI_FONT_SCALE_PERCENT + index * UI_FONT_SCALE_PERCENT_STEP
+                return { value: String(percent), label: `${percent}%` }
+              }
+            )}
+            value={String(uiFontScalePercent)}
+          />
+          <p className="settings-tools-hint">
+            {t.effectiveUiTextScaleLabel}: {effectiveUiTextScalePercent}%
+            {uiTextScaleWasCapped ? ` ${t.effectiveUiTextScaleCappedLabel}` : ''}
+          </p>
+        </div>
+        <FeedbackBubble
+          message={uiFontScalePercentError}
+          sourceKey="settings.interface.font-scale-percent"
+          tone="error"
+        />
         <div className="overview-preference-list">
           <label
             aria-busy={isSavingUiZoomPreference}
@@ -191,14 +239,14 @@ export function InterfaceDisplaySettingsSections() {
             </span>
           </label>
         </div>
-        {compactTabBarError ? (
-          <p className="modal-error" role="alert">
-            {compactTabBarError}
-          </p>
-        ) : null}
-        {uiZoomPreferenceError ? <p className="modal-error">{uiZoomPreferenceError}</p> : null}
-        {filePanelPreferenceError ? <p className="modal-error">{filePanelPreferenceError}</p> : null}
-        {maskConnectionAddressesError ? <p className="modal-error">{maskConnectionAddressesError}</p> : null}
+        <FeedbackBubble message={compactTabBarError} sourceKey="settings.interface.compact-tab-bar" tone="error" />
+        <FeedbackBubble message={uiZoomPreferenceError} sourceKey="settings.interface.zoom-lock" tone="error" />
+        <FeedbackBubble message={filePanelPreferenceError} sourceKey="settings.interface.file-panel" tone="error" />
+        <FeedbackBubble
+          message={maskConnectionAddressesError}
+          sourceKey="settings.interface.mask-addresses"
+          tone="error"
+        />
       </section>
 
       <section className="settings-section">
@@ -247,7 +295,7 @@ export function InterfaceDisplaySettingsSections() {
               ]}
               value={appIcon}
             />
-            {appIconPreferenceError ? <p className="modal-error">{appIconPreferenceError}</p> : null}
+            <FeedbackBubble message={appIconPreferenceError} sourceKey="settings.interface.app-icon" tone="error" />
           </div>
         ) : null}
         {desktopApi?.platform === 'darwin' ? (
@@ -272,7 +320,11 @@ export function InterfaceDisplaySettingsSections() {
             </label>
           </div>
         ) : null}
-        {macosMenuBarIconPreferenceError ? <p className="modal-error">{macosMenuBarIconPreferenceError}</p> : null}
+        <FeedbackBubble
+          message={macosMenuBarIconPreferenceError}
+          sourceKey="settings.interface.macos-menu-bar-icon"
+          tone="error"
+        />
         <div className="overview-preference-list">
           <label
             aria-busy={isSavingWindowSizePreference}
@@ -293,7 +345,7 @@ export function InterfaceDisplaySettingsSections() {
             </span>
           </label>
         </div>
-        {windowSizePreferenceError ? <p className="modal-error">{windowSizePreferenceError}</p> : null}
+        <FeedbackBubble message={windowSizePreferenceError} sourceKey="settings.interface.window-size" tone="error" />
       </section>
     </>
   )

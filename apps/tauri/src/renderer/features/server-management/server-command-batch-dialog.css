@@ -26,7 +26,7 @@
 
 .server-command-batch-message > :is(svg, .material-symbols-outlined) {
   flex: none;
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
 }
 
 .server-command-batch-field {
@@ -98,7 +98,7 @@
 }
 
 .server-command-batch-targets .material-symbols-outlined {
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .server-command-batch-targets strong {

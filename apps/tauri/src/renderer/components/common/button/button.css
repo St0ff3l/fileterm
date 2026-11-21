@@ -137,7 +137,7 @@
 }
 
 .ft-btn__icon > .material-symbols-outlined {
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .ft-btn__spinner {

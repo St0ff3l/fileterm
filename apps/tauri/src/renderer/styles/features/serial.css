@@ -43,7 +43,7 @@
   border-radius: 5px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1.2;
 }
 
@@ -68,7 +68,7 @@
 .serial-toolbar__status {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   white-space: nowrap;
 }
 
@@ -92,7 +92,7 @@
   border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
   padding-top: 4px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .serial-transfer-panel summary {
@@ -125,7 +125,7 @@
   border-radius: 5px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .serial-transfer-panel button:hover:not(:disabled),
@@ -163,7 +163,7 @@
   border-radius: var(--radius-sm, 4px);
   color: var(--text-primary);
   background: var(--bg-input);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .serial-transfer-panel__option input:not(.selection-control) {
@@ -218,7 +218,7 @@
   border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
   padding-top: 4px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .serial-quick-panel summary {
@@ -258,7 +258,7 @@
   border-radius: 5px;
   color: var(--text-muted);
   background: transparent;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .serial-quick-panel button:hover:not(:disabled) {
@@ -280,7 +280,7 @@
   border-radius: var(--radius-sm, 4px);
   color: var(--text-primary);
   background: var(--bg-input);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .serial-quick-panel__loop input {

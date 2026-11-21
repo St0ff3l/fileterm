@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { DEFAULT_UI_ZOOM_PERCENT } from '@fileterm/core'
+import { DEFAULT_UI_FONT_SCALE_PERCENT, DEFAULT_UI_ZOOM_PERCENT } from '@fileterm/core'
 import { App } from './app'
 import { ErrorBoundary } from './features/common/error-boundary'
 import { createTauriApi } from '../bridge/tauri-api'
@@ -9,6 +9,7 @@ import { getLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
 import { applyUiZoomPercent } from './app/ui-zoom'
+import { applyUiFontScalePercent } from './app/ui-font-scale'
 import { setTerminalFontWeight } from './app/font-metrics'
 import { setTerminalRendererPreference } from './app/terminal-renderer-preference'
 import { MainWindowReveal } from './lib/main-window-reveal'
@@ -132,7 +133,12 @@ void createTauriApi()
         // Apply the loaded values before the first React render so CSS and the
         // proxy-backed translation table agree with App's initial state.
         applyThemeVariables(initialTheme, initialUiPreferences?.themeConfig)
-        await applyUiZoomPercent(initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT)
+        const initialUiZoomPercent = initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT
+        await applyUiZoomPercent(initialUiZoomPercent)
+        applyUiFontScalePercent(
+          initialUiPreferences?.uiFontScalePercent ?? DEFAULT_UI_FONT_SCALE_PERCENT,
+          initialUiZoomPercent
+        )
         setLocale(initialLocale)
 
         renderRoot(

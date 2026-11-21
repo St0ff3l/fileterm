@@ -27,6 +27,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             terminal_zoom_locked: false,
             ui_zoom_locked: false,
             ui_zoom_percent: default_ui_zoom_percent(),
+            ui_font_scale_percent: default_ui_font_scale_percent(),
             remember_window_size: default_remember_window_size(),
             workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
@@ -69,6 +70,8 @@ pub fn app_set_ui_preferences(
     let previous_app_icon = preferences.app_icon.clone();
     #[cfg(target_os = "macos")]
     let previous_ui_zoom_percent = preferences.ui_zoom_percent;
+    #[cfg(target_os = "macos")]
+    let previous_ui_font_scale_percent = preferences.ui_font_scale_percent;
     #[cfg(target_os = "macos")]
     let previous_compact_tab_bar = preferences.compact_tab_bar;
     #[cfg(target_os = "macos")]
@@ -129,6 +132,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(ui_zoom_percent) = input.ui_zoom_percent {
         preferences.ui_zoom_percent = ui_zoom_percent;
+    }
+    if let Some(ui_font_scale_percent) = input.ui_font_scale_percent {
+        preferences.ui_font_scale_percent = ui_font_scale_percent;
     }
     if let Some(remember_window_size) = input.remember_window_size {
         preferences.remember_window_size = remember_window_size;
@@ -293,11 +299,12 @@ pub fn app_set_ui_preferences(
         schedule_disabled_monitoring_cleanup(&app, &preferences.connection_defaults);
     }
     let _ = app.emit("app:ui-preferences-changed", &preferences);
-    // Page zoom and the tab bar height change renderer layout without a native
-    // window resize. Sync AppKit appearance and control geometry after theme,
-    // zoom or tab bar height changes.
+    // Page zoom, font size and the tab bar height change renderer layout without a native
+    // window resize. Sync AppKit appearance and control geometry after theme or
+    // layout preference changes.
     #[cfg(target_os = "macos")]
     if previous_ui_zoom_percent != preferences.ui_zoom_percent
+        || previous_ui_font_scale_percent != preferences.ui_font_scale_percent
         || previous_compact_tab_bar != preferences.compact_tab_bar
         || theme_changed
     {
@@ -383,6 +390,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
             ui_zoom_locked: None,
             ui_zoom_percent: None,
+            ui_font_scale_percent: None,
             remember_window_size: None,
             workspace_mode: None,
             compact_tab_bar: None,
@@ -426,6 +434,7 @@ pub fn app_toggle_ui_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError
             terminal_zoom_locked: None,
             ui_zoom_locked: Some(!current.ui_zoom_locked),
             ui_zoom_percent: None,
+            ui_font_scale_percent: None,
             remember_window_size: None,
             workspace_mode: None,
             compact_tab_bar: None,
@@ -476,6 +485,7 @@ pub fn app_adjust_ui_zoom(app: AppHandle, operation: &str) -> Result<UiPreferenc
             terminal_zoom_locked: None,
             ui_zoom_locked: None,
             ui_zoom_percent: Some(next),
+            ui_font_scale_percent: None,
             remember_window_size: None,
             workspace_mode: None,
             compact_tab_bar: None,

@@ -5,6 +5,7 @@ import {
   type UiPreferencesInput,
   type FileTermDesktopApi
 } from '@fileterm/core'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import type { LocaleMessages } from '../../../../i18n'
 import { SelectionControl } from '../../../common/selection-control'
 
@@ -20,20 +21,25 @@ export function DiagnosticLogSettings({
     'basicLoggingEnabled' | 'diagnosticLogCategories'
   > | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const savingRef = useRef(false)
 
   useEffect(() => {
     if (!desktopApi) return
     let active = true
     const apply = (next: UiPreferences) => {
-      if (active) setPreferences(next)
+      if (active) {
+        setPreferences(next)
+        setLoadError(false)
+      }
     }
+    setLoadError(false)
     void desktopApi
       .getUiPreferences()
       .then(apply)
       .catch(() => {
-        if (active) setError(true)
+        if (active) setLoadError(true)
       })
     const unsubscribe = desktopApi.onUiPreferencesChanged(apply)
     return () => {
@@ -46,12 +52,12 @@ export function DiagnosticLogSettings({
     if (!desktopApi || savingRef.current) return
     savingRef.current = true
     setSaving(true)
-    setError(false)
+    setSaveError(false)
     try {
       const next = await desktopApi.setUiPreferences(input)
       setPreferences(next)
     } catch {
-      setError(true)
+      setSaveError(true)
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -95,11 +101,16 @@ export function DiagnosticLogSettings({
         ))}
       </div>
       <p className="diagnostic-log-help">{t.diagnosticLogTroubleshootingHint}</p>
-      {error ? (
+      {loadError ? (
         <p className="modal-error" role="alert">
           {t.diagnosticLogSettingsFailed}
         </p>
       ) : null}
+      <FeedbackBubble
+        message={saveError ? t.diagnosticLogSettingsFailed : null}
+        sourceKey="settings.logs.save"
+        tone="error"
+      />
     </div>
   )
 }

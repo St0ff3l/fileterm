@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import figNotices from '../../../../../../../../THIRD-PARTY-NOTICES.md?raw'
 import bundledNotices from '../../../../../../../../THIRD_PARTY_NOTICES.md?raw'
 import themeNotices from '../../../../../../../../docs/quality/iterm2-color-scheme-attribution.md?raw'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { useExternalUrl } from '../../../../hooks/use-external-url'
 import type { LocaleMessages } from '../../../../i18n'
 import { SettingsDisclosureSummary } from '../settings-disclosure-summary'
@@ -82,11 +83,7 @@ export function OpenSourceNotices({
           </ReactMarkdown>
         </div>
       </details>
-      {externalUrlError ? (
-        <p className="modal-error" role="alert">
-          {externalUrlError}
-        </p>
-      ) : null}
+      <FeedbackBubble message={externalUrlError} sourceKey="settings.about.external-url" tone="error" />
     </div>
   )
 }

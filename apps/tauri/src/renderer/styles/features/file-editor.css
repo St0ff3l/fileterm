@@ -39,14 +39,14 @@
 }
 
 .file-editor-title strong {
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .file-editor-title b {
   flex: 0 0 auto;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 700;
 }
 
@@ -223,7 +223,7 @@
   padding: 0 12px;
   border: 0;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 600;
 }
 
@@ -271,7 +271,7 @@
   border: 0;
   border-radius: 7px;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.25;
 }
 
@@ -304,7 +304,7 @@
   padding: 0;
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -359,7 +359,7 @@
   min-height: 38px;
   padding: 0 12px;
   border-top: 1px solid var(--border-light);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .file-editor-statusbar span {

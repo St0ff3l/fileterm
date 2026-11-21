@@ -22,7 +22,7 @@
 }
 
 .hero-title {
-  font-size: 32px;
+  font-size: var(--ui-font-size-32px, 32px);
   font-weight: 400;
   color: var(--text-main);
   margin: 0 0 12px 0;
@@ -30,7 +30,7 @@
 }
 
 .hero-subtitle {
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
   color: var(--text-muted);
   margin: 0 0 28px 0;
   line-height: 1.6;
@@ -138,7 +138,7 @@
 }
 
 .stat-icon span.material-symbols-outlined {
-  font-size: 22px;
+  font-size: var(--ui-font-size-22px, 22px);
 }
 
 .stat-icon-total {
@@ -171,7 +171,7 @@
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: var(--ui-font-size-28px, 28px);
   font-weight: 300;
   color: var(--text-main);
   line-height: 1;
@@ -179,7 +179,7 @@
 }
 
 .stat-label {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   color: var(--text-muted);
   font-weight: 400;
 }
@@ -190,7 +190,7 @@
 }
 
 .section-title {
-  font-size: 20px;
+  font-size: var(--ui-font-size-20px, 20px);
   font-weight: 400;
   color: var(--text-main);
   margin: 0;
@@ -245,7 +245,7 @@
 }
 
 .recent-icon span.material-symbols-outlined {
-  font-size: 20px;
+  font-size: var(--ui-font-size-20px, 20px);
 }
 
 .recent-icon-ssh {
@@ -270,7 +270,7 @@
 
 .type-badge {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
   padding: 0;
   border-radius: 0;
@@ -302,7 +302,7 @@
 }
 
 .recent-name {
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
   font-weight: 500;
   color: var(--text-main);
   margin: 0 0 6px 0;
@@ -319,7 +319,7 @@
 
 .recent-user {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -425,7 +425,7 @@
 
 .action-icon span.material-symbols-outlined,
 .action-icon .app-icon {
-  font-size: 22px;
+  font-size: var(--ui-font-size-22px, 22px);
   color: var(--text-main);
 }
 
@@ -434,14 +434,14 @@
 }
 
 .action-title {
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
   font-weight: 500;
   color: var(--text-main);
   margin: 0 0 4px 0;
 }
 
 .action-desc {
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   color: var(--text-muted);
   margin: 0;
   line-height: 1.4;
@@ -458,19 +458,19 @@
 }
 
 .fs-shell.has-ai-copilot .hero-title {
-  font-size: 24px;
+  font-size: var(--ui-font-size-24px, 24px);
   margin-bottom: 8px;
 }
 
 .fs-shell.has-ai-copilot .hero-subtitle {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   margin-bottom: 18px;
 }
 
 .fs-shell.has-ai-copilot .hero-btn {
   height: 36px;
   padding: 0 16px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .fs-shell.has-ai-copilot .recent-grid {

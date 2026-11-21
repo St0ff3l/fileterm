@@ -41,6 +41,7 @@ export type UseWorkspaceIpcSyncOptions = {
   terminalZoomLocked: boolean
   uiZoomLocked: boolean
   uiZoomPercent: number
+  uiFontScalePercent: number
   rememberWindowSize: boolean
   filePanelRememberRatio: boolean
   transferSidebarCollapsedByDefault: boolean
@@ -60,6 +61,7 @@ export type UseWorkspaceIpcSyncOptions = {
   onTerminalZoomLockedChange(value: boolean): void
   onUiZoomLockedChange(value: boolean): void
   onUiZoomPercentChange(value: number): void
+  onUiFontScalePercentChange(value: number): void
   onRememberWindowSizeChange(value: boolean): void
   onFilePanelRememberRatioChange(value: boolean): void
   onTransferSidebarCollapsedByDefaultChange(value: boolean): void

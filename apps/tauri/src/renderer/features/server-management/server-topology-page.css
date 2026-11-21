@@ -80,7 +80,7 @@
 .server-topology__details h2,
 .server-topology__details h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }
 
@@ -93,7 +93,7 @@
 
 .server-topology__identity > strong {
   overflow-wrap: anywhere;
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
 }
 
 .server-topology__connection-status {
@@ -101,14 +101,14 @@
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .server-topology__facts {
   display: grid;
   gap: 8px;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .server-topology__facts > div {
@@ -180,7 +180,7 @@
 .server-topology__error {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }
 
@@ -319,7 +319,7 @@
 }
 
 .server-topology__memo > label {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }
 
@@ -379,14 +379,14 @@
   gap: 5px;
   min-width: 0;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   line-height: 1.2;
 }
 
 .server-topology__node-meta > .material-symbols-outlined {
   flex: none;
   color: var(--accent-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .server-topology__node-meta > .status-indicator {
@@ -404,10 +404,10 @@
 }
 
 .server-topology__node strong {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .server-topology__node small {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }

@@ -584,12 +584,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       allowInsecureTls?: boolean
       password?: string
     }) => invoke<WebDavSyncConfig>('app_set_webdav_sync_config', { input }),
-    testWebDavSync: () => invoke<WebDavSyncResult>('app_test_webdav_sync'),
+    testWebDavSync: (input: WebDavSyncConfig & { password?: string }) =>
+      invoke<WebDavSyncResult>('app_test_webdav_sync', { input }),
     uploadWebDavSync: (mode: BackupUploadMode) => invoke<WebDavSyncResult>('app_upload_webdav_sync', { mode }),
     downloadWebDavSync: (mode: BackupDownloadMode) => invoke<WebDavSyncResult>('app_download_webdav_sync', { mode }),
     getS3BackupConfig: () => invoke<S3BackupConfig>('app_get_s3_backup_config'),
     saveS3BackupConfig: (input: S3BackupConfigInput) => invoke<S3BackupConfig>('app_set_s3_backup_config', { input }),
-    testS3Backup: () => invoke<S3BackupResult>('app_test_s3_backup'),
+    testS3Backup: (input: S3BackupConfigInput) => invoke<S3BackupResult>('app_test_s3_backup', { input }),
     uploadS3Backup: (mode: BackupUploadMode) => invoke<S3BackupResult>('app_upload_s3_backup', { mode }),
     downloadS3Backup: (mode: BackupDownloadMode) => invoke<S3BackupResult>('app_download_s3_backup', { mode }),
     createProfile: (input: unknown) => invoke<WorkspaceSnapshot>('app_create_profile', { input }),
