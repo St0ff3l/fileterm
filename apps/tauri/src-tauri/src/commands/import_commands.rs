@@ -221,8 +221,11 @@ pub fn app_set_webdav_sync_config(
 }
 
 #[tauri::command]
-pub async fn app_test_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
-    crate::services::webdav::test_connection(&app).await
+pub async fn app_test_webdav_sync(
+    app: AppHandle,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::test_connection(&app, &input).await
 }
 
 #[tauri::command]
@@ -264,8 +267,11 @@ pub fn app_set_s3_backup_config(
 }
 
 #[tauri::command]
-pub async fn app_test_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
-    crate::services::s3_backup::test_connection(&app).await
+pub async fn app_test_s3_backup(
+    app: AppHandle,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::test_connection(&app, &input).await
 }
 
 #[tauri::command]

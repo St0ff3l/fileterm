@@ -17,7 +17,7 @@
 
 .confirm-action-dialog__title {
   color: var(--dialog-title);
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
   font-weight: 650;
   line-height: 1.2;
   letter-spacing: -0.02em;
@@ -26,7 +26,7 @@
 .confirm-action-dialog__description {
   min-width: 0;
   color: var(--dialog-description);
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

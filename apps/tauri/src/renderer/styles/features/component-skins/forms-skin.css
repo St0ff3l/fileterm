@@ -148,7 +148,7 @@
 :root:not([data-theme*='light']) .command-form-standalone .connection-manager-title,
 :root[data-theme='default'] .command-form-standalone .connection-manager-title {
   color: var(--text-main) !important;
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
   font-weight: 500 !important;
 }
 
@@ -193,7 +193,7 @@
 :root:not([data-theme*='light']) .command-form-standalone-page label,
 :root[data-theme='default'] .command-form-standalone-page label {
   color: var(--text-main) !important;
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
   font-weight: 500 !important;
   margin-bottom: 4px !important;
 }
@@ -236,7 +236,7 @@
   border: 1px solid var(--border-subtle) !important;
   border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
-  font-size: 14px !important;
+  font-size: var(--ui-font-size-14px, 14px) !important;
   min-height: 36px !important;
   height: 36px !important;
   padding: 0 12px !important;
@@ -374,7 +374,7 @@
 :root[data-theme='default'] .command-editor-dialog-textarea textarea {
   background: transparent !important;
   color: var(--text-main) !important;
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
 }
 
 /* Parameters section */
@@ -420,7 +420,7 @@
   height: 36px !important;
   min-width: 82px !important;
   padding: 0 16px !important;
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
   font-weight: 600 !important;
   cursor: pointer !important;
   transition:
@@ -441,7 +441,7 @@
   height: 36px !important;
   min-width: 82px !important;
   padding: 0 16px !important;
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
   font-weight: 600 !important;
   cursor: pointer !important;
   transition:
@@ -467,7 +467,7 @@
 :root:not([data-theme*='light']) .command-editor-checkbox-row,
 :root[data-theme='default'] .command-editor-checkbox-row {
   margin-top: 4px !important;
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
   color: var(--text-main) !important;
 }
 
@@ -477,14 +477,14 @@
 :root:not([data-theme]) .command-editor-checkbox-row span,
 :root:not([data-theme*='light']) .command-editor-checkbox-row span,
 :root[data-theme='default'] .command-editor-checkbox-row span {
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
   font-weight: 500 !important;
 }
 
 :root:not([data-theme]) .command-param-hints-row > small,
 :root:not([data-theme*='light']) .command-param-hints-row > small,
 :root[data-theme='default'] .command-param-hints-row > small {
-  font-size: 12px !important;
+  font-size: var(--ui-font-size-12px, 12px) !important;
 }
 
 :root:not([data-theme]) .command-editor-dialog-params .command-param-hints button,
@@ -496,7 +496,7 @@
 :root:not([data-theme]) .command-preview code,
 :root:not([data-theme*='light']) .command-preview code,
 :root[data-theme='default'] .command-preview code {
-  font-size: 13px !important;
+  font-size: var(--ui-font-size-13px, 13px) !important;
 }
 
 /* Detected parameters preview box */

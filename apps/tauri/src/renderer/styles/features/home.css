@@ -83,7 +83,7 @@
 .brand-title {
   margin: 0;
   color: var(--text-main);
-  font-size: 21px;
+  font-size: var(--ui-font-size-21px, 21px);
   font-weight: 400;
   line-height: 1.25;
   letter-spacing: -0.015em;
@@ -99,7 +99,7 @@
   background-color: var(--bg-hover);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   line-height: 1.4;
   letter-spacing: 0.02em;
 }
@@ -124,7 +124,7 @@
   border: none;
   border-radius: 8px;
   color: var(--text-primary);
-  font-size: 13.5px;
+  font-size: var(--ui-font-size-13-5px, 13.5px);
   font-weight: 500;
   line-height: 1.4;
   text-align: left;
@@ -140,7 +140,7 @@
 .sidebar-nav-link span.material-symbols-outlined {
   display: block;
   flex: 0 0 18px;
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
   line-height: 1;
 }
 
@@ -191,7 +191,7 @@
   color: var(--text-main);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   text-align: left;
   transition:
     background-color var(--duration-hover) var(--ease-out),
@@ -214,7 +214,7 @@
 
 .sidebar-update-hint .material-symbols-outlined {
   color: var(--accent-highlight);
-  font-size: 17px;
+  font-size: var(--ui-font-size-17px, 17px);
 }
 
 .sidebar-update-hint.is-downloaded {
@@ -289,7 +289,7 @@
 
 .home-sidebar.is-collapsed .sidebar-nav-link span.material-symbols-outlined {
   flex: 0 0 auto;
-  font-size: 19px;
+  font-size: var(--ui-font-size-19px, 19px);
 }
 
 .home-sidebar.is-collapsed .sidebar-nav-link > .app-icon {
@@ -435,7 +435,7 @@
 .home-content-body .manager-inline .connection-manager-title {
   display: flex !important;
   align-items: center !important;
-  font-size: 24px !important;
+  font-size: var(--ui-font-size-24px, 24px) !important;
   font-weight: 400 !important;
   letter-spacing: -0.015em !important;
   gap: 12px !important;
@@ -443,7 +443,7 @@
 }
 
 .home-content-body .manager-inline .connection-manager-title .material-symbols-outlined {
-  font-size: 26px !important;
+  font-size: var(--ui-font-size-26px, 26px) !important;
   color: var(--accent-highlight) !important;
 }
 
@@ -611,7 +611,7 @@
   padding: 12px 16px;
   background-color: var(--surface-table-head);
   border-bottom: 1px solid var(--border-light);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -633,7 +633,7 @@
   align-items: center;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-light);
-  font-size: 13.5px;
+  font-size: var(--ui-font-size-13-5px, 13.5px);
   color: var(--text-main);
   transition:
     background-color var(--duration-hover) var(--ease-out),
@@ -694,7 +694,7 @@
 }
 
 .col-icon span.material-symbols-outlined {
-  font-size: 20px;
+  font-size: var(--ui-font-size-20px, 20px);
 }
 
 .col-name {
@@ -708,7 +708,7 @@
 }
 
 .folder-chevron {
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
   color: var(--type-muted);
   margin-right: 8px;
   cursor: pointer;
@@ -725,7 +725,7 @@
 .col-path,
 .col-user {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -737,7 +737,7 @@
   align-items: center;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -843,7 +843,7 @@
 }
 
 .col-action button span.material-symbols-outlined {
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
 }
 
 /* Folder Nesting / Empty Rows */
@@ -862,7 +862,7 @@
   padding: 40px 16px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
   font-style: italic;
 }
 
@@ -882,7 +882,7 @@
 .footer-copyright {
   width: 100%;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1;
   color: var(--text-muted);
   display: flex;
@@ -912,7 +912,7 @@
   border: none;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--ui-font-size-11-5px, 11.5px);
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 4px;
@@ -1093,7 +1093,7 @@
   border-radius: 999px;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -1112,7 +1112,7 @@
 .background-session-status {
   gap: 4px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .background-session-status.is-connected {
@@ -1139,7 +1139,7 @@
 .background-session-id {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .background-session-actions {
@@ -1164,14 +1164,14 @@
 
 .background-session-empty strong {
   color: var(--text-main);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
 }
 
 .background-session-empty span {
   max-width: 420px;
   white-space: normal;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 @media (max-width: 980px) {

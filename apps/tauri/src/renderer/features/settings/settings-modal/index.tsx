@@ -162,6 +162,7 @@ export function SettingsModal({
                 focusBackupPasswordRequest={securityFocusRequest}
                 notice={securityNotice}
                 onBackupPasswordFocusHandled={handleSecurityBackupPasswordFocusHandled}
+                onNoticeDismissed={() => setSecurityNotice(null)}
                 onBackupPasswordSaved={() => setSecurityNotice(null)}
               />
             ) : null}

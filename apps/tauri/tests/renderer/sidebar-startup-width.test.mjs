@@ -178,9 +178,11 @@ function renderWorkspace({
   local = false,
   copilot = false,
   transfers = false,
-  width = 214
+  width = 214,
+  viewportWidth = 1280
 } = {}) {
   const { AppMainWorkspace } = load('../../src/renderer/features/layout/app-main-workspace.tsx', {
+    window: { matchMedia: () => ({ matches: viewportWidth <= 760 }) },
     require(name) {
       if (name.endsWith('.css')) return {}
       if (name === 'react/jsx-runtime') {
@@ -189,7 +191,7 @@ function renderWorkspace({
       }
       if (name === 'react') {
         return {
-          useState: (value) => [value, () => {}],
+          useState: (value) => [typeof value === 'function' ? value() : value, () => {}],
           useEffect() {},
           useCallback: (callback) => callback,
           useMemo: (factory) => factory()
@@ -239,6 +241,11 @@ test('home and session titlebars and sidebars start at the same default width', 
   const managed = renderWorkspace({ management: true, width: 300 })
   assert.equal(managed.props.style['--sidebar-width'], '300px')
   assert.equal(managed.props.style['--host-rail-width'], '320px')
+})
+
+test('server management rail collapses when page zoom leaves a narrow viewport', () => {
+  const managed = renderWorkspace({ management: true, viewportWidth: 696 })
+  assert.equal(managed.props.style['--host-rail-width'], '44px')
 })
 
 test('remote, transfer and local tabs reuse the same visible terminal edge frame', () => {

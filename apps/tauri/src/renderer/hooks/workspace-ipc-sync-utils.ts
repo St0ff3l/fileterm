@@ -18,6 +18,7 @@ export type SyncedUiPreferences = Pick<
   | 'terminalZoomLocked'
   | 'uiZoomLocked'
   | 'uiZoomPercent'
+  | 'uiFontScalePercent'
   | 'rememberWindowSize'
   | 'filePanelRememberRatio'
   | 'transferSidebarCollapsedByDefault'
@@ -39,6 +40,7 @@ export function sameSyncedUiPreferences(left: SyncedUiPreferences, right: Synced
     left.terminalZoomLocked === right.terminalZoomLocked &&
     left.uiZoomLocked === right.uiZoomLocked &&
     left.uiZoomPercent === right.uiZoomPercent &&
+    left.uiFontScalePercent === right.uiFontScalePercent &&
     left.rememberWindowSize === right.rememberWindowSize &&
     left.filePanelRememberRatio === right.filePanelRememberRatio &&
     left.transferSidebarCollapsedByDefault === right.transferSidebarCollapsedByDefault &&
@@ -72,6 +74,7 @@ export function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPre
     terminalZoomLocked: preferences.terminalZoomLocked,
     uiZoomLocked: preferences.uiZoomLocked,
     uiZoomPercent: preferences.uiZoomPercent,
+    uiFontScalePercent: preferences.uiFontScalePercent,
     rememberWindowSize: preferences.rememberWindowSize,
     filePanelRememberRatio: preferences.filePanelRememberRatio,
     transferSidebarCollapsedByDefault: preferences.transferSidebarCollapsedByDefault,

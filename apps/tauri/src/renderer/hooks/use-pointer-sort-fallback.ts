@@ -34,8 +34,8 @@ export function usePointerSortFallback<T>({
   onCancel
 }: {
   onStart(source: T): void
-  onTarget(source: T, target: PointerSortTarget, clientY: number): void
-  onDrop(source: T, target: PointerSortTarget | null, clientY: number): void
+  onTarget(source: T, target: PointerSortTarget, clientY: number, clientX: number): void
+  onDrop(source: T, target: PointerSortTarget | null, clientY: number, clientX: number): void
   onCancel(): void
 }) {
   const stateRef = useRef<PointerSortState<T>>(null)
@@ -118,6 +118,11 @@ export function usePointerSortFallback<T>({
         // the image by the cursor's delta from this exact start frame.
         state.dragStartX = event.clientX
         state.dragStartY = event.clientY
+        try {
+          state.sourceElement.setPointerCapture(state.pointerId)
+        } catch {
+          // Window-level listeners remain the fallback on WebViews that reject pointer capture.
+        }
         event.preventDefault()
         createGhost(state.sourceElement, event.clientX, event.clientY)
         document.documentElement.classList.add('fileterm-pointer-sorting')
@@ -127,7 +132,7 @@ export function usePointerSortFallback<T>({
       event.preventDefault()
       moveGhost(state, event.clientX, event.clientY)
       const target = resolveTarget(event.clientX, event.clientY)
-      if (target) callbacksRef.current.onTarget(state.source, target, event.clientY)
+      if (target) callbacksRef.current.onTarget(state.source, target, event.clientY, event.clientX)
     }
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -139,7 +144,12 @@ export function usePointerSortFallback<T>({
       }
       removeGhost()
       if (!state.active) return
-      callbacksRef.current.onDrop(state.source, resolveTarget(event.clientX, event.clientY), event.clientY)
+      callbacksRef.current.onDrop(
+        state.source,
+        resolveTarget(event.clientX, event.clientY),
+        event.clientY,
+        event.clientX
+      )
     }
 
     const handlePointerCancel = () => {
@@ -170,14 +180,11 @@ export function usePointerSortFallback<T>({
 
   return (event: ReactPointerEvent, source: T) => {
     if (event.button !== 0 || !event.isPrimary) return
-    if (event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR)) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      // Window-level listeners remain the fallback on WebViews that reject
-      // pointer capture for a synthetic or already-released pointer.
+    if (event.target instanceof Element) {
+      const interactive = event.target.closest(INTERACTIVE_SELECTOR)
+      if (interactive && !interactive.hasAttribute('data-fileterm-sort-handle')) return
     }
+    const rect = event.currentTarget.getBoundingClientRect()
     stateRef.current = {
       source,
       sourceElement: event.currentTarget as HTMLElement,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   createCodexThemeConfig,
   createDefaultThemeConfig,
+  DEFAULT_UI_FONT_SCALE_PERCENT,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   DEFAULT_UI_ZOOM_PERCENT,
   DEFAULT_RESOURCE_MONITORING_METRICS,
@@ -21,6 +22,7 @@ import {
 import { deriveThemeVariant, normalizeSavedTheme, themeVariantForMode } from '../app/theme-config'
 import { registerImportedFonts } from '../app/imported-fonts'
 import { applyUiZoomPercent } from '../app/ui-zoom'
+import { applyUiFontScalePercent } from '../app/ui-font-scale'
 import { formatAppError, reportError, type ErrorDetails } from '../app/app-error-utils'
 import { DEFAULT_SIDEBAR_WIDTH, FILE_PANEL_PREFERENCES_KEY, MAX_FILE_PANEL_RATIO } from '../app/app-shell-utils'
 import { getLocale, setLocale, type AppLocale } from '../i18n'
@@ -47,6 +49,7 @@ export type InitialUiPreferences = Pick<
   | 'terminalZoomLocked'
   | 'uiZoomLocked'
   | 'uiZoomPercent'
+  | 'uiFontScalePercent'
   | 'rememberWindowSize'
   | 'workspaceMode'
   | 'compactTabBar'
@@ -145,6 +148,9 @@ export function useAppShellState({
   const [uiZoomPercent, setUiZoomPercent] = useState(
     () => initialUiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT
   )
+  const [uiFontScalePercent, setUiFontScalePercent] = useState(
+    () => initialUiPreferences?.uiFontScalePercent ?? DEFAULT_UI_FONT_SCALE_PERCENT
+  )
   const [rememberWindowSize, setRememberWindowSize] = useState(() => initialUiPreferences?.rememberWindowSize ?? false)
   const [workspaceMode] = useWorkspaceMode(desktopApi, initialUiPreferences?.workspaceMode)
   const [compactTabBar] = useCompactTabBar(desktopApi, initialUiPreferences?.compactTabBar)
@@ -155,6 +161,9 @@ export function useAppShellState({
   useLayoutEffect(() => {
     void applyUiZoomPercent(uiZoomPercent)
   }, [uiZoomPercent])
+  useLayoutEffect(() => {
+    applyUiFontScalePercent(uiFontScalePercent, uiZoomPercent)
+  }, [uiFontScalePercent, uiZoomPercent])
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(
     () => initialUiPreferences?.filePanelRememberRatio ?? true
   )
@@ -351,6 +360,7 @@ export function useAppShellState({
     terminalZoomLocked,
     uiZoomLocked,
     uiZoomPercent,
+    uiFontScalePercent,
     rememberWindowSize,
     filePanelRememberRatio,
     transferSidebarCollapsedByDefault,
@@ -375,6 +385,7 @@ export function useAppShellState({
     onTerminalZoomLockedChange: setTerminalZoomLocked,
     onUiZoomLockedChange: setUiZoomLocked,
     onUiZoomPercentChange: setUiZoomPercent,
+    onUiFontScalePercentChange: setUiFontScalePercent,
     onRememberWindowSizeChange: setRememberWindowSize,
     onFilePanelRememberRatioChange: setFilePanelRememberRatio,
     onTransferSidebarCollapsedByDefaultChange: setTransferSidebarCollapsedByDefault,
@@ -518,6 +529,8 @@ export function useAppShellState({
     setUiZoomLocked,
     uiZoomPercent,
     setUiZoomPercent,
+    uiFontScalePercent,
+    setUiFontScalePercent,
     rememberWindowSize,
     setRememberWindowSize,
     workspaceMode,

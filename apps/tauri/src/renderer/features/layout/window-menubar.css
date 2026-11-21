@@ -14,12 +14,12 @@
 
 .window-menubar .window-menu-items button {
   padding: 0 7px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .window-menubar .window-control-buttons button {
   width: 40px;
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .window-menubar .window-control-buttons .app-close-button--window {

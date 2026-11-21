@@ -38,6 +38,7 @@ export function useSettingsModalEffects({
     setShowMacosMenuBarIcon,
     setAppIcon,
     setUiZoomPercent,
+    setUiFontScalePercent,
     setMaskConnectionAddresses,
     setMcpAgentPreferences,
     setConnectionDefaults,
@@ -47,9 +48,9 @@ export function useSettingsModalEffects({
     setOverviewShowAllConnections,
     setOverviewShowQuickActions,
     setOverviewSectionOrder,
-    setUpdatePreferenceError,
+    setUpdatePreferenceLoadError,
     setImportedFonts,
-    setFontImportError,
+    setFontImportLoadError,
     localTerminalShellScanVersion,
     setLocalTerminalShellOptions,
     setIsLoadingLocalTerminalShellOptions,
@@ -60,6 +61,7 @@ export function useSettingsModalEffects({
     if (!desktopApi) return
 
     let canceled = false
+    setFontImportLoadError(null)
     void desktopApi
       .listImportedFonts()
       .then(async (fonts) => {
@@ -71,13 +73,14 @@ export function useSettingsModalEffects({
         )
         if (canceled) return
         setImportedFonts(fonts)
+        setFontImportLoadError(null)
         registerImportedFonts(
           entries.filter((entry): entry is { font: (typeof fonts)[number]; dataUrl: string } => entry !== null)
         )
       })
       .catch((cause: unknown) => {
         console.error('[FileTerm] 加载导入字体', cause)
-        if (!canceled) setFontImportError(t.themeFontImportFailed)
+        if (!canceled) setFontImportLoadError(t.themeFontImportFailed)
       })
 
     return () => {
@@ -129,6 +132,7 @@ export function useSettingsModalEffects({
     let canceled = false
     const applyUiPreferences = (preferences: UiPreferences) => {
       if (canceled) return
+      setUpdatePreferenceLoadError(null)
       setAutoCheckUpdates(preferences.autoCheckUpdates)
       setUpdateChannel(preferences.updateChannel)
       setTerminalZoomLocked(preferences.terminalZoomLocked)
@@ -141,6 +145,7 @@ export function useSettingsModalEffects({
       setShowMacosMenuBarIcon(preferences.showMacosMenuBarIcon)
       setAppIcon(preferences.appIcon)
       setUiZoomPercent(preferences.uiZoomPercent)
+      setUiFontScalePercent(preferences.uiFontScalePercent)
       setMaskConnectionAddresses(preferences.maskConnectionAddresses)
       setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
@@ -161,7 +166,7 @@ export function useSettingsModalEffects({
       .then(applyUiPreferences)
       .catch(() => {
         if (!canceled) {
-          setUpdatePreferenceError(t.updatePreferenceLoadFailed)
+          setUpdatePreferenceLoadError(t.updatePreferenceLoadFailed)
         }
       })
 

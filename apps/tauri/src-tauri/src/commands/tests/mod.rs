@@ -795,11 +795,24 @@ mod ui_preferences_tests {
 
         assert_eq!(preferences.terminal_renderer, "webgl");
         assert_eq!(preferences.ui_zoom_percent, 140);
+        assert_eq!(preferences.ui_font_scale_percent, 100);
         assert!(preferences.ui_zoom_locked);
         let serialized = serde_json::to_value(preferences).expect("preferences should serialize");
         assert_eq!(serialized["uiZoomPercent"], 140);
         assert_eq!(serialized["uiZoomLocked"], true);
         assert!(serialized.get("fileListFontSize").is_none());
+    }
+
+    #[test]
+    fn clamps_interface_font_scale_percent() {
+        let preferences: UiPreferences = serde_json::from_value(serde_json::json!({
+            "theme": "default-dark",
+            "locale": "enUS",
+            "uiFontScalePercent": 500
+        }))
+        .expect("interface font scale preference should deserialize");
+
+        assert_eq!(normalize_ui_preferences(preferences).ui_font_scale_percent, 150);
     }
 
     #[test]
@@ -841,6 +854,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
@@ -895,6 +909,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
@@ -940,6 +955,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
@@ -1055,6 +1071,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: false,
             transfer_sidebar_collapsed_by_default: true,
@@ -1120,6 +1137,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
@@ -1186,6 +1204,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
@@ -1242,6 +1261,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
@@ -1483,6 +1503,7 @@ mod ui_preferences_tests {
             ui_zoom_locked: false,
             local_terminal_shells: default_local_terminal_shells(),
             ui_zoom_percent: 100,
+            ui_font_scale_percent: 100,
             legacy_file_list_font_size: None,
             file_panel_remember_ratio: false,
             transfer_sidebar_collapsed_by_default: true,

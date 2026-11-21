@@ -1,5 +1,6 @@
 import './workspace-mode-settings-panel.css'
 import type { FileTermDesktopApi, WorkspaceMode } from '@fileterm/core'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { type LocaleMessages } from '../../../../i18n'
 import { RadioCardGroup } from '../../../common/radio-card-group'
 import { useSettingsModalContext } from '../context'
@@ -78,11 +79,7 @@ export function WorkspaceModeSettingsPanel() {
           ]}
           value={workspaceMode}
         />
-        {workspaceModeError ? (
-          <p className="modal-error" role="alert">
-            {workspaceModeError}
-          </p>
-        ) : null}
+        <FeedbackBubble message={workspaceModeError} sourceKey="settings.workspace-mode" tone="error" />
       </section>
       {workspaceMode === 'standard' ? <OverviewContentSettingsSection /> : null}
     </div>

@@ -203,13 +203,13 @@ input.selection-control--target:focus-visible {
 
 .radio-card-group__copy strong {
   color: var(--text-main);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 650;
 }
 
 .radio-card-group__copy small {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 400;
   line-height: 1.45;
 }

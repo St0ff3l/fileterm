@@ -83,7 +83,7 @@
 
 .feedback-bubble__title {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
   line-height: 20px;
 }
@@ -95,7 +95,7 @@
 .feedback-bubble .feedback-text {
   display: block;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.45;
 }
 

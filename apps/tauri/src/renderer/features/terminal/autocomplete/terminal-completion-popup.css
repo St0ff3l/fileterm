@@ -9,7 +9,7 @@
   background: var(--surface-context-menu);
   color: var(--text-primary);
   box-shadow: var(--popover-shadow);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .terminal-completion--above {
@@ -74,7 +74,7 @@
   padding: 6px 12px;
   border-top: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .terminal-completion-announcement {

@@ -9,7 +9,7 @@
 .command-manager-sidebar-head strong,
 .command-runner-head strong {
   display: block;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -197,7 +197,7 @@
   border: 1px solid var(--border-light);
   border-bottom: 0;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 500;
   background: transparent;
   color: var(--text-muted);
@@ -231,7 +231,7 @@
 }
 
 .command-folder-tabs .command-folder-tab-temporary .material-symbols-outlined {
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
 }
 
 .command-folder-tabs .command-folder-tab-temporary.active {
@@ -244,7 +244,7 @@
   background: var(--surface-chip);
   padding: 1px 5px;
   border-radius: 10px;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   font-weight: 600;
   opacity: 0.8;
 }
@@ -258,7 +258,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-card);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   cursor: pointer;
   transition:
     background-color var(--duration-hover) var(--ease-out),
@@ -284,7 +284,7 @@
   height: 24px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border-light);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   background: transparent;
   flex-shrink: 0;
   overflow: hidden;
@@ -297,12 +297,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .command-pane-head > span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
 }
 
 .command-temporary-pane-head {
@@ -373,7 +373,7 @@
 }
 
 .command-pane-edit-actions .material-symbols-outlined {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .command-pane-actions .command-toggle {
@@ -472,12 +472,12 @@
   padding: 20px;
   color: var(--text-muted);
   text-align: center;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .command-temporary-list-placeholder .material-symbols-outlined {
   color: var(--primary);
-  font-size: 24px;
+  font-size: var(--ui-font-size-24px, 24px);
 }
 
 .command-temporary-history {
@@ -511,12 +511,12 @@
 
 .command-temporary-history-title .material-symbols-outlined {
   color: var(--primary);
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
 }
 
 .command-temporary-history-title strong {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -527,7 +527,7 @@
   border-radius: 999px;
   background: var(--surface-chip);
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   text-align: center;
 }
 
@@ -560,7 +560,7 @@
 
 .command-temporary-history-clear .material-symbols-outlined,
 .command-temporary-history-new .material-symbols-outlined {
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .command-temporary-history-clear:disabled,
@@ -627,7 +627,7 @@
   overflow: hidden;
   color: var(--text-main);
   font-family: var(--font-mono, 'SF Mono', Menlo, monospace);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -636,7 +636,7 @@
 .command-temporary-history-item time {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .command-temporary-history-delete.app-close-button--tab {
@@ -655,13 +655,13 @@
   gap: 8px;
   padding: 20px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   text-align: center;
 }
 
 .command-temporary-history-empty .material-symbols-outlined {
   color: var(--primary);
-  font-size: 24px;
+  font-size: var(--ui-font-size-24px, 24px);
 }
 
 .command-list-toolbar {
@@ -717,7 +717,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   flex: 1;
   min-width: 0;
 }
@@ -759,7 +759,7 @@
   border: 1px dashed var(--border-dark);
   border-radius: var(--radius-md);
   margin: 12px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .command-runner {
@@ -807,7 +807,7 @@
 
 .command-temporary-editor-heading span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 400;
 }
 
@@ -937,12 +937,12 @@
   flex-wrap: nowrap;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .command-template-description > span {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
 }
 
@@ -953,7 +953,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-main);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .command-pane-template-description {
@@ -1084,13 +1084,13 @@
   height: 22px;
   padding: 0 7px;
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: var(--button-font-weight);
   line-height: 1;
 }
 
 .command-template-actions .material-symbols-outlined {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .command-detail-block {
@@ -1101,7 +1101,7 @@
 
 .command-detail-block > span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1109,7 +1109,7 @@
 
 .command-detail-block > p {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-main);
 }
 
@@ -1121,7 +1121,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface-inset);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text-main);
@@ -1180,7 +1180,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-muted);
 }
 
@@ -1235,7 +1235,7 @@
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 500;
   cursor: pointer;
   appearance: none;
@@ -1300,7 +1300,7 @@
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-main);
   color: var(--text-main);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 500;
   cursor: pointer;
   box-shadow: var(--control-shadow);
@@ -1356,7 +1356,7 @@
   align-items: center;
   padding: 6px 10px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -1413,7 +1413,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1454,7 +1454,7 @@
   align-items: center;
   padding: 6px 8px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -1499,7 +1499,7 @@
 
 .session-send-target-index {
   font-family: var(--font-mono, 'SF Mono', Menlo, monospace);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   color: var(--text-muted);
   font-weight: 600;
   opacity: 0.8;
@@ -1522,7 +1522,7 @@
 }
 
 .session-send-target-current-badge {
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   background: var(--success-surface);
   color: var(--success-text);
   padding: 1px 4px;
@@ -1539,14 +1539,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-main);
 }
 
 .session-send-target-empty {
   padding: 16px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-muted);
 }
 
@@ -1554,7 +1554,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
@@ -1586,7 +1586,7 @@
   padding-right: 6px;
   border-right: 1px solid var(--border-light);
   height: 14px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 500;
   color: var(--text-muted);
   user-select: none;
@@ -1671,7 +1671,7 @@
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono, 'SF Mono', Menlo, monospace);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   transform: translateY(1.1px) scale(0.9);
   transform-origin: center center;
   font-weight: 500;
@@ -1691,7 +1691,7 @@
   background: transparent !important;
   color: var(--text-main) !important;
   font-family: var(--font-mono, 'SF Mono', Menlo, monospace) !important;
-  font-size: 9px !important;
+  font-size: var(--ui-font-size-9px, 9px) !important;
   line-height: 1 !important;
   padding: 0 5px !important;
   margin: 0 !important;
@@ -1705,7 +1705,7 @@
   color: var(--text-muted);
   opacity: 0.4;
   font-family: var(--font-mono, 'SF Mono', Menlo, monospace);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   line-height: 1;
 }
 
@@ -1742,7 +1742,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -1756,7 +1756,7 @@
   color: var(--text-main);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   width: 100%;
   box-sizing: border-box;
 }
@@ -1794,7 +1794,7 @@
   text-align: left;
   justify-content: flex-start;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1823,7 +1823,7 @@
 .command-folder-row .danger {
   color: var(--danger);
   opacity: 0.6;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   padding: 0 4px;
 }
 
@@ -1862,7 +1862,7 @@
 }
 
 .command-manager-item strong {
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-main);
 }
 
@@ -1936,7 +1936,7 @@
   width: 100%;
   padding: 0 max(76px, env(safe-area-inset-left, 0px) + 76px) 0 max(76px, env(safe-area-inset-right, 0px) + 76px);
   justify-content: center;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
   pointer-events: none;
   -webkit-app-region: drag;
@@ -1980,7 +1980,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 500;
   margin-bottom: 2px;
 }
@@ -1993,7 +1993,7 @@
   gap: 8px;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 500;
   margin-bottom: 2px;
 }
@@ -2005,7 +2005,7 @@
   border-width: 1px;
   border-style: solid;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-family: inherit;
   transition:
     border-color var(--duration-hover) var(--ease-out),
@@ -2085,7 +2085,7 @@
 
 .command-editor-page.standalone .modal-header span,
 .command-manager-modal.standalone .modal-header span {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
   color: var(--text-muted);
   pointer-events: auto;
@@ -2166,7 +2166,7 @@
 
 .command-editor-dialog-form label,
 .command-folder-dialog-form label {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }
 
@@ -2268,7 +2268,7 @@
   min-height: 20px;
   line-height: 20px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-family: var(--font-mono);
   color: var(--text-muted);
   white-space: nowrap;
@@ -2282,7 +2282,7 @@
   resize: none;
   font-family: var(--font-mono);
   line-height: 20px;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   border: none;
   outline: none;
   background: transparent;
@@ -2299,7 +2299,7 @@
 }
 
 .command-editor-dialog-params > span {
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 600;
 }
 
@@ -2313,7 +2313,7 @@
 
 .command-param-hints-row > small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1.5;
   flex: 1;
   min-width: 120px;
@@ -2322,7 +2322,7 @@
 .command-editor-dialog-params .command-param-hints button {
   height: 26px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .command-editor-checkbox-row {
@@ -2332,7 +2332,7 @@
 }
 
 .command-editor-checkbox-row span {
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 600;
 }
 
@@ -2349,12 +2349,12 @@
   height: 36px;
   padding: 0 12px;
   border-radius: var(--radius-md, 6px);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }
 
 .command-preview span {
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -2372,7 +2372,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
 }
 
 .command-manager-modal {
@@ -2414,7 +2414,7 @@
 
 .command-manager-modal .modal-header h2,
 .command-manager-modal .modal-header span {
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
   font-weight: 600;
 }
 
@@ -2451,7 +2451,7 @@
 .command-manager-launch {
   height: 22px !important;
   padding: 0 8px !important;
-  font-size: 11px !important;
+  font-size: var(--ui-font-size-11px, 11px) !important;
 }
 
 @media (max-width: 1180px) {

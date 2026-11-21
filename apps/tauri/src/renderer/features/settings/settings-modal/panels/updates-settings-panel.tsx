@@ -1,8 +1,8 @@
 import './updates-settings-panel.css'
 import type { AppUpdateStatus, FileTermDesktopApi, UiPreferences } from '@fileterm/core'
 import { useState } from 'react'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { useExternalUrl } from '../../../../hooks/use-external-url'
-import { FeedbackText } from '../../../common/feedback-text'
 import { AppIcon } from '../../../common/app-icon'
 import { DropdownSelect } from '../../../common/dropdown-select'
 import { PortableUpdateDialog } from '../../../common/portable-update-dialog'
@@ -17,6 +17,7 @@ type UpdatesSettingsPanelContext = {
   autoCheckUpdates: boolean
   isSavingUpdatePreference: boolean
   updatePreferenceError: string | null
+  updatePreferenceLoadError: string | null
   setUpdateCheckPreference(nextValue: boolean): void
   updateChannel: UiPreferences['updateChannel']
   setUpdateChannelPreference(nextValue: UiPreferences['updateChannel']): void
@@ -30,6 +31,7 @@ export function UpdatesSettingsPanel() {
     autoCheckUpdates,
     isSavingUpdatePreference,
     updatePreferenceError,
+    updatePreferenceLoadError,
     setUpdateCheckPreference,
     updateChannel,
     setUpdateChannelPreference
@@ -75,7 +77,8 @@ export function UpdatesSettingsPanel() {
             ]}
           />
         </div>
-        {updatePreferenceError ? <p className="modal-error">{updatePreferenceError}</p> : null}
+        {updatePreferenceLoadError ? <p className="modal-error">{updatePreferenceLoadError}</p> : null}
+        <FeedbackBubble message={updatePreferenceError} sourceKey="settings.updates.preferences" tone="error" />
         <div className="update-status-card" aria-live="polite">
           <div>
             <strong>{t.updateStatus}</strong>
@@ -153,8 +156,8 @@ export function UpdatesSettingsPanel() {
             </button>
           ) : null}
         </div>
-        <FeedbackText message={installError} tone="error" />
-        <FeedbackText message={externalUrlError} tone="error" />
+        <FeedbackBubble message={installError} sourceKey="settings.updates.install" tone="error" />
+        <FeedbackBubble message={externalUrlError} sourceKey="settings.updates.external-url" tone="error" />
       </section>
       {isPortableUpdateDialogOpen ? (
         <PortableUpdateDialog

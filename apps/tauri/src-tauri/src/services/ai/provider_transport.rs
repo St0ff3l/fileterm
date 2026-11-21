@@ -442,7 +442,9 @@ fn deepseek_reasoning_model(provider: &StoredAiProvider) -> bool {
         return false;
     }
     let model = provider.model.trim().to_ascii_lowercase();
-    model.starts_with("deepseek-v4-flash")
+    model.starts_with("deepseek-flash")
+        || model.starts_with("deepseek-ai/deepseek-flash")
+        || model.starts_with("deepseek-v4-flash")
         || model.starts_with("deepseek-v4-pro")
         || model.starts_with("deepseek-ai/deepseek-v4-flash")
         || model.starts_with("deepseek-ai/deepseek-v4-pro")

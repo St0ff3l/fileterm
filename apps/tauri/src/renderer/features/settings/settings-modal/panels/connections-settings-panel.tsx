@@ -1,6 +1,7 @@
 import './connections-settings-panel.css'
 import { useEffect, useState } from 'react'
 import type { FileTermDesktopApi, SshConnectionDefaults } from '@fileterm/core'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { DropdownSelect } from '../../../common/dropdown-select'
 import { ResourceMonitoringMetricsEditor } from '../../../common/resource-monitoring-metrics-editor'
 import { SelectionControl } from '../../../common/selection-control'
@@ -212,8 +213,12 @@ export function ConnectionsSettingsPanel() {
             </div>
           </div>
         </fieldset>
-        {connectionDefaultsError ? <p className="modal-error">{connectionDefaultsError}</p> : null}
-        {transferSidebarPreferenceError ? <p className="modal-error">{transferSidebarPreferenceError}</p> : null}
+        <FeedbackBubble message={connectionDefaultsError} sourceKey="settings.connections.defaults" tone="error" />
+        <FeedbackBubble
+          message={transferSidebarPreferenceError}
+          sourceKey="settings.connections.transfer-sidebar"
+          tone="error"
+        />
       </section>
     </div>
   )

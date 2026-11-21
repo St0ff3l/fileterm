@@ -239,7 +239,7 @@
 :root[data-theme*='light'] .system-sidebar-layout .disk-head span {
   color: var(--text-secondary);
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   letter-spacing: 0.01em;
 }
 

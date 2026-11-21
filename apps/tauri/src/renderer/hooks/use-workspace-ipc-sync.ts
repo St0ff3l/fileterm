@@ -72,6 +72,7 @@ export function useWorkspaceIpcSync({
   terminalZoomLocked,
   uiZoomLocked,
   uiZoomPercent,
+  uiFontScalePercent,
   rememberWindowSize,
   filePanelRememberRatio,
   transferSidebarCollapsedByDefault,
@@ -91,6 +92,7 @@ export function useWorkspaceIpcSync({
   onTerminalZoomLockedChange,
   onUiZoomLockedChange,
   onUiZoomPercentChange,
+  onUiFontScalePercentChange,
   onRememberWindowSizeChange,
   onFilePanelRememberRatioChange,
   onTransferSidebarCollapsedByDefaultChange,
@@ -131,6 +133,7 @@ export function useWorkspaceIpcSync({
   const onTerminalZoomLockedChangeRef = useLatestRef(onTerminalZoomLockedChange)
   const onUiZoomLockedChangeRef = useLatestRef(onUiZoomLockedChange)
   const onUiZoomPercentChangeRef = useLatestRef(onUiZoomPercentChange)
+  const onUiFontScalePercentChangeRef = useLatestRef(onUiFontScalePercentChange)
   const onRememberWindowSizeChangeRef = useLatestRef(onRememberWindowSizeChange)
   const onFilePanelRememberRatioChangeRef = useLatestRef(onFilePanelRememberRatioChange)
   const onTransferSidebarCollapsedByDefaultChangeRef = useLatestRef(onTransferSidebarCollapsedByDefaultChange)
@@ -271,6 +274,7 @@ export function useWorkspaceIpcSync({
       onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
       onUiZoomLockedChangeRef.current(preferences.uiZoomLocked)
       onUiZoomPercentChangeRef.current(preferences.uiZoomPercent)
+      onUiFontScalePercentChangeRef.current(preferences.uiFontScalePercent)
       onRememberWindowSizeChangeRef.current(preferences.rememberWindowSize)
       onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
       onTransferSidebarCollapsedByDefaultChangeRef.current(preferences.transferSidebarCollapsedByDefault)
@@ -315,6 +319,7 @@ export function useWorkspaceIpcSync({
         onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
         onUiZoomLockedChangeRef.current(preferences.uiZoomLocked)
         onUiZoomPercentChangeRef.current(preferences.uiZoomPercent)
+        onUiFontScalePercentChangeRef.current(preferences.uiFontScalePercent)
         onRememberWindowSizeChangeRef.current(preferences.rememberWindowSize)
         onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
         onTransferSidebarCollapsedByDefaultChangeRef.current(preferences.transferSidebarCollapsedByDefault)
@@ -357,6 +362,7 @@ export function useWorkspaceIpcSync({
       terminalZoomLocked,
       uiZoomLocked,
       uiZoomPercent,
+      uiFontScalePercent,
       rememberWindowSize,
       filePanelRememberRatio,
       transferSidebarCollapsedByDefault,
@@ -406,6 +412,7 @@ export function useWorkspaceIpcSync({
     terminalZoomLocked,
     uiZoomLocked,
     uiZoomPercent,
+    uiFontScalePercent,
     rememberWindowSize,
     filePanelRememberRatio,
     transferSidebarCollapsedByDefault,

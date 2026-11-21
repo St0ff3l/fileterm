@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FileTermDesktopApi, TerminalFontWeight, TerminalRenderer } from '@fileterm/core'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { getTerminalFontWeight, setTerminalFontWeight } from '../../../../app/font-metrics'
 import { supportsTerminalRenderer } from '../../../../app/terminal-renderer-preference'
 import type { LocaleMessages } from '../../../../i18n'
@@ -80,11 +81,11 @@ export function TerminalDisplaySettingsSection() {
         />
       </div>
       <p className="settings-tools-hint">{t.terminalFontWeightHint}</p>
-      {weightError ? (
-        <p className="modal-error" role="alert">
-          {t.terminalFontWeightSaveFailed}
-        </p>
-      ) : null}
+      <FeedbackBubble
+        message={weightError ? t.terminalFontWeightSaveFailed : null}
+        sourceKey="settings.terminal.font-weight"
+        tone="error"
+      />
       {showRendererPreference ? (
         <>
           <p className="settings-tools-hint">{t.terminalDisplaySettingsHint}</p>
@@ -107,7 +108,11 @@ export function TerminalDisplaySettingsSection() {
             />
           </div>
           <p className="settings-tools-hint">{t.terminalRendererHint}</p>
-          {terminalRendererPreferenceError ? <p className="modal-error">{terminalRendererPreferenceError}</p> : null}
+          <FeedbackBubble
+            message={terminalRendererPreferenceError}
+            sourceKey="settings.terminal.renderer"
+            tone="error"
+          />
         </>
       ) : null}
       <div
@@ -130,7 +135,7 @@ export function TerminalDisplaySettingsSection() {
           </span>
         </label>
       </div>
-      {terminalZoomPreferenceError ? <p className="modal-error">{terminalZoomPreferenceError}</p> : null}
+      <FeedbackBubble message={terminalZoomPreferenceError} sourceKey="settings.terminal.zoom-lock" tone="error" />
     </section>
   )
 }

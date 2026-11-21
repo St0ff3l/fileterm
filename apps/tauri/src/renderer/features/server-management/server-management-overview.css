@@ -202,7 +202,7 @@
 
 .server-dashboard-card-heading > .material-symbols-outlined {
   color: var(--accent-secondary);
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
 }
 
 .server-dashboard-card-name {
@@ -215,7 +215,7 @@
   color: inherit;
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 600;
   text-align: start;
   text-overflow: ellipsis;
@@ -232,7 +232,7 @@
   border-radius: 3px;
   color: var(--text-secondary);
   background: var(--surface-hover);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   line-height: 1.2;
 }
 
@@ -261,7 +261,7 @@
   overflow: hidden;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -312,13 +312,13 @@
 .server-resource-ring > span {
   position: relative;
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 650;
 }
 
 .server-resource-ring-block > strong {
   color: var(--text-secondary);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   font-weight: 650;
 }
 
@@ -326,7 +326,7 @@
   max-width: 100%;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 8px;
+  font-size: var(--ui-font-size-8px, 8px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -341,7 +341,7 @@
   padding-top: 7px;
   border-top: 1px solid var(--border-subtle);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   white-space: nowrap;
 }
 
@@ -376,12 +376,12 @@
 
 .server-dashboard-empty > .material-symbols-outlined {
   color: var(--text-muted);
-  font-size: 36px;
+  font-size: var(--ui-font-size-36px, 36px);
 }
 
 .server-dashboard-empty p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .server-dashboard-inspector-region {
@@ -411,7 +411,7 @@
   min-width: 0;
   margin: 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -471,7 +471,7 @@
 .server-inspector-name-row > strong {
   min-width: 0;
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -483,7 +483,7 @@
   overflow: hidden;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -534,12 +534,12 @@
 .server-inspector-card-header > .material-symbols-outlined {
   flex: 0 0 auto;
   color: var(--accent-secondary);
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
 }
 
 .server-inspector-card-header > strong {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -548,7 +548,7 @@
   margin-left: auto;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -576,11 +576,11 @@
   align-items: center;
   gap: 4px;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
 }
 
 .server-inspector-config dt > .material-symbols-outlined {
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .server-inspector-config dd {
@@ -588,7 +588,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 550;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -635,14 +635,14 @@
 .server-inspector-disk-percent {
   flex: 0 0 auto;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-variant-numeric: tabular-nums;
 }
 
 .server-inspector-empty {
   margin: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .server-inspector-history {
@@ -680,7 +680,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -690,7 +690,7 @@
   margin-left: auto;
   padding: 1px 5px;
   border-radius: 3px;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   line-height: 1.4;
 }
 

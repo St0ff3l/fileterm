@@ -96,7 +96,7 @@
   width: 16px;
   height: 16px;
   color: var(--dialog-header-icon);
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
 }
 
 :root .confirm-action-dialog:is(.external-operation-confirmation, .ssh-key-import-dialog) {
@@ -121,7 +121,7 @@
   padding: 16px;
   overflow-y: auto;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   line-height: 1.5;
 }
 
@@ -139,7 +139,7 @@
   border-color: var(--border-subtle);
   background: var(--surface-input);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 :root

@@ -12,7 +12,7 @@
 .diagnostic-log-help {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.6;
 }
 
@@ -68,7 +68,7 @@
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 500;
   line-height: 1.4;
 }
@@ -103,7 +103,7 @@
 
 .diagnostic-log-basic-hint {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.6;
 }
 
@@ -126,12 +126,12 @@
 .logs-shortcut-card p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }
 
 .logs-shortcut-card .material-symbols-outlined {
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
 }
 
 .settings-modal .connection-manager-sidebar-icon .app-icon-document path:last-child {

@@ -1,4 +1,19 @@
 .material-symbols-outlined {
+  /* Keep glyph sizes fixed while the interface text scale changes. */
+  --ui-font-size-12px: 12px;
+  --ui-font-size-13px: 13px;
+  --ui-font-size-14px: 14px;
+  --ui-font-size-15px: 15px;
+  --ui-font-size-16px: 16px;
+  --ui-font-size-17px: 17px;
+  --ui-font-size-18px: 18px;
+  --ui-font-size-19px: 19px;
+  --ui-font-size-20px: 20px;
+  --ui-font-size-22px: 22px;
+  --ui-font-size-24px: 24px;
+  --ui-font-size-26px: 26px;
+  --ui-font-size-34px: 34px;
+  --ui-font-size-36px: 36px;
   font-weight: normal;
   font-style: normal;
   font-size: 24px;

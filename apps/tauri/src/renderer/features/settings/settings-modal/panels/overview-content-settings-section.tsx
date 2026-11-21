@@ -1,4 +1,5 @@
 import { MaterialIcon } from '../../../../components/common/material-icon/material-icon'
+import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { FileTermDesktopApi, OverviewSectionId } from '@fileterm/core'
 import { managerDropClass } from '../../../common/manager-drag'
@@ -132,7 +133,7 @@ export function OverviewContentSettingsSection() {
           )
         })}
       </div>
-      {overviewPreferenceError ? <p className="modal-error">{overviewPreferenceError}</p> : null}
+      <FeedbackBubble message={overviewPreferenceError} sourceKey="settings.overview-content" tone="error" />
     </section>
   )
 }

@@ -217,7 +217,10 @@ export function SyncSettingsPanel() {
                   onClick={() => {
                     if (!desktopApi) return
                     void runSyncOperation('test', async () => {
-                      const result = await desktopApi.testWebDavSync()
+                      const result = await desktopApi.testWebDavSync({
+                        ...syncConfig,
+                        ...(syncPassword ? { password: syncPassword } : {})
+                      })
                       setSyncFeedback({ kind: 'success', message: result.message })
                     })
                   }}
@@ -517,7 +520,10 @@ export function SyncSettingsPanel() {
                   onClick={() => {
                     if (!desktopApi) return
                     void runSyncOperation('s3-test', async () => {
-                      const result = await desktopApi.testS3Backup()
+                      const result = await desktopApi.testS3Backup({
+                        ...s3Config,
+                        ...(s3SecretAccessKey ? { secretAccessKey: s3SecretAccessKey } : {})
+                      })
                       setS3Feedback({ kind: 'success', message: result.message })
                     })
                   }}

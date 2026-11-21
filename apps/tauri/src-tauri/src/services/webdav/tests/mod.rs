@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        build_export_bundle, download_payload, merge_synced_profile, normalize_remote_path,
-        parse_bundle, parse_download_mode, parse_upload_mode, read_config_at,
+        build_export_bundle, config_from_input, download_payload, merge_synced_profile,
+        normalize_remote_path, parse_bundle, parse_download_mode, parse_upload_mode, read_config_at,
         sanitize_import_profile, sha256_hex, upload_payload, validate_config, write_config_at,
         DownloadMode, StoredConfig, UploadMode,
     };
@@ -75,6 +75,39 @@ mod tests {
         };
         assert!(validate_config(&config, false).is_ok());
         assert!(validate_config(&config, true).is_err());
+    }
+
+    #[test]
+    fn draft_connection_test_uses_unsaved_values_and_falls_back_to_saved_password() {
+        let saved = StoredConfig {
+            url: "https://saved.example.test".to_string(),
+            username: Some("saved-user".to_string()),
+            password: Some("saved-password".to_string()),
+            remote_path: "saved/backup.json".to_string(),
+            last_etag: Some("saved-etag".to_string()),
+            ..StoredConfig::default()
+        };
+        let draft = json!({
+            "url": "https://draft.example.test",
+            "username": "draft-user",
+            "remotePath": "draft/backup.json"
+        });
+
+        let tested = config_from_input(saved.clone(), &draft).expect("draft config should merge");
+        assert_eq!(tested.url, "https://draft.example.test");
+        assert_eq!(tested.username.as_deref(), Some("draft-user"));
+        assert_eq!(tested.remote_path, "draft/backup.json");
+        assert_eq!(tested.password.as_deref(), Some("saved-password"));
+        assert_eq!(tested.last_etag.as_deref(), Some("saved-etag"));
+        assert_eq!(saved.url, "https://saved.example.test");
+
+        let draft_with_password = json!({ "password": "temporary-password" });
+        let tested_with_password = config_from_input(saved, &draft_with_password)
+            .expect("temporary test password should merge");
+        assert_eq!(
+            tested_with_password.password.as_deref(),
+            Some("temporary-password")
+        );
     }
 
     #[test]

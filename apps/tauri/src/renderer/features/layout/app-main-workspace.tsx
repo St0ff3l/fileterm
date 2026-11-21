@@ -18,8 +18,12 @@ import { t, setLocale } from '../../i18n'
 import { resolveSshJumpRoute } from '../../app/ssh-jump-route'
 import type { ServerManagementNavigation, ServerManagementPage } from '../server-management/server-management-types'
 
+const HOST_RAIL_COLLAPSE_QUERY = '(max-width: 760px)'
+
 export function AppMainWorkspace({ model }: { model: AppViewModel }) {
-  const [isHostRailCollapsed, setIsHostRailCollapsed] = useState(false)
+  const [isHostRailCollapsed, setIsHostRailCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(HOST_RAIL_COLLAPSE_QUERY).matches
+  )
   const [dismissedInteractiveGatewayNoticeTabId, setDismissedInteractiveGatewayNoticeTabId] = useState<string | null>(
     null
   )
@@ -57,6 +61,12 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   } = shell
   const [serverManagementPage, setServerManagementPage] = useState<ServerManagementPage>('overview')
   const [serverManagementFolderId, setServerManagementFolderId] = useState<string | null>(null)
+  useEffect(() => {
+    const narrowViewport = window.matchMedia(HOST_RAIL_COLLAPSE_QUERY)
+    const updateCollapsedState = (event: MediaQueryListEvent) => setIsHostRailCollapsed(event.matches)
+    narrowViewport.addEventListener('change', updateCollapsedState)
+    return () => narrowViewport.removeEventListener('change', updateCollapsedState)
+  }, [])
   const {
     isWorkspaceTransitionActive,
     isWorkspaceSwitching,

@@ -502,7 +502,7 @@ export function CommandManagerModal({
             ) : (
               <code
                 style={{
-                  fontSize: '11px',
+                  fontSize: 'var(--ui-font-size-11px, 11px)',
                   opacity: 0.8,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import {
   DEFAULT_UI_ZOOM_PERCENT,
+  DEFAULT_UI_FONT_SCALE_PERCENT,
   DEFAULT_MASK_CONNECTION_ADDRESSES,
   DEFAULT_LOCAL_TERMINAL_SHELLS,
   DEFAULT_MCP_AGENT_PREFERENCES,
@@ -43,6 +44,7 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [updateChannel, setUpdateChannel] = useState<'stable' | 'beta'>('beta')
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
   const [updatePreferenceError, setUpdatePreferenceError] = useState<string | null>(null)
+  const [updatePreferenceLoadError, setUpdatePreferenceLoadError] = useState<string | null>(null)
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const [terminalRenderer, setTerminalRenderer] = useState<TerminalRenderer>(getTerminalRendererPreference)
   const [isSavingTerminalRendererPreference, setIsSavingTerminalRendererPreference] = useState(false)
@@ -79,12 +81,16 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [uiZoomPercent, setUiZoomPercent] = useState(DEFAULT_UI_ZOOM_PERCENT)
   const [isSavingUiZoomPercent, setIsSavingUiZoomPercent] = useState(false)
   const [uiZoomPercentError, setUiZoomPercentError] = useState<string | null>(null)
+  const [uiFontScalePercent, setUiFontScalePercent] = useState(DEFAULT_UI_FONT_SCALE_PERCENT)
+  const [isSavingUiFontScalePercent, setIsSavingUiFontScalePercent] = useState(false)
+  const [uiFontScalePercentError, setUiFontScalePercentError] = useState<string | null>(null)
   const [maskConnectionAddresses, setMaskConnectionAddresses] = useState(DEFAULT_MASK_CONNECTION_ADDRESSES)
   const [isSavingMaskConnectionAddresses, setIsSavingMaskConnectionAddresses] = useState(false)
   const [maskConnectionAddressesError, setMaskConnectionAddressesError] = useState<string | null>(null)
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
   const [isImportingFont, setIsImportingFont] = useState(false)
   const [fontImportError, setFontImportError] = useState<string | null>(null)
+  const [fontImportLoadError, setFontImportLoadError] = useState<string | null>(null)
   const [fontToDelete, setFontToDelete] = useState<ImportedFont | null>(null)
   const [themeConfigMessage, setThemeConfigMessage] = useState<{
     id: number
@@ -175,6 +181,8 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsSavingUpdatePreference,
     updatePreferenceError,
     setUpdatePreferenceError,
+    updatePreferenceLoadError,
+    setUpdatePreferenceLoadError,
     terminalZoomLocked,
     setTerminalZoomLocked,
     terminalRenderer,
@@ -239,6 +247,12 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsSavingUiZoomPercent,
     uiZoomPercentError,
     setUiZoomPercentError,
+    uiFontScalePercent,
+    setUiFontScalePercent,
+    isSavingUiFontScalePercent,
+    setIsSavingUiFontScalePercent,
+    uiFontScalePercentError,
+    setUiFontScalePercentError,
     maskConnectionAddresses,
     setMaskConnectionAddresses,
     isSavingMaskConnectionAddresses,
@@ -251,6 +265,8 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsImportingFont,
     fontImportError,
     setFontImportError,
+    fontImportLoadError,
+    setFontImportLoadError,
     fontToDelete,
     setFontToDelete,
     themeConfigMessage,
