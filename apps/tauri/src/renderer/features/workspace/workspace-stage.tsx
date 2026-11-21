@@ -53,6 +53,7 @@ function WorkspaceStageContent({
   activeHomeTabId,
   activeProfile,
   activeSession,
+  maskConnectionAddresses,
   activeTab,
   terminalActiveTab,
   terminalActiveSession,
@@ -183,6 +184,7 @@ function WorkspaceStageContent({
   activeHomeTabId: string | null
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
+  maskConnectionAddresses: boolean
   activeTab: WorkspaceTab | null
   terminalActiveTab: WorkspaceTab | null
   terminalActiveSession: SessionSnapshot | null
@@ -339,6 +341,7 @@ function WorkspaceStageContent({
         tabId={activeTab?.id ?? ''}
         connected={Boolean(activeSession?.connected)}
         isActive={Boolean(isWorkspaceActive)}
+        maskConnectionAddresses={maskConnectionAddresses}
         accessMode={remoteFileAccessMode}
         accessUser={activeSession?.sudoUser ?? 'root'}
         privilegeBusy={isBusy}
@@ -353,6 +356,7 @@ function WorkspaceStageContent({
         activeProfile={activeProfile}
         activeSession={resolveMonitoringSource(activeTab?.id ?? null, sessions).session ?? activeSession}
         connectionStatus={activeTab?.status ?? null}
+        maskConnectionAddresses={maskConnectionAddresses}
       />
     )
   }

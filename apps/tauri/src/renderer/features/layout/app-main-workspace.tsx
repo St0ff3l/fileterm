@@ -466,6 +466,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 activeHomeTabId={effectiveActiveLocalTabId}
                 activeProfile={activeProfile}
                 activeSession={activeSession}
+                maskConnectionAddresses={maskConnectionAddresses}
                 activeTab={activeTab}
                 terminalActiveTab={activePaneTab ?? activeTab}
                 terminalActiveSession={activePaneSession ?? activeSession}

@@ -16,6 +16,7 @@ import {
   type NetworkTableSort
 } from './network-connections-model'
 import { NetworkSocketTable } from './network-socket-table'
+import { MaskedAddressText } from './system-resource-meters'
 import './system-info-header.css'
 import './network-connections-workspace.css'
 
@@ -23,6 +24,7 @@ export function NetworkConnectionsWorkspace({
   tabId,
   connected,
   isActive,
+  maskConnectionAddresses,
   accessMode,
   accessUser,
   privilegeBusy,
@@ -31,6 +33,7 @@ export function NetworkConnectionsWorkspace({
   tabId: string
   connected: boolean
   isActive: boolean
+  maskConnectionAddresses: boolean
   accessMode: 'user' | 'root'
   accessUser: string
   privilegeBusy: boolean
@@ -115,6 +118,10 @@ export function NetworkConnectionsWorkspace({
   const rowKeys = socketRowKeys(visible)
   const peerKeys = socketRowKeys(peers)
   const addressLabel = (address: string) => socketAddressLabel(address, t.networkAllIpv4, t.networkAllIpv6)
+  const displayAddress = (address: string, key?: string) => {
+    const value = addressLabel(address)
+    return maskConnectionAddresses ? <MaskedAddressText key={key} value={value} /> : value
+  }
 
   return (
     <section
@@ -241,7 +248,7 @@ export function NetworkConnectionsWorkspace({
               socket.pid ?? '—',
               socket.process ?? t.networkUnknownProcess,
               socket.protocol.toUpperCase(),
-              addressLabel(socket.localAddress),
+              displayAddress(socket.localAddress, 'local-address'),
               <button
                 key="select-port"
                 type="button"
@@ -263,7 +270,7 @@ export function NetworkConnectionsWorkspace({
         <span>{t.networkPeers}</span>
         {selected ? (
           <span className="network-connections-selected-endpoint">
-            {addressLabel(selected.localAddress)} · {t.networkPort} {selected.localPort} ·{' '}
+            {displayAddress(selected.localAddress)} · {t.networkPort} {selected.localPort} ·{' '}
             {selected.protocol.toUpperCase()}
           </span>
         ) : null}
@@ -278,7 +285,11 @@ export function NetworkConnectionsWorkspace({
           key: peerKeys[index],
           sortValues: [peer.remoteAddress, peer.remotePort, peer.state, peer.txBytes, peer.rxBytes],
           cells: [
-            peer.remoteAddress,
+            maskConnectionAddresses ? (
+              <MaskedAddressText key="remote-address" value={peer.remoteAddress} />
+            ) : (
+              peer.remoteAddress
+            ),
             peer.remotePort,
             peer.state,
             formatSocketBytes(peer.txBytes),

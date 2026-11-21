@@ -108,12 +108,14 @@ export function ResourceMetricCards({
 }
 
 export function AddressLine({ label, value, masked = false }: { label: string; value: string; masked?: boolean }) {
-  // Masking blurs the value until the pointer rests on the row; hovering reveals
-  // it and clicking copies it, so the blur only hides the address from a glance
-  // or a screenshot. No native title tooltip is added: the value is visible while
-  // hovered anyway, and a floating bubble would only obscure the row.
   const canCopy = Boolean(value) && value !== '-'
   const [copied, setCopied] = useState(false)
+  const copyAddress = () => {
+    if (!canCopy || hasSelectedText()) return
+    copyText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   return (
     <div className="address-row">
@@ -121,23 +123,34 @@ export function AddressLine({ label, value, masked = false }: { label: string; v
       <strong
         className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''} ${masked ? 'is-masked' : ''}`.trim()}
         aria-label={copied ? t.copied : `${t.copy}: ${value}`}
-        onClick={() => {
-          if (canCopy && !hasSelectedText()) {
-            copyText(value)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
+        role={canCopy ? 'button' : undefined}
+        tabIndex={canCopy ? 0 : undefined}
+        onClick={copyAddress}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            copyAddress()
           }
         }}
       >
-        {masked ? (
-          // Kept in the accessibility tree so the copy affordance is still
-          // announced; only the painted characters are blurred.
-          <span className="address-masked-text">{value}</span>
+        {masked && canCopy ? (
+          <MaskedAddressText value={copied ? t.copied : value} focusable={false} />
         ) : (
           <MetricHoverDetail className="address-hover-detail" value={copied ? t.copied : value} />
         )}
       </strong>
     </div>
+  )
+}
+
+export function MaskedAddressText({ value, focusable = true }: { value: string; focusable?: boolean }) {
+  return (
+    <span className="address-masked-text" tabIndex={focusable ? 0 : undefined}>
+      <span className="address-mask-placeholder" aria-hidden="true">
+        ••••••••
+      </span>
+      <span className="address-mask-value">{value}</span>
+    </span>
   )
 }
 

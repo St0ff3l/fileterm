@@ -76,24 +76,27 @@ function textContent(node) {
   return textContent(node.props?.children)
 }
 
-test('masked addresses blur the value but keep the copy affordance', () => {
+test('masked addresses use a fixed redaction and keep the copy affordance', () => {
   const row = renderAddressLine({ value: '10.0.0.45', masked: true })
   const value = row.props.children[1]
+  const maskedText = value.props.children.type(value.props.children.props)
 
-  assert.equal(textContent(row), 'IP10.0.0.45')
+  assert.equal(textContent(maskedText), '••••••••10.0.0.45')
   assert.match(value.props.className, /is-masked/)
-  // The value stays in the accessibility tree as a copy target; only the paint
-  // is blurred, so a screen reader still announces what can be copied.
+  // The value stays in the accessibility tree as a copy target.
   assert.equal(value.props['aria-hidden'], undefined)
   assert.equal(value.props['aria-label'], 'Copy: 10.0.0.45')
   assert.match(value.props.className, /copyable/)
   assert.match(value.props.className, /is-masked/)
-  // No native tooltip: the value is visible while hovered anyway, and a bubble
-  // would only obscure the row.
+  // The value is revealed in place, so a native tooltip would only cover the row.
   assert.equal(value.props.title, undefined)
-  // The blur is painted on a wrapper that carries no floating full-value tooltip.
-  assert.equal(value.props.children.props.className, 'address-masked-text')
-  assert.equal(value.props.children.props.title, undefined)
+  assert.equal(maskedText.props.className, 'address-masked-text')
+  assert.equal(maskedText.props.children[0].props.children, '••••••••')
+  assert.equal(maskedText.props.children[0].props['aria-hidden'], true)
+  assert.equal(maskedText.props.children[1].props.children, '10.0.0.45')
+  assert.equal(maskedText.props.tabIndex, undefined)
+  assert.equal(value.props.role, 'button')
+  assert.equal(value.props.tabIndex, 0)
 })
 
 test('clicking a masked address copies the real value', () => {
@@ -127,26 +130,35 @@ test('the empty placeholder stays inert in both states', () => {
   }
 })
 
-test('hovering clears the blur and the value stays unselectable', () => {
+test('hover and keyboard focus reveal the value without a blur effect', () => {
   const css = readFileSync(
-    new URL('../../src/renderer/features/system/system-sidebar-controls.css', import.meta.url),
+    new URL('../../src/renderer/features/system/system-resource-meters.css', import.meta.url),
     'utf8'
   )
-  const maskedRule = css.slice(css.indexOf('strong.is-masked'))
-  assert.ok(maskedRule, 'the masked rule must exist')
-  // Drag selection would leak the characters through the clipboard.
-  assert.match(maskedRule.split('}')[0], /user-select:\s*none/)
-  // Resting the pointer on the row removes the blur entirely, including when the
-  // pointer is over the label rather than the value itself.
-  const hoverRule = css.match(/strong\.is-masked:hover[^{]*\{([^}]*)\}/)
-  assert.ok(hoverRule, 'a hover reveal rule must exist')
-  assert.match(hoverRule[1], /filter:\s*blur\(0\)/)
-  assert.match(hoverRule[1], /opacity:\s*1/)
-  assert.match(css, /\.address-row:hover strong\.is-masked/, 'the whole row is a hover target')
-  // Keyboard users get the same reveal as a pointer hover.
-  assert.match(css, /strong\.is-masked:focus-visible[^{]*\{/)
-  // A successful copy keeps the green confirmation readable.
-  assert.match(css, /strong\.is-masked\.copied[^{]*\{[^}]*color:\s*var\(--status-success\)/)
-  // The default state is still blurred.
-  assert.match(css, /\.address-masked-text[\s\S]*?filter:\s*blur\(/)
+  assert.match(css, /\.address-mask-placeholder/)
+  assert.match(css, /\.address-row:hover strong\.is-masked \.address-mask-placeholder/)
+  assert.match(css, /\.address-row strong\.is-masked:focus-visible \.address-mask-value/)
+  assert.match(css, /\.system-description-row strong\.is-masked:focus-visible \.address-mask-value/)
+  assert.match(css, /\.address-masked-text:focus-visible/)
+  assert.match(css, /user-select:\s*none/)
+  assert.doesNotMatch(css, /filter:\s*blur\(/)
+})
+
+test('system info and network views consume the address mask preference', () => {
+  const systemInfo = readFileSync(
+    new URL('../../src/renderer/features/system/system-info-workspace.tsx', import.meta.url),
+    'utf8'
+  )
+  const network = readFileSync(
+    new URL('../../src/renderer/features/system/network-connections-workspace.tsx', import.meta.url),
+    'utf8'
+  )
+  const workspace = readFileSync(
+    new URL('../../src/renderer/features/workspace/workspace-stage.tsx', import.meta.url),
+    'utf8'
+  )
+
+  assert.match(systemInfo, /maskConnectionAddresses && row\.maskable/)
+  assert.match(network, /maskConnectionAddresses \? <MaskedAddressText/)
+  assert.match(workspace, /maskConnectionAddresses=\{maskConnectionAddresses\}/)
 })
