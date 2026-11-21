@@ -390,7 +390,8 @@ export function SyncSettingsPanel() {
                           : s3Config.region === 'auto'
                             ? 'us-east-1'
                             : s3Config.region,
-                      pathStyleAccessEnabled: isR2 ? true : isBitiful ? false : s3Config.pathStyleAccessEnabled
+                      pathStyleAccessEnabled: isR2 ? true : isBitiful ? false : s3Config.pathStyleAccessEnabled,
+                      allowInvalidCertificates: isR2 || isBitiful ? false : s3Config.allowInvalidCertificates
                     })
                   }}
                 />
@@ -468,7 +469,20 @@ export function SyncSettingsPanel() {
                   />
                   {t.s3PathStyle}
                 </label>
+                {s3Config.provider === 'custom' && (
+                  <label className="webdav-checkbox ssh-checkbox">
+                    <SelectionControl
+                      type="checkbox"
+                      checked={s3Config.allowInvalidCertificates}
+                      onChange={(event) => setS3Config({ ...s3Config, allowInvalidCertificates: event.target.checked })}
+                    />
+                    {t.s3AllowInvalidCertificates}
+                  </label>
+                )}
               </div>
+              {s3Config.allowInvalidCertificates && (
+                <p className="settings-tools-hint">{t.s3AllowInvalidCertificatesWarning}</p>
+              )}
             </div>
 
             <div className="sync-config-actions-row">

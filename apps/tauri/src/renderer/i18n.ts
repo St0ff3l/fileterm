@@ -2276,6 +2276,8 @@ const zhCN = {
   s3SecretAccessKeyPlaceholder: '留空以保留已保存密钥',
   enableS3Backup: '启用 S3 配置备份',
   s3PathStyle: '使用 Path-style 地址',
+  s3AllowInvalidCertificates: '允许不安全证书（高风险）',
+  s3AllowInvalidCertificatesWarning: '跳过 S3 证书验证，仅用于可信自建存储（有中间人风险）。',
   s3TestConnection: '测试连接',
   s3BackupSaved: 'S3 备份配置已保存。',
   syncConfigSaved: '同步配置已保存。',
@@ -4763,6 +4765,9 @@ const enUS: typeof zhCN = {
   s3SecretAccessKeyPlaceholder: 'Leave blank to keep the saved key',
   enableS3Backup: 'Enable S3 config backup',
   s3PathStyle: 'Use path-style addressing',
+  s3AllowInvalidCertificates: 'Allow invalid certificates (high risk)',
+  s3AllowInvalidCertificatesWarning:
+    'Skips S3 certificate checks; use only with trusted self-hosted storage (man-in-the-middle risk).',
   s3TestConnection: 'Test connection',
   s3BackupSaved: 'S3 backup configuration saved.',
   syncConfigSaved: 'Sync configuration saved.',

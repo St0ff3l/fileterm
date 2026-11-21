@@ -29,12 +29,14 @@ mod tests {
             bucket: "fileterm-backups".to_string(),
             remote_path: "sync/profiles.json".to_string(),
             path_style_access_enabled: true,
+            allow_invalid_certificates: true,
             ..StoredConfig::default()
         };
         apply_provider_defaults(&mut config);
         assert_eq!(config.endpoint, BITIFUL_S4_ENDPOINT);
         assert_eq!(config.region, BITIFUL_S4_REGION);
         assert!(!config.path_style_access_enabled);
+        assert!(!config.allow_invalid_certificates);
         let target = target(&config, Some(&config.remote_path)).unwrap();
         assert_eq!(
             target.url.as_str(),
@@ -57,6 +59,17 @@ mod tests {
             normalize_remote_path("sync/profiles.json").unwrap(),
             "sync/profiles.json"
         );
+    }
+
+    #[test]
+    fn legacy_config_defaults_to_validating_certificates() {
+        let mut value = serde_json::to_value(StoredConfig::default()).expect("config json");
+        value
+            .as_object_mut()
+            .expect("config should be an object")
+            .remove("allowInvalidCertificates");
+        let config: StoredConfig = serde_json::from_value(value).expect("legacy config");
+        assert!(!config.allow_invalid_certificates);
     }
 
     #[test]

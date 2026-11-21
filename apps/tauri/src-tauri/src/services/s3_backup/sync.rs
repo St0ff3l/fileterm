@@ -50,6 +50,10 @@ pub fn save_config(app: &AppHandle, input: Value) -> Result<Value, AppError> {
         .get("pathStyleAccessEnabled")
         .and_then(Value::as_bool)
         .unwrap_or(previous.path_style_access_enabled);
+    let allow_invalid_certificates = input
+        .get("allowInvalidCertificates")
+        .and_then(Value::as_bool)
+        .unwrap_or(previous.allow_invalid_certificates);
     let mut next = StoredConfig {
         enabled,
         provider,
@@ -58,6 +62,7 @@ pub fn save_config(app: &AppHandle, input: Value) -> Result<Value, AppError> {
         bucket,
         remote_path,
         path_style_access_enabled,
+        allow_invalid_certificates,
         access_key_id,
         secret_access_key,
         last_synced_at: previous.last_synced_at,
@@ -93,7 +98,7 @@ pub async fn test_connection(app: &AppHandle) -> Result<Value, AppError> {
     crate::services::logging::info(app, "s3-backup", "connection test started");
     let result = async {
         let config = configured(app, false)?;
-        let client = client()?;
+        let client = client(&config)?;
         head_bucket(&client, &config).await?;
         let _ = head_object(&client, &config).await?;
         Ok(serde_json::json!({ "action": "test", "message": "S3 连接成功。" }))
@@ -124,7 +129,7 @@ pub async fn upload(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppErr
 
 async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
-    let client = client()?;
+    let client = client(&config)?;
     let (remote_exists, mut remote_etag) = head_object(&client, &config).await?;
     tracing::info!(
         category = "integration", scope = "s3-backup",
@@ -228,7 +233,7 @@ pub async fn download(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppE
 
 async fn download_inner(app: &AppHandle, mode: webdav::DownloadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
-    let client = client()?;
+    let client = client(&config)?;
     let (bytes, remote_etag) = download_payload(&client, &config).await?;
     let password = if backup_crypto::requires_password(&bytes)
         .map_err(|error| command_error(error.to_string()))?

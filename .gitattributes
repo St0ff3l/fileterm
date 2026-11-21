@@ -6,6 +6,7 @@
 # Keep these tracked text files LF on Windows as well.
 apps/tauri/src-tauri/Cargo.toml text eol=lf
 apps/tauri/src/renderer/features/terminal/autocomplete/specs/LICENSE.fig.txt text eol=lf
+THIRD-PARTY-NOTICES.md text eol=lf
 
 # Shell scripts are consumed by WSL and CI and must not receive CRLF.
 *.sh text eol=lf
