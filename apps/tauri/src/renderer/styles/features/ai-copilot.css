@@ -2511,6 +2511,10 @@
   white-space: nowrap;
 }
 
+.ai-settings-preview-tag.is-key-saved {
+  background: var(--surface-input);
+}
+
 .ai-settings-provider-picker {
   display: flex;
   align-items: end;
@@ -2660,14 +2664,16 @@
 }
 
 .ai-settings-model-tag {
+  box-sizing: border-box;
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 26px;
   padding: 0 9px;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface-input);
   color: var(--text-secondary);
   font-size: var(--ui-font-size-11px, 11px);
   font-family: var(--font-mono);
@@ -2680,6 +2686,61 @@
     opacity var(--duration-hover) var(--ease-out),
     transform var(--duration-hover) var(--ease-out);
   user-select: none;
+}
+
+.ai-settings-model-tag.is-dragging {
+  opacity: 0.45;
+}
+
+.ai-settings-model-tag.drop-before::before,
+.ai-settings-model-tag.drop-after::after {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent-highlight);
+  content: '';
+  pointer-events: none;
+}
+
+.ai-settings-model-tag.drop-before::before {
+  left: -5px;
+}
+
+.ai-settings-model-tag.drop-after::after {
+  right: -5px;
+}
+
+.ai-settings-model-tag-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: grab;
+  line-height: 1.2;
+}
+
+.ai-settings-model-tag-text {
+  position: relative;
+  top: -1px;
+  display: block;
+  line-height: inherit;
+}
+
+.ai-settings-model-tag-select:active {
+  cursor: grabbing;
+}
+
+.ai-settings-model-tag-select:focus-visible,
+.ai-settings-model-tag-remove:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
 }
 
 .ai-settings-model-tag:hover {
@@ -2695,11 +2756,14 @@
 }
 
 .ai-settings-model-tag-remove {
+  box-sizing: border-box;
+  flex: 0 0 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 14px;
   height: 14px;
+  line-height: 0;
   padding: 0;
   border: none;
   border-radius: 50%;

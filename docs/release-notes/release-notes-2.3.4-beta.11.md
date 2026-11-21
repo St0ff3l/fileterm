@@ -1,6 +1,6 @@
 ## FileTerm 2.3.4-beta.11
 
-FileTerm 2.3.4-beta.11 改进小屏和高 DPI 下的界面字号与布局，支持保存前测试 WebDAV/S3 备份配置，并统一设置操作反馈。
+FileTerm 2.3.4-beta.11 改进小屏和高 DPI 下的界面字号与布局，支持保存前测试 WebDAV/S3 备份配置，并统一设置反馈、更新 AI 模型管理。
 
 **下载地址**
 
@@ -22,6 +22,7 @@ FileTerm 2.3.4-beta.11 改进小屏和高 DPI 下的界面字号与布局，支�
 
 - **界面字号与布局**：新增独立的界面字号比例，并限制界面缩放与字号叠加后的综合倍率；终端字号保持独立，改善小屏高 DPI 和大字号下的控件布局。
 - **备份连接测试**：可直接测试当前未保存的 WebDAV/S3 地址和配置；测试不会保存配置或修改远端备份，并会提示具体连接错误。
+- **AI 模型管理**：更新 Provider 模型建议，模型标签可拖动或用方向键排序；DeepSeek Flash 可选择思考档位。
 - **设置反馈**：设置操作的临时成功和错误提示改为显示在右下角气泡；配置加载失败和字段说明仍保留在设置页中。
 
 ### 本版本包含的主要 PR 和问题修复
@@ -39,7 +40,7 @@ FileTerm 2.3.4-beta.11 改进小屏和高 DPI 下的界面字号与布局，支�
 
 ## FileTerm 2.3.4-beta.11
 
-FileTerm 2.3.4-beta.11 improves interface text scaling and layout on small high-DPI screens, enables testing WebDAV/S3 backup settings before saving, and unifies settings feedback.
+FileTerm 2.3.4-beta.11 improves interface text scaling and layout on small high-DPI screens, enables testing WebDAV/S3 backup settings before saving, and unifies Settings feedback and refreshes AI model management.
 
 **Downloads**
 
@@ -61,11 +62,12 @@ FileTerm 2.3.4-beta.11 improves interface text scaling and layout on small high-
 
 - **Interface text and layout**: Adds an independent interface font scale and caps its combined effect with UI zoom; terminal font scaling stays independent, with improved control layout on small high-DPI screens and at larger text sizes.
 - **Backup connection tests**: Tests the current unsaved WebDAV/S3 addresses and settings without saving configuration or changing remote backups, and reports the connection failure stage.
+- **AI model management**: Refreshes Provider model suggestions; model tags can be reordered by dragging or with the arrow keys, and DeepSeek Flash exposes reasoning levels.
 - **Settings feedback**: Temporary success and error messages from settings actions now appear in bottom-right bubbles; configuration load failures and field guidance remain visible in the settings page.
 
 ### Main PRs and issues
 
-- [PR #408](https://github.com/St0ff3l/fileterm/pull/408) (related to [Issue #399](https://github.com/St0ff3l/fileterm/issues/399)): Adds interface text scaling and high-scale layout improvements, pre-save backup testing, and clearer Settings feedback.
+- [PR #408](https://github.com/St0ff3l/fileterm/pull/408) (related to [Issue #399](https://github.com/St0ff3l/fileterm/issues/399)): Adds interface text scaling, pre-save backup testing, clearer Settings feedback, and refreshed AI model management.
 
 See the [comparison between v2.3.4-beta.10 and v2.3.4-beta.11](https://github.com/St0ff3l/fileterm/compare/v2.3.4-beta.10...v2.3.4-beta.11) for the complete change set.
 

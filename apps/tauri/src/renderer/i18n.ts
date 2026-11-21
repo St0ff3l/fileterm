@@ -474,7 +474,7 @@ const zhCN = {
   aiSettingsModelSuggestionsPlaceholder: '选择模型以添加…',
   aiSettingsModelManualInput: '+ 手动输入模型 ID…',
   aiSettingsModelManualPlaceholder: '输入模型 ID（例：deepseek-r1）',
-  aiSettingsModelDefaultHint: '蓝色高亮项为当前生效的默认模型，点击其他模型标签可直接切换。',
+  aiSettingsModelDefaultHint: '蓝色高亮项为当前生效的默认模型；点击切换，拖动或用左右方向键调整顺序。',
   aiSettingsModelEmptyHint: '暂无已加入的模型，请手动输入模型 ID，或从列表填充后点击 [+] 添加。',
   aiSettingsConfiguredModelsTitle: '已加入 Provider 的模型:',
   aiSettingsRefreshModels: '刷新列表',
@@ -2872,7 +2872,8 @@ const enUS: typeof zhCN = {
   aiSettingsModelSuggestionsPlaceholder: 'Choose a model to add…',
   aiSettingsModelManualInput: '+ Enter model ID manually…',
   aiSettingsModelManualPlaceholder: 'Enter model ID (e.g. deepseek-r1)',
-  aiSettingsModelDefaultHint: 'The highlighted tag is the active default model; click any other tag to switch.',
+  aiSettingsModelDefaultHint:
+    'The highlighted tag is active; click to switch models, or drag / use the arrow keys to reorder.',
   aiSettingsModelEmptyHint:
     'No models added yet. Enter a model ID, or fill one from the list, then click [+] to add it.',
   aiSettingsConfiguredModelsTitle: 'Models added to Provider:',

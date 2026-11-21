@@ -1,14 +1,16 @@
 import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { MaterialIcon } from '../../../../components/common/material-icon/material-icon'
-import type { Dispatch, SetStateAction } from 'react'
+import { useRef, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from 'react'
 import type { AiProviderDraft, AiProviderKind, AiProviderSummary, FileTermDesktopApi } from '@fileterm/core'
 import { AppIcon } from '../../../common/app-icon'
 import { ConfirmActionDialog } from '../../../common/confirm-action-dialog'
 import { DropdownSelect } from '../../../common/dropdown-select'
 import { SelectionControl } from '../../../common/selection-control'
+import { usePointerSortFallback, type PointerSortTarget } from '../../../../hooks/use-pointer-sort-fallback'
 import { type LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
 import { AI_PROVIDER_PRESETS, isAiManualCapabilityProvider, type AiFeedback, type AiProviderPreset } from '../constants'
+import type { AiModelDropPosition } from '../controller/model-order'
 import { AiModelCapabilityEditor } from './ai-model-capability-editor'
 
 type AiSettingsPanelContext = {
@@ -42,6 +44,7 @@ type AiSettingsPanelContext = {
   refreshAiModelChoices(): Promise<void>
   addSelectedModelToProvider(): void
   removeConfiguredModel(modelName: string): void
+  reorderConfiguredModels(source: string, target: string, position: AiModelDropPosition): void
   saveAiProvider(): Promise<void>
   testAiProvider(): Promise<void>
   showDeleteAiProviderConfirm: boolean
@@ -78,12 +81,67 @@ export function AiSettingsPanel() {
     refreshAiModelChoices,
     addSelectedModelToProvider,
     removeConfiguredModel,
+    reorderConfiguredModels,
     saveAiProvider,
     testAiProvider,
     showDeleteAiProviderConfirm,
     setShowDeleteAiProviderConfirm,
     deleteAiProvider
   } = useSettingsModalContext<AiSettingsPanelContext>()
+
+  const [draggingModel, setDraggingModel] = useState<string | null>(null)
+  const [dragOverModel, setDragOverModel] = useState<string | null>(null)
+  const [modelDropPosition, setModelDropPosition] = useState<AiModelDropPosition | null>(null)
+  const suppressModelClickRef = useRef(false)
+
+  const clearModelDragState = () => {
+    setDraggingModel(null)
+    setDragOverModel(null)
+    setModelDropPosition(null)
+    window.setTimeout(() => {
+      suppressModelClickRef.current = false
+    }, 0)
+  }
+
+  const positionForModelTarget = (target: PointerSortTarget, clientX: number): AiModelDropPosition => {
+    const { left, width } = target.element.getBoundingClientRect()
+    return clientX < left + width / 2 ? 'before' : 'after'
+  }
+
+  const handleModelPointerDown = usePointerSortFallback<string>({
+    onStart: (modelName) => {
+      suppressModelClickRef.current = true
+      setDraggingModel(modelName)
+    },
+    onTarget: (source, target, _clientY, clientX) => {
+      if (target.kind !== 'ai-provider-model') return
+      if (source === target.id) {
+        setDragOverModel(null)
+        setModelDropPosition(null)
+        return
+      }
+      setDragOverModel(target.id)
+      setModelDropPosition(positionForModelTarget(target, clientX))
+    },
+    onDrop: (source, target, _clientY, clientX) => {
+      if (target && target.kind === 'ai-provider-model' && source !== target.id) {
+        reorderConfiguredModels(source, target.id, positionForModelTarget(target, clientX))
+      }
+      clearModelDragState()
+    },
+    onCancel: clearModelDragState
+  })
+
+  const handleModelReorderKeyDown = (event: KeyboardEvent<HTMLButtonElement>, modelName: string) => {
+    const index = configuredModels.indexOf(modelName)
+    if (event.key === 'ArrowLeft' && index > 0) {
+      event.preventDefault()
+      reorderConfiguredModels(modelName, configuredModels[index - 1], 'before')
+    } else if (event.key === 'ArrowRight' && index < configuredModels.length - 1) {
+      event.preventDefault()
+      reorderConfiguredModels(modelName, configuredModels[index + 1], 'after')
+    }
+  }
 
   const showManualCapabilities = isAiManualCapabilityProvider(aiDraft)
   const activeModel = aiDraft.model || configuredModels[0] || ''
@@ -112,7 +170,7 @@ export function AiSettingsPanel() {
                   : t.aiSettingsPreviewHint}
             </p>
           </div>
-          <span className="ai-settings-preview-tag">
+          <span className={`ai-settings-preview-tag ${selectedAiProvider?.hasApiKey ? 'is-key-saved' : ''}`}>
             {selectedAiProvider?.hasApiKey ? t.aiSettingsApiKeySaved : t.aiCopilotPreview}
           </span>
         </div>
@@ -306,14 +364,34 @@ export function AiSettingsPanel() {
                       <div className="ai-settings-model-tags">
                         {configuredModels.map((modelName) => {
                           const isActive = aiDraft.model === modelName
+                          const isDragging = draggingModel === modelName
+                          const isDragOver = dragOverModel === modelName
                           return (
-                            <span
+                            <div
                               key={modelName}
-                              className={`ai-settings-model-tag ${isActive ? 'is-active' : ''}`}
-                              onClick={() => patchAiDraft({ model: modelName })}
-                              title={isActive ? '当前生效模型' : `点击作为当前生效模型 (${modelName})`}
+                              className={`ai-settings-model-tag ${isActive ? 'is-active' : ''} ${isDragging ? 'is-dragging' : ''} ${isDragOver && modelDropPosition ? `drop-${modelDropPosition}` : ''}`}
+                              data-fileterm-sort-id={modelName}
+                              data-fileterm-sort-kind="ai-provider-model"
+                              draggable={false}
+                              onClickCapture={(event) => {
+                                if (suppressModelClickRef.current) {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                }
+                              }}
+                              onPointerDown={(event) => handleModelPointerDown(event, modelName)}
                             >
-                              <span className="ai-settings-model-tag-text">{modelName}</span>
+                              <button
+                                aria-pressed={isActive}
+                                className="ai-settings-model-tag-select"
+                                data-fileterm-sort-handle
+                                onKeyDown={(event) => handleModelReorderKeyDown(event, modelName)}
+                                onClick={() => patchAiDraft({ model: modelName })}
+                                title={isActive ? '当前生效模型' : `点击作为当前生效模型 (${modelName})`}
+                                type="button"
+                              >
+                                <span className="ai-settings-model-tag-text">{modelName}</span>
+                              </button>
                               <button
                                 type="button"
                                 className="ai-settings-model-tag-remove"
@@ -325,7 +403,7 @@ export function AiSettingsPanel() {
                               >
                                 <AppIcon name="close" size={10} />
                               </button>
-                            </span>
+                            </div>
                           )
                         })}
                       </div>

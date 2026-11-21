@@ -317,21 +317,27 @@ export function sameOverviewSectionOrder(left: OverviewSectionId[], right: Overv
 
 export const DEFAULT_MODELS_BY_KIND: Record<AiProviderKind, string[]> = {
   'openai-compatible-chat': [
-    'deepseek-v4-flash',
+    'deepseek-flash',
     'deepseek-v4-pro',
-    'deepseek-v4-flash-vision-exp',
+    'kimi-k3.1-pro',
+    'kimi-k3.1-pro-highspeed',
     'kimi-k3',
-    'kimi-k2.7-code',
-    'kimi-k2.7-code-highspeed',
-    'kimi-k2.6',
+    'glm-5.3-flash',
+    'glm-5.3-flashx',
     'glm-5.2',
     'glm-5.1',
     'glm-5',
     'glm-4.7',
-    'doubao-seed-2-0-pro-260215',
-    'doubao-seed-2-0-code-260215'
+    'doubao-seed-evolving',
+    'doubao-seed-2-1-pro-260915',
+    'doubao-seed-2-1-lite-260915',
+    'doubao-seed-2-1-turbo-260628'
   ],
   'openai-responses': [
+    'gpt-6.2-astra',
+    'gpt-6.2-sol',
+    'gpt-6.1-terra',
+    'gpt-6-luna',
     'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -345,6 +351,10 @@ export const DEFAULT_MODELS_BY_KIND: Record<AiProviderKind, string[]> = {
     'gpt-5.2'
   ],
   'anthropic-messages': [
+    'claude-fable-5-2',
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
+    'claude-haiku-5-5',
     'claude-fable-5',
     'claude-opus-5',
     'claude-opus-4-8',
@@ -399,8 +409,12 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'Anthropic',
       kind: 'anthropic-messages',
       baseUrl: 'https://api.anthropic.com/v1',
-      model: 'claude-fable-5',
+      model: 'claude-opus-5-5',
       models: [
+        'claude-fable-5-2',
+        'claude-opus-5-5',
+        'claude-sonnet-5-5',
+        'claude-haiku-5-5',
         'claude-fable-5',
         'claude-opus-5',
         'claude-opus-4-8',
@@ -423,8 +437,12 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'OpenAI Responses',
       kind: 'openai-responses',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-5.6-sol',
+      model: 'gpt-6.2-sol',
       models: [
+        'gpt-6.2-astra',
+        'gpt-6.2-sol',
+        'gpt-6.1-terra',
+        'gpt-6-luna',
         'gpt-5.6',
         'gpt-5.6-sol',
         'gpt-5.6-terra',
@@ -449,8 +467,8 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'DeepSeek',
       kind: 'openai-compatible-chat',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-v4-flash',
-      models: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-v4-flash-vision-exp'],
+      model: 'deepseek-flash',
+      models: ['deepseek-flash', 'deepseek-v4-pro'],
       allowNoAuth: false,
       allowInsecureHttp: false
     }
@@ -462,8 +480,8 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'Kimi (Moonshot)',
       kind: 'openai-compatible-chat',
       baseUrl: 'https://api.moonshot.ai/v1',
-      model: 'kimi-k3',
-      models: ['kimi-k3', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k2.6'],
+      model: 'kimi-k3.1-pro',
+      models: ['kimi-k3.1-pro', 'kimi-k3.1-pro-highspeed', 'kimi-k3'],
       allowNoAuth: false,
       allowInsecureHttp: false
     }
@@ -475,8 +493,10 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: 'GLM (智谱)',
       kind: 'openai-compatible-chat',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-      model: 'glm-5.2',
+      model: 'glm-5.3-flash',
       models: [
+        'glm-5.3-flash',
+        'glm-5.3-flashx',
         'glm-5.2',
         'glm-5.1',
         'glm-5-turbo',
@@ -505,14 +525,14 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       name: '火山方舟 (Ark)',
       kind: 'openai-compatible-chat',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-      model: 'doubao-seed-2-0-pro-260215',
+      model: 'doubao-seed-2-1-pro-260915',
       models: [
+        'doubao-seed-evolving',
+        'doubao-seed-2-1-pro-260915',
+        'doubao-seed-2-1-lite-260915',
         'doubao-seed-2-1-pro-260628',
         'doubao-seed-2-1-turbo-260628',
-        'doubao-seed-2-0-pro-260215',
-        'doubao-seed-2-0-lite-260215',
-        'doubao-seed-2-0-mini-260215',
-        'doubao-seed-2-0-code-260215'
+        'doubao-seed-2-0-lite-260428'
       ],
       allowNoAuth: false,
       allowInsecureHttp: false
@@ -527,15 +547,15 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       baseUrl: 'https://api.siliconflow.cn/v1',
       // SiliconFlow's model directory changes independently of FileTerm.
       // Keep these as suggestions only; the input above accepts any current ID.
-      model: 'deepseek-ai/DeepSeek-V3.2',
+      model: 'deepseek-ai/DeepSeek-V4.1-Flash',
       models: [
+        'deepseek-ai/DeepSeek-V4.1-Flash',
         'deepseek-ai/DeepSeek-V3.2',
         'deepseek-ai/DeepSeek-V3.1-Terminus',
         'deepseek-ai/DeepSeek-R1',
+        'moonshotai/Kimi-K2.7-Code',
         'moonshotai/Kimi-K2.6',
         'zai-org/GLM-5.1',
-        'zai-org/GLM-4.7',
-        'MiniMaxAI/MiniMax-M2.5',
         'Qwen/Qwen3-VL-235B-A22B-Instruct'
       ],
       allowNoAuth: false,

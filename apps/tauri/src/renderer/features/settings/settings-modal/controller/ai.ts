@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import type { AiModelCapabilities, AiProviderDraft, AiProviderSummary } from '@fileterm/core'
 import { t } from '../../../../i18n'
 import { waitForMinimumBusyDuration } from '../../../common/operation-timing'
+import { reorderAiProviderModels, type AiModelDropPosition } from './model-order'
 import {
   AI_PROVIDER_PRESETS,
   DEFAULT_MODELS_BY_KIND,
@@ -141,6 +142,10 @@ export function useAiSettingsController({
         modelCapabilities
       }
     })
+  }
+
+  const reorderConfiguredModels = (source: string, target: string, position: AiModelDropPosition) => {
+    setConfiguredModels((previous) => reorderAiProviderModels(previous, source, target, position))
   }
 
   const candidateModelOptions = useMemo(
@@ -350,6 +355,7 @@ export function useAiSettingsController({
     refreshAiModelChoices,
     addSelectedModelToProvider,
     removeConfiguredModel,
+    reorderConfiguredModels,
     saveAiProvider,
     testAiProvider,
     showDeleteAiProviderConfirm,
