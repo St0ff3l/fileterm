@@ -86,6 +86,15 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            apps/tauri/src-tauri -> target
+            tests/ci/tauri-local-pty -> target
+            tests/ci/tauri-socket-lifecycle -> target
+            tests/ci/tauri-windows-scheduler -> target
+
       - name: Install Windows native build dependencies
         if: runner.os == 'Windows'
         shell: pwsh
@@ -490,6 +499,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
+
       - name: Install Linux Tauri link dependencies
         run: |
           sudo apt-get update
@@ -511,6 +525,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri -> target
 
       - name: Setup Node
         uses: actions/setup-node@v5

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import {
   DEFAULT_UI_ZOOM_PERCENT,
+  DEFAULT_MASK_CONNECTION_ADDRESSES,
   DEFAULT_LOCAL_TERMINAL_SHELLS,
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
@@ -78,6 +79,9 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [uiZoomPercent, setUiZoomPercent] = useState(DEFAULT_UI_ZOOM_PERCENT)
   const [isSavingUiZoomPercent, setIsSavingUiZoomPercent] = useState(false)
   const [uiZoomPercentError, setUiZoomPercentError] = useState<string | null>(null)
+  const [maskConnectionAddresses, setMaskConnectionAddresses] = useState(DEFAULT_MASK_CONNECTION_ADDRESSES)
+  const [isSavingMaskConnectionAddresses, setIsSavingMaskConnectionAddresses] = useState(false)
+  const [maskConnectionAddressesError, setMaskConnectionAddressesError] = useState<string | null>(null)
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
   const [isImportingFont, setIsImportingFont] = useState(false)
   const [fontImportError, setFontImportError] = useState<string | null>(null)
@@ -235,6 +239,12 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setIsSavingUiZoomPercent,
     uiZoomPercentError,
     setUiZoomPercentError,
+    maskConnectionAddresses,
+    setMaskConnectionAddresses,
+    isSavingMaskConnectionAddresses,
+    setIsSavingMaskConnectionAddresses,
+    maskConnectionAddressesError,
+    setMaskConnectionAddressesError,
     importedFonts,
     setImportedFonts,
     isImportingFont,

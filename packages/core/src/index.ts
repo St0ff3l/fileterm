@@ -2264,6 +2264,12 @@ export type WorkspaceMode = 'standard' | 'server-management'
 export const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'standard'
 /** Compact tab bars are 36px tall; the original height is 48px. */
 export const DEFAULT_COMPACT_TAB_BAR = false
+/**
+ * Obscure the private IP and access address in the connection summary. The
+ * values stay readable on screen but are blurred, so they cannot be captured
+ * by a screenshot or a shoulder-level glance.
+ */
+export const DEFAULT_MASK_CONNECTION_ADDRESSES = false
 
 export interface UiPreferences {
   theme: ThemeMode
@@ -2287,6 +2293,7 @@ export interface UiPreferences {
   rememberWindowSize: boolean
   workspaceMode: WorkspaceMode
   compactTabBar: boolean
+  maskConnectionAddresses: boolean
   localTerminalShells: LocalTerminalShellPreferences
   filePanelRememberRatio: boolean
   transferSidebarCollapsedByDefault: boolean
@@ -2321,6 +2328,7 @@ export interface UiPreferencesInput {
   rememberWindowSize?: boolean
   workspaceMode?: WorkspaceMode
   compactTabBar?: boolean
+  maskConnectionAddresses?: boolean
   localTerminalShells?: Partial<LocalTerminalShellPreferences>
   filePanelRememberRatio?: boolean
   transferSidebarCollapsedByDefault?: boolean

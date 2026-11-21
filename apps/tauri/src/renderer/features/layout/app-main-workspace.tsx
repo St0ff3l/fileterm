@@ -7,7 +7,7 @@ import { SystemSidebarShell } from '../system/system-sidebar-shell'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
 import { TransferCenterHost } from '../transfers/transfer-center-host'
 import { KeepAliveWorkspaceStage } from '../workspace/workspace-stage'
-import { TabBar, type TabBarProps, type TabContextTarget } from './tab-bar'
+import { getHomeBrandContent, TabBar, type TabBarProps, type TabContextTarget } from './tab-bar'
 import type { AppViewModel } from './app-view-model'
 import { WindowMenubar } from './window-menubar'
 import { HostRail } from './host-rail'
@@ -46,6 +46,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     setSidebarWidth,
     workspaceMode,
     compactTabBar,
+    maskConnectionAddresses,
     aiCopilotWidth,
     isResizingSidebar,
     isResizingAiCopilot,
@@ -205,6 +206,10 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   }, [activeTab?.id, interactiveGatewayNoticeTabId])
 
   const isServerManagementMode = workspaceMode === 'server-management'
+  const managementHomeBrandContent =
+    isServerManagementMode && usesCustomWindowChrome
+      ? getHomeBrandContent(desktopApi?.appName, desktopApi?.appVersion)
+      : undefined
   const resolvedSidebarWidth = isSystemSidebarCollapsed
     ? 44
     : isServerManagementMode && !isHomeWorkspaceVisible
@@ -375,7 +380,12 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           />
         ) : null}
         {(isServerManagementMode || !isHomeWorkspaceVisible) && (
-          <TabBar {...tabBarProps} orderedTabs={tabBarEntries} showAiCopilotToggle={!isHomeWorkspaceVisible} />
+          <TabBar
+            {...tabBarProps}
+            homeBrandContent={managementHomeBrandContent}
+            orderedTabs={tabBarEntries}
+            showAiCopilotToggle={!isHomeWorkspaceVisible}
+          />
         )}
 
         {showHostRail ? (
@@ -409,6 +419,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             collapsed={isSystemSidebarCollapsed}
             connectionStatus={activeTab?.status ?? null}
             showResourceMeters={isResourceMonitoringAvailable}
+            maskConnectionAddresses={maskConnectionAddresses}
             visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
             toggleSide={isServerManagementMode ? 'right' : 'left'}
@@ -464,6 +475,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 activeHomeTabId={effectiveActiveLocalTabId}
                 activeProfile={activeProfile}
                 activeSession={activeSession}
+                maskConnectionAddresses={maskConnectionAddresses}
                 activeTab={activeTab}
                 terminalActiveTab={activePaneTab ?? activeTab}
                 terminalActiveSession={activePaneSession ?? activeSession}

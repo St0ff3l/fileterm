@@ -17,6 +17,7 @@ export function SystemSidebarShell({
   collapsed,
   connectionStatus,
   showResourceMeters,
+  maskConnectionAddresses,
   visibleMetrics,
   isResizing,
   toggleSide,
@@ -34,6 +35,7 @@ export function SystemSidebarShell({
   collapsed: boolean
   connectionStatus: TabStatus | null
   showResourceMeters: boolean
+  maskConnectionAddresses: boolean
   visibleMetrics: ResourceMonitoringMetric[]
   isResizing: boolean
   /** Management mode mirrors the collapse glyph; the default layout keeps it. */
@@ -55,6 +57,7 @@ export function SystemSidebarShell({
         collapsed={collapsed}
         connectionStatus={connectionStatus}
         showResourceMeters={showResourceMeters}
+        maskConnectionAddresses={maskConnectionAddresses}
         visibleMetrics={visibleMetrics}
         onMonitoringSnapshot={onMonitoringSnapshot}
         onOpenSystemInfo={onOpenSystemInfo}

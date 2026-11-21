@@ -107,27 +107,50 @@ export function ResourceMetricCards({
   )
 }
 
-export function AddressLine({ label, value }: { label: string; value: string }) {
-  const canCopy = value && value !== '-'
+export function AddressLine({ label, value, masked = false }: { label: string; value: string; masked?: boolean }) {
+  const canCopy = Boolean(value) && value !== '-'
   const [copied, setCopied] = useState(false)
+  const copyAddress = () => {
+    if (!canCopy || hasSelectedText()) return
+    copyText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   return (
     <div className="address-row">
       <span>{label}</span>
       <strong
-        className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''}`}
-        aria-label={canCopy ? (copied ? t.copied : `${t.copy}: ${value}`) : value}
-        onClick={() => {
-          if (canCopy && !hasSelectedText()) {
-            copyText(value)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
+        className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''} ${masked ? 'is-masked' : ''}`.trim()}
+        aria-label={copied ? t.copied : `${t.copy}: ${value}`}
+        role={canCopy ? 'button' : undefined}
+        tabIndex={canCopy ? 0 : undefined}
+        onClick={copyAddress}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            copyAddress()
           }
         }}
       >
-        <MetricHoverDetail className="address-hover-detail" value={copied ? t.copied : value} />
+        {masked && canCopy ? (
+          <MaskedAddressText value={copied ? t.copied : value} focusable={false} />
+        ) : (
+          <MetricHoverDetail className="address-hover-detail" value={copied ? t.copied : value} />
+        )}
       </strong>
     </div>
+  )
+}
+
+export function MaskedAddressText({ value, focusable = true }: { value: string; focusable?: boolean }) {
+  return (
+    <span className="address-masked-text" tabIndex={focusable ? 0 : undefined}>
+      <span className="address-mask-placeholder" aria-hidden="true">
+        ••••••••
+      </span>
+      <span className="address-mask-value">{value}</span>
+    </span>
   )
 }
 

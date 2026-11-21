@@ -43,6 +43,10 @@ type InterfaceDisplaySettingsContext = {
   isSavingUiZoomPercent: boolean
   uiZoomPercentError: string | null
   setUiZoomPercentPreference(nextValue: number): void
+  maskConnectionAddresses: boolean
+  isSavingMaskConnectionAddresses: boolean
+  maskConnectionAddressesError: string | null
+  setMaskConnectionAddressesPreference(nextValue: boolean): void
 }
 
 /** Interface layout and window preferences. */
@@ -77,7 +81,11 @@ export function InterfaceDisplaySettingsSections() {
     uiZoomPercent,
     isSavingUiZoomPercent,
     uiZoomPercentError,
-    setUiZoomPercentPreference
+    setUiZoomPercentPreference,
+    maskConnectionAddresses,
+    isSavingMaskConnectionAddresses,
+    maskConnectionAddressesError,
+    setMaskConnectionAddressesPreference
   } = useSettingsModalContext<InterfaceDisplaySettingsContext>()
   const appIconHint =
     desktopApi?.platform === 'win32'
@@ -164,6 +172,24 @@ export function InterfaceDisplaySettingsSections() {
               />
             </span>
           </label>
+          <label
+            aria-busy={isSavingMaskConnectionAddresses}
+            className="overview-preference-row"
+            inert={isSavingMaskConnectionAddresses}
+          >
+            <span className="overview-preference-copy">
+              <strong>{t.maskConnectionAddresses}</strong>
+              <p>{t.maskConnectionAddressesHint}</p>
+            </span>
+            <span className="command-toggle overview-preference-toggle">
+              <SelectionControl
+                checked={maskConnectionAddresses}
+                disabled={!desktopApi}
+                onChange={(event) => setMaskConnectionAddressesPreference(event.target.checked)}
+                type="checkbox"
+              />
+            </span>
+          </label>
         </div>
         {compactTabBarError ? (
           <p className="modal-error" role="alert">
@@ -172,6 +198,7 @@ export function InterfaceDisplaySettingsSections() {
         ) : null}
         {uiZoomPreferenceError ? <p className="modal-error">{uiZoomPreferenceError}</p> : null}
         {filePanelPreferenceError ? <p className="modal-error">{filePanelPreferenceError}</p> : null}
+        {maskConnectionAddressesError ? <p className="modal-error">{maskConnectionAddressesError}</p> : null}
       </section>
 
       <section className="settings-section">

@@ -38,6 +38,7 @@ export function useSettingsModalEffects({
     setShowMacosMenuBarIcon,
     setAppIcon,
     setUiZoomPercent,
+    setMaskConnectionAddresses,
     setMcpAgentPreferences,
     setConnectionDefaults,
     setTransferSidebarCollapsedByDefault,
@@ -140,6 +141,7 @@ export function useSettingsModalEffects({
       setShowMacosMenuBarIcon(preferences.showMacosMenuBarIcon)
       setAppIcon(preferences.appIcon)
       setUiZoomPercent(preferences.uiZoomPercent)
+      setMaskConnectionAddresses(preferences.maskConnectionAddresses)
       setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
       setTransferSidebarCollapsedByDefault(preferences.transferSidebarCollapsedByDefault)

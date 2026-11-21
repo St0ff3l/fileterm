@@ -30,6 +30,7 @@ import { useSessionSecurity } from './use-session-security'
 import { useThemeMode, type ThemeMode } from './use-theme-mode'
 import { useWorkspaceMode } from '../features/layout/use-workspace-mode'
 import { useCompactTabBar } from '../features/layout/use-compact-tab-bar'
+import { useMaskConnectionAddresses } from '../features/layout/use-mask-connection-addresses'
 import {
   DEFAULT_FILE_PANEL_SNAP_TARGET,
   isFilePanelSnapTarget,
@@ -49,6 +50,7 @@ export type InitialUiPreferences = Pick<
   | 'rememberWindowSize'
   | 'workspaceMode'
   | 'compactTabBar'
+  | 'maskConnectionAddresses'
   | 'filePanelRememberRatio'
   | 'transferSidebarCollapsedByDefault'
   | 'resourceMonitoringMetrics'
@@ -146,6 +148,10 @@ export function useAppShellState({
   const [rememberWindowSize, setRememberWindowSize] = useState(() => initialUiPreferences?.rememberWindowSize ?? false)
   const [workspaceMode] = useWorkspaceMode(desktopApi, initialUiPreferences?.workspaceMode)
   const [compactTabBar] = useCompactTabBar(desktopApi, initialUiPreferences?.compactTabBar)
+  const [maskConnectionAddresses] = useMaskConnectionAddresses(
+    desktopApi,
+    initialUiPreferences?.maskConnectionAddresses
+  )
   useLayoutEffect(() => {
     void applyUiZoomPercent(uiZoomPercent)
   }, [uiZoomPercent])
@@ -516,6 +522,7 @@ export function useAppShellState({
     setRememberWindowSize,
     workspaceMode,
     compactTabBar,
+    maskConnectionAddresses,
     filePanelRememberRatio,
     setFilePanelRememberRatio,
     transferSidebarCollapsedByDefault,
