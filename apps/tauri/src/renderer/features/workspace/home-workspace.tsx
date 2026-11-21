@@ -31,7 +31,7 @@ import { CommandManagerModal } from '../commands/command-manager-modal'
 import { SshKeyManagerPage } from '../ssh-keys/ssh-key-manager-page'
 import { McpCallLogPage } from './mcp-call-log-page'
 import { SettingsModal } from '../settings/settings-modal'
-import { TabBar, type TabBarProps } from '../layout/tab-bar'
+import { getHomeBrandContent, TabBar, type TabBarProps } from '../layout/tab-bar'
 import { BackgroundSessionsPage } from './background-sessions-page'
 import type { ServerManagementNavigation } from '../server-management/server-management-types'
 import { ServerTopologyPage } from '../server-management/server-topology-page'
@@ -308,12 +308,9 @@ export function HomeWorkspace({
     return desktopApi.onUpdateStatus(setUpdateStatus)
   }, [desktopApi, updatePreviewState])
 
-  const homeBrandContent = usesWindowsHomeLayout ? (
-    <>
-      <strong>{desktopApi?.appName ?? 'FileTerm'}</strong>
-      <span>v{desktopApi?.appVersion ?? '0.0.0'}</span>
-    </>
-  ) : undefined
+  const homeBrandContent = usesWindowsHomeLayout
+    ? getHomeBrandContent(desktopApi?.appName, desktopApi?.appVersion)
+    : undefined
 
   const handleOpenNewConnection = () => {
     if (desktopApi) {

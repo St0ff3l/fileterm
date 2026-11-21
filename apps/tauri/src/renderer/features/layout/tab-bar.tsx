@@ -69,6 +69,15 @@ export interface TabBarProps {
   sessionOnly?: boolean
 }
 
+export function getHomeBrandContent(appName?: string, appVersion?: string): ReactNode {
+  return (
+    <>
+      <strong>{appName ?? 'FileTerm'}</strong>
+      <span>v{appVersion ?? '0.0.0'}</span>
+    </>
+  )
+}
+
 // Middle-button presses would otherwise start WebKit's autoscroll or paste on Linux.
 function preventMiddleClickAutoscroll(event: MouseEvent<HTMLElement>) {
   if (event.button === MIDDLE_MOUSE_BUTTON) event.preventDefault()
