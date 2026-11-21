@@ -1,6 +1,6 @@
 ## FileTerm 2.3.4-beta.10
 
-FileTerm 2.3.4-beta.10 新增多服务器管理工作区与连接地址遮罩，并改善工作区切换和发布构建可靠性。
+FileTerm 2.3.4-beta.10 新增多服务器管理工作区、连接地址遮罩和自定义 S3 自签名证书选项，并改善工作区切换和发布构建可靠性。
 
 **下载地址**
 
@@ -25,6 +25,7 @@ FileTerm 2.3.4-beta.10 新增多服务器管理工作区与连接地址遮罩，
 - **工作区体验**：切换工作区模式时重新播放页面入场动画，并保留设置页导航状态。
 - **构建稳定性**：改进发布构建的 Rust 缓存预热，生成自动补全规格以避免缓存构建缺少输入文件。
 - **开发工具安全**：更新开发依赖并修复 npm 审计告警；不改变应用运行时依赖。
+- **S3 备份兼容性**：自定义 S3 存储可选择允许自签名证书；默认仍验证服务器证书。
 
 ### 本版本包含的主要 PR 和问题修复
 
@@ -32,6 +33,7 @@ FileTerm 2.3.4-beta.10 新增多服务器管理工作区与连接地址遮罩，
 - [PR #401](https://github.com/St0ff3l/fileterm/pull/401)：增加连接地址遮罩和按需显示。
 - [PR #403](https://github.com/St0ff3l/fileterm/pull/403)：修复工作区模式切换时的页面过渡动画。
 - [PR #398](https://github.com/St0ff3l/fileterm/pull/398) 与 [PR #400](https://github.com/St0ff3l/fileterm/pull/400)：完善多平台 Rust 缓存预热流程。
+- [PR #406](https://github.com/St0ff3l/fileterm/pull/406)（关联 [Issue #405](https://github.com/St0ff3l/fileterm/issues/405)）：为自定义 S3 兼容存储增加可选的自签名证书支持。
 
 完整变更记录请查看 [v2.3.4-beta.9 与 v2.3.4-beta.10 的比较](https://github.com/St0ff3l/fileterm/compare/v2.3.4-beta.9...v2.3.4-beta.10)。
 
@@ -44,7 +46,7 @@ FileTerm 2.3.4-beta.10 新增多服务器管理工作区与连接地址遮罩，
 
 ## FileTerm 2.3.4-beta.10
 
-FileTerm 2.3.4-beta.10 adds a multi-server management workspace and connection address masking, while improving workspace transitions and release build reliability.
+FileTerm 2.3.4-beta.10 adds a multi-server management workspace, connection address masking, and an option for self-signed certificates on custom S3 storage, while improving workspace transitions and release build reliability.
 
 **Downloads**
 
@@ -69,6 +71,7 @@ FileTerm 2.3.4-beta.10 adds a multi-server management workspace and connection a
 - **Workspace experience**: Replays page entrance animations when switching workspace modes and preserves navigation on the Settings page.
 - **Build reliability**: Improves Rust cache warmup for release builds and generates completion specs to prevent missing inputs in cache builds.
 - **Developer tooling security**: Updates development dependencies to resolve npm audit findings without changing runtime dependencies.
+- **S3 backup compatibility**: Custom S3 storage can opt in to self-signed certificates; server certificates remain validated by default.
 
 ### Main PRs and issues
 
@@ -76,6 +79,7 @@ FileTerm 2.3.4-beta.10 adds a multi-server management workspace and connection a
 - [PR #401](https://github.com/St0ff3l/fileterm/pull/401): Adds connection address masking and on-demand reveal.
 - [PR #403](https://github.com/St0ff3l/fileterm/pull/403): Fixes page transition animations when switching workspace modes.
 - [PR #398](https://github.com/St0ff3l/fileterm/pull/398) and [PR #400](https://github.com/St0ff3l/fileterm/pull/400): Improve multi-platform Rust cache warmup.
+- [PR #406](https://github.com/St0ff3l/fileterm/pull/406) (related to [Issue #405](https://github.com/St0ff3l/fileterm/issues/405)): Adds optional self-signed certificate support for custom S3-compatible storage.
 
 See the [comparison between v2.3.4-beta.9 and v2.3.4-beta.10](https://github.com/St0ff3l/fileterm/compare/v2.3.4-beta.9...v2.3.4-beta.10) for the complete change set.
 

@@ -1272,6 +1272,7 @@ export interface S3BackupConfig {
   bucket: string
   remotePath: string
   pathStyleAccessEnabled: boolean
+  allowInvalidCertificates: boolean
   accessKeyId?: string
   hasSavedSecret: boolean
   lastSyncedAt?: string
@@ -1280,7 +1281,15 @@ export interface S3BackupConfig {
 
 export type S3BackupConfigInput = Pick<
   S3BackupConfig,
-  'enabled' | 'provider' | 'endpoint' | 'region' | 'bucket' | 'remotePath' | 'pathStyleAccessEnabled' | 'accessKeyId'
+  | 'enabled'
+  | 'provider'
+  | 'endpoint'
+  | 'region'
+  | 'bucket'
+  | 'remotePath'
+  | 'pathStyleAccessEnabled'
+  | 'allowInvalidCertificates'
+  | 'accessKeyId'
 > & {
   secretAccessKey?: string
 }
