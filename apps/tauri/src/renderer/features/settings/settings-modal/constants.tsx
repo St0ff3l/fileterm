@@ -24,14 +24,15 @@ export type SettingsTab =
   | 'agent'
   | 'connections'
   | 'interface'
+  | 'workspace-mode'
   | 'local-terminal'
   | 'security'
   | 'sync'
   | 'tools'
   | 'updates'
-  | 'system'
+  | 'logs'
   | 'language'
-  | 'advanced'
+  | 'about'
 
 export type SyncFeedback = {
   kind: 'success' | 'error'
@@ -50,7 +51,8 @@ export type SettingsSidebarItem = {
 
 export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'interface', labelKey: 'interfaceSettings', materialIcon: 'palette' },
-  { tab: 'local-terminal', labelKey: 'localTerminalSettings', appIcon: 'terminal-file' },
+  { tab: 'workspace-mode', labelKey: 'workspaceMode', appIcon: 'workspace-mode' },
+  { tab: 'local-terminal', labelKey: 'terminalSettings', appIcon: 'terminal-file' },
   { tab: 'ai', labelKey: 'aiSettings', materialIcon: 'auto_awesome' },
   { tab: 'agent', labelKey: 'agentMcpSettings', appIcon: 'terminal-file' },
   { tab: 'connections', labelKey: 'connectionDefaults', materialIcon: 'settings_ethernet' },
@@ -58,26 +60,29 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
   { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update_alt' },
   { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
-  { tab: 'advanced', labelKey: 'advancedSettings', appIcon: 'terminal-file' },
-  { tab: 'system', labelKey: 'systemLogsInfo', materialIcon: 'info' },
-  { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' }
+  { tab: 'logs', labelKey: 'logsSettings', appIcon: 'log' },
+  { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' },
+  { tab: 'about', labelKey: 'aboutSettings', materialIcon: 'info' }
 ]
 
 export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
-  advanced: 'terminal autocomplete completion suggestions ssh 终端 命令 补全 候选 高级',
   interface:
-    'appearance overview theme color font ui window startup size menu bar tray icon macos renderer dom webgl terminal weight 字重 渲染器 终端 外观 概览 主题 颜色 字体 窗口 启动 大小 菜单栏 托盘 图标 layout tab tabs host group row compact height titlebar 布局 标签 标签页 二级 主机 分组 单行 紧凑 高度 标题栏',
-  'local-terminal': 'terminal shell powershell pwsh bash zsh fish nushell 本地终端 shell',
+    'appearance theme color font ui window startup size menu bar tray icon macos layout tab tabs host group row compact height titlebar file panel 外观 界面 主题 颜色 字体 窗口 启动 大小 菜单栏 托盘 图标 布局 标签 标签页 二级 主机 分组 单行 紧凑 高度 标题栏 文件区域',
+  'workspace-mode':
+    'work mode workspace mode standard mode server management multi-server overview recent connections quick actions 默认模式 多服务器管理模式 概览内容 连接统计 最近使用 所有连接 快速操作',
+  'local-terminal':
+    'terminal display renderer dom webgl font weight zoom local shell powershell pwsh bash zsh fish nushell 终端显示 渲染器 字重 终端缩放 本地终端 本地 Shell',
   ai: 'ai provider model api key openai anthropic 模型 服务 密钥',
   agent: 'agent mcp cli command tool automation 代理 命令 工具',
-  connections: 'connection ssh sftp ftp telnet reconnect resource monitor 连接 默认值 重连 监控',
+  connections:
+    'autocomplete completion suggestions 命令 补全 候选 connection ssh sftp ftp telnet reconnect resource monitor 连接 默认值 重连 监控',
   security: 'security session lock password backup credentials safe 安全 会话 锁屏 密码 备份 凭据',
   sync: 'sync webdav s3 backup cloud configuration 同步 备份 云端',
   updates: 'update release version beta stable 更新 版本 发布',
   tools: 'manager connection command key shortcut 管理器 连接 命令 密钥 快捷键',
-  system:
-    'system log diagnostics platform version category performance ssh monitoring 系统 日志 诊断 平台 版本 分类 开关 性能 监控',
-  language: 'language locale chinese english 中文 英文 语言'
+  logs: 'log diagnostics category performance ssh monitoring transfer 日志 诊断 分类 开关 性能 监控 传输',
+  language: 'language locale chinese english 中文 英文 语言',
+  about: 'about fileterm system platform version license open source fig 关于 系统 平台 版本 许可 开源'
 }
 
 const ITERM2_THEME_PRESETS: Array<{ id: Iterm2ThemePresetId; labelKey: keyof LocaleMessages }> = [

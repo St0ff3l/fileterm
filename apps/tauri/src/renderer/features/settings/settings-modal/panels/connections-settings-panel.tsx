@@ -60,6 +60,17 @@ export function ConnectionsSettingsPanel() {
               <div className="advanced-toggle-row">
                 <label className="ssh-checkbox advanced-toggle-label">
                   <SelectionControl
+                    type="checkbox"
+                    checked={connectionDefaults.terminalCommandCompletion}
+                    onChange={(event) => setConnectionDefault('terminalCommandCompletion', event.target.checked)}
+                  />
+                  <span className="advanced-toggle-name">{t.terminalCommandCompletion}</span>
+                </label>
+                <p className="advanced-toggle-hint">{t.terminalCommandCompletionHint}</p>
+              </div>
+              <div className="advanced-toggle-row">
+                <label className="ssh-checkbox advanced-toggle-label">
+                  <SelectionControl
                     checked={connectionDefaults.useEmptyPassword}
                     onChange={(event) => setConnectionDefault('useEmptyPassword', event.target.checked)}
                     type="checkbox"

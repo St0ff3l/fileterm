@@ -61,9 +61,13 @@ async fn create_upload_task(
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
-    let metadata = tokio::fs::symlink_metadata(&local_path)
-        .await
-        .map_err(|error| transfer_error(format!("无法读取本地上传路径 {local_path}: {error}")))?;
+    let metadata = upload_scan_io(
+        Path::new(&local_path),
+        "读取本地上传路径",
+        tokio::fs::symlink_metadata(&local_path),
+        UPLOAD_SCAN_IO_TIMEOUT,
+    )
+    .await?;
     if metadata.file_type().is_symlink() {
         return Err(transfer_error(
             "不支持通过符号链接上传，请选择其实际文件或目录",
@@ -228,6 +232,8 @@ async fn create_upload_task(
     Ok(())
 }
 
+pub(crate) const DOWNLOAD_REMOTE_FILE_NOT_FOUND: &str = "远端下载文件不存在";
+
 pub async fn create_download(
     app: &AppHandle,
     tab_id: String,
@@ -255,7 +261,7 @@ pub async fn create_download(
         }
     })
     .await?
-    .ok_or_else(|| transfer_error("远端下载文件不存在"))?;
+    .ok_or_else(|| transfer_error(DOWNLOAD_REMOTE_FILE_NOT_FOUND))?;
     let name = download_target_name(&remote_path, target_name, cfg!(windows))?;
     let destination_path = Path::new(&local_directory)
         .join(&name)

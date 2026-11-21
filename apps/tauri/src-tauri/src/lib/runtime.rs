@@ -311,6 +311,12 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
+            #[cfg(target_os = "macos")]
+            "about" => {
+                if let Err(error) = crate::macos_icon::show_about_panel(app) {
+                    crate::services::logging::warn(app, "app-icon", error);
+                }
+            }
             "new-connection" => {
                 open_child_window_from_native_event(
                     app,
@@ -593,11 +599,14 @@ pub fn run() {
             crate::commands::app_show_window_menu,
             // Phase 3 commands
             crate::commands::app_open_profile,
+            crate::commands::app_open_profile_background,
             crate::commands::app_activate_tab,
             crate::commands::app_attach_background_session,
             crate::commands::app_detach_session_to_background,
+            crate::commands::app_hide_session_to_background,
             crate::commands::app_reconnect_tab,
             crate::commands::app_retry_monitoring,
+            crate::commands::app_get_network_connections,
             crate::commands::app_set_monitoring_enabled,
             crate::commands::app_disconnect_tab,
             crate::commands::app_close_tab,
@@ -669,6 +678,8 @@ pub fn run() {
             crate::commands::app_update_command_template,
             crate::commands::app_delete_command_template,
             crate::commands::app_execute_command_template,
+            crate::commands::app_run_command_batch,
+            crate::commands::app_list_command_batches,
             crate::commands::app_resolve_mcp_approval,
             crate::commands::app_resolve_action_approval,
             crate::commands::app_execute_ai_terminal_handoff,

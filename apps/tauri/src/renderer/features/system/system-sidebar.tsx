@@ -37,6 +37,8 @@ export function SystemSidebar({
   visibleMetrics,
   onMonitoringSnapshot,
   onOpenSystemInfo,
+  onOpenNetworkConnections,
+  toggleSide = 'left',
   onToggleCollapsed
 }: {
   activeProfile: ConnectionProfile | null
@@ -50,6 +52,9 @@ export function SystemSidebar({
   visibleMetrics: ResourceMonitoringMetric[]
   onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
   onOpenSystemInfo(): void
+  onOpenNetworkConnections(): void
+  /** Management mode mirrors the collapse glyph; the default layout keeps it. */
+  toggleSide?: 'left' | 'right'
   onToggleCollapsed(): void
 }) {
   const logMonitoringAction = useMonitoringDiagnostics({
@@ -155,6 +160,7 @@ export function SystemSidebar({
           className="system-sidebar-toggle"
           collapsed={collapsed}
           label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+          side={toggleSide}
           onClick={() => {
             logMonitoringAction('toggle-sidebar')
             onToggleCollapsed()
@@ -207,7 +213,13 @@ export function SystemSidebar({
             {showResourceMeters && visibleMetrics.includes('processes') ? (
               <ProcessMetricPanel onSortModeChange={setSortMode} rows={sortedProcesses} sortMode={sortMode} />
             ) : null}
-            {showResourceMeters && visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
+            {showResourceMeters && visibleMetrics.includes('network') ? (
+              <NetworkMetricPanel
+                key={activeTabId}
+                metrics={metrics}
+                onOpen={activeSession?.connected && !obscured ? onOpenNetworkConnections : undefined}
+              />
+            ) : null}
           </section>
           {showResourceMeters ? (
             <section className="disk-table" inert={obscured}>

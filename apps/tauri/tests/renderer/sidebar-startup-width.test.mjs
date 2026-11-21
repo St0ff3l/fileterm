@@ -174,7 +174,7 @@ test('a manually narrowed sidebar stays narrow when the window grows', () => {
 
 function renderWorkspace({
   home = false,
-  hostGroups = false,
+  management = false,
   local = false,
   copilot = false,
   transfers = false,
@@ -188,7 +188,12 @@ function renderWorkspace({
         return { jsx, jsxs: jsx }
       }
       if (name === 'react') {
-        return { useState: (value) => [value, () => {}], useEffect() {} }
+        return {
+          useState: (value) => [value, () => {}],
+          useEffect() {},
+          useCallback: (callback) => callback,
+          useMemo: (factory) => factory()
+        }
       }
       if (name.endsWith('/use-host-navigation')) return { useHostNavigation: () => ({ groups: [] }) }
       if (name.endsWith('/use-workspace-tab-shortcuts')) return { useWorkspaceTabShortcuts() {} }
@@ -204,13 +209,14 @@ function renderWorkspace({
         workspace: { profiles: [], sessions: {} },
         sessionSecurity: {},
         sidebarWidth: 320,
-        tabBarLayout: hostGroups ? 'host-groups' : 'horizontal'
+        workspaceMode: management ? 'server-management' : 'standard'
       },
       workspace: {
         isHomeWorkspaceVisible: home,
         isLocalTerminalWorkspace: local,
         shouldShowAiCopilot: copilot,
         activeLocalTab: transfers ? { kind: 'transfers' } : home ? { kind: 'home' } : null,
+        orderedTabs: [],
         visibleWorkspaceTabs: [],
         localTabs: [],
         activeSidebarMetricOrder: [],
@@ -230,16 +236,16 @@ test('home and session titlebars and sidebars start at the same default width', 
     assert.equal(shell.props.style['--sidebar-width'], '214px')
     assert.equal(shell.props.style['--brand-width'], '214px')
   }
-  const grouped = renderWorkspace({ hostGroups: true, width: 300 })
-  assert.equal(grouped.props.style['--sidebar-width'], '300px')
-  assert.equal(grouped.props.style['--host-rail-width'], '320px')
+  const managed = renderWorkspace({ management: true, width: 300 })
+  assert.equal(managed.props.style['--sidebar-width'], '300px')
+  assert.equal(managed.props.style['--host-rail-width'], '320px')
 })
 
 test('remote, transfer and local tabs reuse the same visible terminal edge frame', () => {
   for (const options of [
     {},
     { home: true },
-    { hostGroups: true },
+    { management: true },
     { local: true },
     { copilot: true },
     { transfers: true }
@@ -248,12 +254,12 @@ test('remote, transfer and local tabs reuse the same visible terminal edge frame
       child?.props?.className?.startsWith('terminal-right-frame')
     )
     assert.ok(frame)
-    assert.equal(frame.props.className.includes('is-visible'), !options.home && !options.hostGroups && !options.copilot)
+    assert.equal(frame.props.className.includes('is-visible'), !options.home && !options.management && !options.copilot)
     assert.equal(frame.props['aria-hidden'], 'true')
     const shell = renderWorkspace(options)
     assert.equal(
       shell.props.className.includes('has-workspace-left-frame'),
-      !options.hostGroups && Boolean(options.local || options.transfers)
+      !options.management && Boolean(options.local || options.transfers)
     )
     assert.ok(shell.children.some((child) => child?.props?.className === 'workspace-left-frame'))
   }

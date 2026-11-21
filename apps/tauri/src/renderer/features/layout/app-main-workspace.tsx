@@ -1,5 +1,5 @@
 import './app-main-workspace.css'
-import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from 'react'
 import { DEFAULT_UI_ZOOM_PERCENT, MAX_UI_ZOOM_PERCENT, MIN_UI_ZOOM_PERCENT, UI_ZOOM_PERCENT_STEP } from '@fileterm/core'
 import { AiCopilotPanel } from '../ai/ai-copilot-panel'
 import { CloseButton } from '../common/close-button'
@@ -11,11 +11,12 @@ import { TabBar, type TabBarProps, type TabContextTarget } from './tab-bar'
 import type { AppViewModel } from './app-view-model'
 import { WindowMenubar } from './window-menubar'
 import { HostRail } from './host-rail'
-import { useHostNavigation } from './use-host-navigation'
+import { entryHostGroupKey, sessionHostGroupKey } from './host-groups'
 import { useWorkspaceTabShortcuts } from './use-workspace-tab-shortcuts'
 import { DEFAULT_SIDEBAR_WIDTH, STATUS_MESSAGE_TIMEOUT_MS } from '../../app/app-shell-utils'
 import { t, setLocale } from '../../i18n'
 import { resolveSshJumpRoute } from '../../app/ssh-jump-route'
+import type { ServerManagementNavigation, ServerManagementPage } from '../server-management/server-management-types'
 
 export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   const [isHostRailCollapsed, setIsHostRailCollapsed] = useState(false)
@@ -43,7 +44,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     filePanelRememberRatio,
     sidebarWidth,
     setSidebarWidth,
-    tabBarLayout,
+    workspaceMode,
     compactTabBar,
     maskConnectionAddresses,
     aiCopilotWidth,
@@ -54,6 +55,8 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     setSettingsInitialTab,
     sessionSecurity
   } = shell
+  const [serverManagementPage, setServerManagementPage] = useState<ServerManagementPage>('overview')
+  const [serverManagementFolderId, setServerManagementFolderId] = useState<string | null>(null)
   const {
     isWorkspaceTransitionActive,
     isWorkspaceSwitching,
@@ -76,6 +79,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     updateTerminalDockSendScope,
     updateTerminalDockSelectedTabIds,
     sendTerminalCommand,
+    connectProfile,
     openProfile,
     openLocalTerminal,
     activateSessionTab,
@@ -83,6 +87,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     detachSessionToBackground,
     closeBackgroundSession,
     reconnectSessionTab,
+    disconnectSessionTab,
     openTabContextMenu,
     startTabDrag,
     enterDraggedTab,
@@ -91,6 +96,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     closeHomeTab,
     closeSessionTab,
     openSystemInfo,
+    openNetworkConnections,
     openFileTransfers,
     splitPane,
     closePane,
@@ -199,22 +205,41 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     setDismissedInteractiveGatewayNoticeTabId((current) => (current === activeTab.id ? null : current))
   }, [activeTab?.id, interactiveGatewayNoticeTabId])
 
-  const hasStatusMessage = Boolean(error || isInteractiveGatewayNoticeVisible)
-  const usesHostGroups = tabBarLayout === 'host-groups'
+  const isServerManagementMode = workspaceMode === 'server-management'
   const resolvedSidebarWidth = isSystemSidebarCollapsed
     ? 44
-    : usesHostGroups && !isHomeWorkspaceVisible
+    : isServerManagementMode && !isHomeWorkspaceVisible
       ? activeSidebarWidth
       : resize.expandedSidebarWidth
-  const showWorkspaceLeftFrame = !usesHostGroups && (isLocalTerminalWorkspace || activeLocalTab?.kind === 'transfers')
-  const showTerminalRightFrame = !isHomeWorkspaceVisible && !usesHostGroups && !shouldShowAiCopilot
+  const showWorkspaceLeftFrame =
+    !isServerManagementMode && (isLocalTerminalWorkspace || activeLocalTab?.kind === 'transfers')
+  const showTerminalRightFrame = !isHomeWorkspaceVisible && !isServerManagementMode && !shouldShowAiCopilot
   const activeJumpHosts =
     activeProfile?.type === 'ssh' ? resolveSshJumpRoute(activeProfile, workspace.profiles).jumpHosts : []
   const activeRouteTarget = activeJumpHosts.length && activeProfile?.type === 'ssh' ? activeProfile : undefined
   // Home and session titlebars share the expanded sidebar's live width.
   // A collapsed sidebar keeps enough titlebar space for the native window controls.
-  // The host-groups layout puts the machine list on the left and machine info on the right.
-  const showHostRail = usesHostGroups && !isHomeWorkspaceVisible
+  // Management mode keeps the server navigator on the left and live system info on the right.
+  const showHostRail = isServerManagementMode
+  const activeLocalEntry =
+    activeLocalTab && activeLocalTab.kind !== 'home'
+      ? (orderedTabs.find((entry) => entry.kind === 'local' && entry.id === activeLocalTab.id) ?? null)
+      : null
+  const activeSessionGroupKey = activeTab
+    ? sessionHostGroupKey(activeTab)
+    : activeLocalEntry
+      ? entryHostGroupKey(activeLocalEntry, visibleWorkspaceTabs)
+      : null
+  const tabBarEntries =
+    isServerManagementMode && activeSessionGroupKey !== null
+      ? orderedTabs.filter((entry) =>
+          entry.kind === 'session'
+            ? sessionHostGroupKey(entry.tab) === activeSessionGroupKey
+            : entry.tabKind !== 'home' && entryHostGroupKey(entry, visibleWorkspaceTabs) === activeSessionGroupKey
+        )
+      : isServerManagementMode
+        ? []
+        : orderedTabs
   const brandWidth = showHostRail
     ? isHostRailCollapsed
       ? DEFAULT_SIDEBAR_WIDTH
@@ -225,17 +250,32 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   const activateSession = (tabId: string) => {
     void activateSessionTab(tabId)
   }
-  const hostNavigation = useHostNavigation({
-    orderedTabs,
-    profiles: workspace.profiles,
-    activeHomeTabId: effectiveActiveLocalTabId,
-    activeSessionTabId: visibleActiveSessionTabId,
-    onActivateHome: activateHomeTab,
-    onActivateSession: activateSession,
-    onAddHomeTab: addHomeTab
-  })
+  const addTabToActiveGroup = () => {
+    if (!activeTab) return
+    if (activeTab.sessionType === 'local') void openLocalTerminal()
+    else void openProfile(activeTab.profileId)
+  }
+  const navigateServerManagementPage = useCallback(
+    (page: ServerManagementPage, folderId?: string | null) => {
+      setServerManagementPage(page)
+      if (page === 'overview') setServerManagementFolderId(folderId ?? null)
+      if (activeLocalTab?.kind === 'home') return
+      const homeTab = orderedTabs.find((entry) => entry.kind === 'local' && entry.tabKind === 'home')
+      if (homeTab?.kind === 'local') void activateHomeTab(homeTab.id)
+      else addHomeTab()
+    },
+    [activeLocalTab?.kind, activateHomeTab, addHomeTab, orderedTabs]
+  )
+  const serverManagementNavigation = useMemo<ServerManagementNavigation>(
+    () => ({
+      page: serverManagementPage,
+      selectedFolderId: serverManagementFolderId,
+      navigate: navigateServerManagementPage
+    }),
+    [navigateServerManagementPage, serverManagementFolderId, serverManagementPage]
+  )
   useWorkspaceTabShortcuts({
-    tabs: usesHostGroups ? hostNavigation.activeEntries : orderedTabs,
+    tabs: tabBarEntries,
     activeKey: effectiveActiveLocalTabId
       ? `home:${effectiveActiveLocalTabId}`
       : visibleActiveSessionTabId
@@ -246,24 +286,18 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
   })
   // Sessions on one machine share a collector, so machine info shows the collecting tab's samples.
   const monitoringSource = resolveMonitoringSource(activeTab?.id ?? null, workspace.sessions)
-  const activeHostGroup = hostNavigation.groups.find((group) => group.key === hostNavigation.activeGroupKey)
-  // "+" opens another tab on the active machine.
-  const addTabToActiveHost = () => {
-    if (activeHostGroup?.kind === 'local') {
-      void openLocalTerminal()
-    } else if (activeHostGroup?.kind === 'profile' && activeHostGroup.profileId) {
-      void openProfile(activeHostGroup.profileId)
-    } else {
-      addHomeTab()
-    }
-  }
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
+    canLockNow:
+      sessionSecurity.status === 'ready' &&
+      sessionSecurity.settings?.hasLockPassword === true &&
+      !sessionSecurity.isLocked,
+    onLockNow: sessionSecurity.lockNow,
     activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
     isAiCopilotAvailable,
     isAiCopilotOpen,
     isWorkspaceFocusMode,
-    onAddHomeTab: usesHostGroups ? addTabToActiveHost : addHomeTab,
+    onAddTab: isServerManagementMode ? addTabToActiveGroup : addHomeTab,
     onActivateHome: activateHomeTab,
     onActivateSession: activateSession,
     onCloseHomeTab: closeHomeTab,
@@ -291,16 +325,24 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
         ...currentModes,
         [activeWorkspaceFocusKey]: nextFocusMode
       }))
+      // Session pages react on their own, but the management shell also needs a
+      // visible response, so focus mode tucks the host rail away.
+      if (isServerManagementMode) {
+        setIsHostRailCollapsed(nextFocusMode)
+        // Exiting focus restores the resource sidebar even if it was collapsed
+        // by hand, so the window tool behaves as a master toggle.
+        if (!nextFocusMode) setIsSystemSidebarCollapsed(false)
+      }
       if (!nextFocusMode) setActiveSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
     },
     orderedTabs,
-    hostNavigation: usesHostGroups ? hostNavigation : undefined
+    sessionOnly: isServerManagementMode
   }
 
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${compactTabBar ? 'is-compact-tabbar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${showHostRail ? 'has-host-rail' : ''} ${showWorkspaceLeftFrame ? 'has-workspace-left-frame' : ''} ${shouldShowSystemSidebar ? 'has-system-sidebar' : ''} ${isResizingSidebar || isResizingHostRail ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${shouldShowAiCopilot ? 'has-ai-copilot' : ''} ${usesCustomWindowChrome && sessionSecurity.isLocked ? 'is-session-locked' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${compactTabBar ? 'is-compact-tabbar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible && !isServerManagementMode ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${showHostRail ? 'has-host-rail' : ''} ${showWorkspaceLeftFrame ? 'has-workspace-left-frame' : ''} ${shouldShowSystemSidebar ? 'has-system-sidebar' : ''} ${isResizingSidebar || isResizingHostRail ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${shouldShowAiCopilot ? 'has-ai-copilot' : ''} ${usesCustomWindowChrome && sessionSecurity.isLocked ? 'is-session-locked' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
@@ -333,18 +375,29 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             onToggleTerminalZoomLock={() => setTerminalZoomLocked((current) => !current)}
           />
         ) : null}
-        {!isHomeWorkspaceVisible && <TabBar {...tabBarProps} />}
+        {(isServerManagementMode || !isHomeWorkspaceVisible) && (
+          <TabBar {...tabBarProps} orderedTabs={tabBarEntries} showAiCopilotToggle={!isHomeWorkspaceVisible} />
+        )}
 
         {showHostRail ? (
           <HostRail
-            navigation={hostNavigation}
-            onOpenFileTransfers={openFileTransfers}
             collapsed={isHostRailCollapsed}
             width={sidebarWidth}
             isResizing={isResizingHostRail}
             onToggleCollapsed={() => setIsHostRailCollapsed((current) => !current)}
             onResizeStart={startHostRailResize}
             onWidthChange={setSidebarWidth}
+            management={{
+              page: serverManagementNavigation.page,
+              selectedFolderId: serverManagementNavigation.selectedFolderId,
+              navigate: serverManagementNavigation.navigate,
+              profiles: workspace.profiles,
+              folders: workspace.folders,
+              sessions: workspace.sessions,
+              workspaceTabs: visibleWorkspaceTabs,
+              activeSessionTabId: visibleActiveSessionTabId,
+              onActivateSession: activateSession
+            }}
           />
         ) : null}
 
@@ -360,17 +413,17 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
             maskConnectionAddresses={maskConnectionAddresses}
             visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
+            toggleSide={isServerManagementMode ? 'right' : 'left'}
             onMonitoringSnapshot={shell.applySnapshot}
             onOpenSystemInfo={openSystemInfo}
+            onOpenNetworkConnections={openNetworkConnections}
             onResizeStart={startSidebarResize}
             onRestoreWidth={() => setActiveSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
             onToggleCollapsed={setIsSystemSidebarCollapsed}
           />
         ) : null}
 
-        <main
-          className={`fs-main ${hasStatusMessage ? 'has-status' : 'no-status'} ${shouldShowSystemSidebar ? '' : 'full-width'}`}
-        >
+        <main className={`fs-main ${shouldShowSystemSidebar ? '' : 'full-width'}`}>
           {error ? (
             <div className="status-message" role="alert">
               <span className="status-message-text">{error}</span>
@@ -405,6 +458,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
               data-nav-direction={workspaceNavDirection}
             >
               <KeepAliveWorkspaceStage
+                serverManagement={isServerManagementMode ? serverManagementNavigation : undefined}
                 onApplySnapshot={shell.applySnapshot}
                 activeLocalTab={activeLocalTab}
                 fileTransferTab={workspaceState.localTabs.find((tab) => tab.kind === 'transfers')}
@@ -482,6 +536,8 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 onOpenLocalPath={handleOpenLocalPath}
                 onBackToLocalComputer={handleBackToLocalComputer}
                 onOpenProfile={openProfile}
+                onConnectProfile={connectProfile}
+                onDisconnectSession={disconnectSessionTab}
                 onOpenLocalTerminal={() => void openLocalTerminal()}
                 onLaunchLocalAgent={launchLocalAgent}
                 onReconnectLocalTerminal={reconnectSessionTab}
@@ -540,12 +596,6 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 onOpenLogsDirectory={openLogsDirectory}
                 isSidebarCollapsed={isSystemSidebarCollapsed}
                 isWorkspaceFocusMode={isWorkspaceFocusMode}
-                canLockNow={
-                  sessionSecurity.status === 'ready' &&
-                  sessionSecurity.settings?.hasLockPassword === true &&
-                  !sessionSecurity.isLocked
-                }
-                onLockNow={sessionSecurity.lockNow}
                 tabBarProps={tabBarProps}
                 isResizingSidebar={isResizingSidebar}
                 onResizeStart={startSidebarResize}
@@ -582,7 +632,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
           </div>
         </main>
 
-        {/* Machine info borders the terminal in the host-groups layout, so the edge frame would be a stray strip. */}
+        {/* The management sidebar already frames the terminal and system info. */}
         <div className="workspace-left-frame" aria-hidden="true" />
         <div className={`terminal-right-frame ${showTerminalRightFrame ? 'is-visible' : ''}`} aria-hidden="true" />
 

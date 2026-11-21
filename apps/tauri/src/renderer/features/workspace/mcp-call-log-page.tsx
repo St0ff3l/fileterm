@@ -97,6 +97,7 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
   const pendingLoad = useRef(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLDivElement>(null)
+  const commandRef = useRef<HTMLPreElement>(null)
   const paramsRef = useRef<HTMLPreElement>(null)
 
   const load = useCallback(async (before?: string) => {
@@ -136,7 +137,7 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
     <section className="background-sessions-page manager-inline connection-manager-modal mcp-call-log-page">
       <div className="connection-manager-header">
         <span className="connection-manager-title">
-          <AppIcon name="call-log" size={20} />
+          <AppIcon name="log" size={20} />
           <span>{t.mcpCallRecordsTitle}</span>
         </span>
         <button
@@ -220,7 +221,7 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
                 ))}
                 {!entries.length && !loadError ? (
                   <div className="background-session-empty">
-                    <AppIcon name="call-log" size={24} />
+                    <AppIcon name="log" size={24} />
                     <strong>{initialLoading ? t.mcpCallRecordsLoading : t.mcpCallRecordsEmpty}</strong>
                     {!initialLoading ? <span>{t.mcpCallRecordsEmptyHint}</span> : null}
                   </div>
@@ -265,7 +266,7 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
           title={
             <>
               <span className="external-operation-confirmation__title">
-                <AppIcon name="call-log" size={16} />
+                <AppIcon name="log" size={16} />
                 <span>{t.mcpCallDetailTitle}</span>
               </span>
               <CloseButton aria-label={t.closeTab} disabled={copying} onClick={() => setSelected(null)} />
@@ -310,6 +311,18 @@ export function McpCallLogPage({ onTotalChange }: { onTotalChange(total: number)
                   </div>
                   {selected.error ? <p className="mcp-call-log-error">{selected.error}</p> : null}
                 </fieldset>
+                {selected.command ? (
+                  <fieldset className="external-operation-confirmation__group">
+                    <legend>{t.mcpCallDetailCommand}</legend>
+                    <p className="mcp-call-log-metadata-hint">{t.mcpCallCommandStorageHint}</p>
+                    <div className="external-operation-confirmation__code mcp-call-log-command">
+                      <pre ref={commandRef} tabIndex={0} aria-label={t.mcpCallDetailCommand}>
+                        {selected.command}
+                      </pre>
+                      <VerticalScrollbar ariaLabel={t.mcpCallDetailCommand} scrollRef={commandRef} />
+                    </div>
+                  </fieldset>
+                ) : null}
                 <fieldset className="external-operation-confirmation__group">
                   <legend>{t.mcpCallDetailParams}</legend>
                   <p className="mcp-call-log-metadata-hint">{t.mcpCallMetadataHint}</p>

@@ -100,7 +100,6 @@
   border-radius: var(--radius-sm);
   color: var(--text-context-menu);
   font-family: var(--font-ui);
-  font-size: var(--font-size-sm);
   text-align: left;
   cursor: pointer;
   outline: none;
@@ -108,6 +107,10 @@
     background-color var(--transition-fast),
     color var(--transition-fast);
   white-space: nowrap;
+}
+
+.dropdown-select-menu.context-menu button {
+  font-size: var(--font-size-sm);
 }
 
 .dropdown-select-menu button:hover:not(:disabled) {
@@ -156,6 +159,7 @@
   background-color: var(--surface-input);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
+  font-size: var(--font-size-sm);
   box-sizing: border-box;
   transition:
     border-color var(--transition-normal),
@@ -188,7 +192,6 @@
   white-space: nowrap;
   text-align: left;
   font-family: var(--font-ui);
-  font-size: var(--font-size-sm);
   font-weight: 400;
   color: var(--text-primary);
   pointer-events: none;
@@ -211,6 +214,7 @@
   height: 100% !important;
   opacity: 0 !important;
   cursor: pointer;
+  font-size: inherit;
   z-index: 2;
   margin: 0 !important;
   padding: 0 !important;
@@ -218,6 +222,10 @@
   outline: none !important;
   appearance: none !important;
   -webkit-appearance: none !important;
+}
+
+.ft-select-shell option {
+  font-size: inherit;
 }
 
 .ft-select-shell select:disabled {

@@ -31,6 +31,10 @@
     height: 390px;
     object-fit: contain;
   }
+  .toolbar-previews img {
+    height: auto;
+    margin-bottom: 8px;
+  }
   .light {
     display: none;
   }
@@ -48,7 +52,7 @@
 </style>
 <header>
   <h1>弹窗与设置页面 · 深浅色预览</h1>
-  <p>所有弹窗及设置页面均使用当前组件重新截图；截图使用合成数据，部分依赖桌面服务的操作不可用。点击图片可放大。</p>
+  <p>次要按钮默认仅描边，悬停填充；红色次要操作默认使用红色描边。截图使用合成数据，点击可放大。</p>
   <button onclick="document.body.classList.toggle('light-mode')">切换深色 / 浅色</button
   ><input
     placeholder="筛选弹窗"
@@ -57,7 +61,7 @@
 </header>
 <main>
   <article>
-    <h2>统一表单控件圆角</h2>
+    <h2>表单与设置控件圆角</h2>
     <a class="dark" href="dark/form-control-radius.png"><img loading="lazy" src="dark/form-control-radius.png" /></a
     ><a class="light" href="light/form-control-radius.png"
       ><img loading="lazy" src="light/form-control-radius.png"
@@ -169,6 +173,11 @@
     ><a class="light" href="light/connection-editor.png"><img loading="lazy" src="light/connection-editor.png" /></a>
   </article>
   <article>
+    <h2>新建连接：网络与代理</h2>
+    <a class="dark" href="dark/connection-network.png"><img loading="lazy" src="dark/connection-network.png" /></a>
+    <a class="light" href="light/connection-network.png"><img loading="lazy" src="light/connection-network.png" /></a>
+  </article>
+  <article>
     <h2>连接导入预览</h2>
     <a class="dark" href="dark/connection-import.png"><img loading="lazy" src="dark/connection-import.png" /></a
     ><a class="light" href="light/connection-import.png"><img loading="lazy" src="light/connection-import.png" /></a>
@@ -267,9 +276,36 @@
     <a class="light" href="light/settings-sync.png"><img loading="lazy" src="light/settings-sync.png" /></a>
   </article>
   <article>
-    <h2>设置：AI 手动添加模型</h2>
+    <h2>设置：AI 模型与 Provider</h2>
     <a class="dark" href="dark/settings-ai.png"><img loading="lazy" src="dark/settings-ai.png" /></a>
     <a class="light" href="light/settings-ai.png"><img loading="lazy" src="light/settings-ai.png" /></a>
+  </article>
+  <article>
+    <h2>设置：AI 删除与清除 API Key</h2>
+    <a class="dark" href="dark/settings-ai-actions.png"><img loading="lazy" src="dark/settings-ai-actions.png" /></a>
+    <a class="light" href="light/settings-ai-actions.png"><img loading="lazy" src="light/settings-ai-actions.png" /></a>
+  </article>
+  <article>
+    <h2>设置：安全密码操作</h2>
+    <a class="dark" href="dark/settings-security-actions.png"
+      ><img loading="lazy" src="dark/settings-security-actions.png"
+    /></a>
+    <a class="light" href="light/settings-security-actions.png"
+      ><img loading="lazy" src="light/settings-security-actions.png"
+    /></a>
+  </article>
+  <article class="toolbar-previews">
+    <h2>网络连接工具栏</h2>
+    <p>默认</p>
+    <a class="dark" href="dark/network-toolbar.png"><img loading="lazy" src="dark/network-toolbar.png" /></a>
+    <a class="light" href="light/network-toolbar.png"><img loading="lazy" src="light/network-toolbar.png" /></a>
+    <p>刷新按钮悬停</p>
+    <a class="dark" href="dark/network-toolbar-hover.png"
+      ><img loading="lazy" src="dark/network-toolbar-hover.png"
+    /></a>
+    <a class="light" href="light/network-toolbar-hover.png"
+      ><img loading="lazy" src="light/network-toolbar-hover.png"
+    /></a>
   </article>
   <article>
     <h2>AI 对话输入区</h2>

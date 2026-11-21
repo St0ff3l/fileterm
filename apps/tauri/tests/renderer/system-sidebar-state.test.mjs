@@ -45,7 +45,8 @@ function fixture(options = {}) {
     ['./use-file-operations', 'useFileOperations'],
     ['./use-ssh-interactions', 'useSshInteractions'],
     ['./use-backup-password-interactions', 'useBackupPasswordInteractions'],
-    ['./use-sudo-password-prompt', 'useSudoPasswordPrompt']
+    ['./use-sudo-password-prompt', 'useSudoPasswordPrompt'],
+    ['../features/server-management/use-server-insights-observer', 'useServerInsightsObserver']
   ])
     dependencies[path] = { [symbol]: () => ({}) }
   dependencies['../features/workspace/home-transition'] = {

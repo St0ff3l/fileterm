@@ -8,3 +8,19 @@
 .file-name-cell.is-draggable:active {
   cursor: grabbing;
 }
+
+.fs-file-table th {
+  overflow: visible;
+}
+
+.fs-file-table .file-table-heading {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.fs-file-table .file-table-heading > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

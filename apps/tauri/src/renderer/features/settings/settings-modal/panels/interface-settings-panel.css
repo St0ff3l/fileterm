@@ -47,3 +47,20 @@
   height: 72px;
   object-fit: contain;
 }
+
+.theme-color-disclosure-trigger {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.theme-color-disclosure-trigger:hover {
+  color: var(--text-primary);
+}
+
+.theme-color-disclosure-body {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+}

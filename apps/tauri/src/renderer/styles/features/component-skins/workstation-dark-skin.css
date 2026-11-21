@@ -148,7 +148,6 @@
 :root:not([data-theme*='light']) .status-message,
 :root[data-theme='default'] .status-message {
   border-bottom-color: color-mix(in srgb, var(--status-warning) 14%, var(--surface-canvas));
-  background: var(--status-warning-bg, color-mix(in srgb, var(--status-warning) 8%, transparent));
   color: var(--status-warning-text, var(--status-warning));
 }
 
@@ -326,14 +325,6 @@
 :root:not([data-theme*='light']) .down,
 :root[data-theme='default'] .down {
   color: var(--network-rx);
-}
-
-:root:not([data-theme]) .network-select,
-:root:not([data-theme*='light']) .network-select,
-:root[data-theme='default'] .network-select {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
-  color: var(--text-primary);
 }
 
 :root:not([data-theme]) .network-scale,
@@ -764,107 +755,6 @@
 :root:not([data-theme*='light']) .home-workspace,
 :root[data-theme='default'] .home-workspace {
   background: var(--bg-main);
-}
-
-:root:not([data-theme]) .system-info-workspace,
-:root:not([data-theme*='light']) .system-info-workspace,
-:root[data-theme='default'] .system-info-workspace {
-  background: linear-gradient(180deg, var(--surface-canvas) 0%, var(--surface-terminal) 100%);
-}
-
-:root:not([data-theme]) .system-info-empty,
-:root:not([data-theme*='light']) .system-info-empty,
-:root[data-theme='default'] .system-info-empty {
-  color: var(--text-primary);
-}
-
-:root:not([data-theme]) .system-info-empty p,
-:root:not([data-theme*='light']) .system-info-empty p,
-:root[data-theme='default'] .system-info-empty p {
-  color: var(--text-muted);
-}
-
-:root:not([data-theme]) .system-info-header strong,
-:root:not([data-theme*='light']) .system-info-header strong,
-:root[data-theme='default'] .system-info-header strong {
-  color: var(--text-primary);
-}
-
-:root:not([data-theme]) .system-info-header p,
-:root:not([data-theme*='light']) .system-info-header p,
-:root[data-theme='default'] .system-info-header p {
-  color: var(--text-muted);
-}
-
-:root:not([data-theme]) .system-info-card,
-:root:not([data-theme*='light']) .system-info-card,
-:root[data-theme='default'] .system-info-card {
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
-}
-
-:root:not([data-theme]) .system-info-card-head,
-:root:not([data-theme*='light']) .system-info-card-head,
-:root[data-theme='default'] .system-info-card-head {
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-
-:root:not([data-theme]) .system-info-card-head strong,
-:root:not([data-theme*='light']) .system-info-card-head strong,
-:root[data-theme='default'] .system-info-card-head strong {
-  color: var(--text-primary);
-}
-
-:root:not([data-theme]) .system-description-row,
-:root:not([data-theme*='light']) .system-description-row,
-:root[data-theme='default'] .system-description-row {
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-:root:not([data-theme]) .system-description-row span,
-:root:not([data-theme*='light']) .system-description-row span,
-:root[data-theme='default'] .system-description-row span {
-  color: var(--text-muted);
-}
-
-:root:not([data-theme]) .system-description-row strong,
-:root:not([data-theme*='light']) .system-description-row strong,
-:root[data-theme='default'] .system-description-row strong {
-  color: var(--text-primary);
-}
-
-:root:not([data-theme]) .system-table th,
-:root:not([data-theme*='light']) .system-table th,
-:root[data-theme='default'] .system-table th,
-:root:not([data-theme]) .system-table td,
-:root:not([data-theme*='light']) .system-table td,
-:root[data-theme='default'] .system-table td {
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-:root:not([data-theme]) .system-table th,
-:root:not([data-theme*='light']) .system-table th,
-:root[data-theme='default'] .system-table th {
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
-}
-
-:root:not([data-theme]) .system-table td,
-:root:not([data-theme*='light']) .system-table td,
-:root[data-theme='default'] .system-table td {
-  color: var(--text-primary);
-}
-
-:root:not([data-theme]) .system-table tbody tr:nth-child(even),
-:root:not([data-theme*='light']) .system-table tbody tr:nth-child(even),
-:root[data-theme='default'] .system-table tbody tr:nth-child(even) {
-  background: var(--bg-sidebar);
-}
-
-:root:not([data-theme]) .system-table tbody tr:nth-child(odd),
-:root:not([data-theme*='light']) .system-table tbody tr:nth-child(odd),
-:root[data-theme='default'] .system-table tbody tr:nth-child(odd) {
-  background: var(--bg-card);
 }
 
 :root:not([data-theme]) .quick-panel,

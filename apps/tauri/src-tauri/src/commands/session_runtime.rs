@@ -349,9 +349,9 @@ async fn refresh_remote_files_for_shell_cwd(
 pub(crate) async fn mcp_list_remote_directory(
     app: AppHandle,
     tab_id: String,
-    requested_path: Option<String>,
+    path: String,
 ) -> Result<serde_json::Value, AppError> {
-    let path = {
+    {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
         let sessions = state.sessions.read().await;
         let session = sessions
@@ -362,13 +362,7 @@ pub(crate) async fn mcp_list_remote_directory(
                 "This FileTerm session does not provide remote file access".to_string(),
             ));
         }
-        requested_path
-            .as_deref()
-            .map(str::trim)
-            .filter(|path| !path.is_empty())
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| session.remote_path.clone())
-    };
+    }
 
     if path.len() > 4_096 {
         return Err(AppError::Command(

@@ -119,7 +119,7 @@
 2. 引入 `useFileOperations`、`useSshInteractions`、`useFileEditor` 和 `useWorkspaceIpcSync`，剥离路径、编辑器与 IPC 同步侦听。
 3. 引入并挂载 `ModalPortalManager`。
 4. 启动应用开发服务器，手动在界面操作：
-   - 快速连接与标签新建/切换动效。
+   - 标签新建/切换动效。
    - 文件传输抽屉开启、任务添加与暂停。
    - 文件列表复制粘贴、文件编辑保存与冲突提示。
    - 系统设置修改与多语言切换。

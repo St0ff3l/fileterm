@@ -7,3 +7,8 @@
 - Detection assumes consistent server filename encoding. Bytes valid in both encodings cannot be reliably distinguished; UTF-8 takes precedence until GBK is confirmed. Manual GBK remains available for ambiguous servers.
 
 Wire fixtures live in `apps/tauri/src-tauri/src/sessions/ssh/tests/filename_encoding.rs`. They verify decoded directory/file names, outgoing path bytes, unchanged Unicode handles, UTF-8/GBK compatibility, and invalid-byte failures.
+
+## Rust 1.99 atomic deprecation
+
+- `client/rawsession.rs` uses `AtomicU64::try_update`. Rust 1.99 deprecated its `fetch_update` alias with the same behavior.
+- This call requires [Rust 1.95 or later](https://doc.rust-lang.org/stable/core/sync/atomic/type.AtomicU64.html#method.try_update).

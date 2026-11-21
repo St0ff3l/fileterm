@@ -11,6 +11,7 @@ import { DropdownSelect } from '../../../common/dropdown-select'
 import { StableButtonContent } from '../../../common/stable-button-content'
 import { formatMessage, type LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
+import { TerminalDisplaySettingsSection } from './terminal-display-settings-section'
 
 type LocalTerminalShellConfig = {
   platform: LocalTerminalPlatform
@@ -58,6 +59,7 @@ export function LocalTerminalSettingsPanel() {
 
   return (
     <div className="settings-panel">
+      <TerminalDisplaySettingsSection />
       <section className="settings-section">
         <h3>{t.localTerminalSettings}</h3>
         <p className="settings-tools-hint">{t.localTerminalSettingsHint}</p>

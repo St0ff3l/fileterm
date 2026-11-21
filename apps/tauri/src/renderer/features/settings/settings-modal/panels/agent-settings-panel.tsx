@@ -6,6 +6,7 @@ import type {
   McpAgentPreferences,
   McpAgentSetup
 } from '@fileterm/core'
+import { SubtabBar } from '../../../../components/common/subtab-bar/subtab-bar'
 import { AppIcon } from '../../../common/app-icon'
 import { RadioCardGroup } from '../../../common/radio-card-group'
 import { SelectionControl } from '../../../common/selection-control'
@@ -50,7 +51,6 @@ type AgentSettingsPanelContext = {
   setAgentSubTab: Dispatch<SetStateAction<'mcp' | 'cli'>>
   mcpAgentSetup: McpAgentSetup | null
   copyMcpAgentCommand(command: string, successMessage: string): void
-  copyMcpAgentRegistrationCommand(command: string): void
   launchMcpAgentInLocalTerminal(client: McpAgentClientStatus): void
   onLaunchLocalAgent?: (client: McpAgentClientStatus) => void
   mcpAgentMessage: string | null
@@ -75,11 +75,11 @@ export function AgentSettingsPanel() {
     setAgentSubTab,
     mcpAgentSetup,
     copyMcpAgentCommand,
-    copyMcpAgentRegistrationCommand,
     launchMcpAgentInLocalTerminal,
     onLaunchLocalAgent,
     mcpAgentMessage
   } = useSettingsModalContext<AgentSettingsPanelContext>()
+  const mcpLaunchCommand = mcpAgentSetup ? `${mcpAgentSetup.filetermCommand} mcp` : null
 
   return (
     <div className="settings-panel settings-agent-mcp-panel">
@@ -229,30 +229,16 @@ export function AgentSettingsPanel() {
           </section>
         </div>
 
-        <div className="agent-mcp-subtabs" role="tablist" aria-label={t.agentMcpSubTabs}>
-          <button
-            id="agent-mcp-tab-mcp"
-            aria-controls="agent-mcp-panel-mcp"
-            aria-selected={agentSubTab === 'mcp'}
-            className={`agent-mcp-subtab-button ${agentSubTab === 'mcp' ? 'active' : ''}`}
-            role="tab"
-            type="button"
-            onClick={() => setAgentSubTab('mcp')}
-          >
-            {t.agentMcpTabMcp}
-          </button>
-          <button
-            id="agent-mcp-tab-cli"
-            aria-controls="agent-mcp-panel-cli"
-            aria-selected={agentSubTab === 'cli'}
-            className={`agent-mcp-subtab-button ${agentSubTab === 'cli' ? 'active' : ''}`}
-            role="tab"
-            type="button"
-            onClick={() => setAgentSubTab('cli')}
-          >
-            {t.agentMcpTabCli}
-          </button>
-        </div>
+        <SubtabBar<'mcp' | 'cli'>
+          idPrefix="agent-mcp"
+          ariaLabel={t.agentMcpSubTabs}
+          value={agentSubTab}
+          options={[
+            { value: 'mcp', label: t.agentMcpTabMcp },
+            { value: 'cli', label: t.agentMcpTabCli }
+          ]}
+          onChange={setAgentSubTab}
+        />
 
         {agentSubTab === 'mcp' ? (
           <div
@@ -271,47 +257,87 @@ export function AgentSettingsPanel() {
               </div>
             </div>
 
+            {mcpLaunchCommand ? (
+              <article className="agent-mcp-client-card">
+                <div className="agent-mcp-client-heading">
+                  <div>
+                    <strong>{t.agentMcpLaunchCommandTitle}</strong>
+                  </div>
+                </div>
+                <div className="agent-mcp-registration">
+                  <code>{mcpLaunchCommand}</code>
+                  <button
+                    aria-label={t.agentMcpLaunchCommandCopy}
+                    className="agent-mcp-copy-button agent-mcp-launch-copy-button"
+                    disabled={!desktopApi}
+                    title={t.agentMcpLaunchCommandCopy}
+                    type="button"
+                    onClick={() => copyMcpAgentCommand(mcpLaunchCommand, t.agentMcpLaunchCommandCopied)}
+                  >
+                    <AppIcon name="copy" size={14} strokeWidth={2} />
+                  </button>
+                </div>
+              </article>
+            ) : null}
+
             <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>
               <h4>{t.agentMcpClients}</h4>
-              {mcpAgentSetup?.clients.map((client) => (
-                <article key={client.id} className="agent-mcp-client-card">
-                  <div className="agent-mcp-client-heading">
-                    <div>
-                      <strong>{client.label}</strong>
-                      <small>{client.available ? t.agentMcpClientAvailable : t.agentMcpClientUnavailable}</small>
+              {mcpAgentSetup?.clients.map((client) => {
+                const isDsh = client.id === 'dsh'
+                const copyLabel = isDsh ? t.agentMcpDshConfigCopy : t.agentMcpRegistration
+                return (
+                  <article key={client.id} className="agent-mcp-client-card">
+                    <div className="agent-mcp-client-heading">
+                      <div>
+                        <strong>{client.label}</strong>
+                        <small>{client.available ? t.agentMcpClientAvailable : t.agentMcpClientUnavailable}</small>
+                      </div>
+                      <span className={`agent-mcp-client-status ${client.available ? 'is-available' : ''}`}>
+                        {client.command}
+                      </span>
                     </div>
-                    <span className={`agent-mcp-client-status ${client.available ? 'is-available' : ''}`}>
-                      {client.command}
-                    </span>
-                  </div>
-                  <div className="agent-mcp-registration">
-                    <code>{client.registrationCommand}</code>
-                    <button
-                      aria-label={t.agentMcpRegistration}
-                      className="copy-icon-button agent-mcp-copy-button"
-                      disabled={!desktopApi}
-                      title={t.agentMcpRegistration}
-                      type="button"
-                      onClick={() => copyMcpAgentRegistrationCommand(client.registrationCommand)}
-                    >
-                      <AppIcon name="copy" size={14} strokeWidth={2} />
-                    </button>
-                  </div>
-                  <div className="agent-mcp-client-actions">
-                    <small className="agent-mcp-registration-hint">{t.agentMcpRegistrationDescription}</small>
-                    <button
-                      className="ai-settings-secondary-button agent-mcp-launch-button"
-                      disabled={!client.available || !onLaunchLocalAgent}
-                      title={client.available ? t.agentMcpLaunchDescription : t.agentMcpClientUnavailable}
-                      type="button"
-                      onClick={() => launchMcpAgentInLocalTerminal(client)}
-                    >
-                      <AppIcon name="terminal-file" size={14} strokeWidth={2} />
-                      {t.agentMcpLaunch}
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div className="agent-mcp-registration">
+                      <code
+                        aria-label={isDsh ? t.agentMcpDshConfigCopy : undefined}
+                        className={isDsh ? 'agent-mcp-config' : undefined}
+                        tabIndex={isDsh ? 0 : undefined}
+                      >
+                        {isDsh ? client.setupText.replace(/[ \t]*\r?\n[ \t]*/g, ' ') : client.setupText}
+                      </code>
+                      <button
+                        aria-label={copyLabel}
+                        className="copy-icon-button agent-mcp-copy-button"
+                        disabled={!desktopApi}
+                        title={copyLabel}
+                        type="button"
+                        onClick={() =>
+                          copyMcpAgentCommand(
+                            client.setupText,
+                            isDsh ? t.agentMcpDshConfigCopied : t.agentMcpCommandCopied
+                          )
+                        }
+                      >
+                        <AppIcon name="copy" size={14} strokeWidth={2} />
+                      </button>
+                    </div>
+                    <div className="agent-mcp-client-actions">
+                      <small className="agent-mcp-registration-hint">
+                        {isDsh ? t.agentMcpDshConfigDescription : t.agentMcpRegistrationDescription}
+                      </small>
+                      <button
+                        className="ai-settings-secondary-button agent-mcp-launch-button"
+                        disabled={!client.available || !onLaunchLocalAgent}
+                        title={client.available ? t.agentMcpLaunchDescription : t.agentMcpClientUnavailable}
+                        type="button"
+                        onClick={() => launchMcpAgentInLocalTerminal(client)}
+                      >
+                        <AppIcon name="terminal-file" size={14} strokeWidth={2} />
+                        {t.agentMcpLaunch}
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
 
             <div className="agent-mcp-keep-open">

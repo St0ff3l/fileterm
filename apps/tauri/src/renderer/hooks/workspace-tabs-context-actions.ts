@@ -9,10 +9,12 @@ import {
   formatSessionTabTitle,
   formatSystemInfoTabTitle,
   isTabActivelyConnected,
-  nextTabAfterClose
+  nextTabAfterClose,
+  nextTabInHostGroup
 } from './workspace-tabs-utils'
 
 type WorkspaceTabsContextActionContext = WorkspaceTabsActionContext & {
+  activateManagementHome(): void
   activateSessionTab(tabId: string): Promise<void>
   closeHomeTabs(homeTabIds: string[], preferredActiveHomeId: string | null, nextSessionTabs: WorkspaceTab[]): void
   closeSessionTabById(tabId: string): Promise<WorkspaceSnapshot | null>
@@ -29,6 +31,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     desktopApi,
     workspace,
     isBusy,
+    serverManagementMode,
     onBusyChange,
     onStatusMessage,
     onError,
@@ -55,6 +58,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     setDraggingTabKey,
     localTabsRef,
     closeHomeTabs,
+    activateManagementHome,
     activateSessionTab,
     closeSessionTabById,
     closePane,
@@ -64,16 +68,25 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
   } = context
 
   const closeHomeTabById = (homeTabId: string) => {
-    const next =
-      activeLocalTabId === homeTabId
-        ? nextTabAfterClose(context.orderedTabs, homeTabKey(homeTabId), context.tabBarLayout === 'host-groups')
-        : null
+    const closingTab = localTabs.find((tab) => tab.id === homeTabId)
+    // The overview is the server-management shell, so Cmd+W leaves it alone.
+    if (serverManagementMode && closingTab?.kind === 'home') {
+      return
+    }
+
+    const isActiveTab = activeLocalTabId === homeTabId
+    const next = isActiveTab
+      ? serverManagementMode
+        ? nextTabInHostGroup(context.orderedTabs, homeTabKey(homeTabId))
+        : nextTabAfterClose(context.orderedTabs, homeTabKey(homeTabId), false)
+      : null
     closeHomeTabs(
       [homeTabId],
-      activeLocalTabId === homeTabId ? (next?.kind === 'local' ? next.id : null) : activeLocalTabId,
+      isActiveTab ? (next?.kind === 'local' ? next.id : null) : activeLocalTabId,
       visibleWorkspaceTabs
     )
     if (next?.kind === 'session') void activateSessionTab(next.tab.id)
+    if (serverManagementMode && isActiveTab && !next) activateManagementHome()
   }
 
   const closeSessionTab = async (event: MouseEvent<HTMLElement>, tabId: string) => {
@@ -141,25 +154,28 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     activateHomeTab(id)
   }
 
-  const openSystemInfo = () => {
+  const openHostInfo = (view?: 'network') => {
     if (!activeTab) {
       return
     }
 
-    const existing = localTabs.find((tab) => tab.kind === 'system' && tab.sessionTabId === activeTab.id)
+    const existing = localTabs.find(
+      (tab) => tab.kind === 'system' && tab.sessionTabId === activeTab.id && tab.view === view
+    )
     if (existing) {
       activateHomeTab(existing.id)
       return
     }
 
-    const nextId = `system-${activeTab.id}`
+    const nextId = `${view ?? 'system'}-${activeTab.id}`
     const activeOrderKey = activeLocalTabId ? homeTabKey(activeLocalTabId) : sessionTabKey(activeTab.id)
     setLocalTabs((current) => [
       ...current,
       {
         id: nextId,
         kind: 'system',
-        title: formatSystemInfoTabTitle(activeTab.title),
+        view,
+        title: formatSystemInfoTabTitle(activeTab.title, view),
         sessionTabId: activeTab.id,
         sourceTabTitle: activeTab.title
       }
@@ -167,6 +183,9 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     setTabOrder((current) => insertTabKeyAfter(current, homeTabKey(nextId), activeOrderKey))
     activateHomeTab(nextId)
   }
+
+  const openSystemInfo = () => openHostInfo()
+  const openNetworkConnections = () => openHostInfo('network')
 
   const closeHomeTab = (event: MouseEvent<HTMLElement>, homeTabId: string) => {
     event.stopPropagation()
@@ -203,7 +222,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     const totalClosableItems = localTabs.length + visibleWorkspaceTabs.length
 
     if (currentActiveLocalTab) {
-      if (totalClosableItems <= 1 && currentActiveLocalTab.kind !== 'transfers') {
+      if (!serverManagementMode && totalClosableItems <= 1 && currentActiveLocalTab.kind !== 'transfers') {
         onCloseCurrentWindow()
         return
       }
@@ -248,6 +267,10 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
         setClosingSessionTabIds((current) => current.filter((id) => id !== activeSessionTab.id))
         onError('关闭当前标签页', error)
       }
+      return
+    }
+
+    if (serverManagementMode) {
       return
     }
 
@@ -455,6 +478,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     dismissShortcutCloseConfirm,
     handleTabContextAction,
     openSystemInfo,
+    openNetworkConnections,
     openFileTransfers,
     openTabContextMenu,
     closeTabContextMenu,

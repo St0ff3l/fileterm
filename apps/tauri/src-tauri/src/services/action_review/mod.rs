@@ -25,7 +25,7 @@ pub const ACTION_APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 /// switch back to FileTerm, enter the password, and submit it. This is still
 /// bounded so an abandoned request cannot wait forever.
 pub const PRIVILEGED_PASSWORD_PROMPT_TIMEOUT: Duration = Duration::from_secs(300);
-const MAX_REMOTE_EXEC_COMMAND_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_REMOTE_EXEC_COMMAND_BYTES: usize = 64 * 1024;
 const MAX_REMOTE_EXEC_CWD_BYTES: usize = 4 * 1024;
 const MAX_REMOTE_EXEC_TAB_ID_BYTES: usize = 256;
 pub const DEFAULT_REMOTE_EXEC_TIMEOUT_MS: u64 = 60_000;

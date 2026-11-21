@@ -3,7 +3,10 @@ fn editor_staging_path(path: &str) -> String {
 }
 
 pub async fn list_dir(sftp: &SftpSession, dir_path: &str) -> Result<Vec<Value>, String> {
-    let entries = sftp.read_dir(dir_path).await.map_err(|e| sftp_transfer_error("READDIR", dir_path, e))?;
+    let entries = sftp
+        .read_dir(dir_path)
+        .await
+        .map_err(|e| sftp_lookup_error("READDIR", dir_path, e))?;
     let mut items = Vec::new();
     // SFTP servers commonly omit `..` from read_dir. Keep the file pane
     // navigation consistent with Electron by creating the parent row ourselves.
@@ -98,9 +101,20 @@ async fn read_file(
     encoding: &str,
     max_bytes: usize,
 ) -> Result<String, String> {
-    let mut file = sftp.open(path).await.map_err(|e| e.to_string())?;
+    let mut file = sftp
+        .open(path)
+        .await
+        .map_err(|e| sftp_lookup_error("OPEN", path, e))?;
     let bytes = crate::sessions::file_read::read_bounded(&mut file, max_bytes).await?;
     decode_bytes(&bytes, encoding)
+}
+
+fn sftp_lookup_error(operation: &str, path: &str, error: SftpError) -> String {
+    if matches!(&error, SftpError::Status(status) if status.status_code == StatusCode::NoSuchFile) {
+        crate::sessions::ssh::SFTP_PATH_NOT_FOUND.to_string()
+    } else {
+        sftp_transfer_error(operation, path, error)
+    }
 }
 
 async fn write_file(

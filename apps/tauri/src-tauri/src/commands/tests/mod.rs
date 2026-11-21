@@ -205,9 +205,13 @@ mod mcp_agent_setup_tests {
     fn generates_stdio_registration_commands_for_supported_clients() {
         let setup = app_get_mcp_agent_setup().expect("MCP Agent setup should be readable");
         assert!(!setup.fileterm_command.is_empty());
-        assert!(
-            setup.fileterm_command.starts_with(if cfg!(target_os = "windows") { "& '" } else { "'" })
-        );
+        assert!(setup
+            .fileterm_command
+            .starts_with(if cfg!(target_os = "windows") {
+                "& '"
+            } else {
+                "'"
+            }));
 
         let claude = setup
             .clients
@@ -215,20 +219,54 @@ mod mcp_agent_setup_tests {
             .find(|client| client.id == "claude-code")
             .expect("Claude Code client should be exposed");
         assert!(claude
-            .registration_command
+            .setup_text
             .starts_with("claude mcp add --scope user fileterm -- "));
-        assert!(claude.registration_command.ends_with(" mcp"));
+        assert!(claude.setup_text.ends_with(" mcp"));
 
         let codex = setup
             .clients
             .iter()
             .find(|client| client.id == "codex-cli")
             .expect("Codex CLI client should be exposed");
-        assert!(codex
-            .registration_command
-            .starts_with("codex mcp add fileterm -- "));
-        assert!(codex.registration_command.ends_with(" mcp"));
-        assert!(!codex.registration_command.contains("-- & "));
+        assert!(codex.setup_text.starts_with("codex mcp add fileterm -- "));
+        assert!(codex.setup_text.ends_with(" mcp"));
+        assert!(!codex.setup_text.contains("-- & "));
+
+        let dsh_and_opencode = setup
+            .clients
+            .windows(2)
+            .find(|clients| clients[0].id == "dsh" && clients[1].id == "opencode")
+            .expect("dsh should appear directly above OpenCode");
+        let dsh = &dsh_and_opencode[0];
+        assert_eq!(dsh.command, "dsh");
+        let expected_launch = match dsh.path.as_deref() {
+            #[cfg(target_os = "macos")]
+            Some(path) if Path::new(path).parent() == Some(Path::new(super::DSH_MACOS_CLI_DIR)) => {
+                format!("{} web", quote_executable_argument(path, false))
+            }
+            _ => "dsh web".to_string(),
+        };
+        assert_eq!(dsh.launch_command, expected_launch);
+        assert!(dsh
+            .setup_text
+            .contains("name: '@deepseek-ai/dsh-mcp-client'"));
+        assert!(dsh
+            .setup_text
+            .contains("serverName: fileterm\n        transport: stdio"));
+        assert!(dsh.setup_text.ends_with("args: [mcp]"));
+        let command = dsh
+            .setup_text
+            .lines()
+            .find_map(|line| line.strip_prefix("        command: "))
+            .expect("dsh must use the raw executable path");
+        let path: String = serde_json::from_str(command).expect("command should be a YAML string");
+        assert_eq!(
+            setup.fileterm_command,
+            executable_invocation(
+                &quote_executable_argument(&path, cfg!(target_os = "windows")),
+                cfg!(target_os = "windows")
+            )
+        );
 
         let opencode = setup
             .clients
@@ -237,9 +275,9 @@ mod mcp_agent_setup_tests {
             .expect("OpenCode client should be exposed");
         assert_eq!(opencode.command, "opencode");
         assert!(opencode
-            .registration_command
+            .setup_text
             .starts_with("opencode mcp add fileterm -- "));
-        assert!(opencode.registration_command.ends_with(" mcp"));
+        assert!(opencode.setup_text.ends_with(" mcp"));
     }
 }
 
@@ -607,7 +645,7 @@ mod ui_preferences_tests {
     use super::{
         default_app_icon, default_basic_logging_enabled, default_local_terminal_shells, default_overview_section_order,
         default_terminal_renderer, default_terminal_font_weight,
-        default_compact_tab_bar, default_mask_connection_addresses, default_tab_bar_layout, default_ui_locale,
+        default_compact_tab_bar, default_mask_connection_addresses, default_workspace_mode, default_ui_locale,
         default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
         default_theme_config, default_update_channel, normalize_local_terminal_shells,
         normalize_mcp_operation_policy, normalize_resource_monitoring_metric_order,
@@ -807,7 +845,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -861,7 +899,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -906,7 +944,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: "sideways".to_string(),
+            workspace_mode: "sideways".to_string(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -928,7 +966,7 @@ mod ui_preferences_tests {
         assert_eq!(preferences.locale, default_ui_locale());
         assert_eq!(preferences.terminal_renderer, "dom");
         assert_eq!(preferences.update_channel, "beta");
-        assert_eq!(preferences.tab_bar_layout, "single-row");
+        assert_eq!(preferences.workspace_mode, "standard");
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
         assert_eq!(
@@ -1021,7 +1059,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: false,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -1086,7 +1124,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -1152,7 +1190,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -1208,7 +1246,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: true,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: true,
-            tab_bar_layout: default_tab_bar_layout(),
+            workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -1237,6 +1275,7 @@ mod ui_preferences_tests {
     #[test]
     fn preserves_saved_connection_values_and_explicit_overrides() {
         let defaults = SshConnectionDefaults {
+            terminal_command_completion: true,
             use_empty_password: true,
             enable_exec_channel: false,
             enable_resource_monitoring: false,
@@ -1287,6 +1326,19 @@ mod ui_preferences_tests {
         assert_eq!(resolved["reconnectMode"], "auto");
         assert_eq!(resolved["enableResourceMonitoring"], true);
         assert_eq!(resolved["resourceMonitoringIntervalSeconds"], 1);
+    }
+
+    #[test]
+    fn connection_completion_defaults_and_profile_opt_out_are_independent() {
+        let mut defaults: SshConnectionDefaults = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(defaults.terminal_command_completion);
+        defaults.terminal_command_completion = false;
+        let serialized = serde_json::to_value(&defaults).unwrap();
+        assert_eq!(serialized["terminalCommandCompletion"], false);
+        let profile = serde_json::json!({ "type": "ssh" });
+        assert_eq!(resolve_profile_with_connection_defaults(&profile, &defaults)["terminalCommandCompletion"], true);
+        let opted_out = serde_json::json!({ "type": "ssh", "terminalCommandCompletion": false });
+        assert_eq!(resolve_profile_with_connection_defaults(&opted_out, &defaults)["terminalCommandCompletion"], false);
     }
 
     #[test]
@@ -1367,7 +1419,7 @@ mod ui_preferences_tests {
         }))
         .expect("legacy preferences without the tray setting should deserialize");
         assert!(legacy.show_macos_menu_bar_icon);
-        assert_eq!(legacy.tab_bar_layout, "single-row");
+        assert_eq!(legacy.workspace_mode, "standard");
         assert!(!legacy.compact_tab_bar);
 
         let input: UiPreferencesInput = serde_json::from_value(serde_json::json!({
@@ -1389,7 +1441,7 @@ mod ui_preferences_tests {
         assert_eq!(input.auto_check_updates, Some(false));
         assert_eq!(input.show_macos_menu_bar_icon, Some(false));
         assert_eq!(input.update_channel.as_deref(), Some("beta"));
-        assert_eq!(input.tab_bar_layout.as_deref(), Some("host-groups"));
+        assert_eq!(input.workspace_mode.as_deref(), Some("host-groups"));
         assert_eq!(input.compact_tab_bar, Some(true));
         assert_eq!(input.overview_show_stats, Some(false));
         assert_eq!(input.overview_show_recent, Some(false));
@@ -1435,7 +1487,7 @@ mod ui_preferences_tests {
             file_panel_remember_ratio: false,
             transfer_sidebar_collapsed_by_default: true,
             remember_window_size: false,
-            tab_bar_layout: "host-groups".to_string(),
+            workspace_mode: "server-management".to_string(),
             compact_tab_bar: true,
             mask_connection_addresses: default_mask_connection_addresses(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
@@ -1499,7 +1551,7 @@ mod ui_preferences_tests {
             assert_eq!(normalize_ui_preferences(loaded).terminal_font_weight, if weight == 600 { 600 } else { 400 });
         }
 
-        assert_eq!(preferences["tabBarLayout"], "host-groups");
+        assert_eq!(preferences["workspaceMode"], "server-management");
         assert_eq!(preferences["compactTabBar"], true);
         assert_eq!(preferences["overviewShowStats"], false);
         assert_eq!(preferences["overviewShowRecent"], false);

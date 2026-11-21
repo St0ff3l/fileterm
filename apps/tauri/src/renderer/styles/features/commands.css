@@ -353,7 +353,7 @@
   border: 1px solid var(--border-light);
   border-radius: 5px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--action-secondary-text);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-compact);
   font-weight: var(--button-font-weight);
@@ -548,7 +548,7 @@
   border-color: transparent;
   border-radius: 5px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--action-secondary-text);
 }
 
 .command-temporary-history-clear.flat-button.compact:hover:not(:disabled),
@@ -2433,9 +2433,9 @@
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--bg-hover);
+  background: var(--action-secondary-bg);
   color: var(--text-main);
   box-shadow: none;
 }
@@ -2443,8 +2443,8 @@
 .command-manager-modal .manager-toolbar .flat-button:hover:not(:disabled),
 .command-manager-modal .command-manager-sidebar-head button:hover,
 .command-manager-modal .command-manager-submit button:hover {
-  background: var(--bg-main);
-  border-color: var(--focus-outline);
+  background: var(--action-secondary-hover);
+  border-color: var(--border-default);
   box-shadow: none;
 }
 

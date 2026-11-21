@@ -8,10 +8,10 @@ import { DropdownSelect } from '../common/dropdown-select'
 
 const EMPTY_SAMPLES: SystemMetrics['networkSamples'] = []
 
-export function NetworkMetricPanel({ metrics }: { metrics?: SystemMetrics }) {
+export function NetworkMetricPanel({ metrics, onOpen }: { metrics?: SystemMetrics; onOpen?: () => void }) {
   return (
     <div className="system-network-panel">
-      <NetworkPanel metrics={metrics} />
+      <NetworkPanel metrics={metrics} onOpen={onOpen} />
     </div>
   )
 }
@@ -26,7 +26,7 @@ function formatTrafficLabel(value: number) {
   return `${Math.round(value)}B`
 }
 
-function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
+function NetworkPanel({ metrics, onOpen }: { metrics?: SystemMetrics; onOpen?: () => void }) {
   const visibleSampleCount = 64
   const chartStep = 100 / Math.max(1, visibleSampleCount - 1)
   const [selectedInterface, setSelectedInterface] = useState(metrics?.activeNetworkInterface ?? '')
@@ -113,7 +113,14 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
   return (
     <>
       <div className="network-panel" data-file-panel-snap-target="network-panel">
-        <div className="network-rates">
+        <button
+          type="button"
+          className="network-rates network-details-trigger"
+          onClick={onOpen}
+          disabled={!onOpen}
+          title={t.networkConnections}
+          aria-label={t.networkConnections}
+        >
           <span className="network-rate up">
             <i>
               <AppIcon name="arrow-up" size={12} />
@@ -126,7 +133,7 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
             </i>
             <strong>{currentRates?.rx ?? '0B'}</strong>
           </span>
-        </div>
+        </button>
         <DropdownSelect
           className="network-select"
           align="right"
@@ -138,7 +145,14 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
           onChange={(value) => setSelectedInterface(value)}
         />
       </div>
-      <div className="network-history">
+      <button
+        type="button"
+        className="network-history network-details-trigger"
+        onClick={onOpen}
+        disabled={!onOpen}
+        title={t.networkConnections}
+        aria-label={t.networkConnections}
+      >
         <div className="network-scale">
           {chartScale.map((value) => (
             <span key={value}>{formatTrafficLabel(value)}</span>
@@ -160,7 +174,7 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
             </g>
           </svg>
         </div>
-      </div>
+      </button>
     </>
   )
 }

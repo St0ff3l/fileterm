@@ -22,7 +22,7 @@
   --ref-surface-modal: #1e1e1e;
   --ref-surface-context-menu: #1e2024;
   --ref-surface-overlay: rgba(0, 0, 0, 0.65);
-  --ref-surface-hover: #303030;
+  --ref-surface-hover: #2a2a2a;
   --ref-surface-active: #3a3d42;
   --ref-surface-input: #1a1a1a;
   --ref-surface-input-focus: #181818;
@@ -133,4 +133,9 @@
   --ref-preview-light-sidebar: #f0f0f0;
   --ref-preview-dark-content: #303030;
   --ref-preview-light-content: #dcdcdc;
+}
+
+:root:not([data-theme*='light']):not([data-theme-preset]) {
+  --ref-sidebar-navigation-highlight: #303030;
+  --ref-toolbar-control-hover: #303030;
 }

@@ -3,7 +3,7 @@ import './input.css'
 
 export type InputSize = 'sm' | 'md' | 'lg'
 
-export type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> & {
+export type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> & {
   ref?: Ref<HTMLInputElement>
   sizeVariant?: InputSize
   isError?: boolean

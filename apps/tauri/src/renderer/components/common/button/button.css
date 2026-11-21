@@ -28,11 +28,17 @@
 
 /* Sizes */
 .ft-btn--sm,
-.ft-btn--compact {
+.ft-btn--compact,
+.ft-btn--panel {
   height: var(--control-height-sm);
   --ft-btn-padding-x: var(--control-padding-x-sm);
   padding: 0 var(--ft-btn-padding-x);
   font-size: var(--font-size-xs);
+}
+
+.ft-btn--panel {
+  height: 32px;
+  min-inline-size: 72px;
 }
 
 .ft-btn--md,
@@ -69,11 +75,12 @@
 .ft-btn--secondary {
   background-color: var(--action-secondary-bg);
   color: var(--action-secondary-text);
-  border-color: var(--border-default);
+  border-color: var(--border-subtle);
 }
 
 .ft-btn--secondary:hover:not(:disabled) {
   background-color: var(--action-secondary-hover);
+  border-color: var(--border-default);
 }
 
 .ft-btn--secondary:active:not(:disabled) {
@@ -121,6 +128,16 @@
 .ft-btn--loading {
   cursor: wait;
   opacity: 0.8;
+}
+
+.ft-btn__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.ft-btn__icon > .material-symbols-outlined {
+  font-size: 14px;
 }
 
 .ft-btn__spinner {

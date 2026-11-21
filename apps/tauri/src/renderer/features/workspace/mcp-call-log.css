@@ -147,6 +147,11 @@
   white-space: normal;
 }
 
+.mcp-call-log-command pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 980px) {
   .mcp-call-log-table.connection-manager-table .manager-head,
   .mcp-call-log-table.connection-manager-table .manager-row {

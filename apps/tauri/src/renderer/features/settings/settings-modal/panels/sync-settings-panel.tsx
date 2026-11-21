@@ -1,3 +1,4 @@
+import { SubtabBar } from '../../../../components/common/subtab-bar/subtab-bar'
 import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import type { Dispatch, SetStateAction } from 'react'
 import type {
@@ -88,27 +89,41 @@ export function SyncSettingsPanel() {
 
   return (
     <div className="settings-panel">
-      <div className="sync-subtabs">
-        <button
-          type="button"
-          className={`sync-subtab-button ${syncSubTab === 'webdav' ? 'active' : ''}`}
-          onClick={() => setSyncSubTab('webdav')}
-        >
-          <AppIcon name="cloud" size={15} />
-          <span>WebDAV</span>
-        </button>
-        <button
-          type="button"
-          className={`sync-subtab-button ${syncSubTab === 's3' ? 'active' : ''}`}
-          onClick={() => setSyncSubTab('s3')}
-        >
-          <AppIcon name="database" size={15} />
-          <span>S3</span>
-        </button>
-      </div>
+      <SubtabBar<'webdav' | 's3'>
+        idPrefix="settings-sync"
+        ariaLabel={t.configSync}
+        className="sync-subtabs"
+        value={syncSubTab}
+        options={[
+          {
+            value: 'webdav',
+            label: (
+              <>
+                <AppIcon name="cloud" size={15} />
+                <span>WebDAV</span>
+              </>
+            )
+          },
+          {
+            value: 's3',
+            label: (
+              <>
+                <AppIcon name="database" size={15} />
+                <span>S3</span>
+              </>
+            )
+          }
+        ]}
+        onChange={setSyncSubTab}
+      />
 
       {syncSubTab === 'webdav' && (
-        <section className="settings-section">
+        <section
+          className="settings-section"
+          id="settings-sync-panel-webdav"
+          role="tabpanel"
+          aria-labelledby="settings-sync-tab-webdav"
+        >
           <h3>{t.webdavConfigSync}</h3>
           <p className="settings-tools-hint">{t.webdavConfigSyncDescription}</p>
           <fieldset
@@ -338,7 +353,12 @@ export function SyncSettingsPanel() {
       )}
 
       {syncSubTab === 's3' && s3Config && (
-        <section className="settings-section">
+        <section
+          className="settings-section"
+          id="settings-sync-panel-s3"
+          role="tabpanel"
+          aria-labelledby="settings-sync-tab-s3"
+        >
           <h3>{t.s3Backup}</h3>
           <p className="settings-tools-hint">{t.s3BackupDescription}</p>
           <fieldset

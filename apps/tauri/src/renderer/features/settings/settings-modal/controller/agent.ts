@@ -124,10 +124,6 @@ export function useAgentSettingsController({
       .catch((error: unknown) => setMcpAgentMessage(error instanceof Error ? error.message : String(error)))
   }
 
-  const copyMcpAgentRegistrationCommand = (command: string) => {
-    copyMcpAgentCommand(command, t.agentMcpCommandCopied)
-  }
-
   const launchMcpAgentInLocalTerminal = (client: McpAgentClientStatus) => {
     if (!client.available || !onLaunchLocalAgent) return
     setMcpAgentMessage(null)
@@ -179,7 +175,6 @@ export function useAgentSettingsController({
     setAgentSubTab,
     mcpAgentSetup,
     copyMcpAgentCommand,
-    copyMcpAgentRegistrationCommand,
     launchMcpAgentInLocalTerminal,
     onLaunchLocalAgent,
     mcpAgentMessage

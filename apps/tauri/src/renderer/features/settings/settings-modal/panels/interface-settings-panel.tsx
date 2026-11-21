@@ -10,10 +10,9 @@ import { DropdownSelect } from '../../../common/dropdown-select'
 import { StableButtonContent } from '../../../common/stable-button-content'
 import { type LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
+import { SettingsDisclosureSummary } from '../settings-disclosure-summary'
 import { useSystemFontAvailability } from '../../../../app/use-system-font-availability'
-import { InterfaceDisplaySettingsSections, TerminalDisplaySettingsSection } from './interface-display-settings'
-import { LayoutSettingsSection } from './layout-settings-section'
-import { OverviewContentSettingsSection } from './overview-content-settings-section'
+import { InterfaceDisplaySettingsSections } from './interface-display-settings'
 import {
   ANSI_COLOR_LABELS,
   ANSI_COLOR_NAMES,
@@ -225,351 +224,358 @@ export function InterfaceSettingsPanel() {
           </div>
         </div>
 
-        <div className="theme-config-color-groups">
-          <section className="theme-config-color-group">
-            <div className="theme-config-section-heading">
-              <h4>{t.themeBaseColors}</h4>
-              <span>{t.themeBaseColorsHint}</span>
-            </div>
-            <div className="theme-config-fields">
-              <ThemeColorField
-                label={t.themePrimaryColor}
-                onChange={(value) => updateThemeBody({ accent: value })}
-                value={normalizedThemeConfig.theme.accent}
-              />
-              <ThemeColorField
-                label={t.themeSecondaryColor}
-                onChange={(value) => updateThemeSemanticColors({ secondary: value })}
-                value={normalizedThemeConfig.theme.semanticColors.secondary}
-              />
-              <ThemeColorField
-                label={t.themeSurfaceColor}
-                onChange={(value) => updateThemeBody({ surface: value })}
-                value={normalizedThemeConfig.theme.surface}
-              />
-              <ThemeColorField
-                label={t.themeSurfaceSecondaryColor}
-                onChange={(value) => updateThemeBody({ surfaceSecondary: value })}
-                value={normalizedThemeConfig.theme.surfaceSecondary}
-              />
-              <ThemeColorField
-                label={t.themeSurfaceSidebarColor}
-                onChange={(value) => updateThemeBody({ surfaceSidebar: value })}
-                value={getThemeControlSurfaces(normalizedThemeConfig).sidebar}
-              />
-              <ThemeColorField
-                label={t.themeSurfaceInputColor}
-                onChange={(value) => updateThemeBody({ surfaceInput: value })}
-                value={getThemeControlSurfaces(normalizedThemeConfig).input}
-              />
-              <ThemeColorField
-                label={t.themeSurfaceContextMenuColor}
-                onChange={(value) => updateThemeBody({ surfaceContextMenu: value })}
-                value={getThemeControlSurfaces(normalizedThemeConfig).menu}
-              />
-              <ThemeColorField
-                label={t.themeSurfaceElevatedColor}
-                onChange={(value) => updateThemeBody({ surfaceElevated: value })}
-                value={normalizedThemeConfig.theme.surfaceElevated}
-              />
-              <ThemeColorField
-                label={t.themeTextPrimaryColor}
-                onChange={(value) => updateThemeBody({ ink: value })}
-                value={normalizedThemeConfig.theme.ink}
-              />
-              <ThemeColorField
-                label={t.themeTextSecondaryColor}
-                onChange={(value) => updateThemeSemanticColors({ textSecondary: value })}
-                value={normalizedThemeConfig.theme.semanticColors.textSecondary}
-              />
-              <ThemeColorField
-                label={t.themeTotalColor}
-                onChange={(value) => updateThemeSemanticColors({ total: value })}
-                value={normalizedThemeConfig.theme.semanticColors.total}
-              />
-              <ThemeColorField
-                label={t.themeTelnetColor}
-                onChange={(value) => updateThemeSemanticColors({ telnet: value })}
-                value={normalizedThemeConfig.theme.semanticColors.telnet}
-              />
-              <ThemeColorField
-                label={t.themeFtpColor}
-                onChange={(value) => updateThemeSemanticColors({ ftp: value })}
-                value={normalizedThemeConfig.theme.semanticColors.ftp}
-              />
-              <ThemeColorField
-                label={t.themeNetworkRxColor}
-                onChange={(value) => updateThemeSemanticColors({ networkRx: value })}
-                value={normalizedThemeConfig.theme.semanticColors.networkRx}
-              />
-              <ThemeColorField
-                label={t.themeNetworkTxColor}
-                onChange={(value) => updateThemeSemanticColors({ networkTx: value })}
-                value={normalizedThemeConfig.theme.semanticColors.networkTx}
-              />
-            </div>
-          </section>
-
-          <section className="theme-config-color-group">
-            <div className="theme-config-section-heading">
-              <h4>{t.themeStatusColors}</h4>
-              <span>{t.themeStatusColorsHint}</span>
-            </div>
-            <div className="theme-config-fields">
-              <ThemeColorField
-                label={t.themeInfoColor}
-                onChange={(value) => updateThemeSemanticColors({ info: value })}
-                value={normalizedThemeConfig.theme.semanticColors.info}
-              />
-              <ThemeColorField
-                label={t.themeWarningColor}
-                onChange={(value) => updateThemeSemanticColors({ warning: value })}
-                value={normalizedThemeConfig.theme.semanticColors.warning}
-              />
-              <ThemeColorField
-                label={t.themeErrorColor}
-                onChange={(value) => updateThemeSemanticColors({ error: value })}
-                value={normalizedThemeConfig.theme.semanticColors.error}
-              />
-              <ThemeColorField
-                label={t.themeSuccessColor}
-                onChange={(value) => updateThemeSemanticColors({ success: value })}
-                value={normalizedThemeConfig.theme.semanticColors.success}
-              />
-              <ThemeColorField
-                label={t.themePrimaryActionColor}
-                onChange={(value) => updateThemeSemanticColors({ primaryAction: value })}
-                value={normalizedThemeConfig.theme.semanticColors.primaryAction ?? normalizedThemeConfig.theme.accent}
-              />
-              <ThemeColorField
-                label={t.themeDangerActionColor}
-                onChange={(value) => updateThemeSemanticColors({ dangerAction: value })}
-                value={
-                  normalizedThemeConfig.theme.semanticColors.dangerAction ??
-                  (normalizedThemeConfig.variant === 'light' ? '#d32f2f' : '#c93b3b')
-                }
-              />
-            </div>
-          </section>
-        </div>
-
-        <div className="theme-config-font-grid">
-          <div className="theme-config-control">
-            <span className="theme-config-label">{t.themeUiFont}</span>
-            <div className="theme-config-font-control-row">
-              <DropdownSelect
-                ariaLabel={t.themeUiFont}
-                className="theme-config-select"
-                onChange={(value) => updateThemeFonts({ ui: value || null })}
-                options={[
-                  { value: '', label: t.themeSystemDefault },
-                  { value: 'Inter', label: 'Inter' },
-                  ...(themeConfig.theme.fonts.ui === 'SF Pro Text'
-                    ? [{ value: 'SF Pro Text', label: 'SF Pro Text', disabled: true }]
-                    : []),
-                  { value: 'Noto Sans SC', label: 'Noto Sans SC' },
-                  ...importedFonts.map((font) => ({
-                    value: font.family,
-                    label: `${font.family} (${font.format.toUpperCase()})`
-                  }))
-                ]}
-                value={themeConfig.theme.fonts.ui ?? ''}
-              />
-            </div>
-          </div>
-          <div className="theme-config-control">
-            <span className="theme-config-label">{t.themeCodeFont}</span>
-            <div className="theme-config-font-control-row">
-              <DropdownSelect
-                ariaLabel={t.themeCodeFont}
-                className="theme-config-select"
-                onChange={(value) => updateThemeFonts({ code: value || null })}
-                options={[
-                  { value: '', label: t.themeSystemDefault },
-                  { value: 'JetBrains Mono', label: 'JetBrains Mono' },
-                  ...(systemFonts['SF Mono'] ? [{ value: 'SF Mono', label: 'SF Mono' }] : []),
-                  { value: 'Cascadia Code', label: 'Cascadia Code' },
-                  ...importedFonts.map((font) => ({
-                    value: font.family,
-                    label: `${font.family} (${font.format.toUpperCase()})`
-                  }))
-                ]}
-                value={themeConfig.theme.fonts.code ?? ''}
-              />
-            </div>
-          </div>
-        </div>
-        <div className="theme-font-import-toolbar">
-          <button
-            aria-busy={isImportingFont}
-            className="flat-button compact theme-font-import-button"
-            disabled={!desktopApi || isImportingFont}
-            onClick={() => void importFont()}
-            type="button"
-          >
-            <StableButtonContent
-              busy={isImportingFont}
-              busyLabel={t.themeImportingFont}
-              icon={<AppIcon name="upload" size={14} />}
-              label={t.themeImportFont}
-            />
-          </button>
-          <p className="settings-tools-hint">{t.themeImportFontHint}</p>
-        </div>
-        {fontImportError ? <p className="settings-tools-error">{fontImportError}</p> : null}
-
-        {importedFonts.length > 0 ? (
-          <div className="theme-config-imported-fonts">
-            <div className="theme-config-imported-fonts-header">
-              <span className="theme-config-imported-fonts-title">{t.themeImportedFonts}</span>
-              <span className="theme-config-imported-fonts-count">{importedFonts.length}</span>
-            </div>
-            <div className="theme-config-imported-fonts-list">
-              {importedFonts.map((font) => (
-                <div key={font.id} className="theme-config-imported-font-item">
-                  <span className="theme-config-imported-font-name" title={font.fileName}>
-                    {font.family}
-                    <span className="theme-config-imported-font-format">{font.format.toUpperCase()}</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="flat-button danger theme-config-font-delete-btn"
-                    title={`${t.themeDeleteFont}: ${font.family}`}
-                    aria-label={`${t.themeDeleteFont}: ${font.family}`}
-                    onClick={() => setFontToDelete(font)}
-                  >
-                    <AppIcon name="trash" size={13} />
-                  </button>
+        <details className="theme-color-disclosure">
+          <SettingsDisclosureSummary className="theme-color-disclosure-trigger">{t.advanced}</SettingsDisclosureSummary>
+          <div className="theme-color-disclosure-body">
+            <div className="theme-config-color-groups">
+              <section className="theme-config-color-group">
+                <div className="theme-config-section-heading">
+                  <h4>{t.themeBaseColors}</h4>
+                  <span>{t.themeBaseColorsHint}</span>
                 </div>
-              ))}
+                <div className="theme-config-fields">
+                  <ThemeColorField
+                    label={t.themePrimaryColor}
+                    onChange={(value) => updateThemeBody({ accent: value })}
+                    value={normalizedThemeConfig.theme.accent}
+                  />
+                  <ThemeColorField
+                    label={t.themeSecondaryColor}
+                    onChange={(value) => updateThemeSemanticColors({ secondary: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.secondary}
+                  />
+                  <ThemeColorField
+                    label={t.themeSurfaceColor}
+                    onChange={(value) => updateThemeBody({ surface: value })}
+                    value={normalizedThemeConfig.theme.surface}
+                  />
+                  <ThemeColorField
+                    label={t.themeSurfaceSecondaryColor}
+                    onChange={(value) => updateThemeBody({ surfaceSecondary: value })}
+                    value={normalizedThemeConfig.theme.surfaceSecondary}
+                  />
+                  <ThemeColorField
+                    label={t.themeSurfaceSidebarColor}
+                    onChange={(value) => updateThemeBody({ surfaceSidebar: value })}
+                    value={getThemeControlSurfaces(normalizedThemeConfig).sidebar}
+                  />
+                  <ThemeColorField
+                    label={t.themeSurfaceInputColor}
+                    onChange={(value) => updateThemeBody({ surfaceInput: value })}
+                    value={getThemeControlSurfaces(normalizedThemeConfig).input}
+                  />
+                  <ThemeColorField
+                    label={t.themeSurfaceContextMenuColor}
+                    onChange={(value) => updateThemeBody({ surfaceContextMenu: value })}
+                    value={getThemeControlSurfaces(normalizedThemeConfig).menu}
+                  />
+                  <ThemeColorField
+                    label={t.themeSurfaceElevatedColor}
+                    onChange={(value) => updateThemeBody({ surfaceElevated: value })}
+                    value={normalizedThemeConfig.theme.surfaceElevated}
+                  />
+                  <ThemeColorField
+                    label={t.themeTextPrimaryColor}
+                    onChange={(value) => updateThemeBody({ ink: value })}
+                    value={normalizedThemeConfig.theme.ink}
+                  />
+                  <ThemeColorField
+                    label={t.themeTextSecondaryColor}
+                    onChange={(value) => updateThemeSemanticColors({ textSecondary: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.textSecondary}
+                  />
+                  <ThemeColorField
+                    label={t.themeTotalColor}
+                    onChange={(value) => updateThemeSemanticColors({ total: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.total}
+                  />
+                  <ThemeColorField
+                    label={t.themeTelnetColor}
+                    onChange={(value) => updateThemeSemanticColors({ telnet: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.telnet}
+                  />
+                  <ThemeColorField
+                    label={t.themeFtpColor}
+                    onChange={(value) => updateThemeSemanticColors({ ftp: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.ftp}
+                  />
+                  <ThemeColorField
+                    label={t.themeNetworkRxColor}
+                    onChange={(value) => updateThemeSemanticColors({ networkRx: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.networkRx}
+                  />
+                  <ThemeColorField
+                    label={t.themeNetworkTxColor}
+                    onChange={(value) => updateThemeSemanticColors({ networkTx: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.networkTx}
+                  />
+                </div>
+              </section>
+
+              <section className="theme-config-color-group">
+                <div className="theme-config-section-heading">
+                  <h4>{t.themeStatusColors}</h4>
+                  <span>{t.themeStatusColorsHint}</span>
+                </div>
+                <div className="theme-config-fields">
+                  <ThemeColorField
+                    label={t.themeInfoColor}
+                    onChange={(value) => updateThemeSemanticColors({ info: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.info}
+                  />
+                  <ThemeColorField
+                    label={t.themeWarningColor}
+                    onChange={(value) => updateThemeSemanticColors({ warning: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.warning}
+                  />
+                  <ThemeColorField
+                    label={t.themeErrorColor}
+                    onChange={(value) => updateThemeSemanticColors({ error: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.error}
+                  />
+                  <ThemeColorField
+                    label={t.themeSuccessColor}
+                    onChange={(value) => updateThemeSemanticColors({ success: value })}
+                    value={normalizedThemeConfig.theme.semanticColors.success}
+                  />
+                  <ThemeColorField
+                    label={t.themePrimaryActionColor}
+                    onChange={(value) => updateThemeSemanticColors({ primaryAction: value })}
+                    value={
+                      normalizedThemeConfig.theme.semanticColors.primaryAction ?? normalizedThemeConfig.theme.accent
+                    }
+                  />
+                  <ThemeColorField
+                    label={t.themeDangerActionColor}
+                    onChange={(value) => updateThemeSemanticColors({ dangerAction: value })}
+                    value={
+                      normalizedThemeConfig.theme.semanticColors.dangerAction ??
+                      (normalizedThemeConfig.variant === 'light' ? '#d32f2f' : '#c93b3b')
+                    }
+                  />
+                </div>
+              </section>
             </div>
-          </div>
-        ) : null}
 
-        <details className="theme-config-subsection theme-advanced-section">
-          <summary className="theme-config-section-summary">
-            <span className="theme-config-section-summary-copy">
-              <strong>{t.themeSemanticColors}</strong>
-              <span>{t.themeAdvancedHint}</span>
-            </span>
-          </summary>
-          <div className="theme-config-fields">
-            <ThemeColorField
-              label={t.themeDiffAdded}
-              onChange={(value) => updateThemeSemanticColors({ diffAdded: value })}
-              value={normalizedThemeConfig.theme.semanticColors.diffAdded}
-            />
-            <ThemeColorField
-              label={t.themeDiffRemoved}
-              onChange={(value) => updateThemeSemanticColors({ diffRemoved: value })}
-              value={normalizedThemeConfig.theme.semanticColors.diffRemoved}
-            />
-            <ThemeColorField
-              label={t.themeSkillColor}
-              onChange={(value) => updateThemeSemanticColors({ skill: value })}
-              value={normalizedThemeConfig.theme.semanticColors.skill}
-            />
-            <ThemeColorField
-              label={t.themeKeywordColor}
-              onChange={(value) => updateThemeSemanticColors({ keyword: value })}
-              value={normalizedThemeConfig.theme.semanticColors.keyword}
-            />
-          </div>
-        </details>
-
-        <div className="theme-config-subsection">
-          <h4>{t.themeTerminalColors}</h4>
-          <div className="theme-config-fields">
-            <ThemeColorField
-              label={t.themeTerminalBackground}
-              onChange={(value) => updateTerminalTheme({ background: value })}
-              value={themeConfig.theme.terminal.background}
-            />
-            <ThemeColorField
-              label={t.themeTerminalForeground}
-              onChange={(value) => updateTerminalTheme({ foreground: value })}
-              value={themeConfig.theme.terminal.foreground}
-            />
-            <ThemeColorField
-              label={t.themeTerminalCursor}
-              onChange={(value) => updateTerminalTheme({ cursor: value })}
-              value={themeConfig.theme.terminal.cursor}
-            />
-            <ThemeColorField
-              label={t.themeTerminalCursorAccent}
-              onChange={(value) => updateTerminalTheme({ cursorAccent: value })}
-              value={themeConfig.theme.terminal.cursorAccent}
-            />
-            <ThemeColorField
-              label={t.themeTerminalSelection}
-              onChange={(value) => updateTerminalTheme({ selectionBackground: value })}
-              value={themeConfig.theme.terminal.selectionBackground}
-            />
-            <ThemeColorField
-              label={t.themeTerminalSelectionText}
-              onChange={(value) => updateTerminalTheme({ selectionForeground: value })}
-              value={themeConfig.theme.terminal.selectionForeground}
-            />
-          </div>
-          <div className="theme-config-fields theme-config-search-fields">
-            <ThemeColorField
-              label={t.themeSearchMatch}
-              onChange={(value) => updateTerminalSearchColors({ matchBackground: value })}
-              value={themeConfig.theme.terminal.search.matchBackground}
-            />
-            <ThemeColorField
-              label={t.themeSearchActiveMatch}
-              onChange={(value) => updateTerminalSearchColors({ activeMatchBackground: value })}
-              value={themeConfig.theme.terminal.search.activeMatchBackground}
-            />
-            <ThemeColorField
-              label={t.themeSearchActiveText}
-              onChange={(value) => updateTerminalSearchColors({ activeMatchText: value })}
-              value={themeConfig.theme.terminal.search.activeMatchText}
-            />
-            <ThemeColorField
-              label={t.themeSearchBorder}
-              onChange={(value) => updateTerminalSearchColors({ activeMatchBorder: value })}
-              value={themeConfig.theme.terminal.search.activeMatchBorder}
-            />
-          </div>
-        </div>
-
-        <details className="theme-advanced-section theme-terminal-ansi-details">
-          <summary className="theme-config-section-summary">
-            <span className="theme-config-section-summary-copy">
-              <strong>{t.themeAnsiColors}</strong>
-              <span>{t.themeAnsiHint}</span>
-            </span>
-            <span className="theme-config-section-summary-count">16</span>
-          </summary>
-          <div className="theme-terminal-ansi-groups">
-            <section className="theme-terminal-ansi-group">
-              <h5>{t.themeAnsiNormal}</h5>
-              <div className="theme-config-fields">
-                {ANSI_COLOR_NAMES.slice(0, 8).map((name) => (
-                  <ThemeColorField
-                    key={name}
-                    label={ANSI_COLOR_LABELS[name]}
-                    onChange={(value) => updateTerminalAnsiColor(name, value)}
-                    value={themeConfig.theme.terminal.ansi[name]}
+            <div className="theme-config-font-grid">
+              <div className="theme-config-control">
+                <span className="theme-config-label">{t.themeUiFont}</span>
+                <div className="theme-config-font-control-row">
+                  <DropdownSelect
+                    ariaLabel={t.themeUiFont}
+                    className="theme-config-select"
+                    onChange={(value) => updateThemeFonts({ ui: value || null })}
+                    options={[
+                      { value: '', label: t.themeSystemDefault },
+                      { value: 'Inter', label: 'Inter' },
+                      ...(themeConfig.theme.fonts.ui === 'SF Pro Text'
+                        ? [{ value: 'SF Pro Text', label: 'SF Pro Text', disabled: true }]
+                        : []),
+                      { value: 'Noto Sans SC', label: 'Noto Sans SC' },
+                      ...importedFonts.map((font) => ({
+                        value: font.family,
+                        label: `${font.family} (${font.format.toUpperCase()})`
+                      }))
+                    ]}
+                    value={themeConfig.theme.fonts.ui ?? ''}
                   />
-                ))}
+                </div>
               </div>
-            </section>
-            <section className="theme-terminal-ansi-group">
-              <h5>{t.themeAnsiBright}</h5>
-              <div className="theme-config-fields">
-                {ANSI_COLOR_NAMES.slice(8).map((name) => (
-                  <ThemeColorField
-                    key={name}
-                    label={ANSI_COLOR_LABELS[name]}
-                    onChange={(value) => updateTerminalAnsiColor(name, value)}
-                    value={themeConfig.theme.terminal.ansi[name]}
+              <div className="theme-config-control">
+                <span className="theme-config-label">{t.themeCodeFont}</span>
+                <div className="theme-config-font-control-row">
+                  <DropdownSelect
+                    ariaLabel={t.themeCodeFont}
+                    className="theme-config-select"
+                    onChange={(value) => updateThemeFonts({ code: value || null })}
+                    options={[
+                      { value: '', label: t.themeSystemDefault },
+                      { value: 'JetBrains Mono', label: 'JetBrains Mono' },
+                      ...(systemFonts['SF Mono'] ? [{ value: 'SF Mono', label: 'SF Mono' }] : []),
+                      { value: 'Cascadia Code', label: 'Cascadia Code' },
+                      ...importedFonts.map((font) => ({
+                        value: font.family,
+                        label: `${font.family} (${font.format.toUpperCase()})`
+                      }))
+                    ]}
+                    value={themeConfig.theme.fonts.code ?? ''}
                   />
-                ))}
+                </div>
               </div>
-            </section>
+            </div>
+            <div className="theme-font-import-toolbar">
+              <button
+                aria-busy={isImportingFont}
+                className="flat-button compact theme-font-import-button"
+                disabled={!desktopApi || isImportingFont}
+                onClick={() => void importFont()}
+                type="button"
+              >
+                <StableButtonContent
+                  busy={isImportingFont}
+                  busyLabel={t.themeImportingFont}
+                  icon={<AppIcon name="upload" size={14} />}
+                  label={t.themeImportFont}
+                />
+              </button>
+              <p className="settings-tools-hint">{t.themeImportFontHint}</p>
+            </div>
+            {fontImportError ? <p className="settings-tools-error">{fontImportError}</p> : null}
+
+            {importedFonts.length > 0 ? (
+              <div className="theme-config-imported-fonts">
+                <div className="theme-config-imported-fonts-header">
+                  <span className="theme-config-imported-fonts-title">{t.themeImportedFonts}</span>
+                  <span className="theme-config-imported-fonts-count">{importedFonts.length}</span>
+                </div>
+                <div className="theme-config-imported-fonts-list">
+                  {importedFonts.map((font) => (
+                    <div key={font.id} className="theme-config-imported-font-item">
+                      <span className="theme-config-imported-font-name" title={font.fileName}>
+                        {font.family}
+                        <span className="theme-config-imported-font-format">{font.format.toUpperCase()}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="flat-button danger theme-config-font-delete-btn"
+                        title={`${t.themeDeleteFont}: ${font.family}`}
+                        aria-label={`${t.themeDeleteFont}: ${font.family}`}
+                        onClick={() => setFontToDelete(font)}
+                      >
+                        <AppIcon name="trash" size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <details className="theme-config-subsection theme-advanced-section">
+              <SettingsDisclosureSummary className="theme-config-section-summary">
+                <span className="theme-config-section-summary-copy">
+                  <strong>{t.themeSemanticColors}</strong>
+                  <span>{t.themeAdvancedHint}</span>
+                </span>
+              </SettingsDisclosureSummary>
+              <div className="theme-config-fields">
+                <ThemeColorField
+                  label={t.themeDiffAdded}
+                  onChange={(value) => updateThemeSemanticColors({ diffAdded: value })}
+                  value={normalizedThemeConfig.theme.semanticColors.diffAdded}
+                />
+                <ThemeColorField
+                  label={t.themeDiffRemoved}
+                  onChange={(value) => updateThemeSemanticColors({ diffRemoved: value })}
+                  value={normalizedThemeConfig.theme.semanticColors.diffRemoved}
+                />
+                <ThemeColorField
+                  label={t.themeSkillColor}
+                  onChange={(value) => updateThemeSemanticColors({ skill: value })}
+                  value={normalizedThemeConfig.theme.semanticColors.skill}
+                />
+                <ThemeColorField
+                  label={t.themeKeywordColor}
+                  onChange={(value) => updateThemeSemanticColors({ keyword: value })}
+                  value={normalizedThemeConfig.theme.semanticColors.keyword}
+                />
+              </div>
+            </details>
+
+            <div className="theme-config-subsection">
+              <h4>{t.themeTerminalColors}</h4>
+              <div className="theme-config-fields">
+                <ThemeColorField
+                  label={t.themeTerminalBackground}
+                  onChange={(value) => updateTerminalTheme({ background: value })}
+                  value={themeConfig.theme.terminal.background}
+                />
+                <ThemeColorField
+                  label={t.themeTerminalForeground}
+                  onChange={(value) => updateTerminalTheme({ foreground: value })}
+                  value={themeConfig.theme.terminal.foreground}
+                />
+                <ThemeColorField
+                  label={t.themeTerminalCursor}
+                  onChange={(value) => updateTerminalTheme({ cursor: value })}
+                  value={themeConfig.theme.terminal.cursor}
+                />
+                <ThemeColorField
+                  label={t.themeTerminalCursorAccent}
+                  onChange={(value) => updateTerminalTheme({ cursorAccent: value })}
+                  value={themeConfig.theme.terminal.cursorAccent}
+                />
+                <ThemeColorField
+                  label={t.themeTerminalSelection}
+                  onChange={(value) => updateTerminalTheme({ selectionBackground: value })}
+                  value={themeConfig.theme.terminal.selectionBackground}
+                />
+                <ThemeColorField
+                  label={t.themeTerminalSelectionText}
+                  onChange={(value) => updateTerminalTheme({ selectionForeground: value })}
+                  value={themeConfig.theme.terminal.selectionForeground}
+                />
+              </div>
+              <div className="theme-config-fields theme-config-search-fields">
+                <ThemeColorField
+                  label={t.themeSearchMatch}
+                  onChange={(value) => updateTerminalSearchColors({ matchBackground: value })}
+                  value={themeConfig.theme.terminal.search.matchBackground}
+                />
+                <ThemeColorField
+                  label={t.themeSearchActiveMatch}
+                  onChange={(value) => updateTerminalSearchColors({ activeMatchBackground: value })}
+                  value={themeConfig.theme.terminal.search.activeMatchBackground}
+                />
+                <ThemeColorField
+                  label={t.themeSearchActiveText}
+                  onChange={(value) => updateTerminalSearchColors({ activeMatchText: value })}
+                  value={themeConfig.theme.terminal.search.activeMatchText}
+                />
+                <ThemeColorField
+                  label={t.themeSearchBorder}
+                  onChange={(value) => updateTerminalSearchColors({ activeMatchBorder: value })}
+                  value={themeConfig.theme.terminal.search.activeMatchBorder}
+                />
+              </div>
+            </div>
+
+            <details className="theme-advanced-section theme-terminal-ansi-details">
+              <SettingsDisclosureSummary className="theme-config-section-summary">
+                <span className="theme-config-section-summary-copy">
+                  <strong>{t.themeAnsiColors}</strong>
+                  <span>{t.themeAnsiHint}</span>
+                </span>
+                <span className="theme-config-section-summary-count">16</span>
+              </SettingsDisclosureSummary>
+              <div className="theme-terminal-ansi-groups">
+                <section className="theme-terminal-ansi-group">
+                  <h5>{t.themeAnsiNormal}</h5>
+                  <div className="theme-config-fields">
+                    {ANSI_COLOR_NAMES.slice(0, 8).map((name) => (
+                      <ThemeColorField
+                        key={name}
+                        label={ANSI_COLOR_LABELS[name]}
+                        onChange={(value) => updateTerminalAnsiColor(name, value)}
+                        value={themeConfig.theme.terminal.ansi[name]}
+                      />
+                    ))}
+                  </div>
+                </section>
+                <section className="theme-terminal-ansi-group">
+                  <h5>{t.themeAnsiBright}</h5>
+                  <div className="theme-config-fields">
+                    {ANSI_COLOR_NAMES.slice(8).map((name) => (
+                      <ThemeColorField
+                        key={name}
+                        label={ANSI_COLOR_LABELS[name]}
+                        onChange={(value) => updateTerminalAnsiColor(name, value)}
+                        value={themeConfig.theme.terminal.ansi[name]}
+                      />
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </details>
           </div>
         </details>
 
@@ -596,13 +602,7 @@ export function InterfaceSettingsPanel() {
         ) : null}
       </section>
 
-      <TerminalDisplaySettingsSection />
-
       <InterfaceDisplaySettingsSections />
-
-      <LayoutSettingsSection />
-
-      <OverviewContentSettingsSection />
     </div>
   )
 }

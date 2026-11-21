@@ -1,6 +1,6 @@
 ---
 name: fileterm-app-icons
-description: Use for FileTerm desktop application icon artwork and platform assets, including Dock, shortcut, window, taskbar, launcher, and tray icons, especially when fixing sizing or blur. Do not use for renderer file-type icons or general UI icons.
+description: Use for FileTerm desktop application icon artwork and platform assets, including Dock, shortcut, window, taskbar, launcher, tray, and DeepSeek Harness plugin icons, especially when fixing sizing or blur. Do not use for renderer file-type icons or general UI icons.
 ---
 
 # FileTerm application icons
@@ -14,6 +14,10 @@ Read [platform and protocol contracts](../../../docs/quality/agent-platform-cont
 The source projects are `FileTerm.icon`, `FileTerm-material.icon`, and `FileTerm-clean.icon`, matching the classic, material, and clean variants. Their standalone SVG directories are `svg/`, `svg-material/`, and `svg-clean/`.
 
 The 1024px Dock images keep a 100px transparent inset on each side (about 9.8%). macOS needs this inset so the icon does not look oversized. Windows/Linux exports have alpha bounds `(0, 0, 1024, 1024)`, with no macOS safety inset; transparent corners belonging to the icon shape are preserved. Export these masters from the layered source rather than enlarging a cropped 824px Dock bitmap or a 256/512px output.
+
+## DeepSeek Harness plugin icons
+
+A DSH bundle row reads the `./icon` export of its own package. Reuse `apps/tauri/assets/dsh-plugin-icons/fileterm-512.png` (exported from `dock-classic.png` with its transparent margin) instead of drawing a new icon: copy it into the bundle as `icon.png` and export `"./icon": "./icon.png"`. See `apps/tauri/assets/dsh-plugin-icons/README.md` for the export command and the in-package, 256 KiB constraints.
 
 ## Platform differences
 

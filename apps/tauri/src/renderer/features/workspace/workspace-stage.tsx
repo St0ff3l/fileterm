@@ -23,10 +23,13 @@ import { peekHomeTabTransition } from './home-transition'
 import type { TabBarProps } from '../layout/tab-bar'
 import { FileTransferWorkspace } from '../file-transfer/file-transfer-workspace'
 import type { LocalTab } from '../../hooks/workspace-tabs-types'
+import { NetworkConnectionsWorkspace } from '../system/network-connections-workspace'
+import { TableColumnLayoutProvider } from '../common/table-column-layout/table-column-layout'
 import { SystemInfoWorkspace } from '../system/system-info-workspace'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
 import type { ThemeMode } from '../../app/theme-config'
 import { HomeWorkspace } from './home-workspace'
+import type { ServerManagementNavigation } from '../server-management/server-management-types'
 import { LocalTerminalWorkspace } from './local-terminal-workspace'
 import { SessionWorkspace } from './session-workspace'
 import { DEFAULT_FILE_PANEL_SNAP_TARGET, type FilePanelSnapTarget } from './file-panel-snap'
@@ -37,10 +40,12 @@ const DEFAULT_COMMAND_PANE_WIDTH = 300
 
 type ActiveLocalTab = {
   kind: 'home' | 'system' | 'transfers'
+  backgroundSessionsRequest?: number
+  view?: 'network'
   sessionTabId?: string
 } | null
 
-export function WorkspaceStage({
+function WorkspaceStageContent({
   activeLocalTab,
   fileTransferTab,
   desktopApi,
@@ -114,6 +119,8 @@ export function WorkspaceStage({
   onOpenLocalPath,
   onBackToLocalComputer,
   onOpenProfile,
+  onConnectProfile,
+  onDisconnectSession,
   onOpenLocalTerminal,
   onReconnectLocalTerminal,
   onOpenRemoteItem,
@@ -153,9 +160,8 @@ export function WorkspaceStage({
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
-  canLockNow,
-  onLockNow,
   isSidebarCollapsed,
+  serverManagement,
   isWorkspaceFocusMode,
   isWorkspaceActive = true,
   suppressHomeEntrance = false,
@@ -250,6 +256,8 @@ export function WorkspaceStage({
   onOpenLocalPath(path: string): void
   onBackToLocalComputer(): void
   onOpenProfile(profileId: string): void
+  onConnectProfile(profileId: string): void
+  onDisconnectSession(tabId: string): void | Promise<void>
   onOpenLocalTerminal(): void
   onReconnectLocalTerminal(tabId: string): Promise<void>
   onOpenRemoteItem(item: RemoteFileItem): void
@@ -293,9 +301,8 @@ export function WorkspaceStage({
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
-  canLockNow: boolean
-  onLockNow(): void
   isSidebarCollapsed: boolean
+  serverManagement?: ServerManagementNavigation
   isWorkspaceFocusMode: boolean
   isWorkspaceActive?: boolean
   suppressHomeEntrance?: boolean
@@ -324,6 +331,21 @@ export function WorkspaceStage({
     )
   }
   const activeTabProfile = profiles.find((profile) => profile.id === activeTab?.profileId) ?? null
+
+  if (activeLocalTab?.kind === 'system' && activeLocalTab.view === 'network') {
+    return (
+      <NetworkConnectionsWorkspace
+        key={activeTab?.id}
+        tabId={activeTab?.id ?? ''}
+        connected={Boolean(activeSession?.connected)}
+        isActive={Boolean(isWorkspaceActive)}
+        accessMode={remoteFileAccessMode}
+        accessUser={activeSession?.sudoUser ?? 'root'}
+        privilegeBusy={isBusy}
+        onToggleAccessMode={onToggleRemoteFileAccessMode}
+      />
+    )
+  }
 
   if (activeLocalTab?.kind === 'system') {
     return (
@@ -443,6 +465,7 @@ export function WorkspaceStage({
     <HomeWorkspace
       key={activeHomeTabId ?? 'home-root'}
       suppressEntrance={suppressHomeEntrance}
+      backgroundSessionsRequest={activeLocalTab?.backgroundSessionsRequest}
       folders={folders}
       commandFolders={commandFolders}
       commandTemplates={commandTemplates}
@@ -456,6 +479,8 @@ export function WorkspaceStage({
       overviewShowQuickActions={overviewShowQuickActions}
       overviewSectionOrder={overviewSectionOrder}
       onOpen={onOpenProfile}
+      onConnectProfile={onConnectProfile}
+      onDisconnectSession={onDisconnectSession}
       onOpenFileTransfers={onOpenFileTransfers}
       backgroundTabs={backgroundTabs}
       sessions={sessions}
@@ -484,14 +509,26 @@ export function WorkspaceStage({
       onSetLocale={onSetLocale}
       onOpenLogsDirectory={onOpenLogsDirectory}
       onLaunchLocalAgent={onLaunchLocalAgent}
-      canLockNow={canLockNow}
-      onLockNow={onLockNow}
       isSidebarCollapsed={isSidebarCollapsed}
+      isWorkspaceActive={isWorkspaceActive}
+      serverManagement={serverManagement}
       profiles={profiles}
       tabBarProps={tabBarProps}
       isResizingSidebar={isResizingSidebar}
       onResizeStart={onResizeStart}
     />
+  )
+}
+
+export function WorkspaceStage(props: Parameters<typeof WorkspaceStageContent>[0]) {
+  return (
+    <TableColumnLayoutProvider
+      profileId={props.activeTab?.profileId ?? null}
+      remember={props.rememberFilePanelRatio}
+      api={props.desktopApi}
+    >
+      <WorkspaceStageContent {...props} />
+    </TableColumnLayoutProvider>
   )
 }
 
@@ -631,7 +668,12 @@ export function KeepAliveWorkspaceStage({
         >
           <WorkspaceStage
             {...stageProps}
-            activeLocalTab={{ kind: 'home' }}
+            activeLocalTab={{
+              kind: 'home',
+              backgroundSessionsRequest: stageProps.tabBarProps.orderedTabs.flatMap((entry) =>
+                entry.kind === 'local' && entry.id === id ? [entry.backgroundSessionsRequest] : []
+              )[0]
+            }}
             activeHomeTabId={id}
             isWorkspaceActive={isActive}
             suppressHomeEntrance={!shouldAnimateEntrance}

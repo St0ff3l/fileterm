@@ -7,17 +7,16 @@ import type {
   PaneFocusDirection,
   SessionSnapshot,
   WorkspaceSnapshot,
-  WorkspaceTab,
-  TabBarLayout
+  WorkspaceTab
 } from '@fileterm/core'
 import type { OrderedTabEntry, TabContextTarget } from '../features/layout/tab-bar'
 import type { SendScope, SessionSendTarget } from '../features/common/session-send-targets'
 import type { AppLocale } from '../i18n'
 
 export type LocalTab =
-  | { id: string; kind: 'home'; title: string }
+  | { id: string; kind: 'home'; title: string; backgroundSessionsRequest?: number }
   | { id: string; kind: 'transfers'; title: string; initialTabId?: string; initialPath?: string }
-  | { id: string; kind: 'system'; title: string; sessionTabId: string; sourceTabTitle: string }
+  | { id: string; kind: 'system'; view?: 'network'; title: string; sessionTabId: string; sourceTabTitle: string }
 
 export type StoredMainTabUiState = {
   localTabs: LocalTab[]
@@ -54,9 +53,12 @@ export type WorkspaceNavigationDirection = 'up' | 'down'
 export type UseWorkspaceTabsOptions = {
   desktopApi?: FileTermDesktopApi
   workspace: WorkspaceSnapshot
-  tabBarLayout: TabBarLayout
   isMainWorkspaceWindow: boolean
   hasLoadedInitialSnapshot: boolean
+  /** Server-management mode hides connection tabs, so failed attempts must not linger. */
+  autoCloseFailedHiddenTabs?: boolean
+  /** Server-management mode groups tabs by host, so closing stays inside the active host group. */
+  serverManagementMode?: boolean
   locale: AppLocale
   transferSidebarCollapsedByDefault: boolean
   isBusy: boolean
@@ -99,9 +101,9 @@ export type WorkspaceTabsActionContext = Pick<
   UseWorkspaceTabsOptions,
   | 'desktopApi'
   | 'workspace'
-  | 'tabBarLayout'
   | 'isMainWorkspaceWindow'
   | 'hasLoadedInitialSnapshot'
+  | 'serverManagementMode'
   | 'isBusy'
   | 'closeActiveRequestVersion'
   | 'newTabRequestVersion'

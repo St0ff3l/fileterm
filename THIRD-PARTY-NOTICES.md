@@ -6,7 +6,7 @@ FileTerm uses command completion specifications from [withfig/autocomplete](http
 
 The original specification data is converted to offline declarative JSON by `apps/tauri/scripts/sync-completion-specs.mjs`. FileTerm supplies its own input tracking, context resolver, candidate UI and SSH file-channel integration. Generator scripts and executable callbacks are not included in the generated data.
 
-The upstream package metadata says ISC, while both its repository and distributed `LICENSE` contain the following MIT license. FileTerm preserves the actual distributed copyright and license below, also bundled in the app and visible under Settings → System → Third-party open source.
+The upstream package metadata says ISC, while both its repository and distributed `LICENSE` contain the following MIT license. FileTerm preserves the actual distributed copyright and license below, also bundled in the app and visible under Settings → About → Open Source Credits.
 
 ```text
 MIT License

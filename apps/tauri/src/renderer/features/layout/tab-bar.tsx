@@ -8,7 +8,6 @@ import { CloseButton } from '../common/close-button'
 import { AppIcon } from '../common/app-icon'
 import { StatusIndicator } from '../common/status-indicator'
 import { usePointerSortFallback } from '../../hooks/use-pointer-sort-fallback'
-import type { HostNavigation } from './use-host-navigation'
 
 export type OrderedTabEntry =
   | {
@@ -17,7 +16,9 @@ export type OrderedTabEntry =
       id: string
       title: string
       tabKind: 'home' | 'system' | 'transfers'
+      backgroundSessionsRequest?: number
       sessionTabId?: string
+      initialTabId?: string
     }
   | { key: string; kind: 'session'; tab: WorkspaceTab }
 
@@ -43,12 +44,14 @@ const MIDDLE_MOUSE_BUTTON = 1
 export interface TabBarProps {
   activeHomeTabId: string | null
   activeSessionTabId: string | null
+  canLockNow?: boolean
+  onLockNow?(): void
   homeBrandContent?: ReactNode
   isAiCopilotAvailable: boolean
   isAiCopilotOpen: boolean
   showAiCopilotToggle?: boolean
   isWorkspaceFocusMode: boolean
-  onAddHomeTab(): void
+  onAddTab(): void
   onActivateHome(id: string): void
   onActivateSession(id: string): void
   onCloseHomeTab(event: MouseEvent<HTMLElement>, id: string): void
@@ -62,8 +65,8 @@ export interface TabBarProps {
   onToggleWindowMaximize(): void
   onToggleWorkspaceFocus(): void
   orderedTabs: OrderedTabEntry[]
-  /** When set, only the active host's tabs are shown. */
-  hostNavigation?: HostNavigation
+  /** The management shell keeps the home workspace tab out of the tab bar. */
+  sessionOnly?: boolean
 }
 
 // Middle-button presses would otherwise start WebKit's autoscroll or paste on Linux.
@@ -75,11 +78,13 @@ export function TabBar({
   activeHomeTabId,
   activeSessionTabId,
   homeBrandContent,
+  canLockNow,
+  onLockNow,
   isAiCopilotAvailable,
   isAiCopilotOpen,
   showAiCopilotToggle = true,
   isWorkspaceFocusMode,
-  onAddHomeTab,
+  onAddTab,
   onActivateHome,
   onActivateSession,
   onCloseHomeTab,
@@ -93,9 +98,13 @@ export function TabBar({
   onToggleWindowMaximize,
   onToggleWorkspaceFocus,
   orderedTabs,
-  hostNavigation
+  sessionOnly = false
 }: TabBarProps) {
-  const visibleTabs = hostNavigation ? hostNavigation.activeEntries : orderedTabs
+  // System and transfer pages belong to their server, so a grouped tab bar still
+  // shows them next to that server's sessions and only drops the home tab.
+  const visibleTabs = sessionOnly
+    ? orderedTabs.filter((entry) => entry.kind === 'session' || entry.tabKind !== 'home')
+    : orderedTabs
   const focusModeLabel = isWorkspaceFocusMode ? t.exitWorkspaceFocusMode : t.enterWorkspaceFocusMode
   const aiCopilotLabel = isAiCopilotOpen ? t.closeAiCopilot : t.openAiCopilot
   const suppressTabClickRef = useRef(false)
@@ -248,9 +257,11 @@ export function TabBar({
               </div>
             )
           )}
-          <button aria-label={t.newTab} className="add-tab" type="button" onClick={onAddHomeTab}>
-            <AppIcon name="plus" size={16} />
-          </button>
+          {(!sessionOnly || activeSessionTabId) && (
+            <button aria-label={t.newTab} className="add-tab" title={t.newTab} type="button" onClick={onAddTab}>
+              <AppIcon name="plus" size={16} />
+            </button>
+          )}
         </div>
         <div className="window-tools">
           <button
@@ -277,6 +288,11 @@ export function TabBar({
               onClick={onToggleAiCopilot}
             >
               <span aria-hidden="true" className="window-tool-icon window-tool-icon--auto-awesome" />
+            </button>
+          ) : null}
+          {canLockNow && onLockNow ? (
+            <button aria-label={t.securityLockNow} title={t.securityLockNow} type="button" onClick={onLockNow}>
+              <span aria-hidden="true" className="window-tool-icon window-tool-icon--lock" />
             </button>
           ) : null}
           <button aria-label={t.settings} title={t.settings} type="button" onClick={onOpenSettings}>

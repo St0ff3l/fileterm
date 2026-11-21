@@ -23,9 +23,15 @@ import { createRoot } from 'react-dom/client'
 import { HomeWorkspace } from ${JSON.stringify(home)}
 const root = createRoot(document.getElementById('root'))
 let generation = 0
+const sharedProps = {
+  profiles: [], commandTemplates: [], commandFolders: [], backgroundTabs: [], sessions: {},
+  tabBarProps: { orderedTabs: [] }, isWorkspaceActive: true
+}
+const managementNavigation = { page: 'settings', selectedFolderId: null, navigate: () => {} }
 window.showHome = (suppressEntrance) => root.render(<HomeWorkspace key={++generation}
-  suppressEntrance={suppressEntrance} profiles={[]} commandTemplates={[]}
-  commandFolders={[]} tabBarProps={{}} />)
+  {...sharedProps} suppressEntrance={suppressEntrance} />)
+window.renderMode = (mode) => root.render(<HomeWorkspace {...sharedProps} suppressEntrance={true}
+  serverManagement={mode === 'server-management' ? managementNavigation : undefined} />)
 `
   )
   await build({
@@ -45,18 +51,20 @@ window.showHome = (suppressEntrance) => root.render(<HomeWorkspace key={++genera
 export const t = new Proxy({}, { get: (_, key) => String(key) })
 export const resolveRendererPlatform = (platform) => platform
 export const useExternalUrl = () => ({openExternalUrl: async () => {}, externalUrlError: null})
+export const MaterialIcon = () => null
+export const SidebarAlignedLabel = ({children}) => <span>{children}</span>
 export const OverviewPage = () => <div className="overview-page"><section data-card>Overview</section></div>
+export const ServerManagementOverview = () => <div className="server-management-overview"><section data-card>Management overview</section></div>
 export const ConnectionManagerModal = () => <div className="manager-inline"><section data-card>Connections</section></div>
+export const SettingsModal = () => <div className="settings-modal manager-inline"><section data-card>Settings</section></div>
 ${[
   'FeedbackText',
   'AppIcon',
   'VerticalScrollbar',
   'PortableUpdateDialog',
-  'QuickLinksPage',
   'ProxyManagerPage',
   'CommandManagerModal',
   'SshKeyManagerPage',
-  'SettingsModal',
   'TabBar',
   'HostGroupList',
   'BackgroundSessionsPage'
@@ -133,9 +141,27 @@ ${[
   })
   await page.getByRole('button', { name: 'overview', exact: true }).click()
   await page.waitForFunction(() => window.entrances.includes('page-card-in-down'))
+
+  await page.evaluate(() => {
+    window.entrances = []
+    window.renderMode('server-management')
+  })
+  await page.waitForFunction(() => window.entrances.includes('page-card-in-up'))
+  await page.waitForTimeout(700)
+  await page.evaluate(() => {
+    window.entrances = []
+    window.renderMode('standard')
+  })
+  await page.waitForFunction(() => window.entrances.includes('page-card-in-up'))
+  await page.waitForTimeout(700)
+  await page.evaluate(() => {
+    window.entrances = []
+    window.renderMode('server-management')
+  })
+  await page.waitForFunction(() => window.entrances.includes('page-card-in-up'))
   assert.deepEqual(errors, [])
   console.log(
-    'Initial home animates; restored home stays still beyond 800ms; sidebar navigation keeps both fly-in directions.'
+    'Initial home animates; restored home stays still beyond 800ms; sidebar navigation and both workspace-mode transitions animate.'
   )
 } finally {
   await browser?.close()

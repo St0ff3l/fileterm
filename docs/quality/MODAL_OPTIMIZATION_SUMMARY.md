@@ -137,14 +137,6 @@
 - 最近连接网格
 - 快速操作网格
 
-### quick-links.css
-
-快速链接页面的样式：
-
-- 页面头部
-- 按钮样式
-- 复用home.css的表格样式
-
 ## 用户体验改进
 
 1. **视觉一致性**：所有弹窗使用统一的圆角、间距、颜色
@@ -180,9 +172,7 @@
 ### 新增文件
 
 - `apps/tauri/src/renderer/features/workspace/overview-page.tsx`
-- `apps/tauri/src/renderer/features/workspace/quick-links-page.tsx`
 - `apps/tauri/src/renderer/styles/features/overview.css`
-- `apps/tauri/src/renderer/styles/features/quick-links.css`
 - `apps/tauri/src/renderer/styles/features/modal-components.css`
 
 ### 修改文件

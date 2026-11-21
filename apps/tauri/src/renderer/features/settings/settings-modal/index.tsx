@@ -1,4 +1,3 @@
-import { AdvancedSettingsPanel } from './panels/advanced-settings-panel'
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
 import { SidebarAlignedLabel } from '../../../components/common/icon-label/icon-label'
 import type { McpAgentClientStatus, SavedTheme, ThemeConfig } from '@fileterm/core'
@@ -16,9 +15,11 @@ import { InterfaceSettingsPanel } from './panels/interface-settings-panel'
 import { LanguageSettingsPanel } from './panels/language-settings-panel'
 import { LocalTerminalSettingsPanel } from './panels/local-terminal-settings-panel'
 import { SyncSettingsPanel } from './panels/sync-settings-panel'
-import { SystemSettingsPanel } from './panels/system-settings-panel'
+import { AboutSettingsPanel } from './panels/about-settings-panel'
+import { LogsSettingsPanel } from './panels/logs-settings-panel'
 import { ToolsSettingsPanel } from './panels/tools-settings-panel'
 import { UpdatesSettingsPanel } from './panels/updates-settings-panel'
+import { WorkspaceModeSettingsPanel } from './panels/workspace-mode-settings-panel'
 
 import { SETTINGS_SIDEBAR_ITEMS, type SettingsTab } from './constants'
 
@@ -120,6 +121,7 @@ export function SettingsModal({
             {SETTINGS_SIDEBAR_ITEMS.filter((item) => visibleSettingsTabs.has(item.tab)).map((item) => (
               <button
                 className={`connection-manager-sidebar-item ${activeTab === item.tab ? 'active' : ''}`}
+                aria-current={activeTab === item.tab ? true : undefined}
                 key={item.tab}
                 type="button"
                 onClick={() => setActiveTab(item.tab)}
@@ -140,7 +142,6 @@ export function SettingsModal({
           </aside>
 
           <main className="connection-manager-main">
-            {activeTab === 'advanced' ? <AdvancedSettingsPanel /> : null}
             {activeTab === 'local-terminal' ? <LocalTerminalSettingsPanel /> : null}
 
             {activeTab === 'ai' ? <AiSettingsPanel /> : null}
@@ -150,6 +151,8 @@ export function SettingsModal({
             {activeTab === 'connections' ? <ConnectionsSettingsPanel /> : null}
 
             {activeTab === 'interface' ? <InterfaceSettingsPanel /> : null}
+
+            {activeTab === 'workspace-mode' ? <WorkspaceModeSettingsPanel /> : null}
 
             {activeTab === 'tools' ? <ToolsSettingsPanel /> : null}
 
@@ -167,9 +170,11 @@ export function SettingsModal({
 
             {activeTab === 'updates' ? <UpdatesSettingsPanel /> : null}
 
-            {activeTab === 'system' ? <SystemSettingsPanel /> : null}
+            {activeTab === 'logs' ? <LogsSettingsPanel /> : null}
 
             {activeTab === 'language' ? <LanguageSettingsPanel /> : null}
+
+            {activeTab === 'about' ? <AboutSettingsPanel /> : null}
           </main>
         </div>
       </div>

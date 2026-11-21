@@ -239,13 +239,6 @@
   color: var(--success);
 }
 
-:root:not([data-theme]) .network-select,
-:root:not([data-theme*='light']) .network-select,
-:root[data-theme='default'] .network-select {
-  background: var(--bg-card);
-  color: var(--text-main);
-}
-
 :root:not([data-theme]) .network-scale,
 :root:not([data-theme*='light']) .network-scale,
 :root[data-theme='default'] .network-scale {
@@ -511,7 +504,6 @@
 :root:not([data-theme*='light']) .status-message,
 :root[data-theme='default'] .status-message {
   color: var(--status-warning-text, var(--warning));
-  background: var(--status-warning-bg, color-mix(in srgb, var(--status-warning) 8%, transparent));
 }
 
 :root:not([data-theme]) .status-message-close:hover,

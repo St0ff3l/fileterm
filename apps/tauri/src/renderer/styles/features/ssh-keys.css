@@ -350,9 +350,8 @@
   color: var(--text-main);
 }
 
-.ssh-key-import-dialog__file-name .material-symbols-outlined {
+.ssh-key-import-dialog__file-name .app-icon {
   flex: 0 0 auto;
-  font-size: 18px;
 }
 
 .ssh-key-import-dialog__file-name span:last-child {
@@ -371,9 +370,7 @@
   justify-content: center;
   gap: 7px;
   padding: 0 12px;
-  border: 1px solid var(--border-light);
   border-radius: var(--radius-md, 6px);
-  background: var(--bg-hover);
   color: var(--text-main);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);
@@ -387,11 +384,6 @@
 
 .ssh-key-import-dialog__file-row .ssh-key-import-dialog__file-button .app-icon {
   color: var(--text-muted);
-}
-
-.ssh-key-import-dialog__file-row .ssh-key-import-dialog__file-button:hover:not(:disabled) {
-  border-color: var(--text-muted);
-  background: var(--bg-active);
 }
 
 .ssh-key-import-dialog__file-row .ssh-key-import-dialog__file-button:focus-visible {
@@ -431,12 +423,6 @@
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
-}
-
-.ssh-key-import-dialog .confirm-action-dialog__button--secondary {
-  background: var(--bg-hover);
-  border-color: var(--border-light);
-  color: var(--text-main);
 }
 
 .ssh-key-import-dialog .confirm-action-dialog__button--primary {

@@ -15,6 +15,7 @@ import videoIcon from '../../assets/icons/files/app-video.svg?raw'
 import audioIcon from '../../assets/icons/files/app-audio.svg?raw'
 import imageIcon from '../../assets/icons/files/app-image.svg?raw'
 import documentIcon from '../../assets/icons/files/app-document.svg?raw'
+import logIcon from '../../assets/icons/files/material-description.svg?raw'
 import spreadsheetIcon from '../../assets/icons/files/app-spreadsheet.svg?raw'
 import presentationIcon from '../../assets/icons/files/app-presentation.svg?raw'
 import configFileIcon from '../../assets/icons/files/app-config-file.svg?raw'
@@ -27,7 +28,6 @@ import pdfIcon from '../../assets/icons/files/app-pdf.svg?raw'
 import codeIcon from '../../assets/icons/files/app-code.svg?raw'
 import diskIcon from '../../assets/icons/files/app-disk.svg?raw'
 import historyIcon from '../../assets/icons/system/app-history.svg?raw'
-import callLogIcon from '../../assets/icons/system/app-call-log.svg?raw'
 import refreshIcon from '../../assets/icons/actions/app-refresh.svg?raw'
 import searchIcon from '../../assets/icons/actions/app-search.svg?raw'
 import plusIcon from '../../assets/icons/actions/app-plus.svg?raw'
@@ -58,6 +58,7 @@ import closeIcon from '../../assets/icons/navigation/app-close.svg?raw'
 import windowMinimizeIcon from '../../assets/icons/navigation/app-window-minimize.svg?raw'
 import windowMaximizeIcon from '../../assets/icons/navigation/app-window-maximize.svg?raw'
 import windowRestoreIcon from '../../assets/icons/navigation/app-window-restore.svg?raw'
+import workspaceModeIcon from '../../assets/icons/navigation/app-workspace-mode.svg?raw'
 
 import { parseSvgIconAsset } from './svg-icon-asset'
 
@@ -92,7 +93,7 @@ const sources = {
   code: codeIcon,
   disk: diskIcon,
   history: historyIcon,
-  'call-log': callLogIcon,
+  log: logIcon,
   refresh: refreshIcon,
   search: searchIcon,
   plus: plusIcon,
@@ -122,7 +123,8 @@ const sources = {
   close: closeIcon,
   'window-minimize': windowMinimizeIcon,
   'window-maximize': windowMaximizeIcon,
-  'window-restore': windowRestoreIcon
+  'window-restore': windowRestoreIcon,
+  'workspace-mode': workspaceModeIcon
 } as const
 
 export type AppIconName = keyof typeof sources

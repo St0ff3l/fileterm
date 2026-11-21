@@ -246,6 +246,7 @@ pub struct WorkspaceState {
     /// independent Tauri windows. Unlike Electron's single main event loop,
     /// Tauri commands can otherwise overwrite each other's JSON snapshots.
     pub library_mutation: Arc<Mutex<()>>,
+    pub command_batch: Arc<Mutex<()>>,
     pub update_status: Arc<RwLock<Option<serde_json::Value>>>,
     /// Matches Electron's update check single-flight promise. Concurrent UI
     /// clicks wait for the active check and reuse its final status.

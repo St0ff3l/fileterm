@@ -382,6 +382,13 @@ pub async fn app_execute_command_template(
 }
 
 fn render_command_template(template: &str, args: &[String]) -> String {
+    render_command_template_with(template, |index| args.get(index - 1))
+}
+
+fn render_command_template_with<'a>(
+    template: &str,
+    mut lookup: impl FnMut(usize) -> Option<&'a String>,
+) -> String {
     // `[p#1]` is the durable command-template placeholder format shared with
     // Electron. Invalid/out-of-range references deliberately render as an
     // empty string so existing command libraries retain their behavior.
@@ -391,8 +398,8 @@ fn render_command_template(template: &str, args: &[String]) -> String {
             captures
                 .get(1)
                 .and_then(|index| index.as_str().parse::<usize>().ok())
-                .and_then(|index| index.checked_sub(1))
-                .and_then(|index| args.get(index))
+                .filter(|index| *index > 0)
+                .and_then(&mut lookup)
                 .cloned()
                 .unwrap_or_default()
         })

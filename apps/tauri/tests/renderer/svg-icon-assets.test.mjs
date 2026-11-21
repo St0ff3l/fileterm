@@ -90,6 +90,10 @@ test('icon components preserve sizing, CSS classes, currentColor and variable st
   assert.match(icon, /width="20"/)
   assert.match(icon, /stroke-width="35.2"/)
   assert.doesNotMatch(icon, /var\(--app-icon/)
+  const log = renderToStaticMarkup(React.createElement(AppIcon, { name: 'log', size: 18 }))
+  assert.match(log, /<path [^>]*fill="currentColor"/)
+  const workspaceMode = renderToStaticMarkup(React.createElement(AppIcon, { name: 'workspace-mode', size: 17 }))
+  assert.match(workspaceMode, /<path [^>]*fill="currentColor"/)
   const material = renderToStaticMarkup(
     React.createElement(MaterialIcon, { name: 'settings', className: 'material-symbols-outlined fixture' })
   )

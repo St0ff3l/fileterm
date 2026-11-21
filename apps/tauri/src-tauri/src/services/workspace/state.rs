@@ -41,6 +41,7 @@ impl Default for WorkspaceState {
             connection_tests_in_flight: Arc::new(Mutex::new(HashSet::new())),
             connection_tests_last_started: Arc::new(Mutex::new(HashMap::new())),
             library_mutation: Arc::new(Mutex::new(())),
+            command_batch: Arc::new(Mutex::new(())),
             update_status: Arc::new(RwLock::new(None)),
             update_check: Arc::new(Mutex::new(())),
             update_operation: Arc::new(Mutex::new(())),

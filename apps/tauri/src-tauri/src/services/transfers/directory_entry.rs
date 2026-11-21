@@ -32,7 +32,7 @@ async fn transfer_directory_entry_once(
     throttler: &mut DirectoryTransferThrottler,
 ) -> Result<DirectoryEntryAttempt, AppError> {
     let entry = manifest.files[index].clone();
-    tracing::info!(category = "transfer", scope = "transfer", %transfer_id, entry_index = index, "Directory transfer entry started");
+    tracing::trace!(category = "transfer", scope = "transfer", %transfer_id, entry_index = index, "Directory transfer entry started");
     if skip_existing_transfer_target(
         app,
         tab_id,
