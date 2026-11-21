@@ -1,6 +1,6 @@
 {
   "name": "fileterm",
-  "version": "2.3.4-beta.9",
+  "version": "2.3.4-beta.10",
   "private": true,
   "license": "MIT",
   "description": "Modern remote workspace for SSH, SFTP, and FTP.",
@@ -42,6 +42,11 @@
       "eslint --fix --max-warnings=0"
     ],
     "*.{json,md,css,yml,yaml}": "prettier --write"
+  },
+  "overrides": {
+    "micromark-extension-math": {
+      "katex": "0.18.2"
+    }
   },
   "devDependencies": {
     "@eslint-react/eslint-plugin": "^5.18.0",
