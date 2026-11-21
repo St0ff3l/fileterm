@@ -202,16 +202,28 @@ jobs:
           - platform: macos
             os: macos-26
             rust_target: aarch64-apple-darwin
+            build_script: release:mac
+          - platform: macos-intel
+            os: macos-26-intel
+            rust_target: x86_64-apple-darwin
+            build_script: release:mac:x64
           - platform: windows
             os: windows-2022
             rust_target: x86_64-pc-windows-msvc
+            build_script: release:win
+          - platform: windows-arm64
+            os: windows-11-vs2026-arm
+            rust_target: aarch64-pc-windows-msvc
+            build_script: release:win:arm64
           - platform: linux
             os: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
+            build_script: release:linux
             arch: x86_64
           - platform: linux-arm64
             os: ubuntu-22.04-arm
             rust_target: aarch64-unknown-linux-gnu
+            build_script: release:linux:arm64
             arch: arm64
     runs-on: ${{ matrix.os }}
     env:
@@ -238,7 +250,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install Windows native build dependencies
-        if: runner.os == 'Windows'
+        if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -258,7 +270,7 @@ jobs:
           Split-Path -Parent $nasmPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify NASM
-        if: runner.os == 'Windows'
+        if: matrix.platform == 'windows'
         run: nasm -v
 
       - name: Install Linux Tauri package dependencies
@@ -285,27 +297,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "${{ matrix.platform }}" in
-            macos)
-              npm run release:mac -w @fileterm/tauri -- --config '{"bundle":{"createUpdaterArtifacts":false}}' --no-sign --ci
+          package_args=(--no-sign --ci)
+          case "$RUNNER_OS" in
+            macOS)
+              package_args+=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
               ;;
-            windows)
-              npm run release:win -w @fileterm/tauri -- --config src-tauri/tauri.ci.windows.conf.json --no-sign --ci
-              ;;
-            linux)
-              npm run release:linux -w @fileterm/tauri -- --no-sign --ci
-              ;;
-            linux-arm64)
-              npm run release:linux:arm64 -w @fileterm/tauri -- --no-sign --ci
-              ;;
-            *)
-              echo "Unknown package platform: ${{ matrix.platform }}" >&2
-              exit 1
+            Windows)
+              package_args+=(--config src-tauri/tauri.ci.windows.conf.json)
               ;;
           esac
+          npm run ${{ matrix.build_script }} -w @fileterm/tauri -- "${package_args[@]}"
 
       - name: Verify macOS package
-        if: matrix.platform == 'macos'
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -323,7 +327,7 @@ jobs:
           node ./tests/ci/mcp-stdio-smoke.mjs "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm"
 
       - name: Verify macOS DMG Finder layout
-        if: matrix.platform == 'macos'
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -332,7 +336,7 @@ jobs:
           bash scripts/verify-macos-dmg-finder-layout.sh "$dmg_file"
 
       - name: Verify Windows package
-        if: matrix.platform == 'windows'
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $bundleDir = 'apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/bundle/nsis'
@@ -395,61 +399,6 @@ jobs:
           path: ${{ runner.temp }}/fileterm-arch-inputs/
           if-no-files-found: error
           retention-days: 1
-
-  tauri-release-cache:
-    name: Warm Tauri release cache (${{ matrix.target }})
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-26-intel
-            target: x86_64-apple-darwin
-            build-script: release:mac:x64
-          - os: windows-11-vs2026-arm
-            target: aarch64-pc-windows-msvc
-            build-script: release:win:arm64
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache Rust build artifacts
-        id: rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/tauri/src-tauri -> target
-          shared-key: rust-${{ matrix.target }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Setup Node
-        if: steps.rust-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        if: steps.rust-cache.outputs.cache-hit != 'true'
-        run: npm ci
-
-      - name: Generate bundled completion specs
-        if: steps.rust-cache.outputs.cache-hit != 'true'
-        run: npm run sync:completion-specs -w @fileterm/tauri
-
-      - name: Build shared packages and release binary
-        if: steps.rust-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run build:packages
-          npm run ${{ matrix.build-script }} -w @fileterm/tauri -- --no-bundle --no-sign --ci
 
   tauri-arch-package-smoke:
     name: Tauri Arch package smoke
