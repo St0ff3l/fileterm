@@ -223,7 +223,9 @@ export function HomeWorkspace({
   const currentPage = keepSettings ? 'settings' : requestedPage
   const navigateManagement = serverManagement?.navigate
   useLayoutEffect(() => {
+    const didChangeMode = previousManagementMode.current !== isServerManagementMode
     previousManagementMode.current = isServerManagementMode
+    if (didChangeMode) setSuppressEntrance(false)
     if (!keepSettings) return
     if (navigateManagement) navigateManagement('settings')
     else setActiveTab('settings')
@@ -236,11 +238,9 @@ export function HomeWorkspace({
   }
   const pageEntryKey = (page: string) => `${page}:${pageEntryRef.current.seq}`
   const pageEntrySeq = pageEntryRef.current.seq
-  // Restart the fly-in from scratch on every management page entry. React may
-  // reuse the page nodes when the stage remounts, and a completed CSS animation
-  // never replays on the same element, so reset it explicitly after commit.
+  // React can reuse page nodes across page and workspace-mode changes, so replay
+  // the fly-in explicitly after commit instead of leaving a finished animation in place.
   useLayoutEffect(() => {
-    if (!isServerManagementMode) return
     const pageRoot = contentBodyRef.current?.querySelector(':scope > .page-transition > *')
     if (!pageRoot) return
     for (const child of Array.from(pageRoot.children) as HTMLElement[]) {
