@@ -92,7 +92,7 @@ test('masked addresses use a fixed redaction and keep the copy affordance', () =
   assert.equal(value.props.title, undefined)
   assert.equal(maskedText.props.className, 'address-masked-text')
   assert.equal(maskedText.props.children[0].props.children, '••••••••')
-  assert.equal(maskedText.props.children[0].props['aria-hidden'], true)
+  assert.equal(maskedText.props.children[0].props['aria-hidden'], 'true')
   assert.equal(maskedText.props.children[1].props.children, '10.0.0.45')
   assert.equal(maskedText.props.tabIndex, undefined)
   assert.equal(value.props.role, 'button')
