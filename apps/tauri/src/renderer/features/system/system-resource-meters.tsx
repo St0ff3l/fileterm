@@ -107,16 +107,20 @@ export function ResourceMetricCards({
   )
 }
 
-export function AddressLine({ label, value }: { label: string; value: string }) {
-  const canCopy = value && value !== '-'
+export function AddressLine({ label, value, masked = false }: { label: string; value: string; masked?: boolean }) {
+  // Masking blurs the value until the pointer rests on the row; hovering reveals
+  // it and clicking copies it, so the blur only hides the address from a glance
+  // or a screenshot. No native title tooltip is added: the value is visible while
+  // hovered anyway, and a floating bubble would only obscure the row.
+  const canCopy = Boolean(value) && value !== '-'
   const [copied, setCopied] = useState(false)
 
   return (
     <div className="address-row">
       <span>{label}</span>
       <strong
-        className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''}`}
-        aria-label={canCopy ? (copied ? t.copied : `${t.copy}: ${value}`) : value}
+        className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''} ${masked ? 'is-masked' : ''}`.trim()}
+        aria-label={copied ? t.copied : `${t.copy}: ${value}`}
         onClick={() => {
           if (canCopy && !hasSelectedText()) {
             copyText(value)
@@ -125,7 +129,13 @@ export function AddressLine({ label, value }: { label: string; value: string }) 
           }
         }}
       >
-        <MetricHoverDetail className="address-hover-detail" value={copied ? t.copied : value} />
+        {masked ? (
+          // Kept in the accessibility tree so the copy affordance is still
+          // announced; only the painted characters are blurred.
+          <span className="address-masked-text">{value}</span>
+        ) : (
+          <MetricHoverDetail className="address-hover-detail" value={copied ? t.copied : value} />
+        )}
       </strong>
     </div>
   )

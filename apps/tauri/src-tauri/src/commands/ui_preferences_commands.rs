@@ -30,6 +30,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             remember_window_size: default_remember_window_size(),
             workspace_mode: default_workspace_mode(),
             compact_tab_bar: default_compact_tab_bar(),
+            mask_connection_addresses: default_mask_connection_addresses(),
             legacy_file_list_font_size: None,
             local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: default_file_panel_remember_ratio(),
@@ -137,6 +138,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(compact_tab_bar) = input.compact_tab_bar {
         preferences.compact_tab_bar = compact_tab_bar;
+    }
+    if let Some(mask_connection_addresses) = input.mask_connection_addresses {
+        preferences.mask_connection_addresses = mask_connection_addresses;
     }
     if let Some(local_terminal_shells) = input.local_terminal_shells {
         if let Some(value) = local_terminal_shells.win32 {
@@ -382,6 +386,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             remember_window_size: None,
             workspace_mode: None,
             compact_tab_bar: None,
+            mask_connection_addresses: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
             transfer_sidebar_collapsed_by_default: None,
@@ -424,6 +429,7 @@ pub fn app_toggle_ui_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError
             remember_window_size: None,
             workspace_mode: None,
             compact_tab_bar: None,
+            mask_connection_addresses: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
             transfer_sidebar_collapsed_by_default: None,
@@ -473,6 +479,7 @@ pub fn app_adjust_ui_zoom(app: AppHandle, operation: &str) -> Result<UiPreferenc
             remember_window_size: None,
             workspace_mode: None,
             compact_tab_bar: None,
+            mask_connection_addresses: None,
             local_terminal_shells: None,
             file_panel_remember_ratio: None,
             transfer_sidebar_collapsed_by_default: None,

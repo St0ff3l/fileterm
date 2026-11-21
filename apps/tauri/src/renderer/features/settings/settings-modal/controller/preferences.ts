@@ -72,6 +72,12 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     setIsSavingMacosMenuBarIcon,
     macosMenuBarIconPreferenceError,
     setMacosMenuBarIconPreferenceError,
+    maskConnectionAddresses,
+    setMaskConnectionAddresses,
+    isSavingMaskConnectionAddresses,
+    setIsSavingMaskConnectionAddresses,
+    maskConnectionAddressesError,
+    setMaskConnectionAddressesError,
     appIcon,
     setAppIcon,
     isSavingAppIcon,
@@ -365,6 +371,25 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
       .finally(() => setIsSavingUiZoomPercent(false))
   }
 
+  const setMaskConnectionAddressesPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingMaskConnectionAddresses || nextValue === maskConnectionAddresses) {
+      return
+    }
+
+    const previousValue = maskConnectionAddresses
+    setMaskConnectionAddresses(nextValue)
+    setMaskConnectionAddressesError(null)
+    setIsSavingMaskConnectionAddresses(true)
+    void desktopApi
+      .setUiPreferences({ maskConnectionAddresses: nextValue })
+      .then((preferences) => setMaskConnectionAddresses(preferences.maskConnectionAddresses))
+      .catch(() => {
+        setMaskConnectionAddresses(previousValue)
+        setMaskConnectionAddressesError(t.maskConnectionAddressesSaveFailed)
+      })
+      .finally(() => setIsSavingMaskConnectionAddresses(false))
+  }
+
   const setMacosMenuBarIconPreference = (nextValue: boolean) => {
     if (
       !desktopApi ||
@@ -474,6 +499,10 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     uiZoomPercent,
     isSavingUiZoomPercent,
     uiZoomPercentError,
-    setUiZoomPercentPreference
+    setUiZoomPercentPreference,
+    maskConnectionAddresses,
+    isSavingMaskConnectionAddresses,
+    maskConnectionAddressesError,
+    setMaskConnectionAddressesPreference
   }
 }

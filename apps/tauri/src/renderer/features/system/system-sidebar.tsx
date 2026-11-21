@@ -33,6 +33,7 @@ export function SystemSidebar({
   collapsed,
   connectionStatus,
   showResourceMeters,
+  maskConnectionAddresses,
   visibleMetrics,
   onMonitoringSnapshot,
   onOpenSystemInfo,
@@ -47,6 +48,7 @@ export function SystemSidebar({
   collapsed: boolean
   connectionStatus: TabStatus | null
   showResourceMeters: boolean
+  maskConnectionAddresses: boolean
   visibleMetrics: ResourceMonitoringMetric[]
   onMonitoringSnapshot(snapshot: WorkspaceSnapshot): void
   onOpenSystemInfo(): void
@@ -184,8 +186,8 @@ export function SystemSidebar({
         <>
           <section className="sys-card" inert={obscured}>
             <div className="connection-summary">
-              <AddressLine label={t.privateIp} value={internalIp} />
-              <AddressLine label={t.accessAddress} value={accessAddress} />
+              <AddressLine label={t.privateIp} value={internalIp} masked={maskConnectionAddresses} />
+              <AddressLine label={t.accessAddress} value={accessAddress} masked={maskConnectionAddresses} />
             </div>
             <button
               className="system-title"
