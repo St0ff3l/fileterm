@@ -15,3 +15,85 @@
   padding-inline: 0;
   gap: 0;
 }
+
+.address-row strong.is-masked {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.address-masked-text {
+  display: inline-grid;
+  grid-template-areas: 'address';
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: middle;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.address-masked-text > span {
+  grid-area: address;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--duration-hover) var(--ease-out);
+}
+
+.address-mask-placeholder {
+  color: var(--text-secondary);
+  letter-spacing: 0.1em;
+}
+
+.address-mask-value {
+  color: var(--copy-link);
+  opacity: 0;
+}
+
+.address-masked-text:is(:hover, :focus-visible) .address-mask-placeholder,
+.address-row:hover strong.is-masked .address-mask-placeholder,
+.address-row strong.is-masked:hover .address-mask-placeholder,
+.address-row strong.is-masked:focus-visible .address-mask-placeholder,
+.system-description-row strong.is-masked:hover .address-mask-placeholder,
+.system-description-row strong.is-masked:focus-visible .address-mask-placeholder {
+  opacity: 0;
+}
+
+.address-masked-text:is(:hover, :focus-visible) .address-mask-value,
+.address-row:hover strong.is-masked .address-mask-value,
+.address-row strong.is-masked:hover .address-mask-value,
+.address-row strong.is-masked:focus-visible .address-mask-value,
+.system-description-row strong.is-masked:hover .address-mask-value,
+.system-description-row strong.is-masked:focus-visible .address-mask-value {
+  opacity: 1;
+}
+
+.address-row strong.is-masked.copied .address-mask-placeholder {
+  opacity: 0;
+}
+
+.address-row strong.is-masked.copied .address-mask-value {
+  color: var(--status-success);
+  opacity: 1;
+}
+
+.address-row strong.is-masked:focus-visible,
+.system-description-row strong.is-masked:focus-visible,
+.address-masked-text:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+.system-description-row strong.is-masked {
+  cursor: help;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .address-masked-text > span {
+    transition: none;
+  }
+}

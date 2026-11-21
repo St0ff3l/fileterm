@@ -8,16 +8,18 @@ import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { formatSystemLoad } from './system-metric-format'
 import { TableColumnResizer } from '../../components/common/table-column-resizer/table-column-resizer'
 import { useRememberedColumnWidths } from '../common/table-column-layout/table-column-layout'
-import { MetricHoverDetail } from './system-resource-meters'
+import { MaskedAddressText, MetricHoverDetail } from './system-resource-meters'
 
 export function SystemInfoWorkspace({
   activeProfile,
   activeSession,
-  connectionStatus
+  connectionStatus,
+  maskConnectionAddresses
 }: {
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
   connectionStatus: TabStatus | null
+  maskConnectionAddresses: boolean
 }) {
   const metrics = activeSession?.systemMetrics
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -77,8 +79,8 @@ export function SystemInfoWorkspace({
     { label: t.kernelVersion, value: metrics.identity.kernelVersion },
     { label: t.architecture, value: metrics.identity.architecture },
     { label: t.hostname, value: metrics.identity.hostname },
-    { label: t.accessAddress, value: activeProfile?.host || activeSession.accessHost || '-' },
-    { label: t.privateIp, value: metrics.ip || '-' },
+    { label: t.accessAddress, value: activeProfile?.host || activeSession.accessHost || '-', maskable: true },
+    { label: t.privateIp, value: metrics.ip || '-', maskable: true },
     { label: t.running, value: formatUptime(metrics.uptimeSeconds, metrics.uptime) },
     { label: t.load, value: formatSystemLoad(metrics, t).value }
   ]
@@ -95,7 +97,7 @@ export function SystemInfoWorkspace({
 
           <div className="system-info-grid">
             <DataCard title={t.overview}>
-              <DescriptionList rows={summaryRows} />
+              <DescriptionList rows={summaryRows} maskConnectionAddresses={maskConnectionAddresses} />
             </DataCard>
 
             <DataCard title={t.cpuDetails}>
@@ -216,14 +218,27 @@ function DataCard({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function DescriptionList({ rows }: { rows: Array<{ label: string; value: string }> }) {
+function DescriptionList({
+  rows,
+  maskConnectionAddresses
+}: {
+  rows: Array<{ label: string; value: string; maskable?: boolean }>
+  maskConnectionAddresses: boolean
+}) {
   return (
     <div className="system-description-list">
       {rows.map((row) => (
         <div className="system-description-row" key={row.label}>
           <span>{row.label}</span>
-          <strong>
-            <MetricHoverDetail className="system-info-hover-detail" value={row.value} />
+          <strong
+            className={maskConnectionAddresses && row.maskable && row.value !== '-' ? 'is-masked' : ''}
+            tabIndex={maskConnectionAddresses && row.maskable && row.value !== '-' ? 0 : undefined}
+          >
+            {maskConnectionAddresses && row.maskable && row.value !== '-' ? (
+              <MaskedAddressText value={row.value} focusable={false} />
+            ) : (
+              <MetricHoverDetail className="system-info-hover-detail" value={row.value} />
+            )}
           </strong>
         </div>
       ))}

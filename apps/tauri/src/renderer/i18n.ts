@@ -548,7 +548,7 @@ const zhCN = {
   privateIp: 'IP',
   accessAddress: '连接',
   maskConnectionAddresses: '隐藏连接地址',
-  maskConnectionAddressesHint: '用模糊效果遮盖侧栏中的 IP 和连接地址，方便截图或录屏。关闭后恢复显示。',
+  maskConnectionAddressesHint: '在系统侧栏、系统信息和网络连接页遮盖 IP；悬停或键盘聚焦可查看，方便截图或录屏。',
   maskConnectionAddressesSaveFailed: '无法保存隐藏连接地址设置。',
   copy: '复制',
   cut: '剪切',
@@ -2944,7 +2944,7 @@ const enUS: typeof zhCN = {
   accessAddress: 'Access',
   maskConnectionAddresses: 'Hide connection addresses',
   maskConnectionAddressesHint:
-    'Blurs the IP and access address in the sidebar so they are not readable in screenshots or screen recordings. Turn it off to show them again.',
+    'Masks IP addresses in the system sidebar, system info, and network connections. Hover or focus to reveal them for screenshots and recordings.',
   maskConnectionAddressesSaveFailed: 'Unable to save the hidden address setting.',
   copy: 'Copy',
   cut: 'Cut',
