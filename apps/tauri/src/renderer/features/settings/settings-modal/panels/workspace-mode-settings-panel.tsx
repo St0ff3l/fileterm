@@ -100,29 +100,33 @@ export function WorkspaceModeSettingsPanel() {
           value={workspaceMode}
         />
         <FeedbackBubble message={workspaceModeError} sourceKey="settings.workspace-mode" tone="error" />
-        <div aria-busy={isSavingTopologyServiceProbeInterval} className="workspace-mode-probe-setting">
-          <div className="workspace-mode-probe-setting-copy">
-            <strong>{t.topologyServiceProbeInterval}</strong>
-            <p>{t.topologyServiceProbeIntervalHint}</p>
-          </div>
-          <DropdownSelect
-            ariaLabel={t.topologyServiceProbeInterval}
-            disabled={!desktopApi || isSavingTopologyServiceProbeInterval}
-            onChange={(value) =>
-              setTopologyServiceProbeIntervalPreference(Number(value) as TopologyServiceProbeIntervalSeconds)
-            }
-            options={TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS.map((seconds) => ({
-              value: String(seconds),
-              label: t.topologyServiceProbeIntervalOption.replace('{seconds}', String(seconds))
-            }))}
-            value={String(topologyServiceProbeIntervalSeconds)}
-          />
-        </div>
-        <FeedbackBubble
-          message={topologyServiceProbeIntervalError}
-          sourceKey="settings.topology-service-probe-interval"
-          tone="error"
-        />
+        {workspaceMode === 'server-management' ? (
+          <>
+            <div aria-busy={isSavingTopologyServiceProbeInterval} className="workspace-mode-probe-setting">
+              <div className="workspace-mode-probe-setting-copy">
+                <strong>{t.topologyServiceProbeInterval}</strong>
+                <p>{t.topologyServiceProbeIntervalHint}</p>
+              </div>
+              <DropdownSelect
+                ariaLabel={t.topologyServiceProbeInterval}
+                disabled={!desktopApi || isSavingTopologyServiceProbeInterval}
+                onChange={(value) =>
+                  setTopologyServiceProbeIntervalPreference(Number(value) as TopologyServiceProbeIntervalSeconds)
+                }
+                options={TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS.map((seconds) => ({
+                  value: String(seconds),
+                  label: t.topologyServiceProbeIntervalOption.replace('{seconds}', String(seconds))
+                }))}
+                value={String(topologyServiceProbeIntervalSeconds)}
+              />
+            </div>
+            <FeedbackBubble
+              message={topologyServiceProbeIntervalError}
+              sourceKey="settings.topology-service-probe-interval"
+              tone="error"
+            />
+          </>
+        ) : null}
       </section>
       {workspaceMode === 'standard' ? <OverviewContentSettingsSection /> : null}
     </div>

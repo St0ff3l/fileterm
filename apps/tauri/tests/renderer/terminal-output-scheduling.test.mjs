@@ -38,6 +38,7 @@ vm.runInNewContext(
           TERMINAL_FIT_GUARD_ROWS: 0,
           TERMINAL_REMOTE_GUARD_COLS: 0,
           TERMINAL_RESIZE_PIXEL_EPSILON: 2,
+          terminalFindShortcutForPlatform: () => 'Ctrl+Shift+F',
           splitPaneShortcutsForPlatform: () => ({}),
           toDisplayTerminalText: (value) => value,
           logTerminalRender: () => {}

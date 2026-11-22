@@ -51,7 +51,7 @@
 }
 
 :root .fs-shell.has-host-rail.has-ai-copilot .fs-tabbar {
-  margin-right: 0;
+  margin-right: var(--host-copilot-width, var(--ai-copilot-panel-width));
 }
 
 .ai-copilot-resizer {

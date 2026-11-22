@@ -443,12 +443,7 @@ export function ServerManagementOverview({
           </header>
 
           <div className="server-dashboard-toolbar" data-clear-selection>
-            <div
-              aria-label={t.serverDashboardStatusFilter}
-              className="server-dashboard-filters"
-              data-clear-selection
-              role="group"
-            >
+            <div className="server-dashboard-filters" data-clear-selection>
               {folderOptions.length > 0 && (
                 <DropdownSelect
                   ariaLabel={t.folder}
@@ -460,18 +455,23 @@ export function ServerManagementOverview({
                   value={selectedFolder?.id ?? ''}
                 />
               )}
-              {SERVER_STATUS_FILTERS.map((status) => (
-                <Button
-                  aria-pressed={statusFilter === status}
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  size="panel"
-                >
-                  {status !== 'all' ? <StatusIndicator aria-hidden="true" status={status} /> : null}
-                  {filterLabels[status]}
-                  <span className="server-dashboard-filter-count">{statusCounts[status]}</span>
-                </Button>
-              ))}
+              <SegmentedControl<(typeof SERVER_STATUS_FILTERS)[number]>
+                ariaLabel={t.serverDashboardStatusFilter}
+                className="server-dashboard-status-filter-control"
+                onChange={setStatusFilter}
+                options={SERVER_STATUS_FILTERS.map((status) => ({
+                  value: status,
+                  label: (
+                    <>
+                      {status !== 'all' ? <StatusIndicator aria-hidden="true" status={status} /> : null}
+                      {filterLabels[status]}
+                      <span className="server-dashboard-filter-count">{statusCounts[status]}</span>
+                    </>
+                  )
+                }))}
+                value={statusFilter}
+                variant="neutral"
+              />
               {tags.length ? (
                 <DropdownSelect
                   ariaLabel={t.connectionTagFilter}

@@ -64,21 +64,21 @@
   gap: 6px;
 }
 
-.server-dashboard-filters .ft-btn[aria-pressed='true'] {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
-}
-
 .server-dashboard-filters .status-indicator {
   width: 7px;
   height: 7px;
+}
+
+.server-dashboard-status-filter-control {
+  flex: 0 1 auto;
 }
 
 .server-dashboard-filters .server-dashboard-folder-filter,
 .server-dashboard-filters .server-dashboard-tag-filter {
   width: auto;
   max-width: 100%;
-  height: 32px;
+  height: 38px;
+  background-color: var(--surface-canvas);
 }
 
 .server-dashboard-filter-count {
