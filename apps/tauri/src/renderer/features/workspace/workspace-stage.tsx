@@ -477,6 +477,7 @@ function WorkspaceStageContent({
       themeConfig={themeConfig}
       customThemes={customThemes}
       locale={locale}
+      maskConnectionAddresses={maskConnectionAddresses}
       overviewShowStats={overviewShowStats}
       overviewShowRecent={overviewShowRecent}
       overviewShowAllConnections={overviewShowAllConnections}

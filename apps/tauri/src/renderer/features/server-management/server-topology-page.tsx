@@ -1,15 +1,19 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import type { ConnectionProfile, SessionSnapshot, WorkspaceTab } from '@fileterm/core'
+import type { ConnectionProfile, SessionSnapshot, SystemMetrics, WorkspaceTab } from '@fileterm/core'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { Button } from '../../components/common/button/button'
 import { ConfirmActionDialog } from '../../components/common/confirm-action-dialog/confirm-action-dialog'
 import { DropdownSelect } from '../../components/common/dropdown-select/dropdown-select'
-import { Input, Textarea } from '../../components/common/input/input'
+import { Input } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { t } from '../../i18n'
 import { useProxyLibrary } from '../../hooks/use-proxy-library'
+import { resolveMonitoringSource } from '../system/shared-monitoring'
 import { StatusIndicator } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
+import { NodeDisplaySettings } from './server-topology/node-display-settings'
+import { TopologyNodeCard } from './server-topology/node-card'
+import { NodeMemo } from './server-topology/node-memo'
 import {
   addTopologyNode,
   addTopologyNodes,
@@ -17,16 +21,18 @@ import {
   moveTopologyNode,
   removeTopologyNode,
   TOPOLOGY_LINK_NAME_LIMIT,
-  TOPOLOGY_MEMO_LIMIT,
-  TOPOLOGY_NODE_HEIGHT as NODE_HEIGHT,
-  TOPOLOGY_NODE_WIDTH as NODE_WIDTH,
   TOPOLOGY_STORAGE_KEY,
   topologyLinkEndpoints,
   topologyLinkMatches,
+  topologyNodeDimensions,
   updateTopologyNodeMemo,
+  updateTopologyNodeMetrics,
+  updateTopologyNodeSize,
   type TopologyBoard,
   type TopologyLink,
-  type TopologyNode
+  type TopologyNode,
+  type TopologyNodeMetric,
+  type TopologyNodeSize
 } from './server-topology-model'
 import { configuredTopologyRoutes, isTopologyProxyNode, topologyProxyAddress } from './server-topology-routes'
 import { statusForProfile, statusLabel } from './server-profile-status'
@@ -35,42 +41,9 @@ import './server-topology-page.css'
 
 const KEYBOARD_STEP = 12
 const DRAG_THRESHOLD = 3
+const MAX_METRIC_AGE_MS = 120_000
 
 const linkKey = ([first, second]: TopologyLink) => JSON.stringify([first, second])
-
-function NodeMemo({ memo, onSave }: { memo: string; onSave(value: string): void }) {
-  const id = useId()
-  const [draft, setDraft] = useState(memo)
-
-  return (
-    <form
-      className="server-topology__memo"
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (draft !== memo) onSave(draft)
-      }}
-    >
-      <label htmlFor={id}>{t.serverTopologyMemo}</label>
-      <Textarea
-        id={id}
-        maxLength={TOPOLOGY_MEMO_LIMIT}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-            event.preventDefault()
-            if (draft !== memo) onSave(draft)
-          }
-        }}
-        placeholder={t.serverTopologyMemoPlaceholder}
-        rows={5}
-        value={draft}
-      />
-      <Button disabled={draft === memo} size="panel" type="submit">
-        {t.save}
-      </Button>
-    </form>
-  )
-}
 
 type NodeDrag = {
   pointerId: number
@@ -113,16 +86,40 @@ function loadBoard() {
   }
 }
 
+function liveMetrics(
+  profileId: string,
+  tabs: WorkspaceTab[],
+  sessions: Record<string, SessionSnapshot>
+): SystemMetrics | null {
+  const tab = tabs.find((candidate) => candidate.profileId === profileId && sessions[candidate.id]?.connected)
+  if (!tab) return null
+  const source = resolveMonitoringSource(tab.id, sessions).session
+  const metrics = source?.systemMetrics
+  const sampledAt = source?.monitoring?.lastSampleAt
+  if (
+    !source?.connected ||
+    !metrics ||
+    !sampledAt ||
+    !['healthy', 'shared'].includes(source.monitoring?.phase ?? '') ||
+    Date.now() - sampledAt > MAX_METRIC_AGE_MS
+  ) {
+    return null
+  }
+  return metrics
+}
+
 export function ServerTopologyPage({
   profiles,
   sessions,
   workspaceTabs,
-  onOpenProfile
+  onOpenProfile,
+  maskConnectionAddresses
 }: {
   profiles: ConnectionProfile[]
   sessions: Record<string, SessionSnapshot>
   workspaceTabs: WorkspaceTab[]
   onOpenProfile(id: string): void
+  maskConnectionAddresses: boolean
 }) {
   const [board, setBoard] = useState(loadBoard)
   const [saveFailed, setSaveFailed] = useState(false)
@@ -208,8 +205,8 @@ export function ServerTopologyPage({
   const nodeName = (id: string) =>
     profilesById.get(id)?.name ?? configured.proxyNodes.get(id)?.name ?? t.serverTopologyMissingProfile
   const linkEndpoints = ([first, second]: TopologyLink) => `${nodeName(first)} ↔ ${nodeName(second)}`
-  const minWidth = Math.max(320, ...canvas.nodes.map((node) => node.x + NODE_WIDTH + 40))
-  const minHeight = Math.max(200, ...canvas.nodes.map((node) => node.y + NODE_HEIGHT + 40))
+  const minWidth = Math.max(320, ...canvas.nodes.map((node) => node.x + topologyNodeDimensions(node).width + 40))
+  const minHeight = Math.max(200, ...canvas.nodes.map((node) => node.y + topologyNodeDimensions(node).height + 40))
 
   const selectNode = (id: string) => {
     if (id !== selectedId || selectedLinkKey) {
@@ -429,8 +426,8 @@ export function ServerTopologyPage({
                 const bounds = event.currentTarget.getBoundingClientRect()
                 moveNode(
                   selected,
-                  event.clientX - bounds.left - NODE_WIDTH / 2,
-                  event.clientY - bounds.top - NODE_HEIGHT / 2
+                  event.clientX - bounds.left - topologyNodeDimensions(selected).width / 2,
+                  event.clientY - bounds.top - topologyNodeDimensions(selected).height / 2
                 )
               }}
             >
@@ -518,41 +515,31 @@ export function ServerTopologyPage({
                 const related = relatedIds(node.id).map(nodeName)
                 const status = statuses.get(node.id)?.status ?? 'idle'
                 return (
-                  <button
-                    aria-description={
+                  <TopologyNodeCard
+                    key={node.id}
+                    node={node}
+                    name={nodeName(node.id)}
+                    protocol={
+                      profile ? protocol(profile) : (proxy?.type.toUpperCase() ?? t.serverTopologyMissingProfile)
+                    }
+                    details={profile || proxy ? details : null}
+                    status={profile ? status : null}
+                    statusLabel={statusLabel(status)}
+                    metrics={profile ? liveMetrics(profile.id, workspaceTabs, sessions) : null}
+                    visibleMetrics={profile ? node.metrics : []}
+                    maskDetails={maskConnectionAddresses && (profile ? profile.type !== 'serial' : Boolean(proxy))}
+                    maskConnectionAddresses={maskConnectionAddresses}
+                    relatedDescription={
                       related.length ? t.serverTopologyLinkedTo.replace('{nodes}', related.join(', ')) : undefined
                     }
-                    aria-pressed={node.id === selectedId}
-                    className="server-topology__node"
-                    data-node-id={node.id}
-                    key={node.id}
+                    selected={node.id === selectedId}
                     onClick={() => selectNode(node.id)}
                     onKeyDown={(event) => handleNodeKeys(event, node)}
                     onPointerDown={(event) => startDrag(event, node)}
                     onPointerMove={(event) => updateDrag(event, node)}
-                    onLostPointerCapture={(event) => endDrag(event, node, false)}
                     onPointerUp={(event) => endDrag(event, node, true)}
-                    style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
-                    title={`${nodeName(node.id)} · ${details}`}
-                    type="button"
-                  >
-                    <span className="server-topology__node-meta">
-                      <MaterialIcon name={profile?.type === 'serial' ? 'usb' : 'dns'} />
-                      <span>
-                        {profile ? protocol(profile) : (proxy?.type.toUpperCase() ?? t.serverTopologyMissingProfile)}
-                      </span>
-                      {profile ? (
-                        <StatusIndicator
-                          role="img"
-                          aria-label={statusLabel(status)}
-                          title={statusLabel(status)}
-                          status={status}
-                        />
-                      ) : null}
-                    </span>
-                    <strong>{nodeName(node.id)}</strong>
-                    {profile || proxy ? <small>{details}</small> : null}
-                  </button>
+                    onLostPointerCapture={(event) => endDrag(event, node, false)}
+                  />
                 )
               })}
             </div>
@@ -658,6 +645,17 @@ export function ServerTopologyPage({
                     ) : null}
                   </dl>
                 ) : null}
+                <NodeDisplaySettings
+                  size={selected.size}
+                  metrics={selectedProfile ? selected.metrics : []}
+                  showMetrics={Boolean(selectedProfile)}
+                  onSizeChange={(size: TopologyNodeSize) =>
+                    save(updateTopologyNodeSize(storeLayout(), selected.id, size))
+                  }
+                  onMetricsChange={(metrics: TopologyNodeMetric[]) =>
+                    save(updateTopologyNodeMetrics(storeLayout(), selected.id, metrics))
+                  }
+                />
                 <div className="server-topology__node-actions">
                   {!selectedProxy && (
                     <Button

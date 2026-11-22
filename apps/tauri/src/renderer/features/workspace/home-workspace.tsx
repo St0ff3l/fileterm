@@ -49,6 +49,7 @@ export function HomeWorkspace({
   themeConfig,
   customThemes,
   locale,
+  maskConnectionAddresses,
   suppressEntrance: suppressEntranceProp,
   overviewShowStats,
   overviewShowRecent,
@@ -102,6 +103,7 @@ export function HomeWorkspace({
   themeConfig: ThemeConfig
   customThemes: SavedTheme[]
   locale: 'zhCN' | 'enUS'
+  maskConnectionAddresses: boolean
   suppressEntrance?: boolean
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -568,6 +570,7 @@ export function HomeWorkspace({
                 sessions={sessions}
                 workspaceTabs={managementTabs}
                 onOpenProfile={onOpen}
+                maskConnectionAddresses={maskConnectionAddresses}
               />
             </div>
           )}

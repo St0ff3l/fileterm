@@ -141,6 +141,40 @@
   border-block: 1px solid var(--border-subtle);
 }
 
+.server-topology__display-settings {
+  display: grid;
+  gap: 9px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.server-topology__setting-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.server-topology__setting-group > span {
+  color: var(--text-secondary);
+  font-size: var(--ui-font-size-12px, 12px);
+}
+
+.server-topology__setting-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.server-topology__setting-options .ft-btn {
+  min-height: 27px;
+  padding-inline: 8px;
+}
+
+.server-topology__setting-options .ft-btn[aria-pressed='true'] {
+  border-color: var(--focus-outline);
+  background: var(--surface-hover);
+}
+
 .server-topology__relations ul {
   display: grid;
   gap: 2px;
@@ -335,10 +369,10 @@
   position: absolute;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  align-content: center;
+  align-content: start;
   justify-content: stretch;
-  gap: 2px;
-  padding: 5px 9px;
+  gap: 3px;
+  padding: 6px 9px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-elevated);
@@ -410,4 +444,61 @@
 .server-topology__node small {
   color: var(--text-secondary);
   font-size: var(--ui-font-size-11px, 11px);
+}
+
+.server-topology__node-metrics {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.server-topology__node-metric {
+  display: grid;
+  grid-template-columns: minmax(36px, 0.7fr) minmax(0, 1.3fr);
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--ui-font-size-10px, 10px);
+  line-height: 1.25;
+}
+
+.server-topology__node-metric > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-topology__metric-value {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-topology__node:is(:hover, :focus-visible) .address-mask-placeholder {
+  opacity: 0;
+}
+
+.server-topology__node:is(:hover, :focus-visible) .address-mask-value {
+  opacity: 1;
+}
+
+.server-topology__node-network {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.server-topology__node-processes {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.server-topology__more-interfaces {
+  text-align: right;
 }

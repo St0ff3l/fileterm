@@ -15,8 +15,7 @@
   display: none;
 }
 
-/* When Home tab is active with AI Copilot open, the tabbar inside .home-workspace
-   is already nested within .fs-main (which has margin-right), so reset its margin-right. */
+/* The Home tabbar is inside .workspace-stage-transition, which already reserves space for Copilot. */
 .fs-shell.has-ai-copilot.is-home-active .home-tabs-bar .fs-tabbar {
   margin-right: 0;
 }
@@ -49,6 +48,10 @@
   background: var(--bg-card);
   box-shadow: none;
   animation: ai-copilot-panel-enter 0.2s var(--ease-out) both;
+}
+
+:root .fs-shell.has-host-rail.has-ai-copilot .fs-tabbar {
+  margin-right: 0;
 }
 
 .ai-copilot-resizer {
@@ -88,7 +91,6 @@
 
 .fs-shell.has-window-menubar.has-ai-copilot .ai-copilot-panel {
   top: var(--window-menubar-height, 28px);
-  bottom: 0;
   border-top-right-radius: 0;
 }
 

@@ -1,16 +1,35 @@
 export const TOPOLOGY_STORAGE_KEY = 'fileterm:server-topology:v1'
-export const TOPOLOGY_NODE_WIDTH = 156
-export const TOPOLOGY_NODE_HEIGHT = 60
 export const TOPOLOGY_LINK_NAME_LIMIT = 64
 export const TOPOLOGY_MEMO_LIMIT = 2000
+
+export const TOPOLOGY_NODE_DIMENSIONS = {
+  compact: { width: 184, height: 104 },
+  standard: { width: 256, height: 184 },
+  expanded: { width: 344, height: 344 }
+} as const
+
+export const TOPOLOGY_NODE_SIZES = Object.keys(TOPOLOGY_NODE_DIMENSIONS) as Array<keyof typeof TOPOLOGY_NODE_DIMENSIONS>
+export const TOPOLOGY_NODE_METRICS = ['ip', 'cpu', 'memory', 'disk', 'gpu', 'network', 'processes'] as const
+export const DEFAULT_TOPOLOGY_NODE_METRICS: TopologyNodeMetric[] = ['cpu', 'memory']
 
 const COLUMN_WIDTH = 194
 const ROW_HEIGHT = 108
 const INSET = 20
 const AUTO_LAYOUT_COLUMNS = 5
 const MAX_POSITION = 200_000
+const MAX_METRICS_BY_SIZE = { compact: 2, standard: 4, expanded: 7 } as const
 
-export type TopologyNode = { id: string; x: number; y: number; memo?: string; routeOnly?: true }
+export type TopologyNodeSize = keyof typeof TOPOLOGY_NODE_DIMENSIONS
+export type TopologyNodeMetric = (typeof TOPOLOGY_NODE_METRICS)[number]
+export type TopologyNode = {
+  id: string
+  x: number
+  y: number
+  memo?: string
+  routeOnly?: true
+  size: TopologyNodeSize
+  metrics: TopologyNodeMetric[]
+}
 export type TopologyLink = [first: string, second: string, name?: string]
 export type TopologyBoard = { nodes: TopologyNode[]; links: TopologyLink[] }
 
@@ -20,6 +39,16 @@ export function topologyLinkMatches([a, b]: TopologyLink, first: string, second:
 
 function validPosition(value: number) {
   return Number.isFinite(value) && value >= 0 && value <= MAX_POSITION
+}
+
+export function topologyNodeDimensions(node: Pick<TopologyNode, 'size'>) {
+  return TOPOLOGY_NODE_DIMENSIONS[node.size] ?? TOPOLOGY_NODE_DIMENSIONS.compact
+}
+
+export function topologyNodeSizeForMetricCount(size: TopologyNodeSize, metricCount: number): TopologyNodeSize {
+  if (metricCount <= MAX_METRICS_BY_SIZE[size]) return size
+  if (size === 'compact') return metricCount <= MAX_METRICS_BY_SIZE.standard ? 'standard' : 'expanded'
+  return 'expanded'
 }
 
 export function decodeTopologyBoard(raw: string | null): TopologyBoard {
@@ -41,12 +70,25 @@ export function decodeTopologyBoard(raw: string | null): TopologyBoard {
     if (memo !== undefined && (typeof memo !== 'string' || memo.length > TOPOLOGY_MEMO_LIMIT)) {
       throw new Error('Invalid topology memo')
     }
+    const requestedSize = node.size ?? 'compact'
+    if (!TOPOLOGY_NODE_SIZES.includes(requestedSize)) throw new Error('Invalid topology node size')
+    const metrics = node.metrics ?? DEFAULT_TOPOLOGY_NODE_METRICS
+    if (
+      !Array.isArray(metrics) ||
+      metrics.some((metric: unknown) => !TOPOLOGY_NODE_METRICS.some((valid) => valid === metric))
+    ) {
+      throw new Error('Invalid topology node metrics')
+    }
+    const normalizedMetrics = [...new Set(metrics as TopologyNodeMetric[])]
+    const size = topologyNodeSizeForMetricCount(requestedSize, normalizedMetrics.length)
     nodes.push({
       id: node.id,
       x,
       y,
       ...(memo ? { memo } : {}),
-      ...(routeOnly === true ? { routeOnly: true } : {})
+      ...(routeOnly === true ? { routeOnly: true } : {}),
+      size,
+      metrics: normalizedMetrics
     })
   }
   const links: TopologyLink[] = []
@@ -83,9 +125,18 @@ export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>): T
       if (y > MAX_POSITION) return nodes.length === board.nodes.length ? board : { ...board, nodes }
       index++
       if (
-        !nodes.some((node) => Math.abs(node.x - x) < TOPOLOGY_NODE_WIDTH && Math.abs(node.y - y) < TOPOLOGY_NODE_HEIGHT)
+        !nodes.some((node) => {
+          const existing = topologyNodeDimensions(node)
+          const candidate = TOPOLOGY_NODE_DIMENSIONS.compact
+          return (
+            x < node.x + existing.width &&
+            node.x < x + candidate.width &&
+            y < node.y + existing.height &&
+            node.y < y + candidate.height
+          )
+        })
       ) {
-        nodes.push({ id, x, y })
+        nodes.push({ id, x, y, size: 'compact', metrics: [...DEFAULT_TOPOLOGY_NODE_METRICS] })
         present.add(id)
         break
       }
@@ -95,15 +146,29 @@ export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>): T
 }
 
 export function topologyLinkEndpoints(first: TopologyNode, second: TopologyNode, directed: boolean) {
-  const x = first.x + TOPOLOGY_NODE_WIDTH / 2
-  const y = first.y + TOPOLOGY_NODE_HEIGHT / 2
-  const dx = second.x - first.x
-  const dy = second.y - first.y
-  // Keep the arrow tip outside the target card, including while either card is dragged.
-  const inset = directed
-    ? Math.min(0.45, (TOPOLOGY_NODE_WIDTH / 2 + 4) / Math.abs(dx), (TOPOLOGY_NODE_HEIGHT / 2 + 4) / Math.abs(dy))
-    : 0
-  return { x1: x + dx * inset, y1: y + dy * inset, x2: x + dx * (1 - inset), y2: y + dy * (1 - inset) }
+  const firstSize = topologyNodeDimensions(first)
+  const secondSize = topologyNodeDimensions(second)
+  const x1 = first.x + firstSize.width / 2
+  const y1 = first.y + firstSize.height / 2
+  const x2 = second.x + secondSize.width / 2
+  const y2 = second.y + secondSize.height / 2
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const edgeInset = (width: number, height: number) =>
+    Math.min(
+      Math.abs(dx) ? width / 2 / Math.abs(dx) : Infinity,
+      Math.abs(dy) ? height / 2 / Math.abs(dy) : Infinity,
+      0.5
+    )
+  if (!directed) return { x1, y1, x2, y2 }
+  const startInset = edgeInset(firstSize.width, firstSize.height)
+  const endInset = edgeInset(secondSize.width + 8, secondSize.height + 8)
+  return {
+    x1: x1 + dx * startInset,
+    y1: y1 + dy * startInset,
+    x2: x2 - dx * endInset,
+    y2: y2 - dy * endInset
+  }
 }
 
 export function moveTopologyNode(board: TopologyBoard, id: string, x: number, y: number): TopologyBoard {
@@ -116,6 +181,31 @@ export function updateTopologyNodeMemo(board: TopologyBoard, id: string, memo: s
   const node = board.nodes.find((item) => item.id === id)
   if (!node || memo.length > TOPOLOGY_MEMO_LIMIT || memo === (node.memo ?? '')) return board
   return { ...board, nodes: board.nodes.map((item) => (item === node ? { ...node, memo: memo || undefined } : item)) }
+}
+
+export function updateTopologyNodeSize(board: TopologyBoard, id: string, size: TopologyNodeSize): TopologyBoard {
+  const node = board.nodes.find((item) => item.id === id)
+  if (!node) return board
+  const resolvedSize = topologyNodeSizeForMetricCount(size, node.metrics.length)
+  if (node.size === resolvedSize) return board
+  return { ...board, nodes: board.nodes.map((item) => (item === node ? { ...node, size: resolvedSize } : item)) }
+}
+
+export function updateTopologyNodeMetrics(
+  board: TopologyBoard,
+  id: string,
+  metrics: TopologyNodeMetric[]
+): TopologyBoard {
+  const node = board.nodes.find((item) => item.id === id)
+  if (!node) return board
+  const unique = [...new Set(metrics)]
+  if (unique.length === node.metrics.length && unique.every((metric, index) => metric === node.metrics[index]))
+    return board
+  const size = topologyNodeSizeForMetricCount(node.size, unique.length)
+  return {
+    ...board,
+    nodes: board.nodes.map((item) => (item === node ? { ...node, metrics: unique, size } : item))
+  }
 }
 
 export function removeTopologyNode(board: TopologyBoard, id: string): TopologyBoard {
