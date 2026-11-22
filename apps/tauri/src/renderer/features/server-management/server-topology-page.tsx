@@ -334,6 +334,7 @@ export function ServerTopologyPage({
   const selectedTarget = nodesById.has(linkTo) && linkTo !== selectedId ? linkTo : ''
   const linked = board.links.find((link) => topologyLinkMatches(link, selectedId, selectedTarget))
   const selectedLink = board.links.find((link) => linkKey(link) === selectedLinkKey)
+  const detailsKey = selectedLink ? `link:${linkKey(selectedLink)}` : selected ? `node:${selected.id}` : 'empty'
   const linkToRemove = selectedLink ?? linked
   const nodeName = (id: string) =>
     nodesById.get(id)?.label?.trim() ||
@@ -712,6 +713,7 @@ export function ServerTopologyPage({
           className="server-topology__details"
           aria-label={selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}
           data-selection={selectedLink ? 'link' : selected ? 'node' : 'none'}
+          key={detailsKey}
         >
           <div className="server-topology__details-scroll" ref={detailsScrollRef}>
             <h2>{selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}</h2>
