@@ -5,7 +5,7 @@ import { usePointerSortFallback, type PointerSortTarget } from '../../../hooks/u
 import { t } from '../../../i18n'
 import {
   TOPOLOGY_NODE_SIZES,
-  topologyNodeSizeForMetricCount,
+  topologyNodeSizeForContent,
   type TopologyNodeMetric,
   type TopologyNodeSize
 } from '../server-topology-model'
@@ -30,6 +30,7 @@ export function NodeDisplaySettings({
   size,
   metrics,
   metricOrder,
+  serviceCount,
   showMetrics,
   onSizeChange,
   onMetricsChange,
@@ -38,6 +39,7 @@ export function NodeDisplaySettings({
   size: TopologyNodeSize
   metrics: TopologyNodeMetric[]
   metricOrder: TopologyNodeMetric[]
+  serviceCount: number
   showMetrics: boolean
   onSizeChange(size: TopologyNodeSize): void
   onMetricsChange(metrics: TopologyNodeMetric[]): void
@@ -125,7 +127,7 @@ export function NodeDisplaySettings({
           options={TOPOLOGY_NODE_SIZES.map((option) => ({
             value: option,
             label: sizeLabels[option],
-            disabled: topologyNodeSizeForMetricCount(option, metrics.length) !== option
+            disabled: topologyNodeSizeForContent(option, metrics.length, serviceCount) !== option
           }))}
           onChange={onSizeChange}
         />

@@ -493,6 +493,16 @@
   stroke-width: 2px;
 }
 
+.server-topology__links g[data-kind='dependency'] .server-topology__link-line {
+  stroke-dasharray: 3 3;
+}
+
+.server-topology__links g[data-kind='traffic'] .server-topology__link-line {
+  stroke: var(--accent-secondary);
+  stroke-dasharray: 2 4;
+  stroke-width: 2.5px;
+}
+
 .server-topology__route-line {
   stroke: var(--accent-secondary);
   stroke-width: 2px;
@@ -501,6 +511,30 @@
 
 .server-topology__route-arrow {
   fill: var(--accent-secondary);
+}
+
+.server-topology__route[data-status='connected'] .server-topology__route-line {
+  stroke: var(--status-success);
+}
+
+.server-topology__route[data-status='connected'] .server-topology__route-arrow {
+  fill: var(--status-success);
+}
+
+.server-topology__route[data-status='connecting'] .server-topology__route-line {
+  stroke: var(--status-warning);
+}
+
+.server-topology__route[data-status='connecting'] .server-topology__route-arrow {
+  fill: var(--status-warning);
+}
+
+.server-topology__route[data-status='disconnected'] .server-topology__route-line {
+  stroke: var(--status-danger);
+}
+
+.server-topology__route[data-status='disconnected'] .server-topology__route-arrow {
+  fill: var(--status-danger);
 }
 
 .server-topology__links g:is(.is-selected, :hover, :focus-visible) .server-topology__link-line {
@@ -556,6 +590,103 @@
   min-width: 0;
 }
 
+.server-topology__identity-settings,
+.server-topology__services {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.server-topology__identity-settings > h3,
+.server-topology__services > h3 {
+  margin: 0;
+  font-size: var(--ui-font-size-13px, 13px);
+  font-weight: 600;
+}
+
+.server-topology__identity-settings > label,
+.server-topology__service-form > label {
+  color: var(--text-secondary);
+  font-size: var(--ui-font-size-12px, 12px);
+}
+
+.server-topology__identity-settings > .ft-btn {
+  justify-self: start;
+}
+
+.server-topology__identity-settings .ft-select-shell,
+.server-topology__identity-settings .dropdown-select-trigger,
+.server-topology__identity-settings .ft-input,
+.server-topology__service-form .ft-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.server-topology__services > ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.server-topology__services > ul > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-section);
+}
+
+.server-topology__service-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.server-topology__service-identity > strong,
+.server-topology__service-identity > span,
+.server-topology__services li > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-topology__service-identity > span,
+.server-topology__services li > small {
+  color: var(--text-secondary);
+  font-size: var(--ui-font-size-11px, 11px);
+}
+
+.server-topology__services li > small {
+  grid-column: 1;
+}
+
+.server-topology__service-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: var(--ui-font-size-11px, 11px);
+  white-space: nowrap;
+}
+
+.server-topology__service-form {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.server-topology__service-form > .ft-btn {
+  justify-self: start;
+}
+
 .server-topology__node {
   position: absolute;
   display: grid;
@@ -608,10 +739,21 @@
   line-height: 1.2;
 }
 
-.server-topology__node-meta > .material-symbols-outlined {
+.server-topology__node-meta > .material-symbols-outlined,
+.server-topology__node-meta > .app-icon {
   flex: none;
   color: var(--accent-secondary);
   font-size: var(--ui-font-size-12px, 12px);
+}
+
+.server-topology__node-meta > .app-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.server-topology__node-role {
+  color: var(--accent-secondary);
+  font-weight: 600;
 }
 
 .server-topology__node-meta > .status-indicator {
@@ -691,5 +833,41 @@
 }
 
 .server-topology__more-interfaces {
+  text-align: right;
+}
+
+.server-topology__node-services {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.server-topology__node-service {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--ui-font-size-10px, 10px);
+  line-height: 1.25;
+}
+
+.server-topology__node-service > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-topology__node-service .server-topology__service-state {
+  font-size: inherit;
+}
+
+.server-topology__node-services > small {
+  color: var(--text-secondary);
+  font-size: var(--ui-font-size-10px, 10px);
   text-align: right;
 }

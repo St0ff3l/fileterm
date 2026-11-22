@@ -1,13 +1,44 @@
 import type { KeyboardEvent, PointerEvent } from 'react'
-import type { SystemMetrics } from '@fileterm/core'
+import type { SystemMetrics, TopologyTcpProbeResult } from '@fileterm/core'
+import { AppIcon, type AppIconName } from '../../../features/common/app-icon'
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
 import { t } from '../../../i18n'
 import { MaskedAddressText } from '../../system/system-resource-meters'
 import { StatusIndicator, type StatusIndicatorStatus } from '../../common/status-indicator'
-import { topologyNodeDimensions, type TopologyNode, type TopologyNodeMetric } from '../server-topology-model'
+import {
+  topologyNodeDimensions,
+  topologyServiceProbeId,
+  TOPOLOGY_SERVICE_RESULT_MAX_AGE_MS,
+  type TopologyNode,
+  type TopologyNodeMetric,
+  type TopologyNodeRole
+} from '../server-topology-model'
 
 const NETWORK_ROWS_BY_SIZE = { compact: 1, standard: 4, expanded: 8 } as const
 const PROCESS_ROWS_BY_SIZE = { compact: 1, standard: 2, expanded: 4 } as const
+const SERVICE_ROWS_BY_SIZE = { compact: 1, standard: 2, expanded: 4 } as const
+
+const roleLabels: Record<TopologyNodeRole, string> = {
+  server: t.serverTopologyNodeRoleServer,
+  firewall: t.serverTopologyNodeRoleFirewall,
+  router: t.serverTopologyNodeRoleRouter,
+  switch: t.serverTopologyNodeRoleSwitch,
+  database: t.serverTopologyNodeRoleDatabase,
+  storage: t.serverTopologyNodeRoleStorage,
+  proxy: t.serverTopologyNodeRoleProxy,
+  custom: t.serverTopologyNodeRoleCustom
+}
+
+const roleIcons: Record<TopologyNodeRole, AppIconName> = {
+  server: 'server',
+  firewall: 'shield',
+  router: 'connections',
+  switch: 'connections',
+  database: 'database',
+  storage: 'disk',
+  proxy: 'cloud',
+  custom: 'grid'
+}
 
 function percent(value: number | undefined | null) {
   return value === undefined || value === null || !Number.isFinite(value)
@@ -40,11 +71,13 @@ export function TopologyNodeCard({
   node,
   fontScale,
   name,
+  role,
   protocol,
   details,
   status,
   statusLabel,
   metrics,
+  serviceProbeResults,
   visibleMetrics,
   maskDetails,
   maskConnectionAddresses,
@@ -60,11 +93,13 @@ export function TopologyNodeCard({
   node: TopologyNode
   fontScale: number
   name: string
+  role: TopologyNodeRole
   protocol: string
   details: string | null
   status: StatusIndicatorStatus | null
   statusLabel: string
   metrics: SystemMetrics | null
+  serviceProbeResults: Record<string, TopologyTcpProbeResult>
   visibleMetrics: TopologyNodeMetric[]
   maskDetails: boolean
   maskConnectionAddresses: boolean
@@ -101,7 +136,8 @@ export function TopologyNodeCard({
       type="button"
     >
       <span className="server-topology__node-meta">
-        <MaterialIcon name={protocol === 'SERIAL' ? 'usb' : 'dns'} />
+        {protocol === 'SERIAL' ? <MaterialIcon name="usb" /> : <AppIcon name={roleIcons[role]} />}
+        <span className="server-topology__node-role">{roleLabels[role]}</span>
         <span>{protocol}</span>
         {status ? <StatusIndicator role="img" aria-label={statusLabel} title={statusLabel} status={status} /> : null}
       </span>
@@ -196,6 +232,39 @@ export function TopologyNodeCard({
               </span>
             )
           })}
+        </span>
+      ) : null}
+      {node.services.length ? (
+        <span className="server-topology__node-services">
+          {node.services.slice(0, SERVICE_ROWS_BY_SIZE[node.size]).map((service) => {
+            const result = serviceProbeResults[topologyServiceProbeId(node.id, service.id)]
+            const fresh = result && Date.now() - result.checkedAt <= TOPOLOGY_SERVICE_RESULT_MAX_AGE_MS
+            const state = fresh ? result.status : 'unknown'
+            const indicatorStatus =
+              state === 'reachable' ? 'connected' : state === 'unreachable' ? 'disconnected' : 'idle'
+            const statusLabel =
+              state === 'reachable'
+                ? t.serverTopologyServiceReachable
+                : state === 'unreachable'
+                  ? t.serverTopologyServiceUnreachable
+                  : t.serverTopologyServiceUnknown
+            return (
+              <span
+                className="server-topology__node-service"
+                key={service.id}
+                title={`${service.host}:${service.port}`}
+              >
+                <span>{service.name}</span>
+                <span className="server-topology__service-state">
+                  <StatusIndicator aria-hidden="true" status={indicatorStatus} />
+                  {statusLabel}
+                </span>
+              </span>
+            )
+          })}
+          {node.services.length > SERVICE_ROWS_BY_SIZE[node.size] ? (
+            <small>{`+${node.services.length - SERVICE_ROWS_BY_SIZE[node.size]}`}</small>
+          ) : null}
         </span>
       ) : null}
     </button>

@@ -7,7 +7,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react'
-import type { ConnectionProfile, SessionSnapshot, SystemMetrics, WorkspaceTab } from '@fileterm/core'
+import type {
+  ConnectionProfile,
+  SessionSnapshot,
+  SystemMetrics,
+  TopologyTcpProbeTarget,
+  TopologyTcpProbeResult,
+  WorkspaceTab
+} from '@fileterm/core'
+import { getConnectionCapabilities } from '@fileterm/core'
 import { getUiFontScaleRatio } from '../../app/ui-font-scale'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { Button } from '../../components/common/button/button'
@@ -21,6 +29,8 @@ import { resolveMonitoringSource } from '../system/shared-monitoring'
 import { StatusIndicator } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { NodeDisplaySettings } from './server-topology/node-display-settings'
+import { NodeIdentitySettings } from './server-topology/node-identity-settings'
+import { ServiceStatusSettings } from './server-topology/service-status-settings'
 import { TopologyCanvasViewport } from './server-topology/topology-canvas-viewport'
 import { ServerProfileActions } from './server-profile-actions'
 import { TopologyNodeCard } from './server-topology/node-card'
@@ -29,21 +39,31 @@ import {
   addTopologyNode,
   addTopologyNodes,
   decodeTopologyBoard,
+  LEGACY_TOPOLOGY_STORAGE_KEY,
   moveTopologyNode,
   removeTopologyNode,
   TOPOLOGY_LINK_NAME_LIMIT,
+  TOPOLOGY_SERVICE_BOARD_LIMIT,
+  TOPOLOGY_SERVICE_RESULT_MAX_AGE_MS,
   TOPOLOGY_STORAGE_KEY,
   topologyLinkEndpoints,
   topologyLinkMatches,
   topologyNodeDimensions,
+  topologyServiceProbeId,
+  updateTopologyLink,
+  updateTopologyNodeIdentity,
   updateTopologyNodeMemo,
   updateTopologyNodeMetricOrder,
   updateTopologyNodeMetrics,
+  updateTopologyNodeServices,
   updateTopologyNodeSize,
   type TopologyBoard,
+  type TopologyLinkDirection,
+  type TopologyLinkKind,
   type TopologyLink,
   type TopologyNode,
   type TopologyNodeMetric,
+  type TopologyNodeRole,
   type TopologyNodeSize
 } from './server-topology-model'
 import { configuredTopologyRoutes, isTopologyProxyNode, topologyProxyAddress } from './server-topology-routes'
@@ -55,7 +75,8 @@ const KEYBOARD_STEP = 12
 const DRAG_THRESHOLD = 3
 const MAX_METRIC_AGE_MS = 120_000
 
-const linkKey = ([first, second]: TopologyLink) => JSON.stringify([first, second])
+const SERVICE_PROBE_INTERVAL_MS = 15_000
+const linkKey = ({ from, to }: TopologyLink) => JSON.stringify([from, to])
 
 type NodeDrag = {
   pointerId: number
@@ -95,7 +116,8 @@ function previewNode(button: HTMLButtonElement, node: TopologyNode, drag: NodeDr
 
 function loadBoard(fontScale: number) {
   try {
-    return decodeTopologyBoard(localStorage.getItem(TOPOLOGY_STORAGE_KEY), fontScale)
+    const stored = localStorage.getItem(TOPOLOGY_STORAGE_KEY) ?? localStorage.getItem(LEGACY_TOPOLOGY_STORAGE_KEY)
+    return decodeTopologyBoard(stored, fontScale)
   } catch {
     return null
   }
@@ -151,7 +173,10 @@ export function ServerTopologyPage({
   const [nodeCandidateId, setNodeCandidateId] = useState('')
   const [selectedLinkKey, setSelectedLinkKey] = useState('')
   const [linkName, setLinkName] = useState('')
+  const [linkKind, setLinkKind] = useState<TopologyLinkKind>('relation')
+  const [linkDirection, setLinkDirection] = useState<TopologyLinkDirection>('none')
   const [linkTo, setLinkTo] = useState('')
+  const [serviceProbeResults, setServiceProbeResults] = useState<Record<string, TopologyTcpProbeResult>>({})
   const [showRoutes, setShowRoutes] = useState(true)
   const [pendingRemoval, setPendingRemoval] = useState<'node' | 'link' | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -168,6 +193,10 @@ export function ServerTopologyPage({
   const { proxies, error: proxyError } = useProxyLibrary()
   const configured = useMemo(() => configuredTopologyRoutes(profiles, proxies), [profiles, proxies])
   const routeLinks = showRoutes ? configured.links : []
+  const serviceProbeProfileIds = useMemo(
+    () => new Set(profiles.filter((profile) => profile.type !== 'serial').map((profile) => profile.id)),
+    [profiles]
+  )
   const routeNodeIds = new Set(routeLinks.flatMap(({ from, to }) => [from, to]))
   const canvas = useMemo(() => {
     if (!board) return null
@@ -182,6 +211,76 @@ export function ServerTopologyPage({
       fontScale
     )
   }, [board, configured, fontScale, showRoutes])
+  const serviceProbeTargetsKey = JSON.stringify(
+    board?.nodes
+      .flatMap((node) =>
+        serviceProbeProfileIds.has(node.id)
+          ? node.services.map((service) => ({
+              id: topologyServiceProbeId(node.id, service.id),
+              host: service.host,
+              port: service.port
+            }))
+          : []
+      )
+      .slice(0, TOPOLOGY_SERVICE_BOARD_LIMIT) ?? []
+  )
+
+  useEffect(() => {
+    const serviceProbeTargets = JSON.parse(serviceProbeTargetsKey) as TopologyTcpProbeTarget[]
+    if (!serviceProbeTargets.length) {
+      setServiceProbeResults({})
+      return
+    }
+
+    let active = true
+    let inFlight = false
+    setServiceProbeResults((current) =>
+      Object.fromEntries(
+        serviceProbeTargets.map((target) => [
+          target.id,
+          current[target.id] ?? { id: target.id, status: 'unknown' as const, latencyMs: null, checkedAt: 0 }
+        ])
+      )
+    )
+    const probe = async () => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || inFlight) return
+      inFlight = true
+      try {
+        const results = await desktopApi.probeTopologyServices(serviceProbeTargets)
+        if (active) setServiceProbeResults(Object.fromEntries(results.map((result) => [result.id, result])))
+      } catch {
+        // Keep the last good sample until it ages out; a transient bridge error is not a service failure.
+        if (active) {
+          setServiceProbeResults((current) => {
+            const updated = { ...current }
+            let changed = false
+            for (const target of serviceProbeTargets) {
+              const previous = current[target.id]
+              if (
+                previous &&
+                previous.status !== 'unknown' &&
+                Date.now() - previous.checkedAt > TOPOLOGY_SERVICE_RESULT_MAX_AGE_MS
+              ) {
+                updated[target.id] = { ...previous, status: 'unknown', latencyMs: null }
+                changed = true
+              }
+            }
+            return changed ? updated : current
+          })
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+
+    void probe()
+    const interval = window.setInterval(() => void probe(), SERVICE_PROBE_INTERVAL_MS)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [serviceProbeTargetsKey])
 
   const save = (next: TopologyBoard) => {
     try {
@@ -207,19 +306,23 @@ export function ServerTopologyPage({
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]))
   const nodesById = new Map(canvas.nodes.map((node) => [node.id, node]))
   const visibleRouteLinks = routeLinks.filter(({ from, to }) => nodesById.has(from) && nodesById.has(to))
-  const manualLinks = board.links.filter(([first, second]) => nodesById.has(first) && nodesById.has(second))
+  const manualLinks = board.links.filter(({ from, to }) => nodesById.has(from) && nodesById.has(to))
   const available = profiles.filter((profile) => !nodesById.has(profile.id))
   const nodeCandidate = available.find((profile) => profile.id === nodeCandidateId)
   const selected = nodesById.get(selectedId)
   const selectedProfile = profilesById.get(selectedId)
+  const selectedSupportsMetrics = selectedProfile
+    ? getConnectionCapabilities(selectedProfile).resourceMonitoring
+    : false
+  const totalServiceChecks = board.nodes.reduce((total, node) => total + node.services.length, 0)
   const selectedProxy = configured.proxyNodes.get(selectedId)
   const statuses = new Map(canvas.nodes.map(({ id }) => [id, statusForProfile(id, workspaceTabs, sessions)]))
   const selectedConnection = statuses.get(selectedId)
   const selectedSystem = selectedConnection && sessions[selectedConnection.tab.id]?.systemMetrics?.identity.osName
   const relatedIds = (id: string) => {
     const manual = manualLinks
-      .filter(([first, second]) => first === id || second === id)
-      .map(([a, b]) => (a === id ? b : a))
+      .filter(({ from, to }) => from === id || to === id)
+      .map(({ from, to }) => (from === id ? to : from))
     const routes = visibleRouteLinks
       .filter(({ from, to }) => from === id || to === id)
       .map(({ from, to }) => (from === id ? to : from))
@@ -233,8 +336,14 @@ export function ServerTopologyPage({
   const selectedLink = board.links.find((link) => linkKey(link) === selectedLinkKey)
   const linkToRemove = selectedLink ?? linked
   const nodeName = (id: string) =>
-    profilesById.get(id)?.name ?? configured.proxyNodes.get(id)?.name ?? t.serverTopologyMissingProfile
-  const linkEndpoints = ([first, second]: TopologyLink) => `${nodeName(first)} ↔ ${nodeName(second)}`
+    nodesById.get(id)?.label?.trim() ||
+    profilesById.get(id)?.name ||
+    configured.proxyNodes.get(id)?.name ||
+    t.serverTopologyMissingProfile
+  const linkEndpoints = (link: TopologyLink) =>
+    `${nodeName(link.from)} ${
+      link.direction === 'forward' ? '→' : link.direction === 'reverse' ? '←' : link.direction === 'both' ? '↔' : '—'
+    } ${nodeName(link.to)}`
   const minWidth = Math.max(
     320,
     ...canvas.nodes.map((node) => node.x + topologyNodeDimensions(node, fontScale).width + 40)
@@ -258,17 +367,22 @@ export function ServerTopologyPage({
     if (key === selectedLinkKey) return
     selectNode('')
     setSelectedLinkKey(key)
-    setLinkName(link[2] ?? '')
+    setLinkName(link.name ?? '')
+    setLinkKind(link.kind)
+    setLinkDirection(link.direction)
     if (detailsScrollRef.current) detailsScrollRef.current.scrollTop = 0
   }
 
-  const saveLinkName = () => {
+  const saveLinkDetails = () => {
     if (!selectedLink) return
-    const [first, second] = selectedLink
     const name = linkName.trim()
-    const replacement: TopologyLink = name ? [first, second, name] : [first, second]
-    const next = { ...board, links: board.links.map((link) => (link === selectedLink ? replacement : link)) }
-    if (save(next)) setLinkName(name)
+    const replacement: TopologyLink = {
+      ...selectedLink,
+      kind: linkKind,
+      direction: linkDirection,
+      name: name || undefined
+    }
+    if (save(updateTopologyLink(board, selectedLink, replacement))) setLinkName(name)
   }
 
   const focusRelatedNode = (id: string) => {
@@ -339,7 +453,7 @@ export function ServerTopologyPage({
           label: group.querySelector('text'),
           first,
           second,
-          directed: group.dataset.configured !== undefined
+          directed: group.dataset.directed === 'true'
         }
       ]
     })
@@ -464,45 +578,57 @@ export function ServerTopologyPage({
                     markerHeight="8"
                     markerWidth="8"
                     markerUnits="userSpaceOnUse"
-                    orient="auto"
+                    orient="auto-start-reverse"
                     refX="8"
                     refY="4"
                   >
                     <path className="server-topology__route-arrow" d="M0 0 L8 4 L0 8 Z" />
                   </marker>
                 </defs>
-                {visibleRouteLinks.map(({ from, to, kind }) => (
-                  <g
-                    aria-hidden="true"
-                    className="server-topology__route"
-                    data-configured={kind}
-                    data-first={from}
-                    data-second={to}
-                    key={JSON.stringify([from, to, kind])}
-                  >
-                    <line
-                      className="server-topology__route-line"
-                      markerEnd={`url(#${arrowId})`}
-                      {...topologyLinkEndpoints(nodesById.get(from)!, nodesById.get(to)!, true, fontScale)}
-                    />
-                  </g>
-                ))}
-                {manualLinks.map((link) => {
-                  const [first, second, name] = link
-                  const a = nodesById.get(first)!
-                  const b = nodesById.get(second)!
-                  const key = linkKey(link)
-                  const isSelected = selectedLinkKey === key
-                  const endpoints = topologyLinkEndpoints(a, b, false, fontScale)
+                {visibleRouteLinks.map(({ from, to, kind }) => {
+                  const routeStatus = statuses.get(to)?.status ?? 'idle'
+                  const routeName = kind === 'jump' ? t.serverTopologyRouteJump : t.serverTopologyRouteProxy
+                  const label = `${routeName}: ${nodeName(from)} → ${nodeName(to)} · ${statusLabel(routeStatus)}`
                   return (
                     <g
-                      aria-label={name ? `${name} · ${linkEndpoints(link)}` : linkEndpoints(link)}
+                      aria-label={label}
+                      className="server-topology__route"
+                      data-configured={kind}
+                      data-directed="true"
+                      data-first={from}
+                      data-second={to}
+                      data-status={routeStatus}
+                      key={JSON.stringify([from, to, kind])}
+                      role="img"
+                    >
+                      <title>{label}</title>
+                      <line
+                        className="server-topology__route-line"
+                        markerEnd={`url(#${arrowId})`}
+                        {...topologyLinkEndpoints(nodesById.get(from)!, nodesById.get(to)!, true, fontScale)}
+                      />
+                    </g>
+                  )
+                })}
+                {manualLinks.map((link) => {
+                  const a = nodesById.get(link.from)!
+                  const b = nodesById.get(link.to)!
+                  const key = linkKey(link)
+                  const isSelected = selectedLinkKey === key
+                  const endpoints = topologyLinkEndpoints(a, b, link.direction !== 'none', fontScale)
+                  const markerStart = link.direction === 'reverse' || link.direction === 'both'
+                  const markerEnd = link.direction === 'forward' || link.direction === 'both'
+                  return (
+                    <g
+                      aria-label={link.name ? `${link.name} · ${linkEndpoints(link)}` : linkEndpoints(link)}
                       aria-pressed={isSelected}
                       className={
-                        isSelected || first === selectedId || second === selectedId ? 'is-selected' : undefined
+                        isSelected || link.from === selectedId || link.to === selectedId ? 'is-selected' : undefined
                       }
-                      data-first={first}
-                      data-second={second}
+                      data-directed={link.direction !== 'none'}
+                      data-first={link.from}
+                      data-kind={link.kind}
+                      data-second={link.to}
                       key={key}
                       onClick={() => selectLink(link)}
                       onKeyDown={(event) => {
@@ -514,8 +640,14 @@ export function ServerTopologyPage({
                       tabIndex={0}
                     >
                       <line aria-hidden="true" className="server-topology__link-hit" {...endpoints} />
-                      <line aria-hidden="true" className="server-topology__link-line" {...endpoints} />
-                      {name ? (
+                      <line
+                        aria-hidden="true"
+                        className="server-topology__link-line"
+                        markerEnd={markerEnd ? `url(#${arrowId})` : undefined}
+                        markerStart={markerStart ? `url(#${arrowId})` : undefined}
+                        {...endpoints}
+                      />
+                      {link.name ? (
                         <text
                           aria-hidden="true"
                           dominantBaseline="central"
@@ -523,7 +655,7 @@ export function ServerTopologyPage({
                           x={(endpoints.x1 + endpoints.x2) / 2}
                           y={(endpoints.y1 + endpoints.y2) / 2}
                         >
-                          {name}
+                          {link.name}
                         </text>
                       ) : null}
                     </g>
@@ -546,6 +678,7 @@ export function ServerTopologyPage({
                     node={node}
                     fontScale={fontScale}
                     name={nodeName(node.id)}
+                    role={proxy ? 'proxy' : node.role}
                     protocol={
                       profile ? protocol(profile) : (proxy?.type.toUpperCase() ?? t.serverTopologyMissingProfile)
                     }
@@ -553,7 +686,10 @@ export function ServerTopologyPage({
                     status={profile ? status : null}
                     statusLabel={statusLabel(status)}
                     metrics={profile ? liveMetrics(profile.id, workspaceTabs, sessions) : null}
-                    visibleMetrics={profile ? node.metrics : []}
+                    serviceProbeResults={serviceProbeResults}
+                    visibleMetrics={
+                      profile && getConnectionCapabilities(profile).resourceMonitoring ? node.metrics : []
+                    }
                     maskDetails={maskConnectionAddresses && (profile ? profile.type !== 'serial' : Boolean(proxy))}
                     maskConnectionAddresses={maskConnectionAddresses}
                     relatedDescription={
@@ -587,7 +723,7 @@ export function ServerTopologyPage({
                   className="server-topology__link-editor"
                   onSubmit={(event) => {
                     event.preventDefault()
-                    saveLinkName()
+                    saveLinkDetails()
                   }}
                 >
                   <label htmlFor="server-topology-link-name">{t.serverTopologyLinkName}</label>
@@ -597,8 +733,42 @@ export function ServerTopologyPage({
                     onChange={(event) => setLinkName(event.target.value)}
                     value={linkName}
                   />
+                  <span>{t.serverTopologyLinkKind}</span>
+                  <DropdownSelect
+                    ariaLabel={t.serverTopologyLinkKind}
+                    onChange={(value) => setLinkKind(value as TopologyLinkKind)}
+                    options={[
+                      { value: 'relation', label: t.serverTopologyLinkKindRelation },
+                      { value: 'dependency', label: t.serverTopologyLinkKindDependency },
+                      { value: 'traffic', label: t.serverTopologyLinkKindTraffic }
+                    ]}
+                    value={linkKind}
+                  />
+                  <span>{t.serverTopologyLinkDirection}</span>
+                  <DropdownSelect
+                    ariaLabel={t.serverTopologyLinkDirection}
+                    onChange={(value) => setLinkDirection(value as TopologyLinkDirection)}
+                    options={[
+                      { value: 'none', label: t.serverTopologyLinkDirectionNone },
+                      { value: 'forward', label: t.serverTopologyLinkDirectionForward },
+                      { value: 'reverse', label: t.serverTopologyLinkDirectionReverse },
+                      { value: 'both', label: t.serverTopologyLinkDirectionBoth }
+                    ]}
+                    value={linkDirection}
+                  />
+                  {linkKind === 'traffic' ? (
+                    <p className="server-topology__hint">{t.serverTopologyInterfaceTrafficHint}</p>
+                  ) : null}
                   <div className="server-topology__actions">
-                    <Button disabled={linkName.trim() === (selectedLink[2] ?? '')} size="panel" type="submit">
+                    <Button
+                      disabled={
+                        linkName.trim() === (selectedLink.name ?? '') &&
+                        linkKind === selectedLink.kind &&
+                        linkDirection === selectedLink.direction
+                      }
+                      size="panel"
+                      type="submit"
+                    >
                       {t.save}
                     </Button>
                     <Button onClick={() => setPendingRemoval('link')} size="panel" variant="ghost">
@@ -671,11 +841,22 @@ export function ServerTopologyPage({
                     ) : null}
                   </dl>
                 ) : null}
+                {selectedProfile ? (
+                  <NodeIdentitySettings
+                    key={selected.id}
+                    label={selected.label ?? ''}
+                    onSave={(role: TopologyNodeRole, label: string) =>
+                      save(updateTopologyNodeIdentity(storeLayout(), selected.id, role, label))
+                    }
+                    role={selected.role}
+                  />
+                ) : null}
                 <NodeDisplaySettings
                   size={selected.size}
-                  metrics={selectedProfile ? selected.metrics : []}
+                  metrics={selectedSupportsMetrics ? selected.metrics : []}
                   metricOrder={selected.metricOrder}
-                  showMetrics={Boolean(selectedProfile)}
+                  serviceCount={selected.services.length}
+                  showMetrics={selectedSupportsMetrics}
                   onSizeChange={(size: TopologyNodeSize) =>
                     save(updateTopologyNodeSize(storeLayout(), selected.id, size))
                   }
@@ -686,6 +867,17 @@ export function ServerTopologyPage({
                     save(updateTopologyNodeMetricOrder(storeLayout(), selected.id, metricOrder))
                   }
                 />
+                {selectedProfile && selectedProfile.type !== 'serial' ? (
+                  <ServiceStatusSettings
+                    key={`${selected.id}:${selectedProfile.host}`}
+                    defaultHost={selectedProfile.host}
+                    nodeId={selected.id}
+                    onChange={(services) => save(updateTopologyNodeServices(storeLayout(), selected.id, services))}
+                    results={serviceProbeResults}
+                    services={selected.services}
+                    totalServices={totalServiceChecks}
+                  />
+                ) : null}
                 {selectedProfile ? (
                   <ServerProfileActions
                     profile={selectedProfile}
@@ -734,7 +926,13 @@ export function ServerTopologyPage({
                           if (linked) setPendingRemoval('link')
                           else {
                             const stored = pinNodes(storeLayout(), [selectedId, selectedTarget])
-                            save({ ...stored, links: [...stored.links, [selectedId, selectedTarget]] })
+                            save({
+                              ...stored,
+                              links: [
+                                ...stored.links,
+                                { from: selectedId, to: selectedTarget, kind: 'relation', direction: 'none' }
+                              ]
+                            })
                           }
                         }}
                         size="panel"

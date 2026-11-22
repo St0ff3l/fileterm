@@ -12,6 +12,8 @@ import type {
   CommandBatchTarget,
   AppUpdateStatus,
   NetworkConnectionsSnapshot,
+  TopologyTcpProbeTarget,
+  TopologyTcpProbeResult,
   BackupDownloadMode,
   BackupUploadMode,
   FilePaneMode,
@@ -693,6 +695,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_set_monitoring_enabled', { tabId, generation, enabled }),
     getNetworkConnections: (tabId: string) =>
       invoke<NetworkConnectionsSnapshot>('app_get_network_connections', { tabId }),
+    probeTopologyServices: (targets: TopologyTcpProbeTarget[]) =>
+      invoke<TopologyTcpProbeResult[]>('app_probe_topology_services', { targets }),
     retryMonitoring: (tabId: string, generation: number) => invoke<void>('app_retry_monitoring', { tabId, generation }),
     reconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_reconnect_tab', { tabId }),
     disconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_disconnect_tab', { tabId }),

@@ -1019,6 +1019,19 @@ export interface SystemMetrics {
   topProcesses: SidebarProcessItem[]
 }
 
+export interface TopologyTcpProbeTarget {
+  id: string
+  host: string
+  port: number
+}
+
+export interface TopologyTcpProbeResult {
+  id: string
+  status: 'reachable' | 'unreachable' | 'unknown'
+  latencyMs: number | null
+  checkedAt: number
+}
+
 export function mergeSystemMetricsHistory(
   previousMetrics: SystemMetrics | undefined,
   nextMetrics: SystemMetrics,
@@ -3025,6 +3038,7 @@ export interface FileTermDesktopApi {
   hideSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
   setMonitoringEnabled(tabId: string, generation: number, enabled: boolean): Promise<WorkspaceSnapshot>
   getNetworkConnections(tabId: string): Promise<NetworkConnectionsSnapshot>
+  probeTopologyServices(targets: TopologyTcpProbeTarget[]): Promise<TopologyTcpProbeResult[]>
   retryMonitoring(tabId: string, generation: number): Promise<void>
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>

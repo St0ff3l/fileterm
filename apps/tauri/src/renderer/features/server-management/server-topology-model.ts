@@ -1,6 +1,13 @@
-export const TOPOLOGY_STORAGE_KEY = 'fileterm:server-topology:v1'
+export const TOPOLOGY_STORAGE_KEY = 'fileterm:server-topology:v2'
+export const LEGACY_TOPOLOGY_STORAGE_KEY = 'fileterm:server-topology:v1'
 export const TOPOLOGY_LINK_NAME_LIMIT = 64
 export const TOPOLOGY_MEMO_LIMIT = 2000
+export const TOPOLOGY_NODE_LABEL_LIMIT = 80
+export const TOPOLOGY_SERVICE_NAME_LIMIT = 64
+export const TOPOLOGY_SERVICE_HOST_LIMIT = 253
+export const TOPOLOGY_SERVICE_LIMIT = 16
+export const TOPOLOGY_SERVICE_BOARD_LIMIT = 64
+export const TOPOLOGY_SERVICE_RESULT_MAX_AGE_MS = 45_000
 
 export const TOPOLOGY_NODE_DIMENSIONS = {
   compact: { width: 184, height: 104 },
@@ -11,6 +18,18 @@ export const TOPOLOGY_NODE_DIMENSIONS = {
 export const TOPOLOGY_NODE_SIZES = Object.keys(TOPOLOGY_NODE_DIMENSIONS) as Array<keyof typeof TOPOLOGY_NODE_DIMENSIONS>
 export const TOPOLOGY_NODE_METRICS = ['ip', 'cpu', 'memory', 'disk', 'gpu', 'network', 'processes'] as const
 export const DEFAULT_TOPOLOGY_NODE_METRICS: TopologyNodeMetric[] = ['cpu', 'memory']
+export const TOPOLOGY_NODE_ROLES = [
+  'server',
+  'firewall',
+  'router',
+  'switch',
+  'database',
+  'storage',
+  'proxy',
+  'custom'
+] as const
+export const TOPOLOGY_LINK_KINDS = ['relation', 'dependency', 'traffic'] as const
+export const TOPOLOGY_LINK_DIRECTIONS = ['none', 'forward', 'reverse', 'both'] as const
 
 const COLUMN_WIDTH = 194
 const INSET = 20
@@ -20,22 +39,39 @@ const MAX_METRICS_BY_SIZE = { compact: 2, standard: 4, expanded: 7 } as const
 
 export type TopologyNodeSize = keyof typeof TOPOLOGY_NODE_DIMENSIONS
 export type TopologyNodeMetric = (typeof TOPOLOGY_NODE_METRICS)[number]
+export type TopologyNodeRole = (typeof TOPOLOGY_NODE_ROLES)[number]
+export type TopologyLinkKind = (typeof TOPOLOGY_LINK_KINDS)[number]
+export type TopologyLinkDirection = (typeof TOPOLOGY_LINK_DIRECTIONS)[number]
 export const DEFAULT_TOPOLOGY_NODE_METRIC_ORDER: TopologyNodeMetric[] = [...TOPOLOGY_NODE_METRICS]
+export type TopologyServiceCheck = { id: string; name: string; host: string; port: number }
 export type TopologyNode = {
   id: string
   x: number
   y: number
+  role: TopologyNodeRole
+  label?: string
   memo?: string
   routeOnly?: true
   size: TopologyNodeSize
   metrics: TopologyNodeMetric[]
   metricOrder: TopologyNodeMetric[]
+  services: TopologyServiceCheck[]
 }
-export type TopologyLink = [first: string, second: string, name?: string]
+export type TopologyLink = {
+  from: string
+  to: string
+  name?: string
+  kind: TopologyLinkKind
+  direction: TopologyLinkDirection
+}
 export type TopologyBoard = { nodes: TopologyNode[]; links: TopologyLink[] }
 
-export function topologyLinkMatches([a, b]: TopologyLink, first: string, second: string) {
-  return (a === first && b === second) || (a === second && b === first)
+export function topologyServiceProbeId(nodeId: string, serviceId: string) {
+  return JSON.stringify([nodeId, serviceId])
+}
+
+export function topologyLinkMatches(link: TopologyLink, first: string, second: string) {
+  return (link.from === first && link.to === second) || (link.from === second && link.to === first)
 }
 
 function validPosition(value: number) {
@@ -51,9 +87,16 @@ export function topologyNodeDimensions(node: Pick<TopologyNode, 'size'>, fontSca
   }
 }
 
-export function topologyNodeSizeForMetricCount(size: TopologyNodeSize, metricCount: number): TopologyNodeSize {
-  if (metricCount <= MAX_METRICS_BY_SIZE[size]) return size
-  if (size === 'compact') return metricCount <= MAX_METRICS_BY_SIZE.standard ? 'standard' : 'expanded'
+export function topologyNodeSizeForContent(
+  size: TopologyNodeSize,
+  metricCount: number,
+  serviceCount: number
+): TopologyNodeSize {
+  const serviceRowsBySize = { compact: 1, standard: 2, expanded: 4 } as const
+  const fits = (candidate: TopologyNodeSize) =>
+    metricCount + Math.min(serviceCount, serviceRowsBySize[candidate]) <= MAX_METRICS_BY_SIZE[candidate]
+  if (fits(size)) return size
+  if (size === 'compact') return fits('standard') ? 'standard' : 'expanded'
   return 'expanded'
 }
 
@@ -75,6 +118,7 @@ export function decodeTopologyBoard(raw: string | null, fontScale = 1): Topology
 
   const ids = new Set<string>()
   const nodes: TopologyNode[] = []
+  let totalServiceChecks = 0
   for (const node of value.nodes) {
     // Earlier boards stored grid cells. Resolve them to the original on-screen positions.
     const x = node?.x ?? (Number.isInteger(node?.column) ? INSET + node.column * COLUMN_WIDTH : NaN)
@@ -84,10 +128,47 @@ export function decodeTopologyBoard(raw: string | null, fontScale = 1): Topology
       throw new Error('Invalid topology node')
     }
     ids.add(node.id)
-    const { memo, routeOnly } = node
+    const { memo, routeOnly, label } = node
     if (memo !== undefined && (typeof memo !== 'string' || memo.length > TOPOLOGY_MEMO_LIMIT)) {
       throw new Error('Invalid topology memo')
     }
+    if (label !== undefined && (typeof label !== 'string' || label.length > TOPOLOGY_NODE_LABEL_LIMIT)) {
+      throw new Error('Invalid topology label')
+    }
+    const role = node.role ?? 'server'
+    if (!TOPOLOGY_NODE_ROLES.includes(role)) throw new Error('Invalid topology role')
+    const services = node.services ?? []
+    const serviceIds = new Set<string>()
+    let validServices = Array.isArray(services) && services.length <= TOPOLOGY_SERVICE_LIMIT
+    if (validServices) {
+      for (const service of services as TopologyServiceCheck[]) {
+        if (
+          !service ||
+          typeof service !== 'object' ||
+          typeof service.id !== 'string' ||
+          !service.id ||
+          service.id.length > 128 ||
+          serviceIds.has(service.id) ||
+          typeof service.name !== 'string' ||
+          !service.name.trim() ||
+          service.name.length > TOPOLOGY_SERVICE_NAME_LIMIT ||
+          typeof service.host !== 'string' ||
+          !service.host.trim() ||
+          service.host.length > TOPOLOGY_SERVICE_HOST_LIMIT ||
+          /\s/.test(service.host) ||
+          !Number.isInteger(service.port) ||
+          service.port < 1 ||
+          service.port > 65535
+        ) {
+          validServices = false
+          break
+        }
+        serviceIds.add(service.id)
+      }
+    }
+    if (!validServices) throw new Error('Invalid topology service checks')
+    totalServiceChecks += services.length
+    if (totalServiceChecks > TOPOLOGY_SERVICE_BOARD_LIMIT) throw new Error('Invalid topology service checks')
     const requestedSize = node.size ?? 'compact'
     if (!TOPOLOGY_NODE_SIZES.includes(requestedSize)) throw new Error('Invalid topology node size')
     const metrics = node.metrics ?? DEFAULT_TOPOLOGY_NODE_METRICS
@@ -108,32 +189,58 @@ export function decodeTopologyBoard(raw: string | null, fontScale = 1): Topology
     const metricOrder = completeTopologyMetricOrder(requestedMetricOrder as TopologyNodeMetric[])
     const enabledMetrics = new Set(normalizedMetrics)
     const orderedMetrics = metricOrder.filter((metric) => enabledMetrics.has(metric))
-    const size = topologyNodeSizeForMetricCount(requestedSize, orderedMetrics.length)
+    const size = topologyNodeSizeForContent(requestedSize, orderedMetrics.length, services.length)
     nodes.push({
       id: node.id,
       x,
       y,
+      role,
+      ...(label?.trim() ? { label: label.trim() } : {}),
       ...(memo ? { memo } : {}),
       ...(routeOnly === true ? { routeOnly: true } : {}),
       size,
       metrics: orderedMetrics,
-      metricOrder
+      metricOrder,
+      services: services.map((service: TopologyServiceCheck) => ({
+        ...service,
+        name: service.name.trim(),
+        host: service.host.trim()
+      }))
     })
   }
   const links: TopologyLink[] = []
-  for (const link of value.links) {
+  for (const rawLink of value.links) {
+    const link = Array.isArray(rawLink)
+      ? {
+          from: rawLink[0],
+          to: rawLink[1],
+          name: rawLink[2],
+          kind: 'relation',
+          direction: 'none'
+        }
+      : rawLink
     if (
-      !Array.isArray(link) ||
-      (link.length !== 2 && !(link.length === 3 && typeof link[2] === 'string')) ||
-      !ids.has(link[0]) ||
-      !ids.has(link[1]) ||
-      link[0] === link[1] ||
-      links.some((existing) => topologyLinkMatches(existing, link[0], link[1]))
+      !link ||
+      typeof link.from !== 'string' ||
+      typeof link.to !== 'string' ||
+      !ids.has(link.from) ||
+      !ids.has(link.to) ||
+      link.from === link.to ||
+      !TOPOLOGY_LINK_KINDS.includes(link.kind ?? 'relation') ||
+      !TOPOLOGY_LINK_DIRECTIONS.includes(link.direction ?? 'none') ||
+      (link.name !== undefined && typeof link.name !== 'string') ||
+      links.some((existing) => topologyLinkMatches(existing, link.from, link.to))
     ) {
       throw new Error('Invalid topology link')
     }
-    const name = link[2]?.trim().slice(0, TOPOLOGY_LINK_NAME_LIMIT)
-    links.push(name ? [link[0], link[1], name] : [link[0], link[1]])
+    const name = link.name?.trim().slice(0, TOPOLOGY_LINK_NAME_LIMIT)
+    links.push({
+      from: link.from,
+      to: link.to,
+      kind: link.kind ?? 'relation',
+      direction: link.direction ?? 'none',
+      ...(name ? { name } : {})
+    })
   }
   return { nodes, links }
 }
@@ -172,9 +279,11 @@ export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>, fo
           id,
           x,
           y,
+          role: 'server',
           size: 'compact',
           metrics: [...DEFAULT_TOPOLOGY_NODE_METRICS],
-          metricOrder: [...DEFAULT_TOPOLOGY_NODE_METRIC_ORDER]
+          metricOrder: [...DEFAULT_TOPOLOGY_NODE_METRIC_ORDER],
+          services: []
         })
         present.add(id)
         break
@@ -222,10 +331,48 @@ export function updateTopologyNodeMemo(board: TopologyBoard, id: string, memo: s
   return { ...board, nodes: board.nodes.map((item) => (item === node ? { ...node, memo: memo || undefined } : item)) }
 }
 
+export function updateTopologyNodeIdentity(
+  board: TopologyBoard,
+  id: string,
+  role: TopologyNodeRole,
+  label: string
+): TopologyBoard {
+  const node = board.nodes.find((item) => item.id === id)
+  if (!node) return board
+  const normalizedLabel = label.trim().slice(0, TOPOLOGY_NODE_LABEL_LIMIT)
+  if (node.role === role && (node.label ?? '') === normalizedLabel) return board
+  return {
+    ...board,
+    nodes: board.nodes.map((item) => (item === node ? { ...node, role, label: normalizedLabel || undefined } : item))
+  }
+}
+
+export function updateTopologyNodeServices(board: TopologyBoard, id: string, services: TopologyServiceCheck[]) {
+  const node = board.nodes.find((item) => item.id === id)
+  if (!node || services.length > TOPOLOGY_SERVICE_LIMIT) return board
+  return {
+    ...board,
+    nodes: board.nodes.map((item) =>
+      item === node
+        ? {
+            ...node,
+            services: [...services],
+            size: topologyNodeSizeForContent(node.size, node.metrics.length, services.length)
+          }
+        : item
+    )
+  }
+}
+
+export function updateTopologyLink(board: TopologyBoard, link: TopologyLink, replacement: TopologyLink) {
+  if (!board.links.includes(link)) return board
+  return { ...board, links: board.links.map((item) => (item === link ? replacement : item)) }
+}
+
 export function updateTopologyNodeSize(board: TopologyBoard, id: string, size: TopologyNodeSize): TopologyBoard {
   const node = board.nodes.find((item) => item.id === id)
   if (!node) return board
-  const resolvedSize = topologyNodeSizeForMetricCount(size, node.metrics.length)
+  const resolvedSize = topologyNodeSizeForContent(size, node.metrics.length, node.services.length)
   if (node.size === resolvedSize) return board
   return { ...board, nodes: board.nodes.map((item) => (item === node ? { ...node, size: resolvedSize } : item)) }
 }
@@ -245,7 +392,7 @@ export function updateTopologyNodeMetrics(
     orderedMetrics.every((metric, index) => metric === node.metrics[index])
   )
     return board
-  const size = topologyNodeSizeForMetricCount(node.size, orderedMetrics.length)
+  const size = topologyNodeSizeForContent(node.size, orderedMetrics.length, node.services.length)
   return {
     ...board,
     nodes: board.nodes.map((item) => (item === node ? { ...node, metrics: orderedMetrics, size } : item))
@@ -272,6 +419,6 @@ export function updateTopologyNodeMetricOrder(
 export function removeTopologyNode(board: TopologyBoard, id: string): TopologyBoard {
   return {
     nodes: board.nodes.filter((node) => node.id !== id),
-    links: board.links.filter(([first, second]) => first !== id && second !== id)
+    links: board.links.filter(({ from, to }) => from !== id && to !== id)
   }
 }
