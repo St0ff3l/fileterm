@@ -11,6 +11,23 @@
   margin-right: var(--ai-copilot-panel-width);
 }
 
+/*
+ * The Copilot panel is absolutely positioned with `right: 0`, so it anchors to
+ * its nearest positioned ancestor. .fs-main reserves the panel's column through
+ * `margin-right`, but a margin sits outside the padding box and therefore does
+ * not move that ancestor's right edge: anchoring to .fs-main left the panel
+ * parked at the start of the reserved strip and exposed an empty band the width
+ * of the panel along the window's right edge.
+ *
+ * Dropping .fs-main's positioning here hands the panel back to .fs-shell, whose
+ * width is the full window. The keep-alive items that rely on `position:
+ * relative` sit inside .workspace-content-stack, which establishes its own
+ * positioning context, so they are unaffected.
+ */
+.fs-shell.has-ai-copilot .fs-main {
+  position: static;
+}
+
 .fs-shell.has-ai-copilot::after {
   display: none;
 }
