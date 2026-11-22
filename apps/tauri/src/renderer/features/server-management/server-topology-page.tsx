@@ -711,6 +711,7 @@ export function ServerTopologyPage({
         <aside
           className="server-topology__details"
           aria-label={selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}
+          data-selection={selectedLink ? 'link' : selected ? 'node' : 'none'}
         >
           <div className="server-topology__details-scroll" ref={detailsScrollRef}>
             <h2>{selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}</h2>

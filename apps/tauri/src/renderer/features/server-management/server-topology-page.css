@@ -17,6 +17,8 @@
 }
 
 .server-topology .server-management-page-header {
+  position: relative;
+  z-index: 2;
   flex-wrap: wrap;
 }
 
@@ -38,6 +40,8 @@
 }
 
 .server-topology__body {
+  position: relative;
+  z-index: 0;
   display: grid;
   flex: 1;
   grid-template-columns: minmax(0, 1fr) calc(264px + var(--app-ui-layout-extra-md, 0px));
@@ -47,11 +51,18 @@
 
 .server-topology__details {
   position: relative;
+  z-index: 1;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-card);
+}
+
+.server-topology__details[data-selection='none']
+  .server-topology__details-scroll
+  > :not(h2, .server-topology__hint, .server-topology__error) {
+  display: none;
 }
 
 .server-topology__details-scroll {
