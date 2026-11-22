@@ -39,20 +39,20 @@ fn valid_probe_target(target: &TopologyTcpProbeTarget) -> bool {
         && target.port > 0
 }
 
-async fn probe_topology_target(target: TopologyTcpProbeTarget, checked_at: u64) -> TopologyTcpProbeResult {
+async fn probe_topology_target(
+    target: TopologyTcpProbeTarget,
+    checked_at: u64,
+) -> TopologyTcpProbeResult {
     let started = Instant::now();
     let result = timeout(
         TOPOLOGY_PROBE_TIMEOUT,
         TcpStream::connect((target.host.as_str(), target.port)),
     )
     .await;
-    let latency_ms = result
-        .ok()
-        .and_then(Result::ok)
-        .map(|stream| {
-            drop(stream);
-            started.elapsed().as_millis().min(u64::MAX as u128) as u64
-        });
+    let latency_ms = result.ok().and_then(Result::ok).map(|stream| {
+        drop(stream);
+        started.elapsed().as_millis().min(u64::MAX as u128) as u64
+    });
 
     TopologyTcpProbeResult {
         id: target.id,
@@ -93,8 +93,9 @@ pub async fn app_probe_topology_services(
         .min(u64::MAX as u128) as u64;
     let mut pending = targets.into_iter().enumerate();
     let mut tasks = JoinSet::new();
-    let mut results: Vec<Option<TopologyTcpProbeResult>> =
-        std::iter::repeat_with(|| None).take(pending.len()).collect();
+    let mut results: Vec<Option<TopologyTcpProbeResult>> = std::iter::repeat_with(|| None)
+        .take(pending.len())
+        .collect();
 
     for _ in 0..TOPOLOGY_PROBE_CONCURRENCY {
         if let Some((index, target)) = pending.next() {
