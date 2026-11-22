@@ -30,6 +30,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             ui_font_scale_percent: default_ui_font_scale_percent(),
             remember_window_size: default_remember_window_size(),
             workspace_mode: default_workspace_mode(),
+            topology_service_probe_interval_seconds: default_topology_service_probe_interval_seconds(),
             compact_tab_bar: default_compact_tab_bar(),
             mask_connection_addresses: default_mask_connection_addresses(),
             legacy_file_list_font_size: None,
@@ -141,6 +142,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(workspace_mode) = input.workspace_mode {
         preferences.workspace_mode = workspace_mode;
+    }
+    if let Some(interval) = input.topology_service_probe_interval_seconds {
+        preferences.topology_service_probe_interval_seconds = interval;
     }
     if let Some(compact_tab_bar) = input.compact_tab_bar {
         preferences.compact_tab_bar = compact_tab_bar;
@@ -393,6 +397,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             ui_font_scale_percent: None,
             remember_window_size: None,
             workspace_mode: None,
+            topology_service_probe_interval_seconds: None,
             compact_tab_bar: None,
             mask_connection_addresses: None,
             local_terminal_shells: None,
@@ -437,6 +442,7 @@ pub fn app_toggle_ui_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError
             ui_font_scale_percent: None,
             remember_window_size: None,
             workspace_mode: None,
+            topology_service_probe_interval_seconds: None,
             compact_tab_bar: None,
             mask_connection_addresses: None,
             local_terminal_shells: None,
@@ -488,6 +494,7 @@ pub fn app_adjust_ui_zoom(app: AppHandle, operation: &str) -> Result<UiPreferenc
             ui_font_scale_percent: None,
             remember_window_size: None,
             workspace_mode: None,
+            topology_service_probe_interval_seconds: None,
             compact_tab_bar: None,
             mask_connection_addresses: None,
             local_terminal_shells: None,

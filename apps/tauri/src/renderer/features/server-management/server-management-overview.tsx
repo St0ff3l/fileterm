@@ -16,6 +16,7 @@ import { MaterialIcon } from '../../components/common/material-icon/material-ico
 import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
+import { MaskedAddressText } from '../system/system-resource-meters'
 import { formatMessage, getLocale, t } from '../../i18n'
 import {
   getConnectionHistory,
@@ -137,6 +138,7 @@ export function ServerManagementOverview({
   commandFolders,
   commandTemplates,
   folders,
+  maskConnectionAddresses,
   sessions,
   workspaceTabs,
   focusedProfileId,
@@ -157,6 +159,7 @@ export function ServerManagementOverview({
   commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
   folders: ConnectionFolder[]
+  maskConnectionAddresses: boolean
   sessions: Record<string, SessionSnapshot>
   workspaceTabs: WorkspaceTab[]
   focusedProfileId?: string | null
@@ -529,6 +532,7 @@ export function ServerManagementOverview({
               batchEligible={(id) => batchTargets.has(id)}
               batchLimitReached={batchLimitReached}
               checkedProfiles={checkedProfiles}
+              maskConnectionAddresses={maskConnectionAddresses}
               label={title}
               onCheck={checkBatchProfile}
               onClearSelection={clearSelection}
@@ -577,7 +581,13 @@ export function ServerManagementOverview({
                           {statusLabel(connectionBadgeStatus)}
                         </span>
                       )}
-                      <span className="server-dashboard-address">{connectionProfileSummary(profile)}</span>
+                      <span className="server-dashboard-address">
+                        {maskConnectionAddresses && profile.type !== 'serial' ? (
+                          <MaskedAddressText value={connectionProfileSummary(profile)} />
+                        ) : (
+                          connectionProfileSummary(profile)
+                        )}
+                      </span>
                     </span>
                     <span className="server-dashboard-resources">
                       <ResourceRing label="CPU" value={resources.cpu} />
@@ -662,10 +672,23 @@ export function ServerManagementOverview({
                       {statusLabel(selectedBadgeStatus)}
                     </span>
                   </div>
-                  <p className="server-inspector-address" title={connectionProfileSummary(selectedProfile)}>
-                    {selectedProfile.type === 'serial'
-                      ? connectionProfileSummary(selectedProfile)
-                      : `${selectedProfile.username}@${selectedProfile.host}:${selectedProfile.port}`}
+                  <p
+                    className="server-inspector-address"
+                    title={
+                      maskConnectionAddresses && selectedProfile.type !== 'serial'
+                        ? undefined
+                        : connectionProfileSummary(selectedProfile)
+                    }
+                  >
+                    {maskConnectionAddresses && selectedProfile.type !== 'serial' ? (
+                      <MaskedAddressText
+                        value={`${selectedProfile.username}@${selectedProfile.host}:${selectedProfile.port}`}
+                      />
+                    ) : selectedProfile.type === 'serial' ? (
+                      connectionProfileSummary(selectedProfile)
+                    ) : (
+                      `${selectedProfile.username}@${selectedProfile.host}:${selectedProfile.port}`
+                    )}
                   </p>
                 </div>
 

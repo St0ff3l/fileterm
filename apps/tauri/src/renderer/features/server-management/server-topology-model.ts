@@ -339,11 +339,11 @@ export function updateTopologyNodeIdentity(
 ): TopologyBoard {
   const node = board.nodes.find((item) => item.id === id)
   if (!node) return board
-  const normalizedLabel = label.trim().slice(0, TOPOLOGY_NODE_LABEL_LIMIT)
-  if (node.role === role && (node.label ?? '') === normalizedLabel) return board
+  const nextLabel = label.slice(0, TOPOLOGY_NODE_LABEL_LIMIT) || undefined
+  if (node.role === role && (node.label ?? '') === (nextLabel ?? '')) return board
   return {
     ...board,
-    nodes: board.nodes.map((item) => (item === node ? { ...node, role, label: normalizedLabel || undefined } : item))
+    nodes: board.nodes.map((item) => (item === node ? { ...node, role, label: nextLabel } : item))
   }
 }
 

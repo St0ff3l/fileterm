@@ -5,6 +5,7 @@ import { AppIcon } from '../common/app-icon'
 import { SelectionControl } from '../common/selection-control'
 import { StatusIndicator } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
+import { MaskedAddressText } from '../system/system-resource-meters'
 import {
   nextServerListSort,
   sortServerListRows,
@@ -20,6 +21,7 @@ export function ServerManagementList({
   batchEligible,
   batchLimitReached,
   checkedProfiles,
+  maskConnectionAddresses,
   rows,
   sort,
   selectedId,
@@ -32,6 +34,7 @@ export function ServerManagementList({
   batchEligible(id: string): boolean
   batchLimitReached: boolean
   checkedProfiles: ReadonlySet<string>
+  maskConnectionAddresses: boolean
   rows: ServerListRow[]
   sort: ServerListSort | null
   selectedId: string | undefined
@@ -116,7 +119,13 @@ export function ServerManagementList({
                       <span className="server-management-list-name">{row.name}</span>
                     </Button>
                   </th>
-                  <td>{row.address}</td>
+                  <td>
+                    {maskConnectionAddresses && row.protocol !== 'serial' ? (
+                      <MaskedAddressText value={row.address} />
+                    ) : (
+                      row.address
+                    )}
+                  </td>
                   <td>{row.protocol.toUpperCase()}</td>
                   <td>
                     <span className={`server-dashboard-status is-${row.status}`}>

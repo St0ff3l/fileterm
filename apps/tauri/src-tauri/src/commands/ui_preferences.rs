@@ -69,6 +69,8 @@ pub struct UiPreferences {
     pub remember_window_size: bool,
     #[serde(default = "default_workspace_mode", alias = "tabBarLayout")]
     pub workspace_mode: String,
+    #[serde(default = "default_topology_service_probe_interval_seconds")]
+    pub topology_service_probe_interval_seconds: i32,
     #[serde(default = "default_compact_tab_bar")]
     pub compact_tab_bar: bool,
     #[serde(default = "default_mask_connection_addresses")]
@@ -126,6 +128,7 @@ pub struct UiPreferencesInput {
     pub remember_window_size: Option<bool>,
     #[serde(alias = "tabBarLayout")]
     pub workspace_mode: Option<String>,
+    pub topology_service_probe_interval_seconds: Option<i32>,
     pub compact_tab_bar: Option<bool>,
     pub mask_connection_addresses: Option<bool>,
     pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
@@ -262,6 +265,10 @@ fn default_remember_window_size() -> bool {
 
 fn default_workspace_mode() -> String {
     "standard".to_string()
+}
+
+fn default_topology_service_probe_interval_seconds() -> i32 {
+    60
 }
 
 fn default_compact_tab_bar() -> bool {
@@ -528,6 +535,13 @@ fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
 }
 
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
+    if !matches!(
+        preferences.topology_service_probe_interval_seconds,
+        20 | 30 | 60 | 120 | 300
+    ) {
+        preferences.topology_service_probe_interval_seconds =
+            default_topology_service_probe_interval_seconds();
+    }
     if preferences.diagnostic_log_defaults_version < 2 {
         preferences.diagnostic_log_categories = crate::services::logging::migrate_categories(preferences.diagnostic_log_categories);
         preferences.diagnostic_log_defaults_version = 2;

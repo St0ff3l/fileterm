@@ -530,6 +530,7 @@ export function HomeWorkspace({
                   commandFolders={commandFolders}
                   commandTemplates={commandTemplates}
                   profiles={profiles}
+                  maskConnectionAddresses={maskConnectionAddresses}
                   folders={folders}
                   sessions={sessions}
                   workspaceTabs={managementTabs}
@@ -578,6 +579,7 @@ export function HomeWorkspace({
                 onActivateSession={tabBarProps.onActivateSession}
                 onEditConnection={onEditConnection}
                 maskConnectionAddresses={maskConnectionAddresses}
+                topologyServiceProbeIntervalSeconds={uiPreferences?.topologyServiceProbeIntervalSeconds}
               />
             </div>
           )}

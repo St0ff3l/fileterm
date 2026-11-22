@@ -4,6 +4,7 @@ import { Button } from '../../../components/common/button/button'
 import { Input } from '../../../components/common/input/input'
 import { StatusIndicator } from '../../common/status-indicator'
 import { t } from '../../../i18n'
+import { TopologySettingsDisclosure } from './topology-settings-disclosure'
 import {
   TOPOLOGY_SERVICE_HOST_LIMIT,
   TOPOLOGY_SERVICE_BOARD_LIMIT,
@@ -83,8 +84,11 @@ export function ServiceStatusSettings({
   const removeService = (serviceId: string) => onChange(services.filter(({ id: currentId }) => currentId !== serviceId))
 
   return (
-    <section className="server-topology__services">
-      <h3>{t.serverTopologyServices}</h3>
+    <TopologySettingsDisclosure
+      className="server-topology__services"
+      storageKey="fileterm:server-topology:service-settings-expanded"
+      title={t.serverTopologyServices}
+    >
       {services.length ? (
         <ul>
           {services.map((service) => {
@@ -147,13 +151,7 @@ export function ServiceStatusSettings({
           value={host}
         />
         <label htmlFor={`${id}-port`}>{t.serverTopologyServicePort}</label>
-        <Input
-          id={`${id}-port`}
-          inputMode="numeric"
-          onChange={(event) => setPort(event.target.value)}
-          type="number"
-          value={port}
-        />
+        <Input id={`${id}-port`} inputMode="numeric" onChange={(event) => setPort(event.target.value)} value={port} />
         {error ? (
           <p className="server-topology__error" role="alert">
             {error}
@@ -163,6 +161,6 @@ export function ServiceStatusSettings({
           {t.serverTopologyServiceAdd}
         </Button>
       </form>
-    </section>
+    </TopologySettingsDisclosure>
   )
 }

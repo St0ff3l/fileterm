@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId } from 'react'
 import { Button } from '../../../components/common/button/button'
 import { DropdownSelect } from '../../../components/common/dropdown-select/dropdown-select'
 import { Input } from '../../../components/common/input/input'
@@ -19,47 +19,37 @@ const roleLabels: Record<TopologyNodeRole, string> = {
 export function NodeIdentitySettings({
   role,
   label,
-  onSave
+  onChange
 }: {
   role: TopologyNodeRole
   label: string
-  onSave(role: TopologyNodeRole, label: string): void
+  onChange(role: TopologyNodeRole, label: string): void
 }) {
   const id = useId()
-  const [draftRole, setDraftRole] = useState(role)
-  const [draftLabel, setDraftLabel] = useState(label)
-
-  useEffect(() => {
-    setDraftRole(role)
-    setDraftLabel(label)
-  }, [role, label])
-
-  const changed = draftRole !== role || draftLabel.trim() !== label
 
   return (
     <section className="server-topology__identity-settings">
-      <h3>{t.serverTopologyNodeRole}</h3>
       <label htmlFor={`${id}-role`}>{t.serverTopologyNodeRole}</label>
       <DropdownSelect
         id={`${id}-role`}
         ariaLabel={t.serverTopologyNodeRole}
-        onChange={(value) => setDraftRole(value as TopologyNodeRole)}
+        onChange={(value) => onChange(value as TopologyNodeRole, label)}
         options={TOPOLOGY_NODE_ROLES.map((value) => ({ value, label: roleLabels[value] }))}
-        value={draftRole}
+        value={role}
       />
-      <label htmlFor={`${id}-label`}>{t.serverTopologyNodeLabel}</label>
+      <div className="server-topology__identity-label">
+        <label htmlFor={`${id}-label`}>{t.serverTopologyNodeLabel}</label>
+        <Button disabled={!label} onClick={() => onChange(role, '')} size="panel" variant="ghost">
+          {t.serverTopologyNodeLabelRestore}
+        </Button>
+      </div>
       <Input
         id={`${id}-label`}
         maxLength={TOPOLOGY_NODE_LABEL_LIMIT}
-        onChange={(event) => setDraftLabel(event.target.value)}
+        onChange={(event) => onChange(role, event.target.value)}
         placeholder={t.serverTopologyNodeLabelPlaceholder}
-        value={draftLabel}
+        value={label}
       />
-      <div className="server-topology__actions">
-        <Button disabled={!changed} onClick={() => onSave(draftRole, draftLabel)} size="panel">
-          {t.save}
-        </Button>
-      </div>
     </section>
   )
 }

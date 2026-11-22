@@ -83,11 +83,13 @@ export function TopologyNodeCard({
   maskConnectionAddresses,
   relatedDescription,
   selected,
+  positionOffset,
   onClick,
   onKeyDown,
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onPointerCancel,
   onLostPointerCapture
 }: {
   node: TopologyNode
@@ -105,11 +107,13 @@ export function TopologyNodeCard({
   maskConnectionAddresses: boolean
   relatedDescription?: string
   selected: boolean
+  positionOffset?: { x: number; y: number }
   onClick(): void
   onKeyDown(event: KeyboardEvent<HTMLButtonElement>): void
   onPointerDown(event: PointerEvent<HTMLButtonElement>): void
   onPointerMove(event: PointerEvent<HTMLButtonElement>): void
   onPointerUp(event: PointerEvent<HTMLButtonElement>): void
+  onPointerCancel(event: PointerEvent<HTMLButtonElement>): void
   onLostPointerCapture(event: PointerEvent<HTMLButtonElement>): void
 }) {
   const dimensions = topologyNodeDimensions(node, fontScale)
@@ -128,10 +132,16 @@ export function TopologyNodeCard({
       onClick={onClick}
       onKeyDown={onKeyDown}
       onLostPointerCapture={onLostPointerCapture}
+      onPointerCancel={onPointerCancel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      style={{ left: node.x, top: node.y, width: dimensions.width, height: dimensions.height }}
+      style={{
+        left: node.x + (positionOffset?.x ?? 0),
+        top: node.y + (positionOffset?.y ?? 0),
+        width: dimensions.width,
+        height: dimensions.height
+      }}
       title={`${name}${details ? ` · ${maskDetails ? '••••••••' : details}` : ''}`}
       type="button"
     >

@@ -2297,6 +2297,9 @@ export const DEFAULT_COMPACT_TAB_BAR = false
  * by a screenshot or a shoulder-level glance.
  */
 export const DEFAULT_MASK_CONNECTION_ADDRESSES = false
+export const TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS = [20, 30, 60, 120, 300] as const
+export type TopologyServiceProbeIntervalSeconds = (typeof TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS)[number]
+export const DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS: TopologyServiceProbeIntervalSeconds = 60
 
 export interface UiPreferences {
   theme: ThemeMode
@@ -2320,6 +2323,7 @@ export interface UiPreferences {
   uiFontScalePercent: number
   rememberWindowSize: boolean
   workspaceMode: WorkspaceMode
+  topologyServiceProbeIntervalSeconds: TopologyServiceProbeIntervalSeconds
   compactTabBar: boolean
   maskConnectionAddresses: boolean
   localTerminalShells: LocalTerminalShellPreferences
@@ -2356,6 +2360,7 @@ export interface UiPreferencesInput {
   uiFontScalePercent?: number
   rememberWindowSize?: boolean
   workspaceMode?: WorkspaceMode
+  topologyServiceProbeIntervalSeconds?: TopologyServiceProbeIntervalSeconds
   compactTabBar?: boolean
   maskConnectionAddresses?: boolean
   localTerminalShells?: Partial<LocalTerminalShellPreferences>

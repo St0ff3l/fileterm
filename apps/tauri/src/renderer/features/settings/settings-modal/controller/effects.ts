@@ -42,6 +42,7 @@ export function useSettingsModalEffects({
     setUiZoomPercent,
     setUiFontScalePercent,
     setMaskConnectionAddresses,
+    setTopologyServiceProbeIntervalSeconds,
     setMcpAgentPreferences,
     setConnectionDefaults,
     setTransferSidebarCollapsedByDefault,
@@ -150,6 +151,7 @@ export function useSettingsModalEffects({
       setUiZoomPercent(preferences.uiZoomPercent)
       setUiFontScalePercent(preferences.uiFontScalePercent)
       setMaskConnectionAddresses(preferences.maskConnectionAddresses)
+      setTopologyServiceProbeIntervalSeconds(preferences.topologyServiceProbeIntervalSeconds)
       setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
       setTransferSidebarCollapsedByDefault(preferences.transferSidebarCollapsedByDefault)

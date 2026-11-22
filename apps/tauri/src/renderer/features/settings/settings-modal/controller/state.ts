@@ -7,6 +7,7 @@ import {
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS,
   type AiProviderDraft,
   type AiProviderSummary,
   type AppUpdateStatus,
@@ -96,6 +97,11 @@ export function useSettingsModalState(initialTab: SettingsTab, uiPreferences?: U
   const [maskConnectionAddresses, setMaskConnectionAddresses] = useState(
     () => uiPreferences?.maskConnectionAddresses ?? DEFAULT_MASK_CONNECTION_ADDRESSES
   )
+  const [topologyServiceProbeIntervalSeconds, setTopologyServiceProbeIntervalSeconds] = useState(
+    () => uiPreferences?.topologyServiceProbeIntervalSeconds ?? DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS
+  )
+  const [isSavingTopologyServiceProbeInterval, setIsSavingTopologyServiceProbeInterval] = useState(false)
+  const [topologyServiceProbeIntervalError, setTopologyServiceProbeIntervalError] = useState<string | null>(null)
   const [isSavingMaskConnectionAddresses, setIsSavingMaskConnectionAddresses] = useState(false)
   const [maskConnectionAddressesError, setMaskConnectionAddressesError] = useState<string | null>(null)
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
@@ -274,6 +280,12 @@ export function useSettingsModalState(initialTab: SettingsTab, uiPreferences?: U
     setUiFontScalePercentError,
     maskConnectionAddresses,
     setMaskConnectionAddresses,
+    topologyServiceProbeIntervalSeconds,
+    setTopologyServiceProbeIntervalSeconds,
+    isSavingTopologyServiceProbeInterval,
+    setIsSavingTopologyServiceProbeInterval,
+    topologyServiceProbeIntervalError,
+    setTopologyServiceProbeIntervalError,
     isSavingMaskConnectionAddresses,
     setIsSavingMaskConnectionAddresses,
     maskConnectionAddressesError,

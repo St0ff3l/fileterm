@@ -1,5 +1,11 @@
 import './workspace-mode-settings-panel.css'
-import type { FileTermDesktopApi, WorkspaceMode } from '@fileterm/core'
+import {
+  TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS,
+  type FileTermDesktopApi,
+  type TopologyServiceProbeIntervalSeconds,
+  type WorkspaceMode
+} from '@fileterm/core'
+import { DropdownSelect } from '../../../../components/common/dropdown-select/dropdown-select'
 import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
 import { type LocaleMessages } from '../../../../i18n'
 import { RadioCardGroup } from '../../../common/radio-card-group'
@@ -13,6 +19,10 @@ type WorkspaceModeSettingsPanelContext = {
   isSavingWorkspaceMode: boolean
   workspaceModeError: string | null
   setWorkspaceModePreference(nextValue: WorkspaceMode): void
+  topologyServiceProbeIntervalSeconds: TopologyServiceProbeIntervalSeconds
+  isSavingTopologyServiceProbeInterval: boolean
+  topologyServiceProbeIntervalError: string | null
+  setTopologyServiceProbeIntervalPreference(nextValue: TopologyServiceProbeIntervalSeconds): void
 }
 
 /** A miniature window: tab row on top, then the panes in their real order. */
@@ -40,8 +50,18 @@ function WorkspaceModePreview({ mode }: { mode: WorkspaceMode }) {
 }
 
 export function WorkspaceModeSettingsPanel() {
-  const { t, desktopApi, workspaceMode, isSavingWorkspaceMode, workspaceModeError, setWorkspaceModePreference } =
-    useSettingsModalContext<WorkspaceModeSettingsPanelContext>()
+  const {
+    t,
+    desktopApi,
+    workspaceMode,
+    isSavingWorkspaceMode,
+    workspaceModeError,
+    setWorkspaceModePreference,
+    topologyServiceProbeIntervalSeconds,
+    isSavingTopologyServiceProbeInterval,
+    topologyServiceProbeIntervalError,
+    setTopologyServiceProbeIntervalPreference
+  } = useSettingsModalContext<WorkspaceModeSettingsPanelContext>()
 
   return (
     <div className="settings-panel">
@@ -80,6 +100,29 @@ export function WorkspaceModeSettingsPanel() {
           value={workspaceMode}
         />
         <FeedbackBubble message={workspaceModeError} sourceKey="settings.workspace-mode" tone="error" />
+        <div aria-busy={isSavingTopologyServiceProbeInterval} className="workspace-mode-probe-setting">
+          <div className="workspace-mode-probe-setting-copy">
+            <strong>{t.topologyServiceProbeInterval}</strong>
+            <p>{t.topologyServiceProbeIntervalHint}</p>
+          </div>
+          <DropdownSelect
+            ariaLabel={t.topologyServiceProbeInterval}
+            disabled={!desktopApi || isSavingTopologyServiceProbeInterval}
+            onChange={(value) =>
+              setTopologyServiceProbeIntervalPreference(Number(value) as TopologyServiceProbeIntervalSeconds)
+            }
+            options={TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS.map((seconds) => ({
+              value: String(seconds),
+              label: t.topologyServiceProbeIntervalOption.replace('{seconds}', String(seconds))
+            }))}
+            value={String(topologyServiceProbeIntervalSeconds)}
+          />
+        </div>
+        <FeedbackBubble
+          message={topologyServiceProbeIntervalError}
+          sourceKey="settings.topology-service-probe-interval"
+          tone="error"
+        />
       </section>
       {workspaceMode === 'standard' ? <OverviewContentSettingsSection /> : null}
     </div>

@@ -3,6 +3,7 @@ import { SegmentedControl } from '../../../components/common/segmented-control/s
 import { SelectionControl } from '../../../features/common/selection-control'
 import { usePointerSortFallback, type PointerSortTarget } from '../../../hooks/use-pointer-sort-fallback'
 import { t } from '../../../i18n'
+import { TopologySettingsDisclosure } from './topology-settings-disclosure'
 import {
   TOPOLOGY_NODE_SIZES,
   topologyNodeSizeForContent,
@@ -115,8 +116,11 @@ export function NodeDisplaySettings({
     onMetricsChange(metrics.includes(metric) ? metrics.filter((item) => item !== metric) : [...metrics, metric])
   }
   return (
-    <section className="server-topology__display-settings">
-      <h3>{t.serverTopologyDisplaySettings}</h3>
+    <TopologySettingsDisclosure
+      className="server-topology__display-settings"
+      storageKey="fileterm:server-topology:display-settings-expanded"
+      title={t.serverTopologyDisplaySettings}
+    >
       <div className="server-topology__setting-group">
         <span>{t.serverTopologyNodeSize}</span>
         <SegmentedControl<TopologyNodeSize>
@@ -175,6 +179,6 @@ export function NodeDisplaySettings({
       ) : (
         <p className="server-topology__hint">{t.serverTopologyMetricsOnlyForServers}</p>
       )}
-    </section>
+    </TopologySettingsDisclosure>
   )
 }

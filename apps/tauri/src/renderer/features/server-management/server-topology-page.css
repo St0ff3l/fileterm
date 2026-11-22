@@ -40,18 +40,63 @@
 }
 
 .server-topology__body {
+  --server-topology-details-min-width: calc(264px + var(--app-ui-layout-extra-md, 0px));
   position: relative;
   z-index: 0;
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr) calc(264px + var(--app-ui-layout-extra-md, 0px));
-  gap: 12px;
+  grid-template-columns:
+    minmax(0, 1fr) 12px
+    minmax(
+      var(--server-topology-details-min-width),
+      var(--server-topology-details-width, var(--server-topology-details-min-width))
+    );
+  gap: 0;
   min-height: 0;
+}
+
+.server-topology__details-resizer {
+  position: relative;
+  z-index: 2;
+  width: 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.server-topology__details-resizer::before {
+  position: absolute;
+  inset-block: 0;
+  left: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+  content: '';
+  transition: background-color var(--transition-normal);
+}
+
+.server-topology__details-resizer:is(:hover, :focus-visible, .is-active)::before {
+  background: var(--focus-outline);
+}
+
+.server-topology__details-resizer:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}
+
+.server-topology__body.is-resizing-details,
+.server-topology__body.is-resizing-details * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .server-topology__details {
   position: relative;
   z-index: 1;
+  min-width: var(--server-topology-details-min-width);
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--border-default);
@@ -292,6 +337,14 @@
   .server-topology__body {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(100px, 1fr) minmax(90px, 32%);
+  }
+
+  .server-topology__details-resizer {
+    display: none;
+  }
+
+  .server-topology__details {
+    min-width: 0;
   }
 }
 
@@ -610,21 +663,53 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.server-topology__identity-settings > h3,
-.server-topology__services > h3 {
-  margin: 0;
-  font-size: var(--ui-font-size-13px, 13px);
-  font-weight: 600;
-}
-
 .server-topology__identity-settings > label,
+.server-topology__identity-label > label,
 .server-topology__service-form > label {
   color: var(--text-secondary);
   font-size: var(--ui-font-size-12px, 12px);
 }
 
-.server-topology__identity-settings > .ft-btn {
-  justify-self: start;
+.server-topology__identity-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.server-topology__settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: var(--ui-font-size-13px, 13px);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.server-topology__settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.server-topology__settings-chevron {
+  flex: none;
+  transition: transform var(--duration-hover) var(--ease-out);
+}
+
+.server-topology__settings-summary:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+.server-topology__settings-disclosure[open] > .server-topology__settings-summary > .server-topology__settings-chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .server-topology__settings-chevron {
+    transition: none;
+  }
 }
 
 .server-topology__identity-settings .ft-select-shell,

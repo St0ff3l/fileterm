@@ -32,6 +32,8 @@ Extend the server topology board so users can identify node roles, describe the 
 - Automatic physical discovery requires supported neighbor data such as LLDP/CDP or MAC tables and a separate collector lifecycle. It must not run an implicit host scan.
 - Vendor-specific firewall hardware and route state require explicit, read-only adapters; generic network-device mode remains raw terminal only.
 
+These items are tracked separately in the [topology discovery and link telemetry plan](../active/topology-discovery-and-link-telemetry.md); they are outside PR #411.
+
 ## Acceptance
 
 - [x] Existing v1 board data loads without losing node positions, metrics, or links.
