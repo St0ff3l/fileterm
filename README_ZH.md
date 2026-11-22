@@ -254,7 +254,7 @@ fileterm/
 
 也可加入 QQ 群：`534418986`。
 
-![FileTerm 微信交流群二维码](./docs/assets/fileterm-wechat-group-qr.jpg)
+![FileTerm 微信交流群二维码](./docs/assets/fileterm-wechat-group-qr.png)
 
 ## 支持项目
 

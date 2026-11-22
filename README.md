@@ -255,7 +255,7 @@ Scan the QR code to join the **FileTerm** WeChat community for usage discussions
 
 You can also join the QQ group: `534418986`.
 
-![FileTerm WeChat community QR code](./docs/assets/fileterm-wechat-group-qr.jpg)
+![FileTerm WeChat community QR code](./docs/assets/fileterm-wechat-group-qr.png)
 
 ## Support the Project
 
