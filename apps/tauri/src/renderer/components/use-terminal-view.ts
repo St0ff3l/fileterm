@@ -15,6 +15,11 @@ import {
 import { t } from '../i18n'
 import { getConfiguredMonoFontFamily, getTerminalFontWeight } from '../app/font-metrics'
 import {
+  getTerminalZoomLockedPreference,
+  hasTerminalZoomLockPreferenceLoaded,
+  setTerminalZoomLockedPreference
+} from '../app/terminal-zoom-lock-preference'
+import {
   getTerminalFontSize,
   hydrateTerminalFontSizes,
   subscribeTerminalFontSizes
@@ -23,6 +28,8 @@ import type { SessionType } from '@fileterm/core'
 import { normalizeLocalTerminalStartupTranscript, type SplitPaneDirection } from './terminal-view-utils'
 import { useTerminalLifecycle } from './use-terminal-lifecycle'
 import { useTerminalViewActions } from './terminal-view-actions'
+
+const FIND_MISS_DISPLAY_DELAY_MS = 350
 
 export type TerminalViewProps = {
   profileId: string
@@ -166,7 +173,7 @@ export function useTerminalView({
   const [activeFindIndex, setActiveFindIndex] = useState(-1)
   const [findCaseSensitive, setFindCaseSensitive] = useState(false)
   const [findRegex, setFindRegex] = useState(false)
-  const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
+  const [terminalZoomLocked, setTerminalZoomLocked] = useState(getTerminalZoomLockedPreference)
   const terminalZoomLockedRef = useRef(false)
   const isMac = window.fileterm?.platform === 'darwin'
   const isWindowsPty = sessionType === 'local' && window.fileterm?.platform === 'win32'
@@ -185,24 +192,30 @@ export function useTerminalView({
     }
 
     let canceled = false
-    void desktopApi
-      .getUiPreferences()
-      .then((preferences) => {
-        if (!canceled) {
-          terminalZoomLockedRef.current = preferences.terminalZoomLocked
-          setTerminalZoomLocked(preferences.terminalZoomLocked)
-        }
-      })
-      .catch(() => {
-        // Keep the safe default (unlocked) when the preference cannot be read.
-      })
-
+    let receivedPreferenceChange = false
     const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
       if (!canceled) {
+        receivedPreferenceChange = true
+        setTerminalZoomLockedPreference(preferences.terminalZoomLocked)
         terminalZoomLockedRef.current = preferences.terminalZoomLocked
         setTerminalZoomLocked(preferences.terminalZoomLocked)
       }
     })
+
+    if (!hasTerminalZoomLockPreferenceLoaded()) {
+      void desktopApi
+        .getUiPreferences()
+        .then((preferences) => {
+          if (!canceled && !receivedPreferenceChange) {
+            setTerminalZoomLockedPreference(preferences.terminalZoomLocked)
+            terminalZoomLockedRef.current = preferences.terminalZoomLocked
+            setTerminalZoomLocked(preferences.terminalZoomLocked)
+          }
+        })
+        .catch(() => {
+          // Keep the safe default (unlocked) when the preference cannot be read.
+        })
+    }
 
     return () => {
       canceled = true
@@ -538,27 +551,30 @@ export function useTerminalView({
 
     const searchAddon = searchAddonRef.current
     if (!searchAddon) {
-      setFindMiss(true)
       setFindMatchCount(0)
       setActiveFindIndex(-1)
       clearFindSelection()
+      const timeout = window.setTimeout(() => setFindMiss(true), FIND_MISS_DISPLAY_DELAY_MS)
+      return () => window.clearTimeout(timeout)
+    }
+
+    let found = false
+    try {
+      found = searchAddon.findNext(findQuery, buildSearchOptions(true))
+    } catch {
+      found = false
+    }
+
+    if (found) {
+      setFindMiss(false)
       return
     }
 
-    try {
-      const found = searchAddon.findNext(findQuery, buildSearchOptions(true))
-      if (!found) {
-        setFindMiss(true)
-        setFindMatchCount(0)
-        setActiveFindIndex(-1)
-        clearFindSelection()
-      }
-    } catch {
-      setFindMiss(true)
-      setFindMatchCount(0)
-      setActiveFindIndex(-1)
-      clearFindSelection()
-    }
+    setFindMatchCount(0)
+    setActiveFindIndex(-1)
+    clearFindSelection()
+    const timeout = window.setTimeout(() => setFindMiss(true), FIND_MISS_DISPLAY_DELAY_MS)
+    return () => window.clearTimeout(timeout)
   }, [findCaseSensitive, findOpen, findQuery, findRegex])
 
   return {

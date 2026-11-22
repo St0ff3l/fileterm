@@ -13,7 +13,6 @@ export const TOPOLOGY_NODE_METRICS = ['ip', 'cpu', 'memory', 'disk', 'gpu', 'net
 export const DEFAULT_TOPOLOGY_NODE_METRICS: TopologyNodeMetric[] = ['cpu', 'memory']
 
 const COLUMN_WIDTH = 194
-const ROW_HEIGHT = 108
 const INSET = 20
 const AUTO_LAYOUT_COLUMNS = 5
 const MAX_POSITION = 200_000
@@ -21,6 +20,7 @@ const MAX_METRICS_BY_SIZE = { compact: 2, standard: 4, expanded: 7 } as const
 
 export type TopologyNodeSize = keyof typeof TOPOLOGY_NODE_DIMENSIONS
 export type TopologyNodeMetric = (typeof TOPOLOGY_NODE_METRICS)[number]
+export const DEFAULT_TOPOLOGY_NODE_METRIC_ORDER: TopologyNodeMetric[] = [...TOPOLOGY_NODE_METRICS]
 export type TopologyNode = {
   id: string
   x: number
@@ -29,6 +29,7 @@ export type TopologyNode = {
   routeOnly?: true
   size: TopologyNodeSize
   metrics: TopologyNodeMetric[]
+  metricOrder: TopologyNodeMetric[]
 }
 export type TopologyLink = [first: string, second: string, name?: string]
 export type TopologyBoard = { nodes: TopologyNode[]; links: TopologyLink[] }
@@ -41,8 +42,13 @@ function validPosition(value: number) {
   return Number.isFinite(value) && value >= 0 && value <= MAX_POSITION
 }
 
-export function topologyNodeDimensions(node: Pick<TopologyNode, 'size'>) {
-  return TOPOLOGY_NODE_DIMENSIONS[node.size] ?? TOPOLOGY_NODE_DIMENSIONS.compact
+export function topologyNodeDimensions(node: Pick<TopologyNode, 'size'>, fontScale = 1) {
+  const dimensions = TOPOLOGY_NODE_DIMENSIONS[node.size] ?? TOPOLOGY_NODE_DIMENSIONS.compact
+  const layoutScale = Number.isFinite(fontScale) ? Math.max(1, fontScale) : 1
+  return {
+    ...dimensions,
+    height: Math.ceil(dimensions.height * (1 + (layoutScale - 1) * 0.65))
+  }
 }
 
 export function topologyNodeSizeForMetricCount(size: TopologyNodeSize, metricCount: number): TopologyNodeSize {
@@ -51,7 +57,18 @@ export function topologyNodeSizeForMetricCount(size: TopologyNodeSize, metricCou
   return 'expanded'
 }
 
-export function decodeTopologyBoard(raw: string | null): TopologyBoard {
+function completeTopologyMetricOrder(order: readonly TopologyNodeMetric[]): TopologyNodeMetric[] {
+  const unique = [...new Set(order)]
+  return [...unique, ...DEFAULT_TOPOLOGY_NODE_METRIC_ORDER.filter((metric) => !unique.includes(metric))]
+}
+
+function legacyTopologyMetricOrder(metrics: readonly TopologyNodeMetric[]): TopologyNodeMetric[] {
+  const selected = new Set(metrics)
+  let selectedIndex = 0
+  return DEFAULT_TOPOLOGY_NODE_METRIC_ORDER.map((metric) => (selected.has(metric) ? metrics[selectedIndex++] : metric))
+}
+
+export function decodeTopologyBoard(raw: string | null, fontScale = 1): TopologyBoard {
   if (raw === null) return { nodes: [], links: [] }
   const value = JSON.parse(raw)
   if (!Array.isArray(value?.nodes) || !Array.isArray(value.links)) throw new Error('Invalid topology board')
@@ -61,7 +78,8 @@ export function decodeTopologyBoard(raw: string | null): TopologyBoard {
   for (const node of value.nodes) {
     // Earlier boards stored grid cells. Resolve them to the original on-screen positions.
     const x = node?.x ?? (Number.isInteger(node?.column) ? INSET + node.column * COLUMN_WIDTH : NaN)
-    const y = node?.y ?? (Number.isInteger(node?.row) ? INSET + node.row * ROW_HEIGHT : NaN)
+    const legacyRowHeight = topologyNodeDimensions({ size: 'compact' }, fontScale).height + 4
+    const y = node?.y ?? (Number.isInteger(node?.row) ? INSET + node.row * legacyRowHeight : NaN)
     if (typeof node?.id !== 'string' || !node.id || ids.has(node.id) || !validPosition(x) || !validPosition(y)) {
       throw new Error('Invalid topology node')
     }
@@ -80,7 +98,17 @@ export function decodeTopologyBoard(raw: string | null): TopologyBoard {
       throw new Error('Invalid topology node metrics')
     }
     const normalizedMetrics = [...new Set(metrics as TopologyNodeMetric[])]
-    const size = topologyNodeSizeForMetricCount(requestedSize, normalizedMetrics.length)
+    const requestedMetricOrder = node.metricOrder ?? legacyTopologyMetricOrder(normalizedMetrics)
+    if (
+      !Array.isArray(requestedMetricOrder) ||
+      requestedMetricOrder.some((metric: unknown) => !TOPOLOGY_NODE_METRICS.some((valid) => valid === metric))
+    ) {
+      throw new Error('Invalid topology node metric order')
+    }
+    const metricOrder = completeTopologyMetricOrder(requestedMetricOrder as TopologyNodeMetric[])
+    const enabledMetrics = new Set(normalizedMetrics)
+    const orderedMetrics = metricOrder.filter((metric) => enabledMetrics.has(metric))
+    const size = topologyNodeSizeForMetricCount(requestedSize, orderedMetrics.length)
     nodes.push({
       id: node.id,
       x,
@@ -88,7 +116,8 @@ export function decodeTopologyBoard(raw: string | null): TopologyBoard {
       ...(memo ? { memo } : {}),
       ...(routeOnly === true ? { routeOnly: true } : {}),
       size,
-      metrics: normalizedMetrics
+      metrics: orderedMetrics,
+      metricOrder
     })
   }
   const links: TopologyLink[] = []
@@ -109,25 +138,28 @@ export function decodeTopologyBoard(raw: string | null): TopologyBoard {
   return { nodes, links }
 }
 
-export function addTopologyNode(board: TopologyBoard, id: string): TopologyBoard {
-  return addTopologyNodes(board, [id])
+export function addTopologyNode(board: TopologyBoard, id: string, fontScale = 1): TopologyBoard {
+  return addTopologyNodes(board, [id], fontScale)
 }
 
-export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>): TopologyBoard {
+export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>, fontScale = 1): TopologyBoard {
   const nodes = [...board.nodes]
   const present = new Set(nodes.map(({ id }) => id))
+  const compactDimensions = topologyNodeDimensions({ size: 'compact' }, fontScale)
+  const columnWidth = compactDimensions.width + 10
+  const rowHeight = compactDimensions.height + 4
   let index = 0
   for (const id of ids) {
     if (!id || present.has(id)) continue
     for (;;) {
-      const x = INSET + (index % AUTO_LAYOUT_COLUMNS) * COLUMN_WIDTH
-      const y = INSET + Math.floor(index / AUTO_LAYOUT_COLUMNS) * ROW_HEIGHT
+      const x = INSET + (index % AUTO_LAYOUT_COLUMNS) * columnWidth
+      const y = INSET + Math.floor(index / AUTO_LAYOUT_COLUMNS) * rowHeight
       if (y > MAX_POSITION) return nodes.length === board.nodes.length ? board : { ...board, nodes }
       index++
       if (
         !nodes.some((node) => {
-          const existing = topologyNodeDimensions(node)
-          const candidate = TOPOLOGY_NODE_DIMENSIONS.compact
+          const existing = topologyNodeDimensions(node, fontScale)
+          const candidate = compactDimensions
           return (
             x < node.x + existing.width &&
             node.x < x + candidate.width &&
@@ -136,7 +168,14 @@ export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>): T
           )
         })
       ) {
-        nodes.push({ id, x, y, size: 'compact', metrics: [...DEFAULT_TOPOLOGY_NODE_METRICS] })
+        nodes.push({
+          id,
+          x,
+          y,
+          size: 'compact',
+          metrics: [...DEFAULT_TOPOLOGY_NODE_METRICS],
+          metricOrder: [...DEFAULT_TOPOLOGY_NODE_METRIC_ORDER]
+        })
         present.add(id)
         break
       }
@@ -145,9 +184,9 @@ export function addTopologyNodes(board: TopologyBoard, ids: Iterable<string>): T
   return nodes.length === board.nodes.length ? board : { ...board, nodes }
 }
 
-export function topologyLinkEndpoints(first: TopologyNode, second: TopologyNode, directed: boolean) {
-  const firstSize = topologyNodeDimensions(first)
-  const secondSize = topologyNodeDimensions(second)
+export function topologyLinkEndpoints(first: TopologyNode, second: TopologyNode, directed: boolean, fontScale = 1) {
+  const firstSize = topologyNodeDimensions(first, fontScale)
+  const secondSize = topologyNodeDimensions(second, fontScale)
   const x1 = first.x + firstSize.width / 2
   const y1 = first.y + firstSize.height / 2
   const x2 = second.x + secondSize.width / 2
@@ -199,12 +238,34 @@ export function updateTopologyNodeMetrics(
   const node = board.nodes.find((item) => item.id === id)
   if (!node) return board
   const unique = [...new Set(metrics)]
-  if (unique.length === node.metrics.length && unique.every((metric, index) => metric === node.metrics[index]))
+  const enabledMetrics = new Set(unique)
+  const orderedMetrics = node.metricOrder.filter((metric) => enabledMetrics.has(metric))
+  if (
+    orderedMetrics.length === node.metrics.length &&
+    orderedMetrics.every((metric, index) => metric === node.metrics[index])
+  )
     return board
-  const size = topologyNodeSizeForMetricCount(node.size, unique.length)
+  const size = topologyNodeSizeForMetricCount(node.size, orderedMetrics.length)
   return {
     ...board,
-    nodes: board.nodes.map((item) => (item === node ? { ...node, metrics: unique, size } : item))
+    nodes: board.nodes.map((item) => (item === node ? { ...node, metrics: orderedMetrics, size } : item))
+  }
+}
+
+export function updateTopologyNodeMetricOrder(
+  board: TopologyBoard,
+  id: string,
+  metricOrder: TopologyNodeMetric[]
+): TopologyBoard {
+  const node = board.nodes.find((item) => item.id === id)
+  if (!node) return board
+  const normalizedOrder = completeTopologyMetricOrder(metricOrder)
+  if (normalizedOrder.every((metric, index) => metric === node.metricOrder[index])) return board
+  const enabledMetrics = new Set(node.metrics)
+  const metrics = normalizedOrder.filter((metric) => enabledMetrics.has(metric))
+  return {
+    ...board,
+    nodes: board.nodes.map((item) => (item === node ? { ...node, metricOrder: normalizedOrder, metrics } : item))
   }
 }
 

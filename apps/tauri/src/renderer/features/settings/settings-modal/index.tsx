@@ -1,6 +1,6 @@
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
 import { SidebarAlignedLabel } from '../../../components/common/icon-label/icon-label'
-import type { McpAgentClientStatus, SavedTheme, ThemeConfig } from '@fileterm/core'
+import type { McpAgentClientStatus, SavedTheme, ThemeConfig, UiPreferences, WorkspaceMode } from '@fileterm/core'
 import type { ThemeMode } from '../../../app/theme-config'
 import { t } from '../../../i18n'
 import { AppIcon } from '../../common/app-icon'
@@ -36,6 +36,8 @@ export function SettingsModal({
   onOpenConnectionManager,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
+  workspaceMode,
+  uiPreferences,
   onClose,
   initialTab = 'interface',
   standalone = false,
@@ -54,6 +56,8 @@ export function SettingsModal({
   onOpenLogsDirectory(): void
   /** Opens an Agent in a visible local terminal; secrets never pass through MCP. */
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
+  workspaceMode: WorkspaceMode
+  uiPreferences: UiPreferences | undefined
   onClose(): void
   initialTab?: SettingsTab
   standalone?: boolean
@@ -85,6 +89,8 @@ export function SettingsModal({
     onOpenConnectionManager,
     onOpenLogsDirectory,
     onLaunchLocalAgent,
+    workspaceMode,
+    uiPreferences,
     initialTab,
     inline
   })
@@ -171,7 +177,7 @@ export function SettingsModal({
 
             {activeTab === 'updates' ? <UpdatesSettingsPanel /> : null}
 
-            {activeTab === 'logs' ? <LogsSettingsPanel /> : null}
+            {activeTab === 'logs' ? <LogsSettingsPanel uiPreferences={uiPreferences} /> : null}
 
             {activeTab === 'language' ? <LanguageSettingsPanel /> : null}
 

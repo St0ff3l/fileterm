@@ -1,4 +1,4 @@
-import type { McpAgentClientStatus, SavedTheme, ThemeConfig } from '@fileterm/core'
+import type { McpAgentClientStatus, SavedTheme, ThemeConfig, UiPreferences, WorkspaceMode } from '@fileterm/core'
 import type { ThemeMode } from '../../../../app/theme-config'
 import type { SettingsTab } from '../constants'
 
@@ -15,6 +15,8 @@ export type SettingsModalControllerOptions = {
   onOpenConnectionManager(): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
+  workspaceMode: WorkspaceMode
+  uiPreferences: UiPreferences | undefined
   initialTab: SettingsTab
   inline: boolean
 }

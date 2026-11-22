@@ -38,6 +38,7 @@ function metricValue(metric: TopologyNodeMetric, metrics: SystemMetrics | null) 
 
 export function TopologyNodeCard({
   node,
+  fontScale,
   name,
   protocol,
   details,
@@ -57,6 +58,7 @@ export function TopologyNodeCard({
   onLostPointerCapture
 }: {
   node: TopologyNode
+  fontScale: number
   name: string
   protocol: string
   details: string | null
@@ -75,7 +77,7 @@ export function TopologyNodeCard({
   onPointerUp(event: PointerEvent<HTMLButtonElement>): void
   onLostPointerCapture(event: PointerEvent<HTMLButtonElement>): void
 }) {
-  const dimensions = topologyNodeDimensions(node)
+  const dimensions = topologyNodeDimensions(node, fontScale)
   const networkRows = metrics?.networkInterfaceRows ?? []
   const visibleNetworkRows = networkRows.slice(0, NETWORK_ROWS_BY_SIZE[node.size])
   const processes = [...(metrics?.topProcesses ?? [])]

@@ -66,9 +66,9 @@
 }
 
 .system-sidebar-layout .connection-summary .address-row {
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: calc(40px + var(--app-ui-layout-extra-xs, 0px)) minmax(0, 1fr);
   column-gap: 4px;
-  height: 22px;
+  height: calc(22px + var(--app-ui-layout-extra-xs, 0px));
 }
 
 .system-sidebar-layout .system-title {
@@ -83,7 +83,7 @@
 
 .system-sidebar-layout:not(.is-collapsed) .sys-card {
   box-sizing: border-box;
-  width: var(--sidebar-width, 214px);
+  width: calc(var(--sidebar-width, 214px) + var(--app-ui-layout-extra-md, 0px));
 }
 
 .system-sidebar-layout .mini-tabs span {

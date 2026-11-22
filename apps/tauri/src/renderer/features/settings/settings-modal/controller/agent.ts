@@ -139,12 +139,11 @@ export function useAgentSettingsController({
     let canceled = false
     setMcpAgentOperation('load')
     setMcpAgentMessage(null)
-    void Promise.all([desktopApi.getMcpAgentSetup(), desktopApi.getConnectionLibrary(), desktopApi.getUiPreferences()])
-      .then(([setup, library, preferences]) => {
+    void Promise.all([desktopApi.getMcpAgentSetup(), desktopApi.getConnectionLibrary()])
+      .then(([setup, library]) => {
         if (canceled) return
         setMcpAgentSetup(setup)
         setMcpAgentProfiles(library.profiles)
-        setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       })
       .catch((error: unknown) => {
         if (!canceled) {

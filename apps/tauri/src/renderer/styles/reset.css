@@ -4,6 +4,11 @@
 
 :root {
   --app-ui-zoom: 1;
+  --app-ui-font-scale: 1;
+  --app-ui-layout-extra-xs: 0px;
+  --app-ui-layout-extra-sm: 0px;
+  --app-ui-layout-extra-md: 0px;
+  --app-ui-layout-extra-lg: 0px;
 }
 
 *,

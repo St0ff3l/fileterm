@@ -1,0 +1,25 @@
+.server-profile-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.server-profile-actions .ft-btn {
+  background-color: var(--surface-card);
+}
+
+.server-profile-actions .ft-btn:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  border-color: var(--border-default);
+}
+
+.server-profile-actions__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-profile-actions__disconnect:not(:disabled) {
+  border-color: var(--status-warning);
+  color: var(--status-warning-text);
+}

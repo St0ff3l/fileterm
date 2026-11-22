@@ -7,7 +7,6 @@ type TerminalFindBarProps = {
   findInputRef: RefObject<HTMLInputElement | null>
   findQuery: string
   setFindQuery: Dispatch<SetStateAction<string>>
-  setFindMiss: Dispatch<SetStateAction<boolean>>
   setActiveFindIndex: Dispatch<SetStateAction<number>>
   findMiss: boolean
   findMatchCount: number
@@ -24,7 +23,6 @@ export function TerminalFindBar({
   findInputRef,
   findQuery,
   setFindQuery,
-  setFindMiss,
   setActiveFindIndex,
   findMiss,
   findMatchCount,
@@ -38,27 +36,29 @@ export function TerminalFindBar({
 }: TerminalFindBarProps) {
   return (
     <div className="terminal-find" onClick={(event) => event.stopPropagation()}>
-      <input
-        ref={findInputRef}
-        type="text"
-        value={findQuery}
-        onChange={(event) => {
-          setFindQuery(event.target.value)
-          setFindMiss(false)
-          setActiveFindIndex(-1)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            searchTerminal(findQuery, event.shiftKey ? -1 : 1)
-          }
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            closeFind()
-          }
-        }}
-        placeholder={t.find}
-      />
+      <div className="terminal-find-query">
+        <AppIcon name="search" size={14} />
+        <input
+          ref={findInputRef}
+          aria-label={t.find}
+          type="text"
+          value={findQuery}
+          onChange={(event) => {
+            setFindQuery(event.target.value)
+            setActiveFindIndex(-1)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              searchTerminal(findQuery, event.shiftKey ? -1 : 1)
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              closeFind()
+            }
+          }}
+        />
+      </div>
       <div className="terminal-find-count" aria-live="polite">
         {findQuery && findMatchCount > 0 ? `${Math.max(activeFindIndex + 1, 1)}/${findMatchCount}` : null}
       </div>
@@ -87,8 +87,14 @@ export function TerminalFindBar({
         <button type="button" title={t.findNext} onClick={() => searchTerminal(findQuery, 1)}>
           <AppIcon name="arrow-down" size={13} />
         </button>
-        <button className="terminal-find-submit" type="button" onClick={() => searchTerminal(findQuery, 1)}>
-          {t.find}
+        <button
+          aria-label={t.find}
+          className="terminal-find-submit"
+          type="button"
+          title={t.find}
+          onClick={() => searchTerminal(findQuery, 1)}
+        >
+          <AppIcon name="search" size={14} />
         </button>
       </div>
       <CloseButton onClick={closeFind} size="compact" />

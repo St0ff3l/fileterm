@@ -1031,8 +1031,8 @@
 
 /* Settings Modal Styles */
 .modal-card.manager-modal.connection-manager-modal.settings-modal {
-  width: min(1040px, calc(100vw - 56px));
-  height: min(680px, calc(100vh - 56px));
+  width: min(calc(1040px + var(--app-ui-layout-extra-lg, 0px)), calc(100vw - 56px));
+  height: min(calc(680px + var(--app-ui-layout-extra-md, 0px)), calc(100vh - 56px));
   max-height: calc(100vh - 56px);
   padding: 0;
   display: grid;

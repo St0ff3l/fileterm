@@ -3,14 +3,23 @@ import type { WorkspaceMode } from '@fileterm/core'
 import { t } from '../../../../i18n'
 import { useCompactTabBar } from '../../../layout/use-compact-tab-bar'
 import { useWorkspaceMode } from '../../../layout/use-workspace-mode'
+import type { UiPreferences } from '@fileterm/core'
 import type { SettingsModalState } from './state'
 
-export function useLayoutSettingsController({ state }: { state: SettingsModalState }) {
+export function useLayoutSettingsController({
+  state,
+  initialWorkspaceMode,
+  uiPreferences
+}: {
+  state: SettingsModalState
+  initialWorkspaceMode: WorkspaceMode
+  uiPreferences?: UiPreferences
+}) {
   const { desktopApi } = state
-  const [workspaceMode, setWorkspaceMode] = useWorkspaceMode(desktopApi)
+  const [workspaceMode, setWorkspaceMode] = useWorkspaceMode(desktopApi, initialWorkspaceMode)
   const [isSavingWorkspaceMode, setIsSavingWorkspaceMode] = useState(false)
   const [workspaceModeError, setWorkspaceModeError] = useState<string | null>(null)
-  const [compactTabBar, setCompactTabBar] = useCompactTabBar(desktopApi)
+  const [compactTabBar, setCompactTabBar] = useCompactTabBar(desktopApi, uiPreferences?.compactTabBar)
   const [isSavingCompactTabBar, setIsSavingCompactTabBar] = useState(false)
   const [compactTabBarError, setCompactTabBarError] = useState<string | null>(null)
 

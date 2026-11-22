@@ -12,6 +12,7 @@ import { applyUiZoomPercent } from './app/ui-zoom'
 import { applyUiFontScalePercent } from './app/ui-font-scale'
 import { setTerminalFontWeight } from './app/font-metrics'
 import { setTerminalRendererPreference } from './app/terminal-renderer-preference'
+import { setTerminalZoomLockedPreference } from './app/terminal-zoom-lock-preference'
 import { MainWindowReveal } from './lib/main-window-reveal'
 import './styles/index.css'
 import { installRendererErrorLogging, reportRendererError } from './lib/renderer-error-log'
@@ -106,6 +107,7 @@ void createTauriApi()
       })
       .then(async (initialUiPreferences) => {
         setTerminalRendererPreference(initialUiPreferences?.terminalRenderer ?? 'webgl')
+        setTerminalZoomLockedPreference(initialUiPreferences?.terminalZoomLocked ?? false)
         setTerminalFontWeight(initialUiPreferences?.terminalFontWeight ?? 400)
         const searchParams = new URLSearchParams(window.location.search)
         const queryTheme = searchParams.get('theme')

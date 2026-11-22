@@ -1,11 +1,11 @@
-import type { FileTermDesktopApi } from '@fileterm/core'
+import type { FileTermDesktopApi, UiPreferences } from '@fileterm/core'
 import { MaterialIcon } from '../../../../components/common/material-icon/material-icon'
 import type { LocaleMessages } from '../../../../i18n'
 import { useSettingsModalContext } from '../context'
 import { DiagnosticLogSettings } from './diagnostic-log-settings'
 import './diagnostic-log-settings.css'
 
-export function LogsSettingsPanel() {
+export function LogsSettingsPanel({ uiPreferences }: { uiPreferences?: UiPreferences }) {
   const { t, desktopApi, onOpenLogsDirectory } = useSettingsModalContext<{
     t: LocaleMessages
     desktopApi: FileTermDesktopApi | undefined
@@ -27,7 +27,7 @@ export function LogsSettingsPanel() {
 
       <section className="settings-section">
         <h3>{t.logRecording}</h3>
-        <DiagnosticLogSettings desktopApi={desktopApi} t={t} />
+        <DiagnosticLogSettings desktopApi={desktopApi} initialPreferences={uiPreferences} t={t} />
       </section>
     </div>
   )

@@ -38,6 +38,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     themeMode,
     themeConfig,
     customThemes,
+    settingsUiPreferences,
     locale,
     setLocaleState,
     terminalZoomLocked,
@@ -579,6 +580,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 theme={themeMode}
                 themeConfig={themeConfig}
                 customThemes={customThemes}
+                uiPreferences={settingsUiPreferences}
                 locale={locale}
                 overviewShowStats={shell.overviewShowStats}
                 overviewShowRecent={shell.overviewShowRecent}

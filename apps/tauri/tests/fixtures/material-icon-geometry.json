@@ -62,5 +62,11 @@
     "usb": "54c296193082434eb5cf35a1ae7427f83f6318e682aac18bcb590e7963d27c56",
     "visibility": "40eaadd4c4ad204f91aa24cb73fdd4fca4e70cb3df3e8c7e6103544fbcf7c351",
     "visibility_off": "371179766094a1534049c95962bdc4ecad7d89d839c3d37759818abcf3e8f65a"
+  },
+  "additionalGlyphs": {
+    "fit_screen": {
+      "viewBox": "0 0 24 24",
+      "path": "M6 16h12V8H6v8zm2-6h8v4H8v-4zm-4 5H2v3c0 1.1.9 2 2 2h3v-2H4v-3zm0-9h3V4H4c-1.1 0-2 .9-2 2v3h2V6zm16-2h-3v2h3v3h2V6c0-1.1-.9-2-2-2zm0 14h-3v2h3c1.1 0 2-.9 2-2v-3h-2v3z"
+    }
   }
 }

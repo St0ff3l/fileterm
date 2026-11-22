@@ -805,6 +805,8 @@ input:where(
   display: grid;
   grid-template-columns: clamp(48px, 30%, 84px) minmax(0, 1fr);
   width: 100%;
+  height: auto;
+  min-height: calc(20px + var(--app-ui-layout-extra-xs, 0px));
 }
 
 .system-sidebar-layout .metric-line .value {
@@ -939,11 +941,14 @@ input:where(
 
 .mini-tabs {
   display: grid;
-  grid-template-columns: 64px 58px minmax(0, 1fr);
+  grid-template-columns:
+    calc(64px + var(--app-ui-layout-extra-xs, 0px))
+    calc(58px + var(--app-ui-layout-extra-xs, 0px))
+    minmax(0, 1fr);
   margin: 6px -12px 0;
   border-radius: 0;
   font-size: var(--ui-font-size-11px, 11px);
-  height: 26px;
+  height: calc(26px + var(--app-ui-layout-extra-xs, 0px));
 }
 
 .mini-tabs span {
@@ -957,9 +962,9 @@ input:where(
 }
 
 .process-scroll-region {
-  height: 96px;
-  min-height: 96px;
-  max-height: 96px;
+  height: calc(96px + var(--app-ui-layout-extra-lg, 0px));
+  min-height: calc(96px + var(--app-ui-layout-extra-lg, 0px));
+  max-height: calc(96px + var(--app-ui-layout-extra-lg, 0px));
   margin: 0 -12px;
   overflow: hidden;
 }
@@ -979,8 +984,11 @@ input:where(
 }
 
 .process-row {
-  grid-template-columns: 64px 58px minmax(0, 1fr);
-  min-height: 24px;
+  grid-template-columns:
+    calc(64px + var(--app-ui-layout-extra-xs, 0px))
+    calc(58px + var(--app-ui-layout-extra-xs, 0px))
+    minmax(0, 1fr);
+  min-height: calc(24px + var(--app-ui-layout-extra-xs, 0px));
   font-family: var(--font-mono);
   font-size: var(--ui-font-size-11px, 11px);
 }
@@ -1008,7 +1016,7 @@ input:where(
 }
 
 .network-panel {
-  height: 36px;
+  height: calc(36px + var(--app-ui-layout-extra-sm, 0px));
   margin: 0 -12px;
   padding: 6px 12px 0;
   border-top: 1px solid var(--border-subtle);
@@ -1071,13 +1079,13 @@ input:where(
 .disk-head,
 .disk-row {
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-  height: 24px;
+  height: calc(24px + var(--app-ui-layout-extra-xs, 0px));
   font-family: var(--font-mono);
   font-size: var(--ui-font-size-11px, 11px);
 }
 
 .disk-head {
-  height: 25px;
+  height: calc(25px + var(--app-ui-layout-extra-xs, 0px));
 }
 
 /* Reserve the same footer height as the adjacent transfer strip. */

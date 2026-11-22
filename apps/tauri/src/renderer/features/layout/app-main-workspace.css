@@ -105,7 +105,7 @@
 }
 
 :root .fs-shell.has-host-rail.has-system-sidebar {
-  --host-info-width: var(--sidebar-width, 214px);
+  --host-info-width: calc(var(--sidebar-width, 214px) + var(--app-ui-layout-extra-md, 0px));
 }
 
 :root .fs-shell.has-host-rail.has-ai-copilot {

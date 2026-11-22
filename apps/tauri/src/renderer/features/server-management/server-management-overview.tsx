@@ -32,9 +32,9 @@ import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { buildConnectionTree, connectionFolderOptions, flattenConnectionProfiles } from '../connections/connection-tree'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/use-pointer-sort-fallback'
-import { lastSessionTabIdForProfile } from '../../hooks/session-tab-memory'
 import { resolveMonitoringSource } from '../system/shared-monitoring'
 import { statusForProfile, statusLabel } from './server-profile-status'
+import { ServerProfileActions } from './server-profile-actions'
 import { ServerManagementList } from './server-management-list'
 import type { ServerListSort } from './server-management-list-model'
 import { ServerCommandBatchDialog, type ServerCommandBatchDialogMode } from './server-command-batch-dialog'
@@ -289,8 +289,6 @@ export function ServerManagementOverview({
   const selectedStatus = selectedProfile ? statusByProfile.get(selectedProfile.id) : null
   const selectedBadgeStatus: StatusIndicatorStatus =
     selectedStatus?.status === 'connected' || selectedStatus?.status === 'connecting' ? selectedStatus.status : 'idle'
-  const selectedSessionTab = selectedStatus?.tab ?? null
-  const selectedSessionConnected = Boolean(selectedSessionTab && sessions[selectedSessionTab.id]?.connected)
   const selectedMetrics = selectedProfile ? liveMetrics(selectedProfile.id, workspaceTabs, sessions) : null
   const displayedInsight: ServerInsight | undefined = selectedMetrics
     ? serverInsightFromMetrics(selectedMetrics)
@@ -387,16 +385,6 @@ export function ServerManagementOverview({
     })
   }
 
-  const openWorkspace = () => {
-    if (!selectedProfile || !selectedSessionTab || !selectedSessionConnected) return
-    // Reopen the tab that was last active for this server instead of the first.
-    const rememberedTab = [lastSessionTabIdForProfile(selectedProfile.id), focusedSessionTabId]
-      .filter((tabId): tabId is string => Boolean(tabId))
-      .map((tabId) => workspaceTabs.find((tab) => tab.id === tabId && tab.profileId === selectedProfile.id))
-      .find((tab) => tab && sessions[tab.id]?.connected)
-    onActivateSession(rememberedTab?.id ?? selectedSessionTab.id)
-  }
-
   const positionForTarget = (target: PointerSortTarget, clientY: number) =>
     resolveManagerDropPosition(target.element, clientY, false)
 
@@ -433,9 +421,7 @@ export function ServerManagementOverview({
   })
 
   return (
-    <div
-      className={`server-management-overview ${selectedProfile ? 'has-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}
-    >
+    <div className={`server-management-overview has-inspector ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}>
       <div className="server-dashboard-main-scroll">
         <main
           className={`server-dashboard-main${view === 'list' ? ' is-list-view' : ''}`}
@@ -683,44 +669,16 @@ export function ServerManagementOverview({
                   </p>
                 </div>
 
-                <div className="server-inspector-actions">
-                  {selectedSessionConnected && selectedSessionTab ? (
-                    <Button
-                      className="server-inspector-disconnect"
-                      icon={<MaterialIcon name="stop" />}
-                      onClick={() => void onDisconnectSession(selectedSessionTab.id)}
-                      size="panel"
-                    >
-                      {t.disconnect}
-                    </Button>
-                  ) : (
-                    <Button
-                      disabled={selectedStatus?.status === 'connecting'}
-                      icon={<MaterialIcon name="cloud_sync" />}
-                      onClick={() => onConnectProfile(selectedProfile.id)}
-                      size="panel"
-                    >
-                      <span className="server-inspector-action-label">
-                        {selectedStatus?.status === 'connecting' ? t.serverDashboardConnecting : t.connect}
-                      </span>
-                    </Button>
-                  )}
-                  <Button
-                    disabled={!selectedSessionConnected}
-                    icon={<MaterialIcon name="terminal" />}
-                    onClick={openWorkspace}
-                    size="panel"
-                  >
-                    <span className="server-inspector-action-label">{t.serverInspectorTerminal}</span>
-                  </Button>
-                  <Button
-                    icon={<MaterialIcon name="edit" />}
-                    onClick={() => onEditConnection(selectedProfile)}
-                    size="panel"
-                  >
-                    {t.edit}
-                  </Button>
-                </div>
+                <ServerProfileActions
+                  profile={selectedProfile}
+                  workspaceTabs={workspaceTabs}
+                  sessions={sessions}
+                  focusedSessionTabId={focusedSessionTabId}
+                  onConnectProfile={onConnectProfile}
+                  onDisconnectSession={onDisconnectSession}
+                  onActivateSession={onActivateSession}
+                  onEditConnection={onEditConnection}
+                />
 
                 <section className="server-inspector-card">
                   <header className="server-inspector-card-header">
@@ -822,7 +780,40 @@ export function ServerManagementOverview({
             </div>
           ) : null}
         </section>
-      ) : null}
+      ) : (
+        <section className="server-dashboard-inspector-region">
+          <header className="server-dashboard-inspector-header">
+            <SidebarToggle
+              className="server-dashboard-inspector-toggle"
+              collapsed={inspectorCollapsed}
+              label={inspectorCollapsed ? t.showConnectionDetails : t.hideConnectionDetails}
+              side="right"
+              onClick={() => {
+                if (isFocusMode) {
+                  onToggleFocusMode?.()
+                  return
+                }
+                setIsInspectorCollapsed((current) => !current)
+              }}
+            />
+            {!inspectorCollapsed ? <h2>{t.serverDashboardDetails}</h2> : null}
+          </header>
+          {!inspectorCollapsed ? (
+            <div className="server-dashboard-inspector-scroll">
+              <aside
+                aria-label={t.serverDashboardDetails}
+                className="server-dashboard-inspector"
+                ref={inspectorScrollRef}
+              >
+                <p className="server-inspector-empty server-dashboard-no-selection">
+                  {t.serverDashboardSelectConnection}
+                </p>
+              </aside>
+              <VerticalScrollbar ariaLabel={t.serverDashboardDetails} scrollRef={inspectorScrollRef} />
+            </div>
+          ) : null}
+        </section>
+      )}
     </div>
   )
 }

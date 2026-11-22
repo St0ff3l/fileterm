@@ -107,14 +107,24 @@ export function splitPaneShortcutsForPlatform(platform: string | undefined) {
 }
 
 /**
- * Find is an application action, so do not take Ctrl+F from the remote TUI:
- * readline, OpenCode and Gemini all use it for cursor movement. Keep the
- * application shortcut identical on every platform so Ctrl+F and
- * Ctrl+Shift+F have predictable ownership in SSH and local terminals.
+ * Keep the native macOS Command-F convention. On Windows and Linux, avoid
+ * taking Ctrl+F from the remote shell/TUI; Windows IMEs can also reserve
+ * Ctrl+Shift+F for Simplified/Traditional switching.
  */
-export function isTerminalFindShortcut(event: KeyboardEvent) {
+export function terminalFindShortcutForPlatform(platform: string | undefined) {
+  if (platform === 'darwin') return '⌘F'
+  return platform === 'win32' ? 'Ctrl+Alt+F' : 'Ctrl+Shift+F'
+}
+
+export function isTerminalFindShortcut(event: KeyboardEvent, platform?: string) {
   const matchesKey = event.key.toLowerCase() === 'f' || event.code === 'KeyF'
-  return event.ctrlKey && event.shiftKey && !event.metaKey && !event.altKey && matchesKey
+  const hasShortcutModifiers =
+    platform === 'darwin'
+      ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+      : platform === 'win32'
+        ? event.ctrlKey && event.altKey && !event.shiftKey && !event.getModifierState('AltGraph')
+        : event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey
+  return hasShortcutModifiers && matchesKey
 }
 
 /**

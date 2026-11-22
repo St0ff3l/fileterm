@@ -66,7 +66,7 @@ export function registerTerminalInputHandlers(runtime: TerminalLifecycleRuntime)
 
     const matchesCopy = isTerminalClipboardShortcut(event, isMac, 'copy')
     const matchesPaste = isTerminalClipboardShortcut(event, isMac, 'paste')
-    const matchesFind = isTerminalFindShortcut(event)
+    const matchesFind = isTerminalFindShortcut(event, window.fileterm?.platform)
     const terminalZoomOperation = getTerminalZoomOperation(event)
     if (event.ctrlKey || event.metaKey || terminalZoomOperation) {
       logTerminalZoom(terminal, 'key-xterm-received', {

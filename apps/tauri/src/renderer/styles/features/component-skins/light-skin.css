@@ -30,9 +30,13 @@
   box-shadow: var(--shadow-lg);
 }
 
-:root[data-theme*='light'] .terminal-find input {
+:root[data-theme*='light'] .terminal-find-query {
   border: 1px solid var(--border-dark);
   background: var(--bg-main);
+  color: var(--text-muted);
+}
+
+:root[data-theme*='light'] .terminal-find-query input {
   color: var(--text-main);
 }
 

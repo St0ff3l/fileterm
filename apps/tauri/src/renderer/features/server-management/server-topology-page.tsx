@@ -1,5 +1,14 @@
-import { useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import {
+  useId,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent
+} from 'react'
 import type { ConnectionProfile, SessionSnapshot, SystemMetrics, WorkspaceTab } from '@fileterm/core'
+import { getUiFontScaleRatio } from '../../app/ui-font-scale'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { Button } from '../../components/common/button/button'
 import { ConfirmActionDialog } from '../../components/common/confirm-action-dialog/confirm-action-dialog'
@@ -12,6 +21,8 @@ import { resolveMonitoringSource } from '../system/shared-monitoring'
 import { StatusIndicator } from '../common/status-indicator'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { NodeDisplaySettings } from './server-topology/node-display-settings'
+import { TopologyCanvasViewport } from './server-topology/topology-canvas-viewport'
+import { ServerProfileActions } from './server-profile-actions'
 import { TopologyNodeCard } from './server-topology/node-card'
 import { NodeMemo } from './server-topology/node-memo'
 import {
@@ -26,6 +37,7 @@ import {
   topologyLinkMatches,
   topologyNodeDimensions,
   updateTopologyNodeMemo,
+  updateTopologyNodeMetricOrder,
   updateTopologyNodeMetrics,
   updateTopologyNodeSize,
   type TopologyBoard,
@@ -52,6 +64,8 @@ type NodeDrag = {
   scrollLeft: number
   scrollTop: number
   moved: boolean
+  zoom: number
+  fontScale: number
   ends: {
     lines: NodeListOf<SVGLineElement>
     label: SVGTextElement | null
@@ -68,7 +82,8 @@ function previewNode(button: HTMLButtonElement, node: TopologyNode, drag: NodeDr
     const endpoints = topologyLinkEndpoints(
       first.id === node.id ? moved : first,
       second.id === node.id ? moved : second,
-      directed
+      directed,
+      drag.fontScale
     )
     for (const line of lines) {
       for (const [key, value] of Object.entries(endpoints)) line.setAttribute(key, String(value))
@@ -78,9 +93,9 @@ function previewNode(button: HTMLButtonElement, node: TopologyNode, drag: NodeDr
   }
 }
 
-function loadBoard() {
+function loadBoard(fontScale: number) {
   try {
-    return decodeTopologyBoard(localStorage.getItem(TOPOLOGY_STORAGE_KEY))
+    return decodeTopologyBoard(localStorage.getItem(TOPOLOGY_STORAGE_KEY), fontScale)
   } catch {
     return null
   }
@@ -112,23 +127,31 @@ export function ServerTopologyPage({
   profiles,
   sessions,
   workspaceTabs,
-  onOpenProfile,
+  focusedSessionTabId,
+  onConnectProfile,
+  onDisconnectSession,
+  onActivateSession,
+  onEditConnection,
   maskConnectionAddresses
 }: {
   profiles: ConnectionProfile[]
   sessions: Record<string, SessionSnapshot>
   workspaceTabs: WorkspaceTab[]
-  onOpenProfile(id: string): void
+  focusedSessionTabId?: string | null
+  onConnectProfile(profileId: string): void
+  onDisconnectSession(tabId: string): void | Promise<void>
+  onActivateSession(tabId: string): void
+  onEditConnection(profile: ConnectionProfile): void
   maskConnectionAddresses: boolean
 }) {
-  const [board, setBoard] = useState(loadBoard)
+  const [board, setBoard] = useState(() => loadBoard(getUiFontScaleRatio()))
+  const [fontScale, setFontScale] = useState(getUiFontScaleRatio)
   const [saveFailed, setSaveFailed] = useState(false)
   const [selectedId, setSelectedId] = useState('')
   const [nodeCandidateId, setNodeCandidateId] = useState('')
   const [selectedLinkKey, setSelectedLinkKey] = useState('')
   const [linkName, setLinkName] = useState('')
   const [linkTo, setLinkTo] = useState('')
-  const [placing, setPlacing] = useState(false)
   const [showRoutes, setShowRoutes] = useState(true)
   const [pendingRemoval, setPendingRemoval] = useState<'node' | 'link' | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -136,6 +159,12 @@ export function ServerTopologyPage({
   const linksRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<NodeDrag | null>(null)
   const arrowId = useId()
+  useEffect(() => {
+    const root = document.documentElement
+    const observer = new MutationObserver(() => setFontScale(getUiFontScaleRatio()))
+    observer.observe(root, { attributes: true, attributeFilter: ['style'] })
+    return () => observer.disconnect()
+  }, [])
   const { proxies, error: proxyError } = useProxyLibrary()
   const configured = useMemo(() => configuredTopologyRoutes(profiles, proxies), [profiles, proxies])
   const routeLinks = showRoutes ? configured.links : []
@@ -149,9 +178,10 @@ export function ServerTopologyPage({
         nodes: board.nodes.filter(({ id, routeOnly }) => ids.has(id) || (!routeOnly && !isTopologyProxyNode(id))),
         links: board.links
       },
-      ids
+      ids,
+      fontScale
     )
-  }, [board, configured, showRoutes])
+  }, [board, configured, fontScale, showRoutes])
 
   const save = (next: TopologyBoard) => {
     try {
@@ -205,15 +235,20 @@ export function ServerTopologyPage({
   const nodeName = (id: string) =>
     profilesById.get(id)?.name ?? configured.proxyNodes.get(id)?.name ?? t.serverTopologyMissingProfile
   const linkEndpoints = ([first, second]: TopologyLink) => `${nodeName(first)} ↔ ${nodeName(second)}`
-  const minWidth = Math.max(320, ...canvas.nodes.map((node) => node.x + topologyNodeDimensions(node).width + 40))
-  const minHeight = Math.max(200, ...canvas.nodes.map((node) => node.y + topologyNodeDimensions(node).height + 40))
+  const minWidth = Math.max(
+    320,
+    ...canvas.nodes.map((node) => node.x + topologyNodeDimensions(node, fontScale).width + 40)
+  )
+  const minHeight = Math.max(
+    200,
+    ...canvas.nodes.map((node) => node.y + topologyNodeDimensions(node, fontScale).height + 40)
+  )
 
   const selectNode = (id: string) => {
     if (id !== selectedId || selectedLinkKey) {
       setSelectedId(id)
       setSelectedLinkKey('')
       setLinkTo('')
-      setPlacing(false)
       if (detailsScrollRef.current) detailsScrollRef.current.scrollTop = 0
     }
   }
@@ -263,7 +298,7 @@ export function ServerTopologyPage({
     const stored = storeLayout()
     const next = stored.nodes.some(({ id }) => id === profileId)
       ? pinNodes(stored, [profileId])
-      : addTopologyNode(stored, profileId)
+      : addTopologyNode(stored, profileId, fontScale)
     if (next !== stored && save(next)) {
       setNodeCandidateId('')
       selectNode(profileId)
@@ -273,10 +308,10 @@ export function ServerTopologyPage({
   const moveNode = (node: TopologyNode, x: number, y: number) => {
     const stored = storeLayout()
     const next = moveTopologyNode(stored, node.id, Math.max(0, x), Math.max(0, y))
-    if (next !== stored && save(next)) setPlacing(false)
+    if (next !== stored) save(next)
   }
 
-  const handleNodeKeys = (event: KeyboardEvent<HTMLButtonElement>, node: TopologyNode) => {
+  const handleNodeKeys = (event: ReactKeyboardEvent<HTMLButtonElement>, node: TopologyNode) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
     const offset = {
       ArrowLeft: [-KEYBOARD_STEP, 0],
@@ -290,7 +325,7 @@ export function ServerTopologyPage({
     moveNode(node, node.x + offset[0], node.y + offset[1])
   }
 
-  const startDrag = (event: PointerEvent<HTMLButtonElement>, node: TopologyNode) => {
+  const startDrag = (event: ReactPointerEvent<HTMLButtonElement>, node: TopologyNode, zoom: number) => {
     if (event.button !== 0 || !event.isPrimary || dragRef.current) return
     const ends = Array.from(linksRef.current?.querySelectorAll<SVGGElement>('g[data-first]') ?? []).flatMap<
       NodeDrag['ends'][number]
@@ -316,25 +351,27 @@ export function ServerTopologyPage({
       scrollLeft: scrollRef.current?.scrollLeft ?? 0,
       scrollTop: scrollRef.current?.scrollTop ?? 0,
       moved: false,
+      zoom,
+      fontScale,
       ends
     }
   }
 
-  const dragPosition = (event: PointerEvent<HTMLButtonElement>, drag: NodeDrag, node: TopologyNode) => {
-    const dx = event.clientX - drag.clientX + (scrollRef.current?.scrollLeft ?? 0) - drag.scrollLeft
-    const dy = event.clientY - drag.clientY + (scrollRef.current?.scrollTop ?? 0) - drag.scrollTop
+  const dragPosition = (event: ReactPointerEvent<HTMLButtonElement>, drag: NodeDrag, node: TopologyNode) => {
+    const dx = (event.clientX - drag.clientX + (scrollRef.current?.scrollLeft ?? 0) - drag.scrollLeft) / drag.zoom
+    const dy = (event.clientY - drag.clientY + (scrollRef.current?.scrollTop ?? 0) - drag.scrollTop) / drag.zoom
     drag.moved ||= Math.hypot(dx, dy) >= DRAG_THRESHOLD
     return { dx: Math.max(-node.x, dx), dy: Math.max(-node.y, dy) }
   }
 
-  const updateDrag = (event: PointerEvent<HTMLButtonElement>, node: TopologyNode) => {
+  const updateDrag = (event: ReactPointerEvent<HTMLButtonElement>, node: TopologyNode) => {
     const drag = dragRef.current
     if (drag?.pointerId !== event.pointerId) return
     const { dx, dy } = dragPosition(event, drag, node)
     if (drag.moved) previewNode(event.currentTarget, node, drag, dx, dy)
   }
 
-  const endDrag = (event: PointerEvent<HTMLButtonElement>, node: TopologyNode, commit: boolean) => {
+  const endDrag = (event: ReactPointerEvent<HTMLButtonElement>, node: TopologyNode, commit: boolean) => {
     const drag = dragRef.current
     if (drag?.pointerId !== event.pointerId) return
     dragRef.current = null
@@ -362,11 +399,11 @@ export function ServerTopologyPage({
     <section
       className="server-topology"
       onKeyDown={(event) => {
-        if (event.key !== 'Escape' || (!selected && !selectedLink) || pendingRemoval || event.defaultPrevented) return
+        if (event.defaultPrevented) return
+        if (event.key !== 'Escape' || (!selected && !selectedLink) || pendingRemoval) return
         if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return
         event.preventDefault()
-        if (placing) setPlacing(false)
-        else selectNode('')
+        selectNode('')
       }}
     >
       <header className="server-management-page-header">
@@ -411,24 +448,13 @@ export function ServerTopologyPage({
         </div>
       </header>
       <div className="server-topology__body">
-        <div className="server-topology__viewport">
-          <div className="server-topology__scroll" ref={scrollRef}>
+        <TopologyCanvasViewport ariaLabel={t.serverTopology} height={minHeight} scrollRef={scrollRef} width={minWidth}>
+          {(zoom) => (
             <div
               className="server-topology__canvas"
-              data-placing={placing}
-              style={{ minWidth, minHeight }}
+              style={{ width: minWidth, height: minHeight, transform: `scale(${zoom})` }}
               onClick={(event) => {
-                if (event.target !== event.currentTarget) return
-                if (!placing || !selected) {
-                  selectNode('')
-                  return
-                }
-                const bounds = event.currentTarget.getBoundingClientRect()
-                moveNode(
-                  selected,
-                  event.clientX - bounds.left - topologyNodeDimensions(selected).width / 2,
-                  event.clientY - bounds.top - topologyNodeDimensions(selected).height / 2
-                )
+                if (event.target === event.currentTarget) selectNode('')
               }}
             >
               <svg className="server-topology__links" ref={linksRef}>
@@ -457,7 +483,7 @@ export function ServerTopologyPage({
                     <line
                       className="server-topology__route-line"
                       markerEnd={`url(#${arrowId})`}
-                      {...topologyLinkEndpoints(nodesById.get(from)!, nodesById.get(to)!, true)}
+                      {...topologyLinkEndpoints(nodesById.get(from)!, nodesById.get(to)!, true, fontScale)}
                     />
                   </g>
                 ))}
@@ -467,7 +493,7 @@ export function ServerTopologyPage({
                   const b = nodesById.get(second)!
                   const key = linkKey(link)
                   const isSelected = selectedLinkKey === key
-                  const endpoints = topologyLinkEndpoints(a, b, false)
+                  const endpoints = topologyLinkEndpoints(a, b, false, fontScale)
                   return (
                     <g
                       aria-label={name ? `${name} · ${linkEndpoints(link)}` : linkEndpoints(link)}
@@ -518,6 +544,7 @@ export function ServerTopologyPage({
                   <TopologyNodeCard
                     key={node.id}
                     node={node}
+                    fontScale={fontScale}
                     name={nodeName(node.id)}
                     protocol={
                       profile ? protocol(profile) : (proxy?.type.toUpperCase() ?? t.serverTopologyMissingProfile)
@@ -535,7 +562,7 @@ export function ServerTopologyPage({
                     selected={node.id === selectedId}
                     onClick={() => selectNode(node.id)}
                     onKeyDown={(event) => handleNodeKeys(event, node)}
-                    onPointerDown={(event) => startDrag(event, node)}
+                    onPointerDown={(event) => startDrag(event, node, zoom)}
                     onPointerMove={(event) => updateDrag(event, node)}
                     onPointerUp={(event) => endDrag(event, node, true)}
                     onLostPointerCapture={(event) => endDrag(event, node, false)}
@@ -543,9 +570,8 @@ export function ServerTopologyPage({
                 )
               })}
             </div>
-          </div>
-          <VerticalScrollbar ariaLabel={t.serverTopology} scrollRef={scrollRef} />
-        </div>
+          )}
+        </TopologyCanvasViewport>
         <aside
           className="server-topology__details"
           aria-label={selectedLink ? t.serverTopologyLinkDetails : t.serverDashboardDetails}
@@ -648,6 +674,7 @@ export function ServerTopologyPage({
                 <NodeDisplaySettings
                   size={selected.size}
                   metrics={selectedProfile ? selected.metrics : []}
+                  metricOrder={selected.metricOrder}
                   showMetrics={Boolean(selectedProfile)}
                   onSizeChange={(size: TopologyNodeSize) =>
                     save(updateTopologyNodeSize(storeLayout(), selected.id, size))
@@ -655,33 +682,21 @@ export function ServerTopologyPage({
                   onMetricsChange={(metrics: TopologyNodeMetric[]) =>
                     save(updateTopologyNodeMetrics(storeLayout(), selected.id, metrics))
                   }
+                  onMetricOrderChange={(metricOrder: TopologyNodeMetric[]) =>
+                    save(updateTopologyNodeMetricOrder(storeLayout(), selected.id, metricOrder))
+                  }
                 />
-                <div className="server-topology__node-actions">
-                  {!selectedProxy && (
-                    <Button
-                      size="panel"
-                      icon={<MaterialIcon name="terminal" />}
-                      disabled={!selectedProfile}
-                      onClick={() => onOpenProfile(selectedId)}
-                      title={t.openConnection}
-                    >
-                      <span>{t.openConnection}</span>
-                    </Button>
-                  )}
-                  <Button
-                    size="panel"
-                    icon={<MaterialIcon name="drag_indicator" />}
-                    title={t.serverTopologyMoveHint}
-                    aria-pressed={placing}
-                    onClick={() => setPlacing(!placing)}
-                  >
-                    <span>{t.serverTopologyMove}</span>
-                  </Button>
-                </div>
-                {placing ? (
-                  <p className="server-topology__hint" role="status">
-                    {t.serverTopologyPlaceHint}
-                  </p>
+                {selectedProfile ? (
+                  <ServerProfileActions
+                    profile={selectedProfile}
+                    workspaceTabs={workspaceTabs}
+                    sessions={sessions}
+                    focusedSessionTabId={focusedSessionTabId}
+                    onConnectProfile={onConnectProfile}
+                    onDisconnectSession={onDisconnectSession}
+                    onActivateSession={onActivateSession}
+                    onEditConnection={onEditConnection}
+                  />
                 ) : null}
                 <section className="server-topology__relations">
                   <h3>{t.serverTopologyRelations}</h3>

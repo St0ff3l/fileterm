@@ -22,6 +22,7 @@ import editIcon from '../../assets/icons/actions/material-edit.svg?raw'
 import editNoteIcon from '../../assets/icons/actions/material-edit_note.svg?raw'
 import errorIcon from '../../assets/icons/system/material-error.svg?raw'
 import fingerprintIcon from '../../assets/icons/security/material-fingerprint.svg?raw'
+import fitScreenIcon from '../../assets/icons/actions/material-fit_screen.svg?raw'
 import folderIcon from '../../assets/icons/files/material-folder.svg?raw'
 import folderOpenIcon from '../../assets/icons/files/material-folder_open.svg?raw'
 import folderSharedIcon from '../../assets/icons/files/material-folder_shared.svg?raw'
@@ -83,6 +84,7 @@ const sources = {
   edit_note: editNoteIcon,
   error: errorIcon,
   fingerprint: fingerprintIcon,
+  fit_screen: fitScreenIcon,
   folder: folderIcon,
   folder_open: folderOpenIcon,
   folder_shared: folderSharedIcon,

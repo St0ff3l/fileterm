@@ -164,16 +164,42 @@
   border-radius: 7px;
 }
 
-.terminal-find input {
+.terminal-find-query {
+  --input-focus-shadow: none;
+  display: flex;
   flex: 1 1 auto;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
   height: 24px;
   padding: 0 6px;
+  border: 1px solid var(--border-dark);
   border-radius: var(--radius-sm, 4px);
+  background: var(--bg-main);
+  color: var(--text-muted);
+}
+
+.terminal-find-query > .app-icon {
+  flex: 0 0 auto;
+}
+
+.terminal-find-query input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-main);
   font-family: var(--font-mono);
   font-size: var(--ui-font-size-12px, 12px);
   line-height: 1;
   caret-color: var(--text-main);
+}
+
+.terminal-find-query:focus-within {
+  border-color: var(--input-focus-inset);
 }
 
 .terminal-find button {
@@ -215,15 +241,13 @@
   outline-offset: -2px;
 }
 
-.terminal-find input:focus,
-.terminal-find input:focus-visible {
-  outline: none;
-  box-shadow: var(--input-focus-shadow);
-}
-
 .terminal-find .terminal-find-actions > .terminal-find-submit {
-  min-width: 42px;
+  width: 24px;
+  min-width: 24px;
   margin-left: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
   font-weight: 600;
 }
 
@@ -2887,7 +2911,7 @@
 
 .connection-manager-layout {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: calc(224px + var(--app-ui-layout-extra-lg, 0px)) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
@@ -2999,7 +3023,7 @@
 }
 
 .connection-manager-table {
-  --connection-manager-row-height: 36px;
+  --connection-manager-row-height: calc(36px + var(--app-ui-layout-extra-sm, 0px));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   align-self: stretch;
@@ -3071,7 +3095,7 @@
 }
 
 .connection-manager-table .manager-head {
-  height: 34px;
+  height: calc(34px + var(--app-ui-layout-extra-xs, 0px));
   border-bottom: 1px solid var(--border-light);
   background: var(--manager-head-bg) !important;
   color: var(--text-muted);
