@@ -232,7 +232,7 @@ input:where(
 }
 
 .titlebar-brand strong {
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
 }
 
 .titlebar-tabarea {
@@ -244,11 +244,11 @@ input:where(
 }
 
 .titlebar-home-brand strong {
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .titlebar-home-brand span {
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .tabbar-folder-button {
@@ -270,7 +270,7 @@ input:where(
   padding: 0 13px;
   border: 0;
   border-radius: 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   justify-content: center;
   text-align: center;
 }
@@ -295,7 +295,7 @@ input:where(
   align-self: center;
   width: 28px;
   height: 28px;
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
   border-radius: var(--radius-md, 6px);
   margin-left: 6px;
   display: flex;
@@ -305,7 +305,7 @@ input:where(
 
 .window-tools {
   gap: 2px;
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
 }
 
 .window-tools span,
@@ -321,13 +321,13 @@ input:where(
 
 .status-message {
   padding: 7px 12px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .status-message-close {
   width: 20px;
   height: 20px;
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .workspace-stage {
@@ -355,14 +355,14 @@ input:where(
 
 .sync-row {
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .connection-status {
   gap: 8px;
   height: 20px;
   padding: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 700;
 }
 
@@ -383,7 +383,7 @@ input:where(
   margin: 0 0 7px;
   border: 1px solid transparent;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 500;
   line-height: 1;
   text-align: center;
@@ -471,7 +471,7 @@ input:where(
   max-width: 40px;
   color: var(--text-main);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
@@ -482,13 +482,13 @@ input:where(
 .collapsed-resource-label {
   color: var(--text-muted);
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   line-height: 1;
 }
 
 .collapsed-resource-value {
   color: var(--text-main);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   line-height: 1;
 }
 
@@ -496,7 +496,7 @@ input:where(
 .metric-line,
 .meter-row {
   height: 23px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 500;
 }
 
@@ -507,7 +507,7 @@ input:where(
   gap: 8px;
   height: 20px;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .address-row span {
@@ -527,7 +527,7 @@ input:where(
   min-width: 0;
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -552,13 +552,13 @@ input:where(
   align-items: center;
   gap: 8px;
   height: 20px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
 }
 
 .system-sidebar-layout .metric-line span,
 .system-sidebar-layout .meter-header span {
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
 }
 
@@ -571,7 +571,7 @@ input:where(
 .meter-row strong,
 .meter-header strong {
   font-family: inherit;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
 }
 
@@ -585,7 +585,7 @@ input:where(
   column-gap: 8px;
   align-items: center;
   margin-bottom: 4px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 600;
 }
 
@@ -662,7 +662,7 @@ input:where(
   background: var(--popover-bg);
   box-shadow: var(--popover-shadow);
   color: var(--text-main);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 500;
   line-height: 1.35;
   white-space: normal;
@@ -702,7 +702,7 @@ input:where(
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -717,7 +717,7 @@ input:where(
   border: 0 !important;
   box-shadow: none !important;
   background: transparent !important;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
 }
 
 .disk-select.ft-select-shell {
@@ -747,7 +747,7 @@ input:where(
   height: 18px !important;
   min-height: 18px !important;
   padding: 0 2px !important;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   border: 0 !important;
   box-shadow: none !important;
   outline: none !important;
@@ -788,7 +788,7 @@ input:where(
   width: 100%;
   min-width: 0;
   padding: 0 2px !important;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
 }
 
 .system-sidebar-layout .meter-header .disk-select.ft-select-shell select:focus,
@@ -924,7 +924,7 @@ input:where(
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   white-space: nowrap;
 }
 
@@ -942,7 +942,7 @@ input:where(
   grid-template-columns: 64px 58px minmax(0, 1fr);
   margin: 6px -12px 0;
   border-radius: 0;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   height: 26px;
 }
 
@@ -982,7 +982,7 @@ input:where(
   grid-template-columns: 64px 58px minmax(0, 1fr);
   min-height: 24px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .process-row > span {
@@ -1013,7 +1013,7 @@ input:where(
   padding: 6px 12px 0;
   border-top: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .network-rates {
@@ -1021,14 +1021,14 @@ input:where(
 }
 
 .network-rate i {
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-style: normal;
   font-weight: 700;
   margin-right: 2px;
 }
 
 .network-rate strong {
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
 }
 
 .network-select {
@@ -1037,7 +1037,7 @@ input:where(
   max-width: 92px;
   height: 22px;
   padding: 0 6px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 400;
 }
 
@@ -1049,7 +1049,7 @@ input:where(
 
 .network-scale {
   padding: 2px 0 6px;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
 }
 
 .grid-chart {
@@ -1073,7 +1073,7 @@ input:where(
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
   height: 24px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .disk-head {
@@ -1149,7 +1149,7 @@ input:where(
   height: 22px;
   border: 0;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 500;
 }
 
@@ -1167,7 +1167,7 @@ input:where(
   margin-left: 0;
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 400;
   line-height: 22px;
   text-overflow: ellipsis;
@@ -1200,7 +1200,7 @@ input:where(
   height: 22px;
   padding: 0 7px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 @container file-manager (max-width: 720px) {
@@ -1234,7 +1234,7 @@ input:where(
 .file-toolbar {
   height: 25px;
   padding: 0 12px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .file-toolbar > span {
@@ -1254,7 +1254,7 @@ input:where(
   height: 22px;
   padding: 0 7px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .file-split {
@@ -1279,7 +1279,7 @@ input:where(
 .pane-title {
   height: 25px;
   padding: 0 14px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 500;
 }
 
@@ -1289,12 +1289,12 @@ input:where(
 
 .pane-title span {
   max-width: 58%;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .fs-file-table {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .fs-file-table th,
@@ -1328,19 +1328,19 @@ input:where(
 }
 
 .fs-file-table th {
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
 
 .file-manager .fs-file-table:not(.command-table) {
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .file-manager .fs-file-table:not(.command-table) th {
   height: 24px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
 }
 
 .file-manager .fs-file-table:not(.command-table) td {
@@ -1373,7 +1373,7 @@ input:where(
   min-height: 24px;
   padding: 0 12px;
   border-bottom: 0;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   align-self: stretch;
   margin-top: auto;
   z-index: 10;
@@ -1453,7 +1453,7 @@ input:where(
   }
 
   .titlebar-brand strong {
-    font-size: 13px;
+    font-size: var(--ui-font-size-13px, 13px);
   }
 
   .session-workspace {

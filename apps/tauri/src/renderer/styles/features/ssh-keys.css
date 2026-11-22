@@ -16,7 +16,7 @@
 
 .ssh-key-manager-title .material-symbols-outlined {
   color: var(--accent-highlight);
-  font-size: 26px;
+  font-size: var(--ui-font-size-26px, 26px);
 }
 
 .ssh-key-manager-search {
@@ -46,7 +46,7 @@
   border-radius: 8px;
   background: var(--danger-surface);
   color: var(--danger-text);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .ssh-key-manager-table .manager-head,
@@ -65,7 +65,7 @@
 .ssh-key-manager-table .manager-head {
   height: 34px !important;
   min-height: 34px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .ssh-key-manager-table .manager-row {
@@ -108,7 +108,7 @@
 .ssh-key-note-cell,
 .ssh-key-imported-at {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .ssh-key-fingerprint-cell code {
@@ -135,12 +135,12 @@
 .ssh-key-empty strong,
 .ssh-key-manager-empty strong {
   color: var(--text-main);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .ssh-key-empty .material-symbols-outlined,
 .ssh-key-manager-empty .material-symbols-outlined {
-  font-size: 34px;
+  font-size: var(--ui-font-size-34px, 34px);
 }
 
 .ssh-key-folder-create-row {
@@ -226,7 +226,7 @@
   border-radius: 8px;
   background: var(--bg-hover);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .ssh-private-key-legacy > span {
@@ -237,7 +237,7 @@
 
 .ssh-private-key-notice {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .ssh-key-import-dialog {
@@ -254,7 +254,7 @@
   padding: 0 16px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-sidebar);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -283,7 +283,7 @@
 
 .ssh-key-note-dialog__field > span {
   color: var(--text-main);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }
 
@@ -314,14 +314,14 @@
   min-height: 176px;
   resize: vertical;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.45;
   white-space: pre;
 }
 
 .ssh-key-note-dialog__field small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .ssh-key-import-dialog__file-row {
@@ -406,7 +406,7 @@
 
 .ssh-key-import-dialog__duplicate-notice > .material-symbols-outlined {
   color: var(--copy-link);
-  font-size: 19px;
+  font-size: var(--ui-font-size-19px, 19px);
 }
 
 .ssh-key-import-dialog__duplicate-notice strong,
@@ -416,12 +416,12 @@
 
 .ssh-key-import-dialog__duplicate-notice strong {
   margin-bottom: 3px;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .ssh-key-import-dialog__duplicate-notice div > span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }
 

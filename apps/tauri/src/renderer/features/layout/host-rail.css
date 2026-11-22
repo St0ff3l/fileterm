@@ -28,7 +28,7 @@
   margin: 0;
   padding: 12px 14px 6px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;

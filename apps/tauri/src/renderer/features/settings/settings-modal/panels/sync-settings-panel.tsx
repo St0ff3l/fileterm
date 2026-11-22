@@ -217,7 +217,10 @@ export function SyncSettingsPanel() {
                   onClick={() => {
                     if (!desktopApi) return
                     void runSyncOperation('test', async () => {
-                      const result = await desktopApi.testWebDavSync()
+                      const result = await desktopApi.testWebDavSync({
+                        ...syncConfig,
+                        ...(syncPassword ? { password: syncPassword } : {})
+                      })
                       setSyncFeedback({ kind: 'success', message: result.message })
                     })
                   }}
@@ -390,7 +393,8 @@ export function SyncSettingsPanel() {
                           : s3Config.region === 'auto'
                             ? 'us-east-1'
                             : s3Config.region,
-                      pathStyleAccessEnabled: isR2 ? true : isBitiful ? false : s3Config.pathStyleAccessEnabled
+                      pathStyleAccessEnabled: isR2 ? true : isBitiful ? false : s3Config.pathStyleAccessEnabled,
+                      allowInvalidCertificates: isR2 || isBitiful ? false : s3Config.allowInvalidCertificates
                     })
                   }}
                 />
@@ -468,7 +472,20 @@ export function SyncSettingsPanel() {
                   />
                   {t.s3PathStyle}
                 </label>
+                {s3Config.provider === 'custom' && (
+                  <label className="webdav-checkbox ssh-checkbox">
+                    <SelectionControl
+                      type="checkbox"
+                      checked={s3Config.allowInvalidCertificates}
+                      onChange={(event) => setS3Config({ ...s3Config, allowInvalidCertificates: event.target.checked })}
+                    />
+                    {t.s3AllowInvalidCertificates}
+                  </label>
+                )}
               </div>
+              {s3Config.allowInvalidCertificates && (
+                <p className="settings-tools-hint">{t.s3AllowInvalidCertificatesWarning}</p>
+              )}
             </div>
 
             <div className="sync-config-actions-row">
@@ -503,7 +520,10 @@ export function SyncSettingsPanel() {
                   onClick={() => {
                     if (!desktopApi) return
                     void runSyncOperation('s3-test', async () => {
-                      const result = await desktopApi.testS3Backup()
+                      const result = await desktopApi.testS3Backup({
+                        ...s3Config,
+                        ...(s3SecretAccessKey ? { secretAccessKey: s3SecretAccessKey } : {})
+                      })
                       setS3Feedback({ kind: 'success', message: result.message })
                     })
                   }}

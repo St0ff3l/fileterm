@@ -63,6 +63,8 @@ pub struct UiPreferences {
     pub ui_zoom_locked: bool,
     #[serde(default = "default_ui_zoom_percent")]
     pub ui_zoom_percent: i32,
+    #[serde(default = "default_ui_font_scale_percent")]
+    pub ui_font_scale_percent: i32,
     #[serde(default = "default_remember_window_size")]
     pub remember_window_size: bool,
     #[serde(default = "default_workspace_mode", alias = "tabBarLayout")]
@@ -120,6 +122,7 @@ pub struct UiPreferencesInput {
     pub terminal_zoom_locked: Option<bool>,
     pub ui_zoom_locked: Option<bool>,
     pub ui_zoom_percent: Option<i32>,
+    pub ui_font_scale_percent: Option<i32>,
     pub remember_window_size: Option<bool>,
     #[serde(alias = "tabBarLayout")]
     pub workspace_mode: Option<String>,
@@ -147,6 +150,9 @@ const DEFAULT_UI_ZOOM_PERCENT: i32 = 100;
 const MIN_UI_ZOOM_PERCENT: i32 = 80;
 const MAX_UI_ZOOM_PERCENT: i32 = 200;
 const UI_ZOOM_PERCENT_STEP: i32 = 10;
+const DEFAULT_UI_FONT_SCALE_PERCENT: i32 = 100;
+const MIN_UI_FONT_SCALE_PERCENT: i32 = 80;
+const MAX_UI_FONT_SCALE_PERCENT: i32 = 150;
 const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
     ["stats", "recent", "allConnections", "quickActions"];
 
@@ -268,6 +274,10 @@ fn default_mask_connection_addresses() -> bool {
 
 fn default_ui_zoom_percent() -> i32 {
     DEFAULT_UI_ZOOM_PERCENT
+}
+
+fn default_ui_font_scale_percent() -> i32 {
+    DEFAULT_UI_FONT_SCALE_PERCENT
 }
 
 fn default_resource_monitoring_metrics() -> Vec<String> {
@@ -545,6 +555,9 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     preferences.ui_zoom_percent = preferences
         .ui_zoom_percent
         .clamp(MIN_UI_ZOOM_PERCENT, MAX_UI_ZOOM_PERCENT);
+    preferences.ui_font_scale_percent = preferences
+        .ui_font_scale_percent
+        .clamp(MIN_UI_FONT_SCALE_PERCENT, MAX_UI_FONT_SCALE_PERCENT);
     if !matches!(preferences.app_icon.as_str(), "classic" | "material" | "clean") {
         preferences.app_icon = default_app_icon();
     }

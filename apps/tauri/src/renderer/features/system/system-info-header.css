@@ -5,12 +5,12 @@
 .system-info-header strong {
   display: block;
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: var(--ui-font-size-22px, 22px);
   font-weight: 700;
 }
 
 .system-info-header p {
   margin: 6px 0 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }

@@ -46,7 +46,7 @@
 }
 
 .path-bookmarks-dialog .ft-dialog__title {
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
   font-weight: 500;
   line-height: 1.4;
 }
@@ -108,14 +108,14 @@
 }
 
 .path-bookmarks-current-label {
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   color: var(--text-muted);
   font-weight: 500;
   line-height: 1.2;
 }
 
 .path-bookmarks-current-path {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-family: var(--font-mono, monospace);
   color: var(--text-primary);
   max-height: 5.6em;
@@ -216,7 +216,7 @@
 }
 
 .path-bookmarks-open-name {
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -227,7 +227,7 @@
 
 .path-bookmarks-open-path {
   display: block;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -294,14 +294,14 @@
 
 .path-bookmarks-empty-title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
   color: var(--text-secondary);
 }
 
 .path-bookmarks-empty-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   color: var(--text-muted);
   max-width: 260px;
   line-height: 1.4;
@@ -310,7 +310,7 @@
 /* Error message */
 .path-bookmarks .path-bookmarks-error {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   color: var(--status-danger);
   overflow-wrap: anywhere;
 }

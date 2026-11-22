@@ -19,7 +19,7 @@
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
   cursor: pointer;
   transition:

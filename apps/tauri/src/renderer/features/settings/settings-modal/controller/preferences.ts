@@ -22,6 +22,7 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     isSavingUpdatePreference,
     setIsSavingUpdatePreference,
     updatePreferenceError,
+    updatePreferenceLoadError,
     setUpdatePreferenceError,
     terminalZoomLocked,
     setTerminalZoomLocked,
@@ -90,6 +91,12 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     setIsSavingUiZoomPercent,
     uiZoomPercentError,
     setUiZoomPercentError,
+    uiFontScalePercent,
+    setUiFontScalePercent,
+    isSavingUiFontScalePercent,
+    setIsSavingUiFontScalePercent,
+    uiFontScalePercentError,
+    setUiFontScalePercentError,
     connectionDefaults,
     setConnectionDefaults,
     isSavingConnectionDefaults,
@@ -371,6 +378,25 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
       .finally(() => setIsSavingUiZoomPercent(false))
   }
 
+  const setUiFontScalePercentPreference = (nextValue: number) => {
+    if (!desktopApi || isSavingUiFontScalePercent || nextValue === uiFontScalePercent) {
+      return
+    }
+
+    const previousValue = uiFontScalePercent
+    setUiFontScalePercent(nextValue)
+    setUiFontScalePercentError(null)
+    setIsSavingUiFontScalePercent(true)
+    void desktopApi
+      .setUiPreferences({ uiFontScalePercent: nextValue })
+      .then((preferences) => setUiFontScalePercent(preferences.uiFontScalePercent))
+      .catch(() => {
+        setUiFontScalePercent(previousValue)
+        setUiFontScalePercentError(t.uiFontScalePercentSaveFailed)
+      })
+      .finally(() => setIsSavingUiFontScalePercent(false))
+  }
+
   const setMaskConnectionAddressesPreference = (nextValue: boolean) => {
     if (!desktopApi || isSavingMaskConnectionAddresses || nextValue === maskConnectionAddresses) {
       return
@@ -443,6 +469,7 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     autoCheckUpdates,
     isSavingUpdatePreference,
     updatePreferenceError,
+    updatePreferenceLoadError,
     setUpdateCheckPreference,
     updateChannel,
     setUpdateChannelPreference,
@@ -500,6 +527,10 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     isSavingUiZoomPercent,
     uiZoomPercentError,
     setUiZoomPercentPreference,
+    uiFontScalePercent,
+    isSavingUiFontScalePercent,
+    uiFontScalePercentError,
+    setUiFontScalePercentPreference,
     maskConnectionAddresses,
     isSavingMaskConnectionAddresses,
     maskConnectionAddressesError,

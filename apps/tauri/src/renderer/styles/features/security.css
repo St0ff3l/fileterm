@@ -29,14 +29,14 @@
   display: block;
   margin-bottom: 4px;
   color: var(--text-main);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }
 
 .security-card-header-copy p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }
 
@@ -48,7 +48,7 @@
   border: 1px solid var(--border-light);
   border-radius: 999px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -77,14 +77,14 @@
   display: block;
   margin-bottom: 4px;
   color: var(--text-main);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
 }
 
 .security-preference-copy p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }
 
@@ -108,7 +108,7 @@
   background: var(--input-bg, var(--bg-input, var(--bg-primary)));
   color: var(--text-main);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .security-idle-lock-select.dropdown-select-trigger {
@@ -154,7 +154,7 @@
   display: grid;
   gap: 6px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .security-form-grid input {
@@ -167,7 +167,7 @@
   background: var(--input-bg, var(--bg-input, var(--bg-primary)));
   color: var(--text-main);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   outline: none;
 }
 
@@ -184,7 +184,7 @@
 .security-policy-hint {
   margin: -4px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1.5;
 }
 
@@ -247,7 +247,7 @@
   border-radius: 6px;
   background: color-mix(in srgb, var(--accent-highlight) 6%, var(--bg-card));
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.5;
 }
 
@@ -263,7 +263,7 @@
   gap: 8px;
   padding: 2px;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: var(--ui-font-size-11-5px, 11.5px);
   line-height: 1.5;
 }
 
@@ -286,7 +286,7 @@
   display: grid;
   gap: 6px;
   color: var(--dialog-description);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   text-align: left;
 }
 
@@ -324,7 +324,7 @@
   background: color-mix(in srgb, var(--accent-highlight) 6%, transparent);
   color: var(--accent-highlight);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   cursor: pointer;
   transition:
     background var(--duration-hover) var(--ease-out),
@@ -458,7 +458,7 @@
 .session-lock-card h1 {
   margin: 0 0 6px;
   color: var(--text-main);
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -467,7 +467,7 @@
   max-width: 270px;
   margin: 0 0 22px;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: var(--ui-font-size-12-5px, 12.5px);
   line-height: 1.5;
   text-wrap: balance;
 }
@@ -507,7 +507,7 @@
   background: var(--bg-input, var(--bg-main));
   color: var(--text-main);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--ui-font-size-13-5px, 13.5px);
   letter-spacing: normal;
   transition:
     border-color var(--duration-hover) var(--ease-out),
@@ -517,7 +517,7 @@
 
 .session-lock-card__form input::placeholder {
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: var(--ui-font-size-12-5px, 12.5px);
   font-weight: 400;
   opacity: 0.6;
 }
@@ -588,7 +588,7 @@
   border-radius: 10px;
   background: var(--button-primary-bg);
   color: var(--button-primary-text);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 550;
   cursor: pointer;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--button-primary-bg) 30%, transparent);
@@ -616,7 +616,7 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--status-danger) 10%, transparent);
   color: var(--status-danger);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.4;
 }
 

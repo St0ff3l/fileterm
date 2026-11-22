@@ -14,7 +14,7 @@
   gap: 12px;
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 24px;
+  font-size: var(--ui-font-size-24px, 24px);
   font-weight: 400;
   letter-spacing: -0.015em;
   line-height: 1.2;
@@ -23,16 +23,16 @@
 .server-management-page-header h1 > .material-symbols-outlined {
   flex: none;
   color: var(--accent-secondary);
-  font-size: 26px;
+  font-size: var(--ui-font-size-26px, 26px);
 }
 
 @media (max-width: 640px) {
   .server-management-page-header h1 {
     gap: 8px;
-    font-size: 19px;
+    font-size: var(--ui-font-size-19px, 19px);
   }
 
   .server-management-page-header h1 > .material-symbols-outlined {
-    font-size: 20px;
+    font-size: var(--ui-font-size-20px, 20px);
   }
 }

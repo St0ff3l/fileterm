@@ -20,7 +20,7 @@ const OPENAI_STANDARD_EFFORTS = [
   'high',
   'xhigh'
 ] as const satisfies readonly AiReasoningEffort[]
-const OPENAI_GPT_56_EFFORTS = [
+const OPENAI_EXTENDED_EFFORTS = [
   'none',
   'low',
   'medium',
@@ -53,7 +53,7 @@ const BUDGET_EFFORTS = ['low', 'medium', 'high', 'max'] as const satisfies reado
 const AUTO_ONLY_PROFILE: AiReasoningProfile = { control: 'none', efforts: [] }
 const TOGGLE_ONLY_PROFILE: AiReasoningProfile = { control: 'toggle', efforts: [] }
 const OPENAI_STANDARD_PROFILE: AiReasoningProfile = { control: 'effort', efforts: OPENAI_STANDARD_EFFORTS }
-const OPENAI_GPT_56_PROFILE: AiReasoningProfile = { control: 'effort', efforts: OPENAI_GPT_56_EFFORTS }
+const OPENAI_EXTENDED_PROFILE: AiReasoningProfile = { control: 'effort', efforts: OPENAI_EXTENDED_EFFORTS }
 const OPENAI_PRO_PROFILE: AiReasoningProfile = { control: 'effort', efforts: OPENAI_PRO_EFFORTS }
 const ANTHROPIC_ADAPTIVE_PROFILE: AiReasoningProfile = {
   control: 'effort',
@@ -111,7 +111,7 @@ function explicitReasoningProfile(provider: AiProviderModelIdentity, model: stri
 
 function openAiProfile(model: string): AiReasoningProfile {
   if (modelMatches(model, 'gpt-5.6-pro', 'gpt-5.5-pro', 'gpt-5.4-pro')) return OPENAI_PRO_PROFILE
-  if (modelStartsWith(model, 'gpt-5.6')) return OPENAI_GPT_56_PROFILE
+  if (modelStartsWith(model, 'gpt-5.6') || modelStartsWith(model, 'gpt-6')) return OPENAI_EXTENDED_PROFILE
   if (
     modelStartsWith(model, 'gpt-5.5') ||
     modelStartsWith(model, 'gpt-5.4') ||
@@ -129,6 +129,7 @@ function anthropicProfile(model: string): AiReasoningProfile {
     modelStartsWith(model, 'claude-fable-5') ||
     modelStartsWith(model, 'claude-opus-5') ||
     modelStartsWith(model, 'claude-sonnet-5') ||
+    modelStartsWith(model, 'claude-haiku-5-5') ||
     modelStartsWith(model, 'claude-opus-4-8') ||
     modelStartsWith(model, 'claude-opus-4-7') ||
     modelStartsWith(model, 'claude-opus-4-6') ||
@@ -164,14 +165,18 @@ function glmProfile(model: string): AiReasoningProfile {
 }
 
 function deepSeekProfile(model: string): AiReasoningProfile {
-  if (modelStartsWith(model, 'deepseek-v4-flash') || modelStartsWith(model, 'deepseek-v4-pro')) {
+  if (
+    modelStartsWith(model, 'deepseek-flash') ||
+    modelStartsWith(model, 'deepseek-v4-flash') ||
+    modelStartsWith(model, 'deepseek-v4-pro')
+  ) {
     return DEEPSEEK_PROFILE
   }
   return AUTO_ONLY_PROFILE
 }
 
 function kimiProfile(model: string): AiReasoningProfile {
-  if (modelMatches(model, 'kimi-k3')) return KIMI_K3_PROFILE
+  if (modelMatches(model, 'kimi-k3') || modelStartsWith(model, 'kimi-k3.1-pro')) return KIMI_K3_PROFILE
   if (modelMatches(model, 'kimi-k2.6')) return TOGGLE_ONLY_PROFILE
   // K2.7 Code is always thinking and does not expose a reasoning_effort
   // parameter. It therefore remains Auto-only in the selector.
@@ -254,6 +259,9 @@ function knownImageInput(provider: AiProviderModelIdentity, model: string) {
     return true
   }
   if (provider.kind === 'openai-responses' && modelStartsWith(normalizedModel, 'gpt-5')) {
+    return true
+  }
+  if (provider.kind === 'openai-responses' && modelStartsWith(normalizedModel, 'gpt-6')) {
     return true
   }
   if (provider.kind === 'anthropic-messages' && modelStartsWith(normalizedModel, 'claude-')) {

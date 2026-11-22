@@ -39,6 +39,9 @@ fn apply_provider_defaults(config: &mut StoredConfig) {
         }
         _ => {}
     }
+    if config.provider != PROVIDER_CUSTOM {
+        config.allow_invalid_certificates = false;
+    }
 }
 
 fn normalize_endpoint(value: &str) -> Result<String, AppError> {
@@ -197,6 +200,7 @@ fn public_config(config: &StoredConfig) -> Value {
         "bucket": config.bucket,
         "remotePath": config.remote_path,
         "pathStyleAccessEnabled": config.path_style_access_enabled,
+        "allowInvalidCertificates": config.allow_invalid_certificates,
         "accessKeyId": config.access_key_id,
         "hasSavedSecret": config.secret_access_key.is_some(),
         "lastSyncedAt": config.last_synced_at,
@@ -230,9 +234,14 @@ fn configured(app: &AppHandle, require_enabled: bool) -> Result<StoredConfig, Ap
     Ok(config)
 }
 
-fn client() -> Result<Client, AppError> {
-    Client::builder()
-        .timeout(Duration::from_secs(20))
+fn client(config: &StoredConfig) -> Result<Client, AppError> {
+    let builder = Client::builder().timeout(Duration::from_secs(20));
+    let builder = if config.allow_invalid_certificates {
+        builder.danger_accept_invalid_certs(true)
+    } else {
+        builder
+    };
+    builder
         .build()
         .map_err(|error| command_error(format!("无法初始化 S3 客户端: {error}")))
 }

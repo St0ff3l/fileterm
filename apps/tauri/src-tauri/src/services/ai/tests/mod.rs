@@ -275,35 +275,37 @@ mod tests {
     }
 
     #[test]
-    fn deepseek_v4_maps_none_to_toggle_and_effort_to_official_values() {
+    fn deepseek_models_map_none_to_toggle_and_effort_to_official_values() {
         let mut provider = provider("https://api.deepseek.com");
-        provider.model = "deepseek-v4-flash-vision-exp".to_string();
+        for model in ["deepseek-flash", "deepseek-v4-flash-vision-exp"] {
+            provider.model = model.to_string();
 
-        let mut low_payload = json!({"model": provider.model});
-        apply_openai_compatible_reasoning(
-            &mut low_payload,
-            &provider,
-            Some(AiReasoningEffort::Low),
-        );
-        assert_eq!(low_payload["thinking"]["type"], "enabled");
-        assert_eq!(low_payload["reasoning_effort"], "low");
+            let mut low_payload = json!({"model": provider.model});
+            apply_openai_compatible_reasoning(
+                &mut low_payload,
+                &provider,
+                Some(AiReasoningEffort::Low),
+            );
+            assert_eq!(low_payload["thinking"]["type"], "enabled");
+            assert_eq!(low_payload["reasoning_effort"], "low");
 
-        let mut medium_payload = json!({"model": provider.model});
-        apply_openai_compatible_reasoning(
-            &mut medium_payload,
-            &provider,
-            Some(AiReasoningEffort::Medium),
-        );
-        assert_eq!(medium_payload["reasoning_effort"], "high");
+            let mut medium_payload = json!({"model": provider.model});
+            apply_openai_compatible_reasoning(
+                &mut medium_payload,
+                &provider,
+                Some(AiReasoningEffort::Medium),
+            );
+            assert_eq!(medium_payload["reasoning_effort"], "high");
 
-        let mut none_payload = json!({"model": provider.model});
-        apply_openai_compatible_reasoning(
-            &mut none_payload,
-            &provider,
-            Some(AiReasoningEffort::None),
-        );
-        assert_eq!(none_payload["thinking"]["type"], "disabled");
-        assert!(none_payload.get("reasoning_effort").is_none());
+            let mut none_payload = json!({"model": provider.model});
+            apply_openai_compatible_reasoning(
+                &mut none_payload,
+                &provider,
+                Some(AiReasoningEffort::None),
+            );
+            assert_eq!(none_payload["thinking"]["type"], "disabled");
+            assert!(none_payload.get("reasoning_effort").is_none());
+        }
     }
 
     #[test]

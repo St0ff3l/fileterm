@@ -9,6 +9,6 @@
 
 .file-action-label {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }

@@ -7,7 +7,7 @@
   padding: 0;
   list-style: none;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .ssh-jump-route li {
@@ -50,7 +50,7 @@
 
 .ssh-jump-hop__label {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 .ssh-jump-hop__select {
@@ -104,7 +104,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   margin-left: var(--ssh-jump-control-offset);
 }
 

@@ -17,5 +17,5 @@
   grid-template-columns: 72px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }

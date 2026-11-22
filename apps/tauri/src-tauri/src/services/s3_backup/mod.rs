@@ -42,6 +42,8 @@ struct StoredConfig {
     bucket: String,
     remote_path: String,
     path_style_access_enabled: bool,
+    #[serde(default)]
+    allow_invalid_certificates: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     access_key_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,6 +66,7 @@ impl Default for StoredConfig {
             bucket: String::new(),
             remote_path: DEFAULT_REMOTE_PATH.to_string(),
             path_style_access_enabled: true,
+            allow_invalid_certificates: false,
             access_key_id: None,
             secret_access_key: None,
             last_synced_at: None,

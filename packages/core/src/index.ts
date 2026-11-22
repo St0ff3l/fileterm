@@ -1272,6 +1272,7 @@ export interface S3BackupConfig {
   bucket: string
   remotePath: string
   pathStyleAccessEnabled: boolean
+  allowInvalidCertificates: boolean
   accessKeyId?: string
   hasSavedSecret: boolean
   lastSyncedAt?: string
@@ -1280,7 +1281,15 @@ export interface S3BackupConfig {
 
 export type S3BackupConfigInput = Pick<
   S3BackupConfig,
-  'enabled' | 'provider' | 'endpoint' | 'region' | 'bucket' | 'remotePath' | 'pathStyleAccessEnabled' | 'accessKeyId'
+  | 'enabled'
+  | 'provider'
+  | 'endpoint'
+  | 'region'
+  | 'bucket'
+  | 'remotePath'
+  | 'pathStyleAccessEnabled'
+  | 'allowInvalidCertificates'
+  | 'accessKeyId'
 > & {
   secretAccessKey?: string
 }
@@ -2235,6 +2244,11 @@ export const DEFAULT_UI_ZOOM_PERCENT = 100
 export const MIN_UI_ZOOM_PERCENT = 80
 export const MAX_UI_ZOOM_PERCENT = 200
 export const UI_ZOOM_PERCENT_STEP = 10
+export const DEFAULT_UI_FONT_SCALE_PERCENT = 100
+export const MIN_UI_FONT_SCALE_PERCENT = 80
+export const MAX_UI_FONT_SCALE_PERCENT = 150
+export const UI_FONT_SCALE_PERCENT_STEP = 10
+export const MAX_EFFECTIVE_UI_TEXT_SCALE_PERCENT = 200
 
 export type AppIconVariant = 'classic' | 'material' | 'clean'
 export type TerminalRenderer = 'dom' | 'webgl'
@@ -2290,6 +2304,7 @@ export interface UiPreferences {
   terminalZoomLocked: boolean
   uiZoomLocked: boolean
   uiZoomPercent: number
+  uiFontScalePercent: number
   rememberWindowSize: boolean
   workspaceMode: WorkspaceMode
   compactTabBar: boolean
@@ -2325,6 +2340,7 @@ export interface UiPreferencesInput {
   terminalZoomLocked?: boolean
   uiZoomLocked?: boolean
   uiZoomPercent?: number
+  uiFontScalePercent?: number
   rememberWindowSize?: boolean
   workspaceMode?: WorkspaceMode
   compactTabBar?: boolean
@@ -2939,12 +2955,12 @@ export interface FileTermDesktopApi {
   deleteSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]>
   getWebDavSyncConfig(): Promise<WebDavSyncConfig>
   saveWebDavSyncConfig(input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncConfig>
-  testWebDavSync(): Promise<WebDavSyncResult>
+  testWebDavSync(input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncResult>
   uploadWebDavSync(mode: BackupUploadMode): Promise<WebDavSyncResult>
   downloadWebDavSync(mode: BackupDownloadMode): Promise<WebDavSyncResult>
   getS3BackupConfig(): Promise<S3BackupConfig>
   saveS3BackupConfig(input: S3BackupConfigInput): Promise<S3BackupConfig>
-  testS3Backup(): Promise<S3BackupResult>
+  testS3Backup(input: S3BackupConfigInput): Promise<S3BackupResult>
   uploadS3Backup(mode: BackupUploadMode): Promise<S3BackupResult>
   downloadS3Backup(mode: BackupDownloadMode): Promise<S3BackupResult>
   createFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>

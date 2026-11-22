@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_provider_defaults, normalize_bucket, normalize_provider, normalize_remote_path,
-        percent_encode, read_config_at, signature, target, validate_config, write_config_at,
+        apply_provider_defaults, config_from_input, normalize_bucket, normalize_provider,
+        normalize_remote_path, percent_encode, read_config_at, signature, target, validate_config,
+        write_config_at,
         StoredConfig, BITIFUL_S4_ENDPOINT, BITIFUL_S4_REGION, DEFAULT_REMOTE_PATH,
         PROVIDER_BITIFUL_S4, PROVIDER_CLOUDFLARE_R2,
     };
+    use serde_json::json;
     use std::fs;
 
     #[test]
@@ -29,12 +31,14 @@ mod tests {
             bucket: "fileterm-backups".to_string(),
             remote_path: "sync/profiles.json".to_string(),
             path_style_access_enabled: true,
+            allow_invalid_certificates: true,
             ..StoredConfig::default()
         };
         apply_provider_defaults(&mut config);
         assert_eq!(config.endpoint, BITIFUL_S4_ENDPOINT);
         assert_eq!(config.region, BITIFUL_S4_REGION);
         assert!(!config.path_style_access_enabled);
+        assert!(!config.allow_invalid_certificates);
         let target = target(&config, Some(&config.remote_path)).unwrap();
         assert_eq!(
             target.url.as_str(),
@@ -60,6 +64,17 @@ mod tests {
     }
 
     #[test]
+    fn legacy_config_defaults_to_validating_certificates() {
+        let mut value = serde_json::to_value(StoredConfig::default()).expect("config json");
+        value
+            .as_object_mut()
+            .expect("config should be an object")
+            .remove("allowInvalidCertificates");
+        let config: StoredConfig = serde_json::from_value(value).expect("legacy config");
+        assert!(!config.allow_invalid_certificates);
+    }
+
+    #[test]
     fn allows_connection_tests_without_enabling_s3_backup() {
         let config = StoredConfig {
             enabled: false,
@@ -72,6 +87,47 @@ mod tests {
         };
         assert!(validate_config(&config, false).is_ok());
         assert!(validate_config(&config, true).is_err());
+    }
+
+    #[test]
+    fn draft_connection_test_uses_unsaved_values_and_falls_back_to_saved_secret() {
+        let saved = StoredConfig {
+            endpoint: "https://saved.example.test".to_string(),
+            region: "saved-region".to_string(),
+            bucket: "saved-bucket".to_string(),
+            remote_path: "saved/backup.json".to_string(),
+            access_key_id: Some("saved-access-key".to_string()),
+            secret_access_key: Some("saved-secret-key".to_string()),
+            last_etag: Some("saved-etag".to_string()),
+            ..StoredConfig::default()
+        };
+        let draft = json!({
+            "provider": "custom",
+            "endpoint": "https://draft.example.test",
+            "region": "draft-region",
+            "bucket": "draft-bucket",
+            "remotePath": "draft/backup.json",
+            "pathStyleAccessEnabled": false,
+            "accessKeyId": "draft-access-key"
+        });
+
+        let tested = config_from_input(saved.clone(), &draft).expect("draft config should merge");
+        assert_eq!(tested.endpoint, "https://draft.example.test");
+        assert_eq!(tested.region, "draft-region");
+        assert_eq!(tested.bucket, "draft-bucket");
+        assert_eq!(tested.remote_path, "draft/backup.json");
+        assert_eq!(tested.access_key_id.as_deref(), Some("draft-access-key"));
+        assert_eq!(tested.secret_access_key.as_deref(), Some("saved-secret-key"));
+        assert_eq!(tested.last_etag.as_deref(), Some("saved-etag"));
+        assert_eq!(saved.endpoint, "https://saved.example.test");
+
+        let draft_with_secret = json!({ "secretAccessKey": "temporary-secret-key" });
+        let tested_with_secret = config_from_input(saved, &draft_with_secret)
+            .expect("temporary test secret should merge");
+        assert_eq!(
+            tested_with_secret.secret_access_key.as_deref(),
+            Some("temporary-secret-key")
+        );
     }
 
     #[test]

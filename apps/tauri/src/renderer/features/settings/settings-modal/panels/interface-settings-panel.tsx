@@ -49,6 +49,7 @@ type InterfaceSettingsPanelContext = {
   setFontToDelete: Dispatch<SetStateAction<ImportedFont | null>>
   handleDeleteFont(font: ImportedFont): Promise<void>
   fontImportError: string | null
+  fontImportLoadError: string | null
   updateThemeBody(patch: Partial<ThemeConfig['theme']>): void
   updateThemeSemanticColors(patch: Partial<ThemeConfig['theme']['semanticColors']>): void
   updateThemeFonts(patch: Partial<ThemeConfig['theme']['fonts']>): void
@@ -87,6 +88,7 @@ export function InterfaceSettingsPanel() {
     setFontToDelete,
     handleDeleteFont,
     fontImportError,
+    fontImportLoadError,
     updateThemeBody,
     updateThemeSemanticColors,
     updateThemeFonts,
@@ -420,7 +422,8 @@ export function InterfaceSettingsPanel() {
               </button>
               <p className="settings-tools-hint">{t.themeImportFontHint}</p>
             </div>
-            {fontImportError ? <p className="settings-tools-error">{fontImportError}</p> : null}
+            {fontImportLoadError ? <p className="settings-tools-error">{fontImportLoadError}</p> : null}
+            <FeedbackBubble message={fontImportError} sourceKey="settings.theme.font" tone="error" />
 
             {importedFonts.length > 0 ? (
               <div className="theme-config-imported-fonts">

@@ -87,7 +87,7 @@
   gap: 8px;
   min-width: 0;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }
 
@@ -111,7 +111,7 @@
     'Segoe UI',
     Roboto,
     sans-serif;
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
   font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1;
@@ -151,7 +151,7 @@
 
 .window-menu-items button {
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .window-menu-items button.is-open {
@@ -160,7 +160,7 @@
 
 .window-control-buttons button {
   width: 46px;
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
   line-height: 1;
 }
 
@@ -392,7 +392,7 @@
   justify-content: flex-start;
   gap: 8px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
 }
 
 .sync-dot {
@@ -403,7 +403,7 @@
 
 .copy-link {
   border: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   border-radius: var(--radius-sm);
   padding: 2px 6px;
 }
@@ -435,7 +435,7 @@
   gap: 8px;
   height: 24px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .metric-subline {
@@ -443,7 +443,7 @@
   flex-wrap: wrap;
   gap: 6px 12px;
   margin: -1px 0 4px 40px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1.35;
 }
 
@@ -453,14 +453,14 @@
   align-items: flex-start;
   gap: 2px;
   margin: 1px 0 4px 40px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 500;
   line-height: 1.1;
 }
 
 .memory-details strong {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 600;
   line-height: 1;
 }
@@ -491,7 +491,7 @@
 
 .metric-chip strong {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   font-weight: 600;
   line-height: 1;
 }
@@ -523,7 +523,7 @@
   align-items: center;
   height: 26px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .meter-row > * {
@@ -575,7 +575,7 @@
   grid-template-columns: repeat(3, 1fr);
   margin-top: 16px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   overflow: hidden;
   height: 26px;
@@ -609,7 +609,7 @@
   gap: 8px;
   height: 30px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   margin-top: 4px;
   min-width: 0;
   overflow: hidden;
@@ -635,14 +635,14 @@
   display: inline-flex;
   align-items: center;
   font-style: normal;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   font-weight: 700;
   letter-spacing: 0.08em;
   opacity: 0.7;
 }
 
 .network-rate strong {
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 1;
 }
 
@@ -663,7 +663,7 @@
   min-height: 22px;
   padding: 0 6px;
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   font-weight: 400;
   box-sizing: border-box;
 }
@@ -674,20 +674,20 @@
   min-height: 22px;
   height: 22px;
   padding: 0 6px;
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
   gap: 4px;
 }
 
 .system-sidebar-layout .network-select.ft-select-shell {
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
 }
 
 .system-sidebar-layout .network-select.ft-select-shell .ft-select-shell__value {
-  font-size: 9px;
+  font-size: var(--ui-font-size-9px, 9px);
 }
 
 .system-sidebar-layout .network-select.dropdown-select-trigger .dropdown-select-arrow {
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
 }
 
 /* macOS 上 system sidebar 的 network-select 采用统一单框样式，
@@ -724,7 +724,7 @@
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   pointer-events: none;
 }
 
@@ -742,7 +742,7 @@
   flex-direction: column;
   justify-content: space-between;
   padding: 4px 0 8px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-10px, 10px);
   line-height: 1;
 }
 
@@ -823,7 +823,7 @@
   max-height: 24px;
   overflow: hidden;
   border-bottom: none;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   line-height: 20px;
 }
 
@@ -902,7 +902,7 @@
   width: 100%;
   height: 25px;
   border-bottom: 1px solid var(--border-light);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   position: relative;
   z-index: 1;
   background: var(--theme-sidebar-background, var(--bg-sidebar));
@@ -913,7 +913,7 @@
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
   height: 24px;
   border-bottom: none;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
 }
 
 .disk-head {
@@ -1025,7 +1025,7 @@
     'Segoe UI',
     Roboto,
     sans-serif;
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
   font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1;
@@ -1040,7 +1040,7 @@
      optical adjustment for the renderer-owned brand glyph. */
   position: relative;
   top: 0;
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
 }
 
 .titlebar-tabarea {
@@ -1071,7 +1071,7 @@
     'Segoe UI',
     Roboto,
     sans-serif;
-  font-size: 15px;
+  font-size: var(--ui-font-size-15px, 15px);
   font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1;
@@ -1079,7 +1079,7 @@
 
 .titlebar-home-brand span {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   font-weight: 500;
   opacity: 0.68;
 }
@@ -1133,7 +1133,7 @@
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
   -webkit-app-region: no-drag;
 }
@@ -1166,7 +1166,7 @@
 }
 
 .tab-close {
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
   display: flex !important;
   align-items: center;
   justify-content: center;
@@ -1178,7 +1178,7 @@
   width: 36px;
   height: 32px;
   border: none;
-  font-size: 20px;
+  font-size: var(--ui-font-size-20px, 20px);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   -webkit-app-region: no-drag;
 }
@@ -1190,7 +1190,7 @@
   gap: 8px;
   min-width: 0;
   padding: 0 12px 0 4px;
-  font-size: 18px;
+  font-size: var(--ui-font-size-18px, 18px);
 }
 
 .window-tools span,
@@ -1219,7 +1219,7 @@
 }
 
 .window-tools button .material-symbols-outlined {
-  font-size: 16px;
+  font-size: var(--ui-font-size-16px, 16px);
   font-variation-settings:
     'wght' 300,
     'opsz' 16,
@@ -1238,7 +1238,7 @@
   padding: 10px 16px;
   border-bottom: 1px solid var(--border-subtle);
   background: linear-gradient(var(--status-warning-bg), var(--status-warning-bg)), var(--surface-canvas);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   font-weight: 500;
 }
 

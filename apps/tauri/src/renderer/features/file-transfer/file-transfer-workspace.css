@@ -12,7 +12,7 @@
   padding: 12px calc(var(--file-transfer-frame-width) + 12px);
   gap: 8px;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   line-height: 1.4;
   color: var(--text-primary);
   background: var(--surface-app);
@@ -89,7 +89,7 @@
 
 .file-transfer-workspace__toolbar h2 {
   margin: 0 0 4px;
-  font-size: 14px;
+  font-size: var(--ui-font-size-14px, 14px);
   font-weight: 600;
 }
 
@@ -98,7 +98,7 @@
 .file-transfer-workspace__message {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .file-transfer-workspace__feedback {
@@ -206,7 +206,7 @@
 }
 
 .file-transfer-pane .fs-file-table td {
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
 }
 
 .file-transfer-pane__list {
@@ -229,7 +229,7 @@
 .file-transfer-pane footer {
   padding: 5px 8px;
   border-top: 1px solid var(--border-subtle);
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -239,7 +239,7 @@
 .file-transfer-error {
   margin: 0;
   padding: 6px 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-11px, 11px);
   color: var(--status-danger);
   background: var(--surface-section);
   overflow-wrap: anywhere;

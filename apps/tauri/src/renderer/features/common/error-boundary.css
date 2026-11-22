@@ -9,7 +9,7 @@
 .error-boundary-dialog .form-dialog__body p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--ui-font-size-13px, 13px);
   line-height: 1.5;
 }
 
@@ -17,7 +17,7 @@
   margin: 0;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-size-12px, 12px);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
