@@ -13,11 +13,13 @@ import type { SettingsModalState } from './state'
 export function useSettingsModalEffects({
   state,
   initialTab,
-  visibleSettingsTabs
+  visibleSettingsTabs,
+  uiPreferences
 }: {
   state: SettingsModalState
   initialTab: SettingsTab
   visibleSettingsTabs: Set<SettingsTab>
+  uiPreferences?: UiPreferences
 }) {
   const {
     activeTab,
@@ -40,6 +42,7 @@ export function useSettingsModalEffects({
     setUiZoomPercent,
     setUiFontScalePercent,
     setMaskConnectionAddresses,
+    setTopologyServiceProbeIntervalSeconds,
     setMcpAgentPreferences,
     setConnectionDefaults,
     setTransferSidebarCollapsedByDefault,
@@ -130,6 +133,7 @@ export function useSettingsModalEffects({
     }
 
     let canceled = false
+    let receivedPreferenceChange = false
     const applyUiPreferences = (preferences: UiPreferences) => {
       if (canceled) return
       setUpdatePreferenceLoadError(null)
@@ -147,6 +151,7 @@ export function useSettingsModalEffects({
       setUiZoomPercent(preferences.uiZoomPercent)
       setUiFontScalePercent(preferences.uiFontScalePercent)
       setMaskConnectionAddresses(preferences.maskConnectionAddresses)
+      setTopologyServiceProbeIntervalSeconds(preferences.topologyServiceProbeIntervalSeconds)
       setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
       setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
       setTransferSidebarCollapsedByDefault(preferences.transferSidebarCollapsedByDefault)
@@ -161,22 +166,29 @@ export function useSettingsModalEffects({
       )
     }
 
-    void desktopApi
-      .getUiPreferences()
-      .then(applyUiPreferences)
-      .catch(() => {
-        if (!canceled) {
-          setUpdatePreferenceLoadError(t.updatePreferenceLoadFailed)
-        }
-      })
+    const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
+      receivedPreferenceChange = true
+      applyUiPreferences(preferences)
+    })
 
-    const unsubscribe = desktopApi.onUiPreferencesChanged(applyUiPreferences)
+    if (!uiPreferences) {
+      void desktopApi
+        .getUiPreferences()
+        .then((preferences) => {
+          if (!receivedPreferenceChange) applyUiPreferences(preferences)
+        })
+        .catch(() => {
+          if (!canceled) {
+            setUpdatePreferenceLoadError(t.updatePreferenceLoadFailed)
+          }
+        })
+    }
 
     return () => {
       canceled = true
       unsubscribe()
     }
-  }, [desktopApi])
+  }, [desktopApi, uiPreferences])
 
   useEffect(() => {
     if (activeTab !== 'local-terminal' || !desktopApi) {

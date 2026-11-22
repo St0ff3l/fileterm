@@ -407,11 +407,11 @@ fn prefer_windows_native_rounded_corners(window: &WebviewWindow<Wry>) {
     }
 }
 
-/// Keep browser zoom disabled in the main WebView. Wry configures both switches
-/// from zoomHotkeysEnabled=false; the terminal interaction layer handles wheel
-/// gestures only over xterm instead of scaling the whole application.
+/// Keep browser zoom disabled while allowing the renderer to handle touchpad
+/// pinch input. WebView2 exposes Windows pinch as Ctrl+wheel; the main renderer
+/// prevents its page-scale default and lets the topology canvas consume it.
 #[cfg(target_os = "windows")]
-fn disable_windows_webview_zoom(window: &WebviewWindow<Wry>) {
+fn configure_windows_webview_zoom(window: &WebviewWindow<Wry>) {
     let install_result = window.with_webview(|webview| {
         let controller = webview.controller();
 
@@ -423,17 +423,15 @@ fn disable_windows_webview_zoom(window: &WebviewWindow<Wry>) {
                 return;
             };
 
-            // Enabling zoom here bypasses zoomHotkeysEnabled=false and makes
-            // Ctrl+wheel over any pane briefly resize the whole WebView.
             let _ = settings.SetIsZoomControlEnabled(false);
             if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
                 // Leave terminal shortcuts to the renderer/native menu.
                 let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
             }
             if let Ok(settings5) = settings.cast::<ICoreWebView2Settings5>() {
-                // Native pinch uses Page Scale, which is independent of
-                // ZoomFactor and cannot be undone by ZoomFactorChanged.
-                let _ = settings5.SetIsPinchZoomEnabled(false);
+                // Wry mirrors zoomHotkeysEnabled=false here. Re-enable pinch
+                // so Windows touchpad gestures reach the renderer as Ctrl+wheel.
+                let _ = settings5.SetIsPinchZoomEnabled(true);
             }
         }
     });

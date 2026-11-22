@@ -233,6 +233,7 @@ Renderer 只显示遮罩、倒计时和操作反馈，`app_retry_monitoring` 只
 
 - 顶部标签栏、工作区焦点模式与标签切换动效由 `features/layout/tab-bar.tsx`、`features/workspace/workspace-stage.tsx` 和 `app.tsx` 协作。
 - 工作模式 `workspaceMode`（`standard` 默认 / `server-management` 多服务器管理）是 Rust 持久化的 UI 偏好；读取旧 `tabBarLayout` 时将 `host-groups` 迁移为 `server-management`、`single-row` 迁移为 `standard`。renderer 经 `features/layout/use-workspace-mode.ts` 读取并跟随 `app:ui-preferences-changed` 更新。管理模式由 `features/server-management/server-management-sidebar.tsx` 提供页面导航和按文件夹组织的已连接会话，`server-management-overview.tsx` 显示服务器卡片及选中连接详情；连接按钮创建会话但保留概览页，“打开终端 + 文件”显式进入会话工作区。卡片排序写回连接管理器共用的 profile `parentId` 和 `order`；卡片和详情侧栏独立滚动，详情侧栏可收起。顶部标签栏只显示当前连接 profile 的会话标签，不同 profile 各自保留标签组；连接监控信息来自已连接会话的现有快照，不在概览中建立后台 SSH 会话。紧凑标签栏 `compactTabBar`（默认 `false`）同为 Rust 持久化偏好，renderer 经 `use-compact-tab-bar.ts` 在 `.fs-shell` 上切换 `is-compact-tabbar`（36px / 48px），macOS 原生标题栏随偏好刷新同步基线。
+- 拓扑画板的 TCP 服务探测周期由全局 `UiPreferences.topologyServiceProbeIntervalSeconds` 保存，默认 60 秒，可选 20、30、60、120、300 秒；打开画板或变更探测目标时立即检查。探测只代表当前电脑到服务地址的 TCP 可达性，后端每批最多 64 项、并发 8 项，单项连接超时 2 秒；renderer 在同一轮仍运行时不会重叠发起下一轮。
 - SSH 工作区的文件面板高度、抽屉收起状态、终端悬浮输入条由 `features/workspace/session-workspace.tsx` 与 `features/terminal/terminal-dock.tsx` 处理。
 - 首页侧栏展开/收起、macOS 红绿灯避让和收起态左边界由 `features/workspace/home-workspace.tsx` 与 `styles/features/home.css` 处理。
 - 系统监控的展开态详情和收起态资源摘要都在 `features/system/system-sidebar.tsx` 展示，不把平台判断或采集逻辑放进 renderer。

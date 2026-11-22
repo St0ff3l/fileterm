@@ -16,8 +16,8 @@ import { useThemeSettingsController } from './theme'
 export type { SettingsModalControllerOptions } from './types'
 
 export function useSettingsModalController(options: SettingsModalControllerOptions) {
-  const { locale, initialTab, inline, onLaunchLocalAgent } = options
-  const state = useSettingsModalState(initialTab)
+  const { locale, initialTab, inline, onLaunchLocalAgent, uiPreferences } = options
+  const state = useSettingsModalState(initialTab, uiPreferences)
   const { activeTab, settingsSearchQuery, desktopApi } = state
 
   const visibleSettingsTabs = useMemo(() => {
@@ -40,13 +40,17 @@ export function useSettingsModalController(options: SettingsModalControllerOptio
     options
   })
   const overview = useOverviewSettingsController({ state })
-  const layout = useLayoutSettingsController({ state })
+  const layout = useLayoutSettingsController({
+    state,
+    initialWorkspaceMode: options.workspaceMode,
+    uiPreferences
+  })
   const ai = useAiSettingsController({ state, desktopApi })
   const agent = useAgentSettingsController({ state, onLaunchLocalAgent })
   const security = useSettingsSecurityController({ state })
   const sync = useSyncSettingsController({ state, openSecuritySettings: security.openSecuritySettings })
 
-  useSettingsModalEffects({ state, initialTab, visibleSettingsTabs })
+  useSettingsModalEffects({ state, initialTab, visibleSettingsTabs, uiPreferences })
 
   const managerToolsHint = inline ? t.settingsManagersInlineHint : t.settingsManagersWindowHint
   const managerToolsActionLabel = inline ? t.switchToManagerPage : t.openInSeparateWindow

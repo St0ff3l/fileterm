@@ -115,7 +115,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 prefer_windows_native_rounded_corners(&main_window);
-                disable_windows_webview_zoom(&main_window);
+                configure_windows_webview_zoom(&main_window);
                 crate::services::logging::track_webview_processes(&main_window);
                 main_window
                     .set_icon(windows_icon_image().map_err(|error| error.to_string())?)
@@ -607,6 +607,7 @@ pub fn run() {
             crate::commands::app_reconnect_tab,
             crate::commands::app_retry_monitoring,
             crate::commands::app_get_network_connections,
+            crate::commands::app_probe_topology_services,
             crate::commands::app_set_monitoring_enabled,
             crate::commands::app_disconnect_tab,
             crate::commands::app_close_tab,

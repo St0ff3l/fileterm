@@ -38,6 +38,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
     themeMode,
     themeConfig,
     customThemes,
+    settingsUiPreferences,
     locale,
     setLocaleState,
     terminalZoomLocked,
@@ -579,6 +580,7 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 theme={themeMode}
                 themeConfig={themeConfig}
                 customThemes={customThemes}
+                uiPreferences={settingsUiPreferences}
                 locale={locale}
                 overviewShowStats={shell.overviewShowStats}
                 overviewShowRecent={shell.overviewShowRecent}
@@ -635,22 +637,23 @@ export function AppMainWorkspace({ model }: { model: AppViewModel }) {
                 onSetPaneWeights={setPaneWeights}
               />
             </div>
-            {shouldShowAiCopilot ? (
-              <AiCopilotPanel
-                activeSession={aiCopilotTargetSession}
-                activeTab={aiCopilotTargetTab ?? null}
-                rootTab={activeTab ?? null}
-                isResizing={isResizingAiCopilot}
-                onClose={() => setIsAiCopilotOpen(false)}
-                onOpenSettings={() => {
-                  setSettingsInitialTab('ai')
-                  workspaceState.setShowSettings(true)
-                }}
-                onResizeStart={startAiCopilotResize}
-              />
-            ) : null}
           </div>
         </main>
+
+        {shouldShowAiCopilot ? (
+          <AiCopilotPanel
+            activeSession={aiCopilotTargetSession}
+            activeTab={aiCopilotTargetTab ?? null}
+            rootTab={activeTab ?? null}
+            isResizing={isResizingAiCopilot}
+            onClose={() => setIsAiCopilotOpen(false)}
+            onOpenSettings={() => {
+              setSettingsInitialTab('ai')
+              workspaceState.setShowSettings(true)
+            }}
+            onResizeStart={startAiCopilotResize}
+          />
+        ) : null}
 
         {/* The management sidebar already frames the terminal and system info. */}
         <div className="workspace-left-frame" aria-hidden="true" />

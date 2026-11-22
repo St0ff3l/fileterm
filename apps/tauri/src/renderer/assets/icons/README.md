@@ -5,7 +5,7 @@
 ## 两组现有造型
 
 - `app-*.svg`：从原 `AppIcon` 组件逐项提取的 SVG，以及原自绘窗口控件。保留原路径、嵌套 SVG、坐标变换、填充和描边。`brand` 与 `terminal` 共用 `network/app-terminal.svg`。
-- `material-*.svg`：从原本地 Material Symbols Outlined 400 字重字体中提取的 58 个实际使用字形，保留轮廓和 `viewBox="0 -960 960 960"` 的字体基线。使用静态字体实际生效的 400 字重，没有换成同名图库中的另一种造型。来源摘要见 `tests/fixtures/material-icon-geometry.json`；Apache 2.0 许可与版权见应用的 `licenses/material-symbols/LICENSE.txt` 和根目录 `THIRD_PARTY_NOTICES.md`。
+- `material-*.svg`：原本地 Material Symbols Outlined 400 字重字体中的 58 个字形保持原轮廓与 `viewBox="0 -960 960 960"` 字体基线；`material-fit_screen.svg` 是从 `@material-design-icons/svg` 0.10.5 单独加入的适配画板轮廓图标。来源摘要见 `tests/fixtures/material-icon-geometry.json`；Apache 2.0 许可与版权见应用的 `licenses/material-symbols/LICENSE.txt` 和根目录 `THIRD_PARTY_NOTICES.md`。
 - 未带前缀的现有素材保留原造型。其中部分用于 CSS mask；同名但不同路径的素材不直接合并，避免改变既有外观。
 
 ## 使用方式

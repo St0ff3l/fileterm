@@ -39,31 +39,7 @@ import {
   type FilePanelSnapTarget
 } from '../features/workspace/file-panel-snap'
 
-export type InitialUiPreferences = Pick<
-  UiPreferences,
-  | 'theme'
-  | 'themeConfig'
-  | 'customThemes'
-  | 'locale'
-  | 'connectionDefaults'
-  | 'terminalZoomLocked'
-  | 'uiZoomLocked'
-  | 'uiZoomPercent'
-  | 'uiFontScalePercent'
-  | 'rememberWindowSize'
-  | 'workspaceMode'
-  | 'compactTabBar'
-  | 'maskConnectionAddresses'
-  | 'filePanelRememberRatio'
-  | 'transferSidebarCollapsedByDefault'
-  | 'resourceMonitoringMetrics'
-  | 'resourceMonitoringMetricOrder'
-  | 'overviewShowStats'
-  | 'overviewShowRecent'
-  | 'overviewShowAllConnections'
-  | 'overviewShowQuickActions'
-  | 'overviewSectionOrder'
->
+export type InitialUiPreferences = UiPreferences
 
 export type AppShellOptions = {
   searchParams: URLSearchParams
@@ -138,6 +114,9 @@ export function useAppShellState({
   const [customThemes, setCustomThemes] = useState<SavedTheme[]>(() =>
     (initialUiPreferences?.customThemes ?? []).map(normalizeSavedTheme)
   )
+  const [settingsUiPreferences, setSettingsUiPreferences] = useState<UiPreferences | undefined>(
+    () => initialUiPreferences
+  )
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
     ...DEFAULT_SSH_CONNECTION_DEFAULTS,
@@ -187,6 +166,31 @@ export function useAppShellState({
   const [overviewSectionOrder, setOverviewSectionOrder] = useState<OverviewSectionId[]>(() => [
     ...(initialUiPreferences?.overviewSectionOrder ?? DEFAULT_OVERVIEW_SECTION_ORDER)
   ])
+
+  useEffect(() => {
+    if (!desktopApi) return
+
+    let canceled = false
+    let receivedPreferenceChange = false
+    const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
+      receivedPreferenceChange = true
+      setSettingsUiPreferences(preferences)
+    })
+
+    if (!initialUiPreferences) {
+      void desktopApi
+        .getUiPreferences()
+        .then((preferences) => {
+          if (!canceled && !receivedPreferenceChange) setSettingsUiPreferences(preferences)
+        })
+        .catch(() => undefined)
+    }
+
+    return () => {
+      canceled = true
+      unsubscribe()
+    }
+  }, [desktopApi, initialUiPreferences])
 
   const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
   const [actionApprovalRequests, setActionApprovalRequests] = useState<ActionApprovalRequest[]>([])
@@ -534,6 +538,7 @@ export function useAppShellState({
     rememberWindowSize,
     setRememberWindowSize,
     workspaceMode,
+    settingsUiPreferences,
     compactTabBar,
     maskConnectionAddresses,
     filePanelRememberRatio,

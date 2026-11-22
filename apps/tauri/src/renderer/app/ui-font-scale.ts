@@ -25,6 +25,14 @@ export function applyUiFontScalePercent(value: number, uiZoomPercent: number) {
     ? Math.max(MIN_UI_ZOOM_PERCENT, Math.min(MAX_UI_ZOOM_PERCENT, uiZoomPercent))
     : DEFAULT_UI_ZOOM_PERCENT
   const percent = Math.min(fontPercent, (MAX_EFFECTIVE_UI_TEXT_SCALE_PERCENT * 100) / zoomPercent)
+  const layoutScale = Math.max(1, percent / 100)
+  const layoutGrowth = layoutScale - 1
+
+  document.documentElement.style.setProperty('--app-ui-font-scale', String(percent / 100))
+  document.documentElement.style.setProperty('--app-ui-layout-extra-xs', `${Number((layoutGrowth * 16).toFixed(2))}px`)
+  document.documentElement.style.setProperty('--app-ui-layout-extra-sm', `${Number((layoutGrowth * 32).toFixed(2))}px`)
+  document.documentElement.style.setProperty('--app-ui-layout-extra-md', `${Number((layoutGrowth * 56).toFixed(2))}px`)
+  document.documentElement.style.setProperty('--app-ui-layout-extra-lg', `${Number((layoutGrowth * 112).toFixed(2))}px`)
 
   for (const size of UI_FONT_SIZES) {
     const token = String(size).replace('.', '-')
@@ -33,4 +41,10 @@ export function applyUiFontScalePercent(value: number, uiZoomPercent: number) {
       `${Number(((size * percent) / 100).toFixed(2))}px`
     )
   }
+}
+
+export function getUiFontScaleRatio() {
+  if (typeof document === 'undefined') return 1
+  const ratio = Number.parseFloat(document.documentElement.style.getPropertyValue('--app-ui-font-scale'))
+  return Number.isFinite(ratio) ? Math.max(1, ratio) : 1
 }

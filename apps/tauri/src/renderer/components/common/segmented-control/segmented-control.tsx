@@ -16,7 +16,7 @@ export function SegmentedControl<Value extends string>({
   className?: string
   variant?: 'primary' | 'neutral'
   value: Value
-  options: readonly { value: Value; label: ReactNode }[]
+  options: readonly { value: Value; label: ReactNode; disabled?: boolean }[]
   onChange(value: Value): void
 }) {
   const groupId = useId()
@@ -32,13 +32,14 @@ export function SegmentedControl<Value extends string>({
       {options.map((option) => (
         <label
           key={option.value}
-          className={`ft-segmented-control__option${value === option.value ? ' is-selected' : ''}`}
+          className={`ft-segmented-control__option${value === option.value ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}`}
         >
           <SelectionControl
             type="radio"
             name={groupId}
             value={option.value}
             checked={value === option.value}
+            disabled={option.disabled}
             onChange={() => onChange(option.value)}
           />
           <span className="ft-segmented-control__label">{option.label}</span>

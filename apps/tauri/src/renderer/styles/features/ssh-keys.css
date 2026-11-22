@@ -63,8 +63,8 @@
 }
 
 .ssh-key-manager-table .manager-head {
-  height: 34px !important;
-  min-height: 34px;
+  height: calc(34px + var(--app-ui-layout-extra-xs, 0px)) !important;
+  min-height: calc(34px + var(--app-ui-layout-extra-xs, 0px));
   font-size: var(--ui-font-size-12px, 12px);
 }
 

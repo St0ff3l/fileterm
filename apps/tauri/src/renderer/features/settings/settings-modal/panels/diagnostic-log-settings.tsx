@@ -11,15 +11,17 @@ import { SelectionControl } from '../../../common/selection-control'
 
 export function DiagnosticLogSettings({
   desktopApi,
+  initialPreferences,
   t
 }: {
   desktopApi: FileTermDesktopApi | undefined
+  initialPreferences?: Pick<UiPreferences, 'basicLoggingEnabled' | 'diagnosticLogCategories'>
   t: LocaleMessages
 }) {
   const [preferences, setPreferences] = useState<Pick<
     UiPreferences,
     'basicLoggingEnabled' | 'diagnosticLogCategories'
-  > | null>(null)
+  > | null>(() => initialPreferences ?? null)
   const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [saveError, setSaveError] = useState(false)
@@ -34,19 +36,27 @@ export function DiagnosticLogSettings({
         setLoadError(false)
       }
     }
+    let receivedPreferenceChange = false
+    const unsubscribe = desktopApi.onUiPreferencesChanged((next) => {
+      receivedPreferenceChange = true
+      apply(next)
+    })
     setLoadError(false)
-    void desktopApi
-      .getUiPreferences()
-      .then(apply)
-      .catch(() => {
-        if (active) setLoadError(true)
-      })
-    const unsubscribe = desktopApi.onUiPreferencesChanged(apply)
+    if (!initialPreferences) {
+      void desktopApi
+        .getUiPreferences()
+        .then((next) => {
+          if (!receivedPreferenceChange) apply(next)
+        })
+        .catch(() => {
+          if (active) setLoadError(true)
+        })
+    }
     return () => {
       active = false
       unsubscribe()
     }
-  }, [desktopApi])
+  }, [desktopApi, initialPreferences])
 
   const save = async (input: Pick<UiPreferencesInput, 'basicLoggingEnabled' | 'diagnosticLogCategories'>) => {
     if (!desktopApi || savingRef.current) return

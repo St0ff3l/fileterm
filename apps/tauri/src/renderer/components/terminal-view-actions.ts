@@ -15,6 +15,7 @@ import {
   logTerminalClipboard,
   logTerminalRender,
   splitPaneShortcutsForPlatform,
+  terminalFindShortcutForPlatform,
   toDisplayTerminalText,
   TERMINAL_FIT_GUARD_ROWS,
   TERMINAL_REMOTE_GUARD_COLS,
@@ -99,7 +100,7 @@ export function useTerminalViewActions({
   const shortcuts = {
     copy: isMac ? '⌘C' : 'Ctrl+Shift+C',
     paste: isMac ? '⌘V' : 'Ctrl+Shift+V',
-    find: 'Ctrl+Shift+F',
+    find: terminalFindShortcutForPlatform(window.fileterm?.platform),
     ...splitPaneShortcutsForPlatform(window.fileterm?.platform)
   }
 

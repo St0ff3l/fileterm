@@ -13,6 +13,7 @@ import type {
   SavedTheme,
   SessionSnapshot,
   ThemeConfig,
+  UiPreferences,
   WorkspaceTab
 } from '@fileterm/core'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -48,7 +49,9 @@ export function HomeWorkspace({
   theme,
   themeConfig,
   customThemes,
+  uiPreferences,
   locale,
+  maskConnectionAddresses,
   suppressEntrance: suppressEntranceProp,
   overviewShowStats,
   overviewShowRecent,
@@ -101,7 +104,9 @@ export function HomeWorkspace({
   theme: ThemeMode
   themeConfig: ThemeConfig
   customThemes: SavedTheme[]
+  uiPreferences: UiPreferences | undefined
   locale: 'zhCN' | 'enUS'
+  maskConnectionAddresses: boolean
   suppressEntrance?: boolean
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -525,6 +530,7 @@ export function HomeWorkspace({
                   commandFolders={commandFolders}
                   commandTemplates={commandTemplates}
                   profiles={profiles}
+                  maskConnectionAddresses={maskConnectionAddresses}
                   folders={folders}
                   sessions={sessions}
                   workspaceTabs={managementTabs}
@@ -567,7 +573,13 @@ export function HomeWorkspace({
                 profiles={profiles}
                 sessions={sessions}
                 workspaceTabs={managementTabs}
-                onOpenProfile={onOpen}
+                focusedSessionTabId={lastActiveSessionTab?.id ?? null}
+                onConnectProfile={onConnectProfile}
+                onDisconnectSession={onDisconnectSession}
+                onActivateSession={tabBarProps.onActivateSession}
+                onEditConnection={onEditConnection}
+                maskConnectionAddresses={maskConnectionAddresses}
+                topologyServiceProbeIntervalSeconds={uiPreferences?.topologyServiceProbeIntervalSeconds}
               />
             </div>
           )}
@@ -655,6 +667,8 @@ export function HomeWorkspace({
                 onOpenConnectionManager={() => selectTab('connection-manager')}
                 onOpenLogsDirectory={onOpenLogsDirectory}
                 onLaunchLocalAgent={onLaunchLocalAgent}
+                workspaceMode={isServerManagementMode ? 'server-management' : 'standard'}
+                uiPreferences={uiPreferences}
                 onClose={() => selectTab('overview')}
                 inline={true}
               />

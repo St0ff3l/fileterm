@@ -7,6 +7,7 @@ import {
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS,
   type AiProviderDraft,
   type AiProviderSummary,
   type AppUpdateStatus,
@@ -23,6 +24,7 @@ import {
   type S3BackupConfig,
   type SshConnectionDefaults,
   type TerminalRenderer,
+  type UiPreferences,
   type WebDavSyncConfig
 } from '@fileterm/core'
 import type { ManagerDropPosition } from '../../../common/manager-drag'
@@ -34,31 +36,35 @@ import {
   type SyncFeedback as SettingsSyncFeedback
 } from '../constants'
 
-export function useSettingsModalState(initialTab: SettingsTab) {
+export function useSettingsModalState(initialTab: SettingsTab, uiPreferences?: UiPreferences) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
   const [settingsSearchQuery, setSettingsSearchQuery] = useState('')
   const [syncSubTab, setSyncSubTab] = useState<'webdav' | 's3'>('webdav')
   const [agentSubTab, setAgentSubTab] = useState<'mcp' | 'cli'>('mcp')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
-  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
-  const [updateChannel, setUpdateChannel] = useState<'stable' | 'beta'>('beta')
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(() => uiPreferences?.autoCheckUpdates ?? true)
+  const [updateChannel, setUpdateChannel] = useState<'stable' | 'beta'>(() => uiPreferences?.updateChannel ?? 'beta')
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
   const [updatePreferenceError, setUpdatePreferenceError] = useState<string | null>(null)
   const [updatePreferenceLoadError, setUpdatePreferenceLoadError] = useState<string | null>(null)
-  const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
-  const [terminalRenderer, setTerminalRenderer] = useState<TerminalRenderer>(getTerminalRendererPreference)
+  const [terminalZoomLocked, setTerminalZoomLocked] = useState(() => uiPreferences?.terminalZoomLocked ?? false)
+  const [terminalRenderer, setTerminalRenderer] = useState<TerminalRenderer>(
+    () => uiPreferences?.terminalRenderer ?? getTerminalRendererPreference()
+  )
   const [isSavingTerminalRendererPreference, setIsSavingTerminalRendererPreference] = useState(false)
   const [terminalRendererPreferenceError, setTerminalRendererPreferenceError] = useState<string | null>(null)
   const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
   const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
-  const [uiZoomLocked, setUiZoomLocked] = useState(false)
+  const [uiZoomLocked, setUiZoomLocked] = useState(() => uiPreferences?.uiZoomLocked ?? false)
   const [isSavingUiZoomPreference, setIsSavingUiZoomPreference] = useState(false)
   const [uiZoomPreferenceError, setUiZoomPreferenceError] = useState<string | null>(null)
   const [localTerminalShells, setLocalTerminalShells] = useState<LocalTerminalShellPreferences>(() => ({
-    ...DEFAULT_LOCAL_TERMINAL_SHELLS
+    ...DEFAULT_LOCAL_TERMINAL_SHELLS,
+    ...uiPreferences?.localTerminalShells
   }))
   const [localTerminalShellDrafts, setLocalTerminalShellDrafts] = useState<LocalTerminalShellPreferences>(() => ({
-    ...DEFAULT_LOCAL_TERMINAL_SHELLS
+    ...DEFAULT_LOCAL_TERMINAL_SHELLS,
+    ...uiPreferences?.localTerminalShells
   }))
   const [localTerminalShellOptions, setLocalTerminalShellOptions] = useState<LocalTerminalShellOption[]>([])
   const [isLoadingLocalTerminalShellOptions, setIsLoadingLocalTerminalShellOptions] = useState(false)
@@ -66,25 +72,36 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [isSavingLocalTerminalShells, setIsSavingLocalTerminalShells] = useState(false)
   const [localTerminalShellMessage, setLocalTerminalShellMessage] = useState<string | null>(null)
   const [localTerminalShellError, setLocalTerminalShellError] = useState<string | null>(null)
-  const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(true)
+  const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(
+    () => uiPreferences?.filePanelRememberRatio ?? true
+  )
   const [isSavingFilePanelPreference, setIsSavingFilePanelPreference] = useState(false)
   const [filePanelPreferenceError, setFilePanelPreferenceError] = useState<string | null>(null)
-  const [rememberWindowSize, setRememberWindowSize] = useState(false)
+  const [rememberWindowSize, setRememberWindowSize] = useState(() => uiPreferences?.rememberWindowSize ?? false)
   const [isSavingWindowSizePreference, setIsSavingWindowSizePreference] = useState(false)
   const [windowSizePreferenceError, setWindowSizePreferenceError] = useState<string | null>(null)
-  const [showMacosMenuBarIcon, setShowMacosMenuBarIcon] = useState(true)
+  const [showMacosMenuBarIcon, setShowMacosMenuBarIcon] = useState(() => uiPreferences?.showMacosMenuBarIcon ?? true)
   const [isSavingMacosMenuBarIcon, setIsSavingMacosMenuBarIcon] = useState(false)
   const [macosMenuBarIconPreferenceError, setMacosMenuBarIconPreferenceError] = useState<string | null>(null)
-  const [appIcon, setAppIcon] = useState<AppIconVariant>('classic')
+  const [appIcon, setAppIcon] = useState<AppIconVariant>(() => uiPreferences?.appIcon ?? 'classic')
   const [isSavingAppIcon, setIsSavingAppIcon] = useState(false)
   const [appIconPreferenceError, setAppIconPreferenceError] = useState<string | null>(null)
-  const [uiZoomPercent, setUiZoomPercent] = useState(DEFAULT_UI_ZOOM_PERCENT)
+  const [uiZoomPercent, setUiZoomPercent] = useState(() => uiPreferences?.uiZoomPercent ?? DEFAULT_UI_ZOOM_PERCENT)
   const [isSavingUiZoomPercent, setIsSavingUiZoomPercent] = useState(false)
   const [uiZoomPercentError, setUiZoomPercentError] = useState<string | null>(null)
-  const [uiFontScalePercent, setUiFontScalePercent] = useState(DEFAULT_UI_FONT_SCALE_PERCENT)
+  const [uiFontScalePercent, setUiFontScalePercent] = useState(
+    () => uiPreferences?.uiFontScalePercent ?? DEFAULT_UI_FONT_SCALE_PERCENT
+  )
   const [isSavingUiFontScalePercent, setIsSavingUiFontScalePercent] = useState(false)
   const [uiFontScalePercentError, setUiFontScalePercentError] = useState<string | null>(null)
-  const [maskConnectionAddresses, setMaskConnectionAddresses] = useState(DEFAULT_MASK_CONNECTION_ADDRESSES)
+  const [maskConnectionAddresses, setMaskConnectionAddresses] = useState(
+    () => uiPreferences?.maskConnectionAddresses ?? DEFAULT_MASK_CONNECTION_ADDRESSES
+  )
+  const [topologyServiceProbeIntervalSeconds, setTopologyServiceProbeIntervalSeconds] = useState(
+    () => uiPreferences?.topologyServiceProbeIntervalSeconds ?? DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS
+  )
+  const [isSavingTopologyServiceProbeInterval, setIsSavingTopologyServiceProbeInterval] = useState(false)
+  const [topologyServiceProbeIntervalError, setTopologyServiceProbeIntervalError] = useState<string | null>(null)
   const [isSavingMaskConnectionAddresses, setIsSavingMaskConnectionAddresses] = useState(false)
   const [maskConnectionAddressesError, setMaskConnectionAddressesError] = useState<string | null>(null)
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
@@ -101,7 +118,8 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [editingCustomThemeId, setEditingCustomThemeId] = useState<string | null>(null)
   const [showDeleteThemeConfirm, setShowDeleteThemeConfirm] = useState(false)
   const [mcpAgentPreferences, setMcpAgentPreferences] = useState<McpAgentPreferences>(() => ({
-    ...DEFAULT_MCP_AGENT_PREFERENCES
+    ...DEFAULT_MCP_AGENT_PREFERENCES,
+    ...uiPreferences?.mcpAgent
   }))
   const [mcpAgentSetup, setMcpAgentSetup] = useState<McpAgentSetup | null>(null)
   const [mcpAgentProfiles, setMcpAgentProfiles] = useState<ConnectionProfile[]>([])
@@ -109,19 +127,26 @@ export function useSettingsModalState(initialTab: SettingsTab) {
   const [mcpAgentOperation, setMcpAgentOperation] = useState<'load' | 'save' | null>(null)
   const [mcpAgentMessage, setMcpAgentMessage] = useState<string | null>(null)
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
-    ...DEFAULT_SSH_CONNECTION_DEFAULTS
+    ...DEFAULT_SSH_CONNECTION_DEFAULTS,
+    ...uiPreferences?.connectionDefaults
   }))
   const [isSavingConnectionDefaults, setIsSavingConnectionDefaults] = useState(false)
   const [connectionDefaultsError, setConnectionDefaultsError] = useState<string | null>(null)
-  const [transferSidebarCollapsedByDefault, setTransferSidebarCollapsedByDefault] = useState(true)
+  const [transferSidebarCollapsedByDefault, setTransferSidebarCollapsedByDefault] = useState(
+    () => uiPreferences?.transferSidebarCollapsedByDefault ?? true
+  )
   const [isSavingTransferSidebarPreference, setIsSavingTransferSidebarPreference] = useState(false)
   const [transferSidebarPreferenceError, setTransferSidebarPreferenceError] = useState<string | null>(null)
-  const [overviewShowStats, setOverviewShowStats] = useState(true)
-  const [overviewShowRecent, setOverviewShowRecent] = useState(true)
-  const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(true)
-  const [overviewShowQuickActions, setOverviewShowQuickActions] = useState(true)
+  const [overviewShowStats, setOverviewShowStats] = useState(() => uiPreferences?.overviewShowStats ?? true)
+  const [overviewShowRecent, setOverviewShowRecent] = useState(() => uiPreferences?.overviewShowRecent ?? true)
+  const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(
+    () => uiPreferences?.overviewShowAllConnections ?? true
+  )
+  const [overviewShowQuickActions, setOverviewShowQuickActions] = useState(
+    () => uiPreferences?.overviewShowQuickActions ?? true
+  )
   const [overviewSectionOrder, setOverviewSectionOrder] = useState<OverviewSectionId[]>(() => [
-    ...DEFAULT_OVERVIEW_SECTION_ORDER
+    ...(uiPreferences?.overviewSectionOrder ?? DEFAULT_OVERVIEW_SECTION_ORDER)
   ])
   const [draggingOverviewSection, setDraggingOverviewSection] = useState<OverviewSectionId | null>(null)
   const [dragOverOverviewSection, setDragOverOverviewSection] = useState<OverviewSectionId | null>(null)
@@ -255,6 +280,12 @@ export function useSettingsModalState(initialTab: SettingsTab) {
     setUiFontScalePercentError,
     maskConnectionAddresses,
     setMaskConnectionAddresses,
+    topologyServiceProbeIntervalSeconds,
+    setTopologyServiceProbeIntervalSeconds,
+    isSavingTopologyServiceProbeInterval,
+    setIsSavingTopologyServiceProbeInterval,
+    topologyServiceProbeIntervalError,
+    setTopologyServiceProbeIntervalError,
     isSavingMaskConnectionAddresses,
     setIsSavingMaskConnectionAddresses,
     maskConnectionAddressesError,

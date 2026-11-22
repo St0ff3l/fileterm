@@ -38,7 +38,6 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
     shortcuts,
     setContextMenu,
     setFindQuery,
-    setFindMiss,
     setActiveFindIndex,
     setFindCaseSensitive,
     setFindRegex,
@@ -73,7 +72,6 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
           findInputRef={findInputRef}
           findQuery={findQuery}
           setFindQuery={setFindQuery}
-          setFindMiss={setFindMiss}
           setActiveFindIndex={setActiveFindIndex}
           findMiss={findMiss}
           findMatchCount={findMatchCount}

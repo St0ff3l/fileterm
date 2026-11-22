@@ -1019,6 +1019,19 @@ export interface SystemMetrics {
   topProcesses: SidebarProcessItem[]
 }
 
+export interface TopologyTcpProbeTarget {
+  id: string
+  host: string
+  port: number
+}
+
+export interface TopologyTcpProbeResult {
+  id: string
+  status: 'reachable' | 'unreachable' | 'unknown'
+  latencyMs: number | null
+  checkedAt: number
+}
+
 export function mergeSystemMetricsHistory(
   previousMetrics: SystemMetrics | undefined,
   nextMetrics: SystemMetrics,
@@ -2284,6 +2297,9 @@ export const DEFAULT_COMPACT_TAB_BAR = false
  * by a screenshot or a shoulder-level glance.
  */
 export const DEFAULT_MASK_CONNECTION_ADDRESSES = false
+export const TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS = [20, 30, 60, 120, 300] as const
+export type TopologyServiceProbeIntervalSeconds = (typeof TOPOLOGY_SERVICE_PROBE_INTERVAL_OPTIONS)[number]
+export const DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS: TopologyServiceProbeIntervalSeconds = 60
 
 export interface UiPreferences {
   theme: ThemeMode
@@ -2307,6 +2323,7 @@ export interface UiPreferences {
   uiFontScalePercent: number
   rememberWindowSize: boolean
   workspaceMode: WorkspaceMode
+  topologyServiceProbeIntervalSeconds: TopologyServiceProbeIntervalSeconds
   compactTabBar: boolean
   maskConnectionAddresses: boolean
   localTerminalShells: LocalTerminalShellPreferences
@@ -2343,6 +2360,7 @@ export interface UiPreferencesInput {
   uiFontScalePercent?: number
   rememberWindowSize?: boolean
   workspaceMode?: WorkspaceMode
+  topologyServiceProbeIntervalSeconds?: TopologyServiceProbeIntervalSeconds
   compactTabBar?: boolean
   maskConnectionAddresses?: boolean
   localTerminalShells?: Partial<LocalTerminalShellPreferences>
@@ -3025,6 +3043,7 @@ export interface FileTermDesktopApi {
   hideSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
   setMonitoringEnabled(tabId: string, generation: number, enabled: boolean): Promise<WorkspaceSnapshot>
   getNetworkConnections(tabId: string): Promise<NetworkConnectionsSnapshot>
+  probeTopologyServices(targets: TopologyTcpProbeTarget[]): Promise<TopologyTcpProbeResult[]>
   retryMonitoring(tabId: string, generation: number): Promise<void>
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>

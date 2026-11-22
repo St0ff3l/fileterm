@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { ConnectionFormMode, FileContentSnapshot, TunnelProfileType } from '@fileterm/core'
 import { useAppDataOperations } from './hooks/use-app-data-operations'
 import { useAppResize } from './hooks/use-app-resize'
@@ -45,6 +46,18 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   // Linux uses the same renderer-owned chrome as Windows. macOS remains on
   // AppKit chrome because its traffic lights are intentionally native.
   const usesCustomWindowChrome = isWindowsDesktop || rendererPlatform === 'linux'
+
+  useEffect(() => {
+    if (!isWindowsDesktop || !isMainWorkspaceWindow) return
+
+    // WebView2 emits Windows touchpad pinch as Ctrl+wheel. Prevent page scale
+    // without stopping propagation so the topology canvas can consume it.
+    const preventWebViewPinchZoom = (event: WheelEvent) => {
+      if (event.ctrlKey) event.preventDefault()
+    }
+    window.addEventListener('wheel', preventWebViewPinchZoom, { capture: true, passive: false })
+    return () => window.removeEventListener('wheel', preventWebViewPinchZoom, true)
+  }, [isMainWorkspaceWindow, isWindowsDesktop])
 
   const shell = useAppShellState({
     searchParams,

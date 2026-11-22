@@ -58,15 +58,20 @@ test('all 57 original AppIcon names retain the exact geometry at seven stroke wi
   assert.deepEqual(APP_ICON_ASSETS.brand, APP_ICON_ASSETS.terminal)
 })
 
-test('Material SVGs preserve all 58 used font glyph outlines and the original baseline', () => {
-  const { glyphs, unitsPerEm, ascent, descent } = readFixture('material-icon-geometry')
+test('Material SVGs preserve the 58 font glyphs and verify separately sourced icons', () => {
+  const { glyphs, additionalGlyphs = {}, unitsPerEm, ascent, descent } = readFixture('material-icon-geometry')
   assert.equal(Object.keys(glyphs).length, 58)
-  assert.equal(Object.keys(MATERIAL_ICON_ASSETS).length, 58)
+  assert.equal(Object.keys(MATERIAL_ICON_ASSETS).length, 58 + Object.keys(additionalGlyphs).length)
   assert.deepEqual([unitsPerEm, ascent, descent], [960, 1056, -96])
   for (const [name, expected] of Object.entries(glyphs)) {
     const asset = MATERIAL_ICON_ASSETS[name]
     assert.equal(asset.viewBox, '0 -960 960 960')
     assert.equal(hash(asset.content.match(/<path d="([^"]+)"/)[1]), expected, name)
+  }
+  for (const [name, { viewBox, path }] of Object.entries(additionalGlyphs)) {
+    const asset = MATERIAL_ICON_ASSETS[name]
+    assert.equal(asset.viewBox, viewBox, name)
+    assert.equal(asset.content.match(/<path d="([^"]+)"/)[1], path, name)
   }
 })
 

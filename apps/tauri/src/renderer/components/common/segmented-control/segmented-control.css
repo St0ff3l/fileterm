@@ -81,6 +81,22 @@
   color: var(--text-primary);
 }
 
+.ft-segmented-control > .ft-segmented-control__option.is-disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ft-segmented-control > .ft-segmented-control__option.is-disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.ft-segmented-control--neutral > .ft-segmented-control__option.is-disabled:hover:not(.is-selected) {
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .ft-segmented-control .selection-control {
   position: absolute;
   width: 1px;

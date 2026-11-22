@@ -75,6 +75,12 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     setMacosMenuBarIconPreferenceError,
     maskConnectionAddresses,
     setMaskConnectionAddresses,
+    topologyServiceProbeIntervalSeconds,
+    setTopologyServiceProbeIntervalSeconds,
+    isSavingTopologyServiceProbeInterval,
+    setIsSavingTopologyServiceProbeInterval,
+    topologyServiceProbeIntervalError,
+    setTopologyServiceProbeIntervalError,
     isSavingMaskConnectionAddresses,
     setIsSavingMaskConnectionAddresses,
     maskConnectionAddressesError,
@@ -156,6 +162,27 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
         setUpdatePreferenceError(t.updatePreferenceSaveFailed)
       })
       .finally(() => setIsSavingUpdatePreference(false))
+  }
+
+  const setTopologyServiceProbeIntervalPreference = (
+    nextValue: UiPreferences['topologyServiceProbeIntervalSeconds']
+  ) => {
+    if (!desktopApi || isSavingTopologyServiceProbeInterval || nextValue === topologyServiceProbeIntervalSeconds) {
+      return
+    }
+
+    const previousValue = topologyServiceProbeIntervalSeconds
+    setTopologyServiceProbeIntervalSeconds(nextValue)
+    setTopologyServiceProbeIntervalError(null)
+    setIsSavingTopologyServiceProbeInterval(true)
+    void desktopApi
+      .setUiPreferences({ topologyServiceProbeIntervalSeconds: nextValue })
+      .then((preferences) => setTopologyServiceProbeIntervalSeconds(preferences.topologyServiceProbeIntervalSeconds))
+      .catch(() => {
+        setTopologyServiceProbeIntervalSeconds(previousValue)
+        setTopologyServiceProbeIntervalError(t.topologyServiceProbeIntervalSaveFailed)
+      })
+      .finally(() => setIsSavingTopologyServiceProbeInterval(false))
   }
 
   const setUpdateChannelPreference = (nextValue: UiPreferences['updateChannel']) => {
@@ -534,6 +561,10 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     maskConnectionAddresses,
     isSavingMaskConnectionAddresses,
     maskConnectionAddressesError,
-    setMaskConnectionAddressesPreference
+    setMaskConnectionAddressesPreference,
+    topologyServiceProbeIntervalSeconds,
+    isSavingTopologyServiceProbeInterval,
+    topologyServiceProbeIntervalError,
+    setTopologyServiceProbeIntervalPreference
   }
 }

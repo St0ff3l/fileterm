@@ -83,6 +83,7 @@ The bundled fonts and icon fonts below remain under their own licenses.
 - License: Apache License 2.0
 - Source: <https://github.com/google/material-design-icons>
 - Changes: FileTerm extracted the used glyph outlines from the previously bundled static 400-weight font into individual SVG files, preserving the original outlines and font baseline. The SVG files replace the application's icon font dependency.
+- Additional artwork: `apps/tauri/src/renderer/assets/icons/actions/material-fit_screen.svg` is the outlined `fit_screen` SVG from [`@material-design-icons/svg` 0.10.5](https://github.com/marella/material-design-icons), bundled without modification under Apache License 2.0.
 - Packaged license: `licenses/material-symbols/LICENSE.txt`
 
 ### Codicons (via Monaco Editor)

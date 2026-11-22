@@ -17,6 +17,8 @@ export function AppModalPortals({ model }: { model: AppViewModel }) {
     themeConfig,
     customThemes,
     locale,
+    workspaceMode,
+    settingsUiPreferences,
     setLocaleState,
     connectionDefaults,
     connectionImportPlan,
@@ -364,6 +366,8 @@ export function AppModalPortals({ model }: { model: AppViewModel }) {
                 onOpenConnectionManager: openConnectionManagerFromSettings,
                 onOpenLogsDirectory: openLogsDirectory,
                 onLaunchLocalAgent: workspaceState.launchLocalAgent,
+                workspaceMode,
+                uiPreferences: settingsUiPreferences,
                 initialTab: settingsInitialTab,
                 onClose: () => setShowSettings(false)
               }

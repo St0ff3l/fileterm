@@ -14,6 +14,7 @@ import type {
   SavedTheme,
   SessionSnapshot,
   ThemeConfig,
+  UiPreferences,
   WorkspaceTab,
   WorkspaceSnapshot
 } from '@fileterm/core'
@@ -96,6 +97,7 @@ function WorkspaceStageContent({
   theme,
   themeConfig,
   customThemes,
+  uiPreferences,
   locale,
   overviewShowStats,
   overviewShowRecent,
@@ -227,6 +229,7 @@ function WorkspaceStageContent({
   theme: ThemeMode
   themeConfig: ThemeConfig
   customThemes: SavedTheme[]
+  uiPreferences: UiPreferences | undefined
   locale: 'zhCN' | 'enUS'
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -476,7 +479,9 @@ function WorkspaceStageContent({
       theme={theme}
       themeConfig={themeConfig}
       customThemes={customThemes}
+      uiPreferences={uiPreferences}
       locale={locale}
+      maskConnectionAddresses={maskConnectionAddresses}
       overviewShowStats={overviewShowStats}
       overviewShowRecent={overviewShowRecent}
       overviewShowAllConnections={overviewShowAllConnections}
