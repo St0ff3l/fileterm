@@ -201,11 +201,11 @@ export function SessionWorkspace({
   remoteFileAccessMode: 'user' | 'root'
   isRemoteDirectoryLoading: boolean
   onRefresh(): void
-  onUploadFiles(items: LocalFileItem[]): void
+  onUploadFiles(items: LocalFileItem[], targetDirectory?: string): void
   onChooseUploadFiles(): void
   onDownloadFiles(items: RemoteFileItem[], targetDirectory?: string): void
   onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
-  onDropUpload(event: DragEvent<HTMLDivElement>): void
+  onDropUpload(event: DragEvent<HTMLDivElement>, targetDirectory?: string): void
   isWorkspaceFocusMode: boolean
   isActive?: boolean
 }) {

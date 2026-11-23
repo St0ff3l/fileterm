@@ -24,3 +24,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.fs-file-table tbody tr.is-drop-target > td {
+  box-shadow:
+    inset 0 1px var(--focus-outline),
+    inset 0 -1px var(--focus-outline);
+}
+
+.fs-file-table tbody tr.is-drop-target > td:first-child {
+  box-shadow:
+    inset 1px 0 var(--focus-outline),
+    inset 0 1px var(--focus-outline),
+    inset 0 -1px var(--focus-outline);
+}
+
+.fs-file-table tbody tr.is-drop-target > td:last-child {
+  box-shadow:
+    inset -1px 0 var(--focus-outline),
+    inset 0 1px var(--focus-outline),
+    inset 0 -1px var(--focus-outline);
+}

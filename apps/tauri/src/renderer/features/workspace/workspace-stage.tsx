@@ -256,7 +256,7 @@ function WorkspaceStageContent({
   onChooseUploadFiles(): void
   onDownloadFiles(items: RemoteFileItem[], targetDirectory?: string): void
   onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
-  onDropUpload(event: DragEvent<HTMLDivElement>): void
+  onDropUpload(event: DragEvent<HTMLDivElement>, targetDirectory?: string): void
   onOpenLocalItem(item: LocalFileItem): void
   onOpenLocalPath(path: string): void
   onBackToLocalComputer(): void
@@ -279,7 +279,7 @@ function WorkspaceStageContent({
   remoteFileAccessMode: 'user' | 'root'
   isRemoteDirectoryLoading: boolean
   onRefresh(): void
-  onUploadFiles(items: LocalFileItem[]): void
+  onUploadFiles(items: LocalFileItem[], targetDirectory?: string): void
   onCreateConnection(): void
   onEditConnection(profile: ConnectionProfile): void
   onDeleteConnection(profileId: string): Promise<boolean> | boolean | void

@@ -1,6 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import type { AppIconName } from '../common/app-icon'
+import type { FileDropTarget } from './file-drop-target'
 
 export type FilePane = 'local' | 'remote'
 
@@ -18,6 +19,8 @@ export type InternalFileDragPreview = {
   icon: AppIconName
   x: number
   y: number
+  target: FileDropTarget | null
+  targetHint: string | null
 }
 
 export type FileContextMenuState = {

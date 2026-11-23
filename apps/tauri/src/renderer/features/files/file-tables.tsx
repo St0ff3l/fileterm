@@ -159,6 +159,7 @@ export function FileTable({
   headerContainer,
   rows,
   compact = false,
+  dropTargetPath,
   emptyText,
   sortState,
   cutPaths,
@@ -177,6 +178,7 @@ export function FileTable({
   headerContainer?: HTMLDivElement | null
   rows: RemoteFileItem[]
   compact?: boolean
+  dropTargetPath?: string
   emptyText?: string
   sortState?: RemoteFileSortState
   cutPaths?: string[]
@@ -339,7 +341,10 @@ export function FileTable({
                   <tr
                     key={row.path}
                     data-index={virtualRow.index}
-                    className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths?.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
+                    data-file-drop-pane="remote"
+                    data-file-drop-folder-path={row.type === 'folder' && row.name !== '..' ? row.path : undefined}
+                    data-file-drop-folder-name={row.type === 'folder' && row.name !== '..' ? row.name : undefined}
+                    className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths?.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''} ${dropTargetPath === row.path ? 'is-drop-target' : ''}`}
                     onClick={(event) => onSelectItem?.(event, row)}
                     onContextMenu={(event) => onContextItem?.(event, row)}
                     onDoubleClick={() => onOpenItem?.(row)}
@@ -386,6 +391,7 @@ export function FileTable({
 export function LocalFileTable({
   scrollRef,
   cutPaths,
+  dropTargetPath,
   rows,
   selectedPaths,
   onClearSelection,
@@ -398,6 +404,7 @@ export function LocalFileTable({
 }: {
   scrollRef: RefObject<HTMLDivElement | null>
   cutPaths?: string[]
+  dropTargetPath?: string
   rows: LocalFileItem[]
   selectedPaths: string[]
   onClearSelection(): void
@@ -463,7 +470,10 @@ export function LocalFileTable({
             <tr
               key={`${row.path}:${row.name}`}
               data-index={virtualRow.index}
-              className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
+              data-file-drop-pane="local"
+              data-file-drop-folder-path={row.type === 'folder' && row.name !== '..' ? row.path : undefined}
+              data-file-drop-folder-name={row.type === 'folder' && row.name !== '..' ? row.name : undefined}
+              className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''} ${dropTargetPath === row.path ? 'is-drop-target' : ''}`}
               onClick={(event) => onSelectItem(event, row)}
               onContextMenu={(event) => onContextItem(event, row)}
               onDoubleClick={() => onOpenItem(row)}

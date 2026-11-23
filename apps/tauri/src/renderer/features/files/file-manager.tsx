@@ -23,12 +23,14 @@ import type {
   WorkspaceTab
 } from '@fileterm/core'
 import { copyText, mergeUnique, nextSelection, rangePaths } from '../../app/app-utils'
+import { APP_EVENT, onAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { WorkspaceLoadingState } from '../common/workspace-loading-state'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { CommandCenter } from '../commands/command-center'
 import { SshTunnelPanel } from '../workspace/ssh-tunnel-panel'
 import { FileManagerContextMenuHost } from './file-manager-context-menu-host'
+import { getFileDropTarget, getFileDropTargetAtPoint } from './file-drop-target'
 import { handleFileManagerKeyboardShortcuts } from './file-manager-keyboard-shortcuts'
 import { FileManagerPanes } from './file-manager-panes'
 import { FileManagerToolbar } from './file-manager-toolbar'
@@ -37,6 +39,7 @@ import type { RemoteFileSortState } from './file-tables'
 import { matchesFileFilter, type FileFilterConfig } from './file-filter'
 import { getDragPreviewIcon, sortRemoteFiles } from './file-manager-utils'
 import type { FileContextMenuState, FilePane, InternalFileDrag, InternalFileDragPreview } from './file-manager-types'
+import type { FileDropTarget } from './file-drop-target'
 
 export function FileManager({
   activeSession,
@@ -144,11 +147,11 @@ export function FileManager({
   onOpenRemotePath(path: string): void
   onPasteIntoPane(pane: 'local' | 'remote'): void
   onRefresh(): void
-  onUploadFiles(items: LocalFileItem[]): void
+  onUploadFiles(items: LocalFileItem[], targetDirectory?: string): void
   onChooseUploadFiles(): void
   onDownloadFiles(items: RemoteFileItem[], targetDirectory?: string): void
   onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
-  onDropUpload(event: DragEvent<HTMLDivElement>): void
+  onDropUpload(event: DragEvent<HTMLDivElement>, targetDirectory?: string): void
   onRequestChangePermissions(pane: 'local' | 'remote', item: LocalFileItem | RemoteFileItem): void
   onRequestDelete(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onRequestNewFile(pane: 'local' | 'remote', directoryPath: string): void
@@ -177,6 +180,7 @@ export function FileManager({
   const [selectedLocalPaths, setSelectedLocalPaths] = useState<string[]>([])
   const [selectedRemotePaths, setSelectedRemotePaths] = useState<string[]>([])
   const [internalFileDragPreview, setInternalFileDragPreview] = useState<InternalFileDragPreview | null>(null)
+  const [nativeDropTarget, setNativeDropTarget] = useState<FileDropTarget | null>(null)
   const [localAnchorPath, setLocalAnchorPath] = useState<string | null>(null)
   const [remoteAnchorPath, setRemoteAnchorPath] = useState<string | null>(null)
   const [keyboardPane, setKeyboardPane] = useState<'local' | 'remote'>('remote')
@@ -201,8 +205,20 @@ export function FileManager({
   const localDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const internalFileDragRef = useRef<InternalFileDrag | null>(null)
-  const internalFileDragRuntimeRef = useRef({ canUseRemoteFiles, localPath, onDownloadFiles, onUploadFiles })
-  internalFileDragRuntimeRef.current = { canUseRemoteFiles, localPath, onDownloadFiles, onUploadFiles }
+  const internalFileDragRuntimeRef = useRef({
+    canUseRemoteFiles,
+    localPath,
+    remotePath: activeSession.remotePath,
+    onDownloadFiles,
+    onUploadFiles
+  })
+  internalFileDragRuntimeRef.current = {
+    canUseRemoteFiles,
+    localPath,
+    remotePath: activeSession.remotePath,
+    onDownloadFiles,
+    onUploadFiles
+  }
   const localScrollRef = useRef<HTMLDivElement | null>(null)
   const remoteScrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -403,11 +419,23 @@ export function FileManager({
       }
 
       event.preventDefault()
+      const runtime = internalFileDragRuntimeRef.current
+      const hitTarget = getFileDropTargetAtPoint(event.clientX, event.clientY, {
+        local: runtime.localPath,
+        remote: runtime.remotePath
+      })
+      const target = hitTarget && hitTarget.pane !== drag.sourcePane && runtime.canUseRemoteFiles ? hitTarget : null
+      const targetHint =
+        target?.kind === 'folder' && target.name
+          ? (target.pane === 'remote' ? t.dragUploadToFolder : t.dragDownloadToFolder).replace('{name}', target.name)
+          : null
       setInternalFileDragPreview({
         names: drag.items.map((item) => item.name),
         icon: getDragPreviewIcon(drag.items),
         x: event.clientX,
-        y: event.clientY
+        y: event.clientY,
+        target,
+        targetHint
       })
     }
 
@@ -423,22 +451,18 @@ export function FileManager({
       }
 
       event.preventDefault()
-      const target = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>('.local-pane, .remote-pane')
-      const targetPane: FilePane | null = target?.classList.contains('local-pane')
-        ? 'local'
-        : target?.classList.contains('remote-pane')
-          ? 'remote'
-          : null
+      const runtime = internalFileDragRuntimeRef.current
+      const target = getFileDropTargetAtPoint(event.clientX, event.clientY, {
+        local: runtime.localPath,
+        remote: runtime.remotePath
+      })
 
       clearInternalFileDrag()
 
-      const runtime = internalFileDragRuntimeRef.current
-      if (targetPane === 'remote' && drag.sourcePane === 'local' && runtime.canUseRemoteFiles) {
-        runtime.onUploadFiles(drag.items as LocalFileItem[])
-      } else if (targetPane === 'local' && drag.sourcePane === 'remote' && runtime.canUseRemoteFiles) {
-        runtime.onDownloadFiles(drag.items as RemoteFileItem[], runtime.localPath)
+      if (target?.pane === 'remote' && drag.sourcePane === 'local' && runtime.canUseRemoteFiles) {
+        runtime.onUploadFiles(drag.items as LocalFileItem[], target.path)
+      } else if (target?.pane === 'local' && drag.sourcePane === 'remote' && runtime.canUseRemoteFiles) {
+        runtime.onDownloadFiles(drag.items as RemoteFileItem[], target.path)
       }
     }
 
@@ -463,6 +487,64 @@ export function FileManager({
     }
   }, [])
 
+  useEffect(() => {
+    let draggedPaths: string[] = []
+    let clearPreviewTimer: number | undefined
+
+    const clearNativeDropTarget = () => {
+      draggedPaths = []
+      setNativeDropTarget(null)
+      if (clearPreviewTimer !== undefined) {
+        window.clearTimeout(clearPreviewTimer)
+        clearPreviewTimer = undefined
+      }
+    }
+
+    const stopPreviewSoon = () => {
+      if (clearPreviewTimer !== undefined) {
+        window.clearTimeout(clearPreviewTimer)
+      }
+      clearPreviewTimer = window.setTimeout(() => {
+        setNativeDropTarget(null)
+        clearPreviewTimer = undefined
+      }, 500)
+    }
+
+    const offDragOver = onAppEvent(APP_EVENT.tauriNativeDragOver, ({ paths, position }) => {
+      if (paths.length > 0) {
+        draggedPaths = paths
+      }
+      if (draggedPaths.length === 0 || !canUseRemoteFiles) {
+        setNativeDropTarget(null)
+        return
+      }
+
+      const ratio = window.devicePixelRatio || 1
+      const x = position.x / ratio
+      const y = position.y / ratio
+      const target = getFileDropTargetAtPoint(x, y, {
+        local: localPath,
+        remote: activeSession.remotePath
+      })
+
+      if (!target || target.pane !== 'remote' || target.kind !== 'folder' || !target.name) {
+        setNativeDropTarget(null)
+        stopPreviewSoon()
+        return
+      }
+
+      setNativeDropTarget(target)
+      stopPreviewSoon()
+    })
+    const offDrop = onAppEvent(APP_EVENT.tauriNativeDrop, clearNativeDropTarget)
+
+    return () => {
+      offDragOver()
+      offDrop()
+      clearNativeDropTarget()
+    }
+  }, [activeSession.remotePath, canUseRemoteFiles, localPath])
+
   const submitLocalPath = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     onOpenLocalPath(localPathInput.trim() || localPath)
@@ -483,7 +565,8 @@ export function FileManager({
     if (!canUseRemoteFiles) {
       return
     }
-    onDropUpload(event)
+    const target = getFileDropTarget(event.target, { local: localPath, remote: activeSession.remotePath })
+    onDropUpload(event, target?.pane === 'remote' ? target.path : activeSession.remotePath)
   }
 
   const handleLocalPaneDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -698,6 +781,7 @@ export function FileManager({
               handleLocalPaneDrop={handleLocalPaneDrop}
               handleRemotePaneDrop={handleRemotePaneDrop}
               internalFileDragPreview={internalFileDragPreview}
+              nativeDropTarget={nativeDropTarget}
               isLocalDirectoryLoading={isLocalDirectoryLoading}
               isLocalNetworkShare={isLocalNetworkShare}
               isResizingFileSplit={isResizingFileSplit}

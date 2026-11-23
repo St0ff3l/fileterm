@@ -1643,30 +1643,6 @@
   white-space: nowrap;
 }
 
-.file-drag-preview {
-  position: fixed;
-  top: -1000px;
-  left: -1000px;
-  z-index: 9999;
-  display: inline-flex;
-  align-items: center;
-  max-width: 360px;
-  height: 28px;
-  gap: 7px;
-  padding: 0 10px;
-  border: 1px solid var(--border-dark);
-  border-radius: 5px;
-  font-family: var(--font-mono);
-  font-size: var(--ui-font-size-12px, 12px);
-  pointer-events: none;
-}
-
-.file-drag-preview span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .transfer-strip {
   grid-column: 2 / -1;
   grid-row: 3;

@@ -21,6 +21,7 @@ import { WorkspaceLoadingState } from '../common/workspace-loading-state'
 import { RemoteCapabilityPanel } from './remote-capability-panel'
 import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './file-tables'
 import type { FileFilterConfig } from './file-filter'
+import type { FileDropTarget } from './file-drop-target'
 import type { FileContextMenuState, InternalFileDragPreview, StringListSetter } from './file-manager-types'
 
 type DragSelection = {
@@ -43,6 +44,7 @@ export function FileManagerPanes({
   handleLocalPaneDrop,
   handleRemotePaneDrop,
   internalFileDragPreview,
+  nativeDropTarget,
   isLocalDirectoryLoading,
   isLocalNetworkShare,
   isResizingFileSplit,
@@ -114,6 +116,7 @@ export function FileManagerPanes({
   handleLocalPaneDrop(event: DragEvent<HTMLDivElement>): void
   handleRemotePaneDrop(event: DragEvent<HTMLDivElement>): void
   internalFileDragPreview: InternalFileDragPreview | null
+  nativeDropTarget: FileDropTarget | null
   isLocalDirectoryLoading: boolean
   isLocalNetworkShare: boolean
   isResizingFileSplit: MutableRefObject<boolean>
@@ -175,6 +178,18 @@ export function FileManagerPanes({
     event: PointerEvent<HTMLElement>
   ): void
 }) {
+  const localDropTargetPath =
+    internalFileDragPreview?.target?.pane === 'local' && internalFileDragPreview.target.kind === 'folder'
+      ? internalFileDragPreview.target.path
+      : nativeDropTarget?.pane === 'local'
+        ? nativeDropTarget.path
+        : undefined
+  const remoteDropTargetPath =
+    internalFileDragPreview?.target?.pane === 'remote' && internalFileDragPreview.target.kind === 'folder'
+      ? internalFileDragPreview.target.path
+      : nativeDropTarget?.pane === 'remote'
+        ? nativeDropTarget.path
+        : undefined
   const remoteHeader = (
     <>
       <PanePathBar
@@ -236,21 +251,26 @@ export function FileManagerPanes({
       {internalFileDragPreview ? (
         <div
           aria-hidden="true"
-          className="file-drag-preview"
+          className={`file-drag-preview ${internalFileDragPreview.targetHint ? 'has-destination' : ''}`}
           style={{
             left: internalFileDragPreview.x + 14,
             top: internalFileDragPreview.y + 14
           }}
         >
-          <span className="file-drag-preview-icon">
-            <AppIcon name={internalFileDragPreview.icon} size={14} />
-          </span>
-          <span>
-            {internalFileDragPreview.names.slice(0, 2).join(internalFileDragPreview.names.length > 1 ? ', ' : '')}
-            {internalFileDragPreview.names.length > 2
-              ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${internalFileDragPreview.names.length} ${t.itemsSuffix}`
-              : ''}
-          </span>
+          <div className="file-drag-preview-source">
+            <span className="file-drag-preview-icon">
+              <AppIcon name={internalFileDragPreview.icon} size={14} />
+            </span>
+            <span>
+              {internalFileDragPreview.names.slice(0, 2).join(internalFileDragPreview.names.length > 1 ? ', ' : '')}
+              {internalFileDragPreview.names.length > 2
+                ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${internalFileDragPreview.names.length} ${t.itemsSuffix}`
+                : ''}
+            </span>
+          </div>
+          {internalFileDragPreview.targetHint ? (
+            <span className="file-drag-preview-target">{internalFileDragPreview.targetHint}</span>
+          ) : null}
         </div>
       ) : null}
       {leftPaneMode === 'remote-tree' ? <div className="file-remote-shared-header">{remoteHeader}</div> : null}
@@ -263,6 +283,7 @@ export function FileManagerPanes({
             files={activeSession.remoteFiles}
             refresh={resetColumnsTrigger}
             onOpenPath={onOpenRemotePath}
+            onDropUpload={handleRemotePaneDrop}
           />
         ) : (
           <div className="remote-directory-pane">
@@ -273,6 +294,7 @@ export function FileManagerPanes({
       ) : (
         <div
           className="local-pane"
+          data-file-drop-pane="local"
           onMouseDownCapture={(event) => {
             if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return
             setKeyboardPane('local')
@@ -352,6 +374,7 @@ export function FileManagerPanes({
               <LocalFileTable
                 scrollRef={localScrollRef}
                 cutPaths={localCutPaths}
+                dropTargetPath={localDropTargetPath}
                 rows={filteredLocalItems}
                 selectedPaths={selectedLocalPaths}
                 onPointerDragStart={(event, item) => beginInternalFileDrag('local', item, event)}
@@ -416,6 +439,7 @@ export function FileManagerPanes({
       />
       <div
         className="pane remote-pane"
+        data-file-drop-pane="remote"
         onMouseDownCapture={(event) => {
           if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return
           setKeyboardPane('remote')
@@ -476,6 +500,7 @@ export function FileManagerPanes({
               <FileTable
                 scrollRef={remoteScrollRef}
                 cutPaths={remoteCutPaths}
+                dropTargetPath={remoteDropTargetPath}
                 emptyText={canUseRemoteFiles ? t.emptyFiles : remoteFilesUnavailableText}
                 rows={sortedRemoteRows}
                 sortState={remoteSort}

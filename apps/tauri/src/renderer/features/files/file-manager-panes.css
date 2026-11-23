@@ -1,3 +1,53 @@
+.file-drag-preview {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  max-width: 360px;
+  height: 28px;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border-dark);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-12px, 12px);
+  pointer-events: none;
+}
+
+.file-drag-preview-source {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.file-drag-preview-source > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-drag-preview.has-destination {
+  height: auto;
+  min-height: 28px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding-block: 6px;
+}
+
+.file-drag-preview-target {
+  max-width: 338px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--ui-font-size-11px, 11px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .file-table-shell--with-trailing-space {
   /* Match four fixed-height file rows so a full directory can scroll past
      its final entry and expose the pane-level context-menu target. */
