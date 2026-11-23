@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import type { RemoteFileItem } from '@fileterm/core'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
@@ -12,13 +13,15 @@ export function RemoteDirectoryTree({
   path: sourcePath,
   files,
   refresh,
-  onOpenPath
+  onOpenPath,
+  onDropUpload
 }: {
   tabId: string
   path: string
   files: RemoteFileItem[]
   refresh: number
   onOpenPath(path: string): void
+  onDropUpload(event: DragEvent<HTMLDivElement>): void
 }) {
   const path = remoteDirectoryAncestors(sourcePath).at(-1)!
   const tree = useRemoteDirectoryTree(tabId, path, files, refresh)
@@ -87,7 +90,17 @@ export function RemoteDirectoryTree({
   }
 
   return (
-    <div className="remote-directory-pane">
+    <div
+      className="remote-directory-pane"
+      data-file-drop-pane="remote"
+      data-file-drop-current-path={path}
+      onDragOver={(event) => {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+        dispatchAppEvent(APP_EVENT.tauriRemoteDragOver)
+      }}
+      onDrop={onDropUpload}
+    >
       <div className="remote-directory-tree-header">
         <span>{t.remoteDirectoryTree}</span>
         <button
@@ -113,6 +126,9 @@ export function RemoteDirectoryTree({
                 aria-label={row.name}
                 tabIndex={row.path === focused || (!rows.some((item) => item.path === focused) && index === 0) ? 0 : -1}
                 className={`remote-directory-row ${row.path === path ? 'is-current' : ''}`}
+                data-file-drop-pane="remote"
+                data-file-drop-folder-path={row.path}
+                data-file-drop-folder-name={row.name}
                 ref={(element) => {
                   if (element) buttons.current.set(row.path, element)
                   else buttons.current.delete(row.path)

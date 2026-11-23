@@ -1,5 +1,6 @@
 import { useEffect, type DragEvent } from 'react'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
+import { getFileDropTarget } from '../features/files/file-drop-target'
 import { createUploadBatch } from './upload-batch'
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
 import { t } from '../i18n'
@@ -69,13 +70,14 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
     openRemoteDirectory
   } = { ...context, ...navigation }
 
-  const uploadLocalPaths = async (paths: string[]) => {
+  const uploadLocalPaths = async (paths: string[], targetDirectory?: string) => {
     if (!desktopApi || !activeTab || !activeSession || !ensureActiveRemoteSessionConnected()) {
       return
     }
 
+    const destination = targetDirectory ?? activeSession.remotePath
     const { latestSnapshot, failures } = await createUploadBatch(paths, (sourcePath) =>
-      desktopApi.uploadFile(activeTab.id, sourcePath, activeSession.remotePath)
+      desktopApi.uploadFile(activeTab.id, sourcePath, destination)
     )
     // Transfer events stream independently; apply only the last successful snapshot.
     if (latestSnapshot) {
@@ -96,11 +98,10 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
 
       const targetMarkedByDragOver = Date.now() - nativeRemoteDropTargetAtRef.current < 1_500
       const ratio = window.devicePixelRatio || 1
-      const targets = [
-        document.elementFromPoint(position.x, position.y),
-        document.elementFromPoint(position.x / ratio, position.y / ratio)
-      ]
-      if (!targetMarkedByDragOver && !targets.some((target) => target?.closest('.remote-pane'))) {
+      const pathsByPane = { local: localPath, remote: activeSession?.remotePath ?? '' }
+      const target = getFileDropTarget(document.elementFromPoint(position.x / ratio, position.y / ratio), pathsByPane)
+      const remoteTarget = target?.pane === 'remote' ? target : null
+      if (!targetMarkedByDragOver && !remoteTarget) {
         return
       }
       if (typeof detail.consume === 'function') {
@@ -112,7 +113,7 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
       void (async () => {
         try {
           onBusyChange(true)
-          await uploadLocalPaths(paths)
+          await uploadLocalPaths(paths, remoteTarget?.path)
         } catch (error) {
           reportStatusError('上传文件', error)
         } finally {
@@ -124,7 +125,7 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
     return onAppEvent(APP_EVENT.tauriNativeDrop, handleNativeDrop)
   }, [activeSession, activeTab, desktopApi, onBusyChange, reportStatusError, uploadLocalPaths])
 
-  const handleDropUpload = async (event: DragEvent<HTMLDivElement>) => {
+  const handleDropUpload = async (event: DragEvent<HTMLDivElement>, targetDirectory?: string) => {
     event.preventDefault()
     const localPaths = extractDroppedLocalPaths(event, desktopApi)
 
@@ -142,7 +143,7 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
 
     try {
       onBusyChange(true)
-      await uploadLocalPaths(localPaths)
+      await uploadLocalPaths(localPaths, targetDirectory)
     } catch (error) {
       reportStatusError('上传文件', error)
     } finally {
@@ -150,7 +151,7 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
     }
   }
 
-  const handleUploadFiles = (items: LocalFileItem[]) => {
+  const handleUploadFiles = (items: LocalFileItem[], targetDirectory?: string) => {
     if (!desktopApi) {
       return
     }
@@ -158,7 +159,10 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
     void (async () => {
       try {
         onBusyChange(true)
-        await uploadLocalPaths(items.map((item) => item.path))
+        await uploadLocalPaths(
+          items.map((item) => item.path),
+          targetDirectory
+        )
       } catch (error) {
         reportStatusError('上传文件', error)
       } finally {
