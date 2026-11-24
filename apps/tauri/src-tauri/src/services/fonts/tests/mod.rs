@@ -27,6 +27,18 @@ fn derives_safe_family_from_filename() {
     assert_eq!(font_weight_from_label("MesloLGS NF Regular"), Some(400));
     assert_eq!(font_weight_from_label("MesloLGS NF Bold"), Some(700));
     assert_eq!(font_weight_from_label("Example Semi Bold"), Some(600));
+    assert_eq!(font_weight_from_label("Inter-700"), Some(700));
+    assert_eq!(font_weight_from_label("Inter 700 Italic"), Some(700));
+    assert_eq!(font_weight_from_label("Inter 2"), None);
+    assert_eq!(
+        font_family_from_file_name("Fira Code 6 Light.ttf"),
+        "Fira Code 6"
+    );
+    assert_eq!(font_family_from_file_name("Inter-700.ttf"), "Inter");
+    assert_eq!(
+        font_metadata_from_file_name("Inter-700.ttf").font_weight,
+        700
+    );
 }
 
 #[test]

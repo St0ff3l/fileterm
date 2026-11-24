@@ -1594,7 +1594,7 @@ mod ui_preferences_tests {
         custom_line_height["terminalLineHeight"] = serde_json::json!(1.25);
         let loaded: UiPreferences = serde_json::from_value(custom_line_height).unwrap();
         assert_eq!(normalize_ui_preferences(loaded).terminal_line_height, 1.25);
-        for line_height in [0.5, 1.6, -1.0] {
+        for line_height in [0.5, 1.03, 1.6, -1.0] {
             let mut value = preferences.clone();
             value["terminalLineHeight"] = serde_json::json!(line_height);
             let loaded: UiPreferences = serde_json::from_value(value).unwrap();

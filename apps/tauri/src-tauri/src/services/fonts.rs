@@ -761,15 +761,6 @@ fn strip_font_style_suffix(stem: &str) -> &str {
         end = words[remaining - 1].0;
         remaining -= 1;
     }
-    if remaining > 0
-        && words[remaining - 1]
-            .2
-            .parse::<u16>()
-            .is_ok_and(|weight| (1..=1000).contains(&weight))
-    {
-        end = words[remaining - 1].0;
-        remaining -= 1;
-    }
     if remaining > 0 && font_weight_from_label(&words[remaining - 1].2).is_some() {
         end = words[remaining - 1].0;
         remaining -= 1;
@@ -812,6 +803,19 @@ fn font_name_words(value: &str) -> Vec<(usize, usize, String)> {
 }
 
 fn font_weight_from_label(label: &str) -> Option<u16> {
+    let words = font_name_words(label);
+    let mut word_count = words.len();
+    while word_count > 0 && matches!(words[word_count - 1].2.as_str(), "italic" | "oblique") {
+        word_count -= 1;
+    }
+    if word_count > 0 {
+        if let Ok(weight) = words[word_count - 1].2.parse::<u16>() {
+            if is_common_numeric_font_weight(weight) {
+                return Some(weight);
+            }
+        }
+    }
+
     let compact: String = label
         .chars()
         .filter(|character| character.is_alphanumeric())
@@ -821,8 +825,15 @@ fn font_weight_from_label(label: &str) -> Option<u16> {
         .strip_suffix("italic")
         .or_else(|| compact.strip_suffix("oblique"))
         .unwrap_or(&compact);
-    if let Ok(weight) = compact.parse::<u16>() {
-        return (1..=1000).contains(&weight).then_some(weight);
+    let numeric_start = compact
+        .char_indices()
+        .rev()
+        .find(|(_, character)| !character.is_ascii_digit())
+        .map_or(0, |(index, character)| index + character.len_utf8());
+    if let Ok(weight) = compact[numeric_start..].parse::<u16>() {
+        if is_common_numeric_font_weight(weight) {
+            return Some(weight);
+        }
     }
     [
         ("ultrablack", 900),
@@ -847,6 +858,13 @@ fn font_weight_from_label(label: &str) -> Option<u16> {
     ]
     .into_iter()
     .find_map(|(suffix, weight)| compact.ends_with(suffix).then_some(weight))
+}
+
+fn is_common_numeric_font_weight(weight: u16) -> bool {
+    matches!(
+        weight,
+        100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950 | 1000
+    )
 }
 
 fn default_font_weight() -> u16 {

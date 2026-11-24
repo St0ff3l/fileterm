@@ -186,6 +186,10 @@ fn default_terminal_line_height() -> f64 {
     1.05
 }
 
+const TERMINAL_LINE_HEIGHT_OPTIONS: [f64; 11] = [
+    1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5,
+];
+
 fn default_terminal_renderer() -> String {
     DEFAULT_TERMINAL_RENDERER.to_string()
 }
@@ -556,9 +560,7 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     if !matches!(preferences.terminal_font_weight, 400 | 500 | 600) {
         preferences.terminal_font_weight = default_terminal_font_weight();
     }
-    if !preferences.terminal_line_height.is_finite()
-        || !(1.0..=1.5).contains(&preferences.terminal_line_height)
-    {
+    if !TERMINAL_LINE_HEIGHT_OPTIONS.contains(&preferences.terminal_line_height) {
         preferences.terminal_line_height = default_terminal_line_height();
     }
     preferences.diagnostic_log_categories = crate::services::logging::normalize_categories(
