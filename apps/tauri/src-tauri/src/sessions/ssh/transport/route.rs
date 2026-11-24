@@ -25,6 +25,29 @@ fn profile_has_proxy(profile: &Value) -> bool {
             != "none"
 }
 
+pub(crate) fn has_proxy_assignment_jump_conflict(
+    profile: &Value,
+    profiles: &[Value],
+    assigning: bool,
+) -> bool {
+    let has_own_jump = match profile.get("jumpProfileIds") {
+        Some(hops) => hops.as_array().is_none_or(|hops| !hops.is_empty()),
+        None => profile
+            .get("jumpProfileId")
+            .is_some_and(|jump| !jump.is_null()),
+    };
+    has_own_jump
+        || assigning
+            && profiles.iter().any(|dependent| {
+                matches!(dependent["type"].as_str(), Some("ssh" | "sftp"))
+                    && dependent["jumpProfileIds"].as_array().is_some_and(|hops| {
+                        hops.iter()
+                            .skip(1)
+                            .any(|hop| hop.as_str() == profile["id"].as_str())
+                    })
+            })
+}
+
 fn resolve_ssh_route(profile: &Value, profiles: &[Value]) -> Result<Vec<Value>, String> {
     if let Some(jump_ids) = profile.get("jumpProfileIds") {
         let jump_ids = jump_ids.as_array().ok_or_else(|| {

@@ -606,7 +606,11 @@ export function HomeWorkspace({
           )}
           {currentPage === 'proxy-manager' && (
             <div key={pageEntryKey('proxy-manager')} className="page-transition" data-nav-direction={navDirection}>
-              <ProxyManagerPage onStatsChange={setProxyStats} onActiveFilterChange={setActiveProxyFilterLabel} />
+              <ProxyManagerPage
+                profiles={profiles}
+                onStatsChange={setProxyStats}
+                onActiveFilterChange={setActiveProxyFilterLabel}
+              />
             </div>
           )}
           {currentPage === 'command-manager' && (

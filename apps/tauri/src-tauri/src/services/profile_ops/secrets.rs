@@ -52,9 +52,7 @@ fn read_profile_secret(
 }
 
 fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Result<(), AppError> {
-    let Some(store) = read_profile_secret_store(path)? else {
-        return Ok(());
-    };
+    let store = read_profile_secret_store(path)?;
     let storage_root = profile_secret_storage_root(path)?;
     for profile in profiles {
         let Some(profile_id) = profile.get("id").and_then(Value::as_str).map(str::to_owned) else {
@@ -72,7 +70,7 @@ fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Re
             "otpSecret",
         ] {
             let Some(stored_value) =
-                current_profile_secret(Some(&store), &profile_id, field).and_then(Value::as_str)
+                current_profile_secret(store.as_ref(), &profile_id, field).and_then(Value::as_str)
             else {
                 continue;
             };
@@ -85,7 +83,7 @@ fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Re
             profile_object.insert(field.to_string(), Value::String(value));
         }
         if let Some(stored_value) =
-            current_profile_secret(Some(&store), &profile_id, "proxyPassword")
+            current_profile_secret(store.as_ref(), &profile_id, "proxyPassword")
                 .and_then(Value::as_str)
         {
             let scope = format!("profile/{profile_id}/proxyPassword");
@@ -344,8 +342,13 @@ fn build_profile_secrets(
                 );
             }
         }
-        if let Some(proxy) = profile.get("proxy").and_then(|v| v.as_object()) {
-            if let Some(password) = proxy.get("password").and_then(Value::as_str) {
+        if let Some(password) = profile["proxy"]["password"].as_str() {
+            // Shared proxy credentials belong to the proxy store, even after runtime hydration.
+            let has_shared_proxy = proxy_assignments::saved_proxy_id(profile).is_some_and(|id| {
+                crate::services::proxies::get_internal(storage_root, id)
+                    .is_ok_and(|proxy| proxy.is_some())
+            });
+            if !has_shared_proxy {
                 entry.insert(
                     "proxyPassword".to_string(),
                     encrypted_profile_secret(

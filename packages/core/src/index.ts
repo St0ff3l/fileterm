@@ -159,6 +159,16 @@ export interface ProxyProfile {
   updatedAt?: number
 }
 
+export type SshProxySource =
+  | { kind: 'direct' }
+  | { kind: 'saved'; proxyId: string }
+  | ({ kind: 'custom' } & Pick<ProxyConfig, 'type' | 'host' | 'port' | 'username'>)
+
+export interface SshProxyAssignmentInput {
+  proxyId: string
+  changes: { profileId: string; assigned: boolean; expected: SshProxySource }[]
+}
+
 export interface CreateProxyProfileInput {
   name: string
   type: 'socks5' | 'http'
@@ -3034,6 +3044,8 @@ export interface FileTermDesktopApi {
   getCommandSendPreferences(): Promise<CommandSendPreferences>
   setCommandSendPreferences(preferences: CommandSendPreferences): Promise<void>
   createProfile(input: CreateProfileInput): Promise<WorkspaceSnapshot>
+  /** Returns whether the workspace snapshot refreshed after saving. */
+  assignSshProxy(input: SshProxyAssignmentInput): Promise<boolean>
   updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot>
   setProfileFilePaneMode(profileId: string, mode: FilePaneMode): Promise<WorkspaceSnapshot>
   setProfileDefaultDirectory(profileId: string, pane: 'local' | 'remote', path: string): Promise<WorkspaceSnapshot>

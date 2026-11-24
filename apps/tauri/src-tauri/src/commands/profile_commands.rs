@@ -40,6 +40,29 @@ pub async fn app_update_profile(
 }
 
 #[tauri::command]
+pub(crate) async fn app_assign_ssh_proxy(
+    app: AppHandle,
+    input: crate::services::profile_ops::SshProxyAssignmentInput,
+) -> Result<bool, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
+    if !crate::services::profile_ops::assign_ssh_proxy(&app, input)? {
+        return Ok(true);
+    }
+    let _ = app.emit("proxies:changed", ());
+    match get_workspace_snapshot_and_emit(&app).await {
+        Ok(_) => Ok(true),
+        Err(error) => {
+            crate::services::logging::warn(
+                &app,
+                "workspace",
+                format!("SSH proxy assignments saved, snapshot refresh failed: {error}"),
+            );
+            Ok(false)
+        }
+    }
+}
+
+#[tauri::command]
 pub async fn app_set_profile_file_pane_mode(
     app: AppHandle,
     profile_id: String,

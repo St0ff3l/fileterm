@@ -73,6 +73,7 @@ import type {
   DeleteAiMessageInput,
   ListAiModelsInput,
   ProxyProfile,
+  SshProxyAssignmentInput,
   CreateProxyProfileInput,
   UpdateProxyProfileInput,
   TunnelProfile,
@@ -605,6 +606,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       }),
     createCommandTemplate: (input: unknown) =>
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-command', payload: { input } }),
+    assignSshProxy: (input: SshProxyAssignmentInput) => invoke<boolean>('app_assign_ssh_proxy', { input }),
     updateProfile: (profileId: string, input: unknown) =>
       invoke<WorkspaceSnapshot>('app_update_profile', { profileId, input }),
     setProfileFilePaneMode: (profileId: string, mode: FilePaneMode) =>

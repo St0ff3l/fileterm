@@ -15,6 +15,9 @@ use tauri::AppHandle;
 const DEFAULT_GROUP: &str = "默认";
 pub(crate) const BACKUP_IDENTITY_FIELD: &str = "backupIdentity";
 
+mod proxy_assignments;
+pub(crate) use proxy_assignments::{assign_ssh_proxy, SshProxyAssignmentInput};
+
 include!("healing.rs");
 include!("profiles.rs");
 include!("secrets.rs");
