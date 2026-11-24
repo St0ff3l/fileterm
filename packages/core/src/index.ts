@@ -439,6 +439,19 @@ export interface McpAgentSetup {
   clients: McpAgentClientStatus[]
 }
 
+export interface SshNetworkInterfacePreference {
+  adapterId: string
+  displayName?: string
+}
+
+export interface SshNetworkInterfaceInfo {
+  id: string
+  name: string
+  online: boolean
+  ipv4: boolean
+  ipv6: boolean
+}
+
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
   /** Disable the 24-hour ceiling for size-based SHA-256 transfer verification timeouts. */
@@ -479,6 +492,7 @@ export interface SshProfile extends NetworkProfile {
   resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   reconnectMode?: 'none' | 'enter' | 'auto'
   connectionOverrides?: SshConnectionOverrides
+  sshNetworkInterface?: SshNetworkInterfacePreference
   proxy?: ProxyConfig
   proxyProfileId?: string
   tunnelProfileId?: string
@@ -491,7 +505,7 @@ export interface SshProfile extends NetworkProfile {
   legacyAlgorithms?: boolean
 }
 
-export interface SftpProfile extends Omit<SshProfile, 'type'> {
+export interface SftpProfile extends Omit<SshProfile, 'type' | 'sshNetworkInterface'> {
   type: 'sftp'
 }
 
@@ -1426,6 +1440,7 @@ export interface CreateProfileInput {
   disableChecksumTimeoutCap?: boolean
   sftpEnabled?: boolean
   connectionOverrides?: SshConnectionOverrides
+  sshNetworkInterface?: SshNetworkInterfacePreference | null
   proxy?: ProxyConfig
   proxyPassword?: string
   proxyProfileId?: string
@@ -2918,6 +2933,7 @@ export interface FileTermDesktopApi {
   openLogsDirectory(): Promise<void>
   writeDiagnosticLog(level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', scope: string, message: string): Promise<void>
   listSerialPorts(): Promise<SerialPortInfo[]>
+  listSshNetworkInterfaces(): Promise<SshNetworkInterfaceInfo[]>
   onSerialPortsChanged(listener: (ports: SerialPortInfo[]) => void): () => void
   serialControl(
     tabId: string,

@@ -124,6 +124,7 @@ export function useAppDataOperations({
     const defaultPort = form.type === 'ftp' ? 21 : form.type === 'telnet' ? 23 : form.type === 'serial' ? 0 : 22
     return {
       ...form,
+      sshNetworkInterface: form.sshNetworkInterface ?? null,
       host: normalizedHost,
       port: Number(form.port) || defaultPort,
       ...(form.type === 'sftp'

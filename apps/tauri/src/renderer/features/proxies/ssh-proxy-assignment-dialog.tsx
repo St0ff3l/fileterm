@@ -198,7 +198,7 @@ export function SshProxyAssignmentDialog({
         </div>
         <div className="proxy-assignment-scroll">
           <div className="proxy-assignment-list" ref={scrollRef}>
-            {visibleRows.map(({ profile, source, assigned, blocked }) => (
+            {visibleRows.map(({ profile, source, assigned, blocked, interfaceConflict }) => (
               <label className="proxy-assignment-row" key={profile.id}>
                 <SelectionControl
                   checked={blocked ? assigned : (edits.get(profile.id) ?? assigned)}
@@ -223,7 +223,7 @@ export function SshProxyAssignmentDialog({
                 <span className="proxy-assignment-route">
                   <span title={sourceLabel(source)}>{sourceLabel(source)}</span>
                   {blocked ? (
-                    <small title={t.proxyAssignmentJumpConflict}>{t.proxyAssignmentJumpConflict}</small>
+                    <small>{interfaceConflict ? t.sshInterfaceProxyConflict : t.proxyAssignmentJumpConflict}</small>
                   ) : null}
                 </span>
               </label>

@@ -63,3 +63,10 @@ test('submits only explicit changes by ID, even if a new linked connection appea
     ]
   )
 })
+
+test('does not assign a proxy to a connection with a selected outbound interface', () => {
+  const rows = proxyAssignmentRows([profile('bound', { sshNetworkInterface: { adapterId: 'lan' } })], 'shared')
+  assert.equal(rows[0].interfaceConflict, true)
+  assert.equal(rows[0].blocked, true)
+  assert.deepEqual(plain(proxyAssignmentChanges(rows, new Map([['bound', true]]))), [])
+})

@@ -97,6 +97,7 @@ import type {
   SerialTransferProgress,
   SerialTransferResult,
   SerialPortInfo,
+  SshNetworkInterfaceInfo,
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
   TestAiProviderInput,
@@ -428,6 +429,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeDiagnosticLog: (level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', scope: string, message: string) =>
       invoke<void>('app_write_diagnostic_log', { level, scope, message }),
     listSerialPorts: () => invoke<SerialPortInfo[]>('app_list_serial_ports'),
+    listSshNetworkInterfaces: () => invoke<SshNetworkInterfaceInfo[]>('app_list_ssh_network_interfaces'),
     onSerialPortsChanged: (listener: (ports: SerialPortInfo[]) => void) => subscribe('serial:ports-changed', listener),
     serialControl: (tabId: string, action: SerialControlAction, value?: boolean, durationMs?: number) =>
       invoke<SerialLineStatus>('app_serial_control', { tabId, action, value, durationMs }),

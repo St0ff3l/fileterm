@@ -7,6 +7,12 @@ async fn connect_ssh_transport(
     host: &str,
     port: u16,
 ) -> Result<BoxedSshTransport, String> {
+    use crate::services::ssh_network_interface;
+    if let Some(preference) = ssh_network_interface::validate(profile)? {
+        let stream = ssh_network_interface::connect(preference, host, port).await?;
+        let _ = stream.set_nodelay(true);
+        return Ok(Box::new(stream));
+    }
     let proxy = profile.get("proxy").and_then(Value::as_object);
     let proxy_type = proxy
         .and_then(|value| value.get("type"))

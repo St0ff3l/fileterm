@@ -791,6 +791,7 @@ fn resolve_profile_for_session(
         effective_profile,
         &preferences.connection_defaults,
     );
+    crate::services::ssh_network_interface::validate(&resolved).map_err(AppError::Command)?;
     if resolved.get("type").and_then(Value::as_str) == Some("ssh") {
         if let Some(tunnel_profile_id) = resolved
             .get("tunnelProfileId")

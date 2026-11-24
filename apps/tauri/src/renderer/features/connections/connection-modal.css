@@ -35,6 +35,18 @@
   padding-bottom: 20px;
 }
 
+.network-interface-fieldset .network-card__body {
+  gap: 8px;
+}
+
+.network-interface-fieldset .network-field-hint {
+  padding-left: 0;
+}
+
+.network-interface-fieldset .network-interface-refresh {
+  flex: 0 0 auto;
+}
+
 .ssh-modal-nav {
   position: relative;
   isolation: isolate;

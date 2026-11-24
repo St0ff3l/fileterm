@@ -5,6 +5,7 @@ import './ssh-jump-route.css'
 import { AppIcon } from '../common/app-icon'
 import { DropdownSelect } from '../common/dropdown-select'
 import { ConnectionProxySection } from './connection-proxy-section'
+import { ConnectionNetworkInterface } from './connection-network-interface'
 import { ConnectionTunnelSection } from './connection-tunnel-section'
 import type { ConnectionFormSetter } from './connection-modal-utils'
 
@@ -14,6 +15,7 @@ export function ConnectionNetworkSection({
   jumpRoute,
   routeError,
   routingMode,
+  usedAsJumpHost,
   setForm
 }: {
   form: CreateProfileInput
@@ -21,6 +23,7 @@ export function ConnectionNetworkSection({
   jumpRoute: SshProfile[]
   routeError: string | null
   routingMode: 'direct' | 'jump'
+  usedAsJumpHost: boolean
   setForm: ConnectionFormSetter
 }) {
   const supportsRouting = form.type === 'ssh'
@@ -37,6 +40,7 @@ export function ConnectionNetworkSection({
     return jumpHosts
       .filter((profile) => {
         if (profile.id === selectedId) return true
+        if (profile.sshNetworkInterface) return false
         if (selectedJumpProfileIds.some((id, selectedIndex) => selectedIndex !== index && id === profile.id)) {
           return false
         }
@@ -192,6 +196,9 @@ export function ConnectionNetworkSection({
         </fieldset>
       ) : null}
 
+      {supportsRouting || form.sshNetworkInterface ? (
+        <ConnectionNetworkInterface form={form} setForm={setForm} usedAsJumpHost={usedAsJumpHost} />
+      ) : null}
       {supportsProxy ? <ConnectionProxySection form={form} setForm={setForm} /> : null}
 
       {supportsTunnel ? <ConnectionTunnelSection form={form} setForm={setForm} /> : null}

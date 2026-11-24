@@ -120,6 +120,12 @@ fn apply_assignments(
         if change.assigned == (saved_proxy_id(profile) == Some(&proxy.id)) {
             continue;
         }
+        if change.assigned && crate::services::ssh_network_interface::has_preference(profile) {
+            let name = profile["name"].as_str().unwrap_or(id);
+            return Err(AppError::Command(format!(
+                "The SSH outbound interface for {name} conflicts with this proxy assignment."
+            )));
+        }
         if crate::sessions::ssh::has_proxy_assignment_jump_conflict(
             profile,
             profiles,

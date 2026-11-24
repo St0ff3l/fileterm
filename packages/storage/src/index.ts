@@ -380,6 +380,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         reconnectMode: input.reconnectMode,
         legacyAlgorithms: input.legacyAlgorithms,
         connectionOverrides: input.connectionOverrides,
+        sshNetworkInterface: input.sshNetworkInterface ?? undefined,
         proxy: input.proxy ? { ...input.proxy, password: input.proxyPassword ?? input.proxy.password } : undefined,
         jumpProfileId: input.jumpProfileId,
         forwards: input.forwards ?? [],

@@ -23,8 +23,9 @@ export function proxyAssignmentRows(profiles: ConnectionProfile[], proxyId: stri
       profile.jumpProfileIds !== undefined
         ? !Array.isArray(profile.jumpProfileIds) || profile.jumpProfileIds.length > 0
         : profile.jumpProfileId != null
-    const blocked = hasOwnJump || (!assigned && laterHops.has(profile.id))
-    return [{ profile, source, assigned, blocked }]
+    const interfaceConflict = Boolean(profile.sshNetworkInterface && !assigned)
+    const blocked = interfaceConflict || hasOwnJump || (!assigned && laterHops.has(profile.id))
+    return [{ profile, source, assigned, blocked, interfaceConflict }]
   })
 }
 

@@ -49,6 +49,8 @@ pub(crate) fn has_proxy_assignment_jump_conflict(
 }
 
 fn resolve_ssh_route(profile: &Value, profiles: &[Value]) -> Result<Vec<Value>, String> {
+    use crate::services::ssh_network_interface::{has_preference, jump_conflict, validate};
+    validate(profile)?;
     if let Some(jump_ids) = profile.get("jumpProfileIds") {
         let jump_ids = jump_ids.as_array().ok_or_else(|| {
             "SSH Jump Host route must be an array of profile IDs".to_string()
@@ -89,6 +91,9 @@ fn resolve_ssh_route(profile: &Value, profiles: &[Value]) -> Result<Vec<Value>, 
             if hop.get("type").and_then(Value::as_str) != Some("ssh") {
                 return Err(format!("Jump Host profile '{jump_id}' must be an SSH profile"));
             }
+            if has_preference(&hop) {
+                return Err(jump_conflict(&hop));
+            }
             port_from_profile(&hop, 22, "SSH")?;
             if index > 0 && profile_has_proxy(&hop) {
                 return Err(format!(
@@ -121,6 +126,9 @@ fn resolve_ssh_route(profile: &Value, profiles: &[Value]) -> Result<Vec<Value>, 
         }
         if current.get("type").and_then(Value::as_str) != Some("ssh") {
             return Err(format!("Jump Host profile '{id}' must be an SSH profile"));
+        }
+        if !route.is_empty() && has_preference(&current) {
+            return Err(jump_conflict(&current));
         }
         port_from_profile(&current, 22, "SSH")?;
         let jump_id = match current

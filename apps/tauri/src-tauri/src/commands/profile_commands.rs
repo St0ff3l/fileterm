@@ -8,6 +8,12 @@
 // secrets stripping, cascade rename / delete, ordering).
 
 #[tauri::command]
+pub(crate) fn app_list_ssh_network_interfaces(
+) -> Result<Vec<crate::services::ssh_network_interface::AdapterInfo>, AppError> {
+    crate::services::ssh_network_interface::list().map_err(AppError::Command)
+}
+
+#[tauri::command]
 pub async fn app_create_profile(
     app: AppHandle,
     input: serde_json::Value,
