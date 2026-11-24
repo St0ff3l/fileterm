@@ -141,6 +141,7 @@ test('connection settings show the complete route and explain invalid references
         DropdownSelect: ({ options }) => createElement('span', null, options.map((option) => option.label).join(' | '))
       },
       './connection-proxy-section': { ConnectionProxySection: () => null },
+      './connection-network-interface': { ConnectionNetworkInterface: () => null },
       './connection-tunnel-section': { ConnectionTunnelSection: () => null }
     }
   )
@@ -152,6 +153,7 @@ test('connection settings show the complete route and explain invalid references
     jumpRoute: resolve({ jumpProfileId: 'middle' }, profiles).jumpHosts,
     routeError: null,
     routingMode: 'jump',
+    usedAsJumpHost: false,
     setForm() {},
     setRoutingMode() {}
   }

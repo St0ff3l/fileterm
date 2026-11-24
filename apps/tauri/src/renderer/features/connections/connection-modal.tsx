@@ -11,6 +11,7 @@ import type {
 } from '@fileterm/core'
 import { t } from '../../i18n'
 import { getSshRoutingMode, hasIncompleteSshJumpRoute, resolveSshJumpRoute } from '../../app/ssh-jump-route'
+import { isUsedAsJumpHost } from '../../app/ssh-network-interface'
 import './connection-modal.css'
 import { useSelectionIndicator } from '../common/use-selection-indicator'
 import { CloseButton } from '../common/close-button'
@@ -111,7 +112,8 @@ export function ConnectionModal({
     missing: t.sshJumpRouteMissing,
     type: t.sshJumpRouteType,
     'too-long': t.sshJumpRouteTooLong,
-    'proxy-conflict': t.sshJumpRouteProxyConflict
+    'proxy-conflict': t.sshJumpRouteProxyConflict,
+    'interface-conflict': t.sshInterfaceJumpConflict
   }
   const jumpHostSelectionIncomplete = routingMode === 'jump' && hasIncompleteSshJumpRoute(form)
   const jumpRouteError = jumpHostSelectionIncomplete
@@ -460,6 +462,7 @@ export function ConnectionModal({
                     routeError={jumpRouteError}
                     routingMode={routingMode}
                     setForm={setForm}
+                    usedAsJumpHost={isUsedAsJumpHost(editingProfileId ?? null, profiles)}
                   />
                 ) : null}
                 {section === 'terminal' && supportsTerminal ? (

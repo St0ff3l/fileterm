@@ -263,6 +263,7 @@ export function profileToForm(
     proxyProfileId:
       isSshTransport || profile.type === 'telnet' || profile.type === 'ftp' ? profile.proxyProfileId : undefined,
     tunnelProfileId: profile.type === 'ssh' ? profile.tunnelProfileId : undefined,
+    sshNetworkInterface: profile.type === 'ssh' ? profile.sshNetworkInterface : undefined,
     sudoPassword: '',
     suPassword: '',
     jumpProfileId: profile.type === 'ssh' ? profile.jumpProfileId : undefined,

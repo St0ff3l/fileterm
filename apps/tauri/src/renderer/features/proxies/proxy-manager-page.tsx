@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  ConnectionProfile,
   CreateProxyProfileInput,
   CreateTunnelProfileInput,
   ProxyProfile,
   TunnelProfile,
-  TunnelProfileType,
   UpdateProxyProfileInput,
   UpdateTunnelProfileInput
 } from '@fileterm/core'
@@ -15,12 +15,22 @@ import { AppIcon } from '../common/app-icon'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 import { ContextMenu } from '../common/context-menu'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
+import { SshProxyAssignmentDialog } from './ssh-proxy-assignment-dialog'
 import { ProxyEditDialog } from './proxy-edit-dialog'
 import { TunnelEditDialog } from '../tunnels/tunnel-edit-dialog'
+import './proxy-manager-page.css'
 
-type ActiveFilter = 'all' | 'socks5' | 'http-connect' | 'ssh' | 'http-tunnel'
+type ProtocolFilter = 'ssh' | 'http-tunnel' | 'socks5' | 'http-connect'
+type ActiveFilter = 'all' | ProtocolFilter
 
 type ManagerEntry = { kind: 'proxy'; item: ProxyProfile } | { kind: 'tunnel'; item: TunnelProfile }
+
+const protocolOrder: ProtocolFilter[] = ['ssh', 'http-tunnel', 'socks5', 'http-connect']
+
+function entryProtocol(entry: ManagerEntry): ProtocolFilter {
+  if (entry.item.type !== 'http') return entry.item.type
+  return entry.kind === 'tunnel' ? 'http-tunnel' : 'http-connect'
+}
 
 export interface ProxyManagerStats {
   totalCount: number
@@ -33,9 +43,11 @@ export interface ProxyManagerStats {
 }
 
 export function ProxyManagerPage({
+  profiles = [],
   onStatsChange,
   onActiveFilterChange
 }: {
+  profiles?: ConnectionProfile[]
   onStatsChange?(stats: ProxyManagerStats): void
   onActiveFilterChange?(label: string): void
 } = {}) {
@@ -43,6 +55,8 @@ export function ProxyManagerPage({
   const tunnelLibrary = useTunnelLibrary()
   const { proxies, error: proxyError, clearError: clearProxyError, saveProxy, deleteProxy, testProxy } = proxyLibrary
   const { tunnels, error: tunnelError, clearError: clearTunnelError, saveTunnel, deleteTunnel } = tunnelLibrary
+  const [assignmentProxy, setAssignmentProxy] = useState<ProxyProfile | null>(null)
+  const [assignmentNotice, setAssignmentNotice] = useState('')
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [isActionsExpanded, setIsActionsExpanded] = useState(false)
@@ -51,7 +65,6 @@ export function ProxyManagerPage({
   const [editingProxy, setEditingProxy] = useState<ProxyProfile | null>(null)
   const [editingTunnel, setEditingTunnel] = useState<TunnelProfile | null>(null)
   const [createProxyType, setCreateProxyType] = useState<'socks5' | 'http'>('socks5')
-  const [createTunnelType, setCreateTunnelType] = useState<TunnelProfileType>('ssh')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingEntry, setDeletingEntry] = useState<ManagerEntry | null>(null)
   const editorOpenInFlightRef = useRef(false)
@@ -100,41 +113,34 @@ export function ProxyManagerPage({
           .includes(query)
       )
     }
-    const matchesFilter = (entry: ManagerEntry) => {
-      if (activeFilter === 'all') return true
-      if (entry.kind === 'proxy') {
-        return (
-          (activeFilter === 'socks5' && entry.item.type === 'socks5') ||
-          (activeFilter === 'http-connect' && entry.item.type === 'http')
-        )
-      }
-      return (
-        (activeFilter === 'ssh' && entry.item.type === 'ssh') ||
-        (activeFilter === 'http-tunnel' && entry.item.type === 'http')
-      )
-    }
-
     return [
-      ...proxies.map((item) => ({ kind: 'proxy' as const, item })),
-      ...tunnels.map((item) => ({ kind: 'tunnel' as const, item }))
+      ...tunnels.map((item) => ({ kind: 'tunnel' as const, item })),
+      ...proxies.map((item) => ({ kind: 'proxy' as const, item }))
     ]
-      .filter((entry) => matchesFilter(entry) && matchesQuery(entry))
+      .filter((entry) => (activeFilter === 'all' || activeFilter === entryProtocol(entry)) && matchesQuery(entry))
       .sort(
         (left, right) =>
+          protocolOrder.indexOf(entryProtocol(left)) - protocolOrder.indexOf(entryProtocol(right)) ||
           (right.item.updatedAt ?? right.item.createdAt ?? 0) - (left.item.updatedAt ?? left.item.createdAt ?? 0)
       )
   }, [activeFilter, proxies, searchQuery, tunnels])
 
-  const activeFilterLabel =
-    activeFilter === 'socks5'
-      ? t.socks5Proxies
-      : activeFilter === 'http-connect'
-        ? t.httpConnectProxies
-        : activeFilter === 'ssh'
-          ? t.sshTunnelProfiles
-          : activeFilter === 'http-tunnel'
-            ? t.httpTunnels
-            : t.allProxiesAndTunnels
+  const filters = {
+    all: { label: t.allProxiesAndTunnels, count: stats.totalCount, icon: 'shield' },
+    ssh: { label: t.sshTunnelProfiles, count: stats.sshTunnelCount, icon: 'connections' },
+    'http-tunnel': { label: t.httpTunnels, count: stats.httpTunnelCount, icon: 'cloud' },
+    socks5: { label: t.socks5Proxies, count: stats.socks5Count, icon: 'brand' },
+    'http-connect': { label: t.httpConnectProxies, count: stats.httpProxyCount, icon: 'server' }
+  } as const
+  const activeFilterLabel = filters[activeFilter].label
+  const renderFilter = (filter: ActiveFilter) => (
+    <FilterButton
+      key={filter}
+      {...filters[filter]}
+      active={activeFilter === filter}
+      onClick={() => setActiveFilter(filter)}
+    />
+  )
 
   useEffect(() => {
     onStatsChange?.(stats)
@@ -154,13 +160,12 @@ export function ProxyManagerPage({
     setIsProxyModalOpen(true)
   }
 
-  const openTunnelCreate = (type: TunnelProfileType) => {
+  const openTunnelCreate = () => {
     if (window.fileterm?.openTunnelFormWindow) {
-      void window.fileterm.openTunnelFormWindow('create', undefined, type)
+      void window.fileterm.openTunnelFormWindow('create')
       return
     }
     setEditingTunnel(null)
-    setCreateTunnelType(type)
     setIsTunnelModalOpen(true)
   }
 
@@ -220,6 +225,11 @@ export function ProxyManagerPage({
     }))
   }
 
+  const openAssignments = (proxy: ProxyProfile) => {
+    setAssignmentNotice('')
+    setAssignmentProxy(proxy)
+  }
+
   const libraryError = proxyError || tunnelError
   const contextEntry = contextMenu?.entry ?? null
   const contextProxy = contextEntry?.kind === 'proxy' ? contextEntry.item : null
@@ -259,43 +269,19 @@ export function ProxyManagerPage({
         </div>
       ) : null}
 
+      {assignmentNotice ? (
+        <div className="proxy-assignment-notice" role="status">
+          {assignmentNotice}
+        </div>
+      ) : null}
+
       <div className="connection-manager-layout">
         <aside className="connection-manager-sidebar" aria-label="Proxy and tunnel filters">
-          <FilterButton
-            active={activeFilter === 'all'}
-            count={stats.totalCount}
-            icon="shield"
-            label={t.allProxiesAndTunnels}
-            onClick={() => setActiveFilter('all')}
-          />
-          <FilterButton
-            active={activeFilter === 'socks5'}
-            count={stats.socks5Count}
-            icon="brand"
-            label={t.socks5Proxies}
-            onClick={() => setActiveFilter('socks5')}
-          />
-          <FilterButton
-            active={activeFilter === 'http-connect'}
-            count={stats.httpProxyCount}
-            icon="server"
-            label={t.httpConnectProxies}
-            onClick={() => setActiveFilter('http-connect')}
-          />
-          <FilterButton
-            active={activeFilter === 'ssh'}
-            count={stats.sshTunnelCount}
-            icon="connections"
-            label={t.sshTunnelProfiles}
-            onClick={() => setActiveFilter('ssh')}
-          />
-          <FilterButton
-            active={activeFilter === 'http-tunnel'}
-            count={stats.httpTunnelCount}
-            icon="cloud"
-            label={t.httpTunnels}
-            onClick={() => setActiveFilter('http-tunnel')}
-          />
+          {renderFilter('all')}
+          {renderFilter('socks5')}
+          {renderFilter('http-connect')}
+          {renderFilter('ssh')}
+          {renderFilter('http-tunnel')}
         </aside>
 
         <section className="connection-manager-main">
@@ -305,7 +291,7 @@ export function ProxyManagerPage({
               <span>{t.host}</span>
               <span>{t.port}</span>
               <span>{t.proxyAuthStatus}</span>
-              <span>{t.proxyType}</span>
+              <span>{t.type}</span>
               <span>{t.proxyBoundConnections}</span>
               <span>{t.actions}</span>
             </div>
@@ -316,6 +302,7 @@ export function ProxyManagerPage({
                   entry={entry}
                   testState={entry.kind === 'proxy' ? testStates[entry.item.id] : undefined}
                   onEdit={() => openEntry(entry)}
+                  onManageAssignments={entry.kind === 'proxy' ? () => openAssignments(entry.item) : undefined}
                   onDelete={() => {
                     setDeletingEntry(entry)
                     setDeleteError(null)
@@ -344,23 +331,12 @@ export function ProxyManagerPage({
                 className="drawer-option-btn secondary-btn"
                 type="button"
                 onClick={() => {
-                  openTunnelCreate('http')
+                  openTunnelCreate()
                   setIsActionsExpanded(false)
                 }}
               >
                 <AppIcon name="plus" size={13} />
-                <span>{t.addHttpTunnel}</span>
-              </button>
-              <button
-                className="drawer-option-btn secondary-btn"
-                type="button"
-                onClick={() => {
-                  openTunnelCreate('ssh')
-                  setIsActionsExpanded(false)
-                }}
-              >
-                <AppIcon name="plus" size={13} />
-                <span>{t.addSshTunnel}</span>
+                <span>{t.addTunnel}</span>
               </button>
               <button
                 className="drawer-option-btn primary-btn"
@@ -386,6 +362,18 @@ export function ProxyManagerPage({
         </section>
       </div>
 
+      {assignmentProxy ? (
+        <SshProxyAssignmentDialog
+          onClose={() => setAssignmentProxy(null)}
+          onSaved={(refreshed) => {
+            setAssignmentProxy(null)
+            setAssignmentNotice(refreshed ? t.proxyAssignmentAppliesOnConnect : t.proxyAssignmentRefreshFailed)
+          }}
+          profiles={profiles}
+          proxies={proxies}
+          proxy={assignmentProxy}
+        />
+      ) : null}
       {deletingEntry ? (
         <ConfirmActionDialog
           confirmLabel={t.delete}
@@ -406,6 +394,10 @@ export function ProxyManagerPage({
           items={[
             ...(contextProxy
               ? [
+                  {
+                    label: t.proxyManageAssignments,
+                    action: () => openAssignments(contextProxy)
+                  },
                   {
                     label: t.testProxy,
                     disabled: testStates[contextProxy.id]?.testing,
@@ -452,7 +444,6 @@ export function ProxyManagerPage({
       />
       <TunnelEditDialog
         initialTunnel={editingTunnel}
-        initialType={createTunnelType}
         isOpen={isTunnelModalOpen}
         isSubmitting={isSubmitting}
         onClose={() => {
@@ -488,7 +479,12 @@ function FilterButton({
   onClick(): void
 }) {
   return (
-    <button className={`connection-manager-sidebar-item ${active ? 'active' : ''}`} type="button" onClick={onClick}>
+    <button
+      aria-pressed={active}
+      className={`connection-manager-sidebar-item ${active ? 'active' : ''}`}
+      type="button"
+      onClick={onClick}
+    >
       <span className="connection-manager-sidebar-icon">
         <AppIcon name={icon} size={14} />
       </span>
@@ -502,6 +498,7 @@ function ManagerRow({
   entry,
   testState,
   onEdit,
+  onManageAssignments,
   onDelete,
   onContextMenu,
   onTest
@@ -509,6 +506,7 @@ function ManagerRow({
   entry: ManagerEntry
   testState?: { testing: boolean; success?: boolean; latencyMs?: number }
   onEdit(): void
+  onManageAssignments?(): void
   onDelete(): void
   onContextMenu(event: React.MouseEvent<HTMLDivElement>): void
   onTest(): void
@@ -586,7 +584,20 @@ function ManagerRow({
       <span className={`manager-type-badge is-${typeClass}`} title={typeTitle}>
         {typeLabel}
       </span>
-      <span title={boundNames.join(', ')}>{boundNames.length > 0 ? `${boundNames.length} 个连接` : '--'}</span>
+      {onManageAssignments ? (
+        <button
+          aria-label={`${t.proxyManageAssignments} · ${name}`}
+          className="flat-button compact proxy-manager-bound-link"
+          onClick={onManageAssignments}
+          title={t.proxyManageAssignments}
+          type="button"
+        >
+          {entry.item.usageCount ?? boundNames.length}
+          <AppIcon name="connections" size={13} />
+        </button>
+      ) : (
+        <span title={boundNames.join(', ')}>{boundNames.length || '--'}</span>
+      )}
       <span className="manager-actions">
         {isProxy ? (
           <button

@@ -79,6 +79,9 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
     let id = new_id("profile");
     let mut profile = ensure_object(&input);
     profile.remove(BACKUP_IDENTITY_FIELD);
+    if profile.get("sshNetworkInterface") == Some(&Value::Null) {
+        profile.remove("sshNetworkInterface");
+    }
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, None);
     normalize_profile_tags(&mut profile);
@@ -90,6 +93,8 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
         profile.insert("order".to_string(), Value::Number(now.into()));
     }
     let profile_value = Value::Object(profile);
+    crate::services::ssh_network_interface::validate_save(&profile_value, &profiles)
+        .map_err(AppError::Command)?;
     profiles.insert(0, profile_value.clone());
 
     persist_profiles(app, &profiles)?;
@@ -166,6 +171,9 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
 
     let mut profile = ensure_object(&input);
     profile.remove(BACKUP_IDENTITY_FIELD);
+    if profile.get("sshNetworkInterface") == Some(&Value::Null) {
+        profile.remove("sshNetworkInterface");
+    }
     preserve_trusted_host_fingerprint(&mut profile, Some(&previous));
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, Some(&previous));
@@ -182,6 +190,8 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
     }
 
     let profile_value = Value::Object(profile);
+    crate::services::ssh_network_interface::validate_save(&profile_value, &profiles)
+        .map_err(AppError::Command)?;
     profiles[previous_idx] = profile_value.clone();
 
     persist_profiles(app, &profiles)?;

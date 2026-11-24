@@ -1,0 +1,6 @@
+.proxy-manager-table .flat-button.compact.proxy-manager-bound-link {
+  justify-self: start;
+  justify-content: flex-start;
+  column-gap: 6px;
+  padding-inline: 0 8px;
+}

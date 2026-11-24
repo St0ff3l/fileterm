@@ -73,6 +73,7 @@ import type {
   DeleteAiMessageInput,
   ListAiModelsInput,
   ProxyProfile,
+  SshProxyAssignmentInput,
   CreateProxyProfileInput,
   UpdateProxyProfileInput,
   TunnelProfile,
@@ -96,6 +97,7 @@ import type {
   SerialTransferProgress,
   SerialTransferResult,
   SerialPortInfo,
+  SshNetworkInterfaceInfo,
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
   TestAiProviderInput,
@@ -427,6 +429,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeDiagnosticLog: (level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', scope: string, message: string) =>
       invoke<void>('app_write_diagnostic_log', { level, scope, message }),
     listSerialPorts: () => invoke<SerialPortInfo[]>('app_list_serial_ports'),
+    listSshNetworkInterfaces: () => invoke<SshNetworkInterfaceInfo[]>('app_list_ssh_network_interfaces'),
     onSerialPortsChanged: (listener: (ports: SerialPortInfo[]) => void) => subscribe('serial:ports-changed', listener),
     serialControl: (tabId: string, action: SerialControlAction, value?: boolean, durationMs?: number) =>
       invoke<SerialLineStatus>('app_serial_control', { tabId, action, value, durationMs }),
@@ -605,6 +608,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       }),
     createCommandTemplate: (input: unknown) =>
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-command', payload: { input } }),
+    assignSshProxy: (input: SshProxyAssignmentInput) => invoke<boolean>('app_assign_ssh_proxy', { input }),
     updateProfile: (profileId: string, input: unknown) =>
       invoke<WorkspaceSnapshot>('app_update_profile', { profileId, input }),
     setProfileFilePaneMode: (profileId: string, mode: FilePaneMode) =>

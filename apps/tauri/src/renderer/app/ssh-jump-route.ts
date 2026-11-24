@@ -1,6 +1,6 @@
 import type { ConnectionProfile, ProxyConfig, SshProfile } from '@fileterm/core'
 
-export type SshJumpRouteError = 'cycle' | 'missing' | 'type' | 'too-long' | 'proxy-conflict'
+export type SshJumpRouteError = 'cycle' | 'missing' | 'type' | 'too-long' | 'proxy-conflict' | 'interface-conflict'
 
 export function getSshRoutingMode(target: { jumpProfileId?: string; jumpProfileIds?: string[] }): 'direct' | 'jump' {
   if (target.jumpProfileIds !== undefined) return target.jumpProfileIds.length ? 'jump' : 'direct'
@@ -36,6 +36,7 @@ export function resolveSshJumpRoute(
       const hop = profiles.find((profile) => profile.id === id)
       if (!hop) return { jumpHosts: [], error: 'missing' }
       if (hop.type !== 'ssh') return { jumpHosts: [], error: 'type' }
+      if (hop.sshNetworkInterface) return { jumpHosts: [], error: 'interface-conflict' }
       const hopHasProxy = Boolean(hop.proxyProfileId) || Boolean(hop.proxy?.type && hop.proxy.type !== 'none')
       if (index > 0 && hopHasProxy) return { jumpHosts: [], error: 'proxy-conflict' }
       jumpHosts.push(hop)
@@ -56,6 +57,7 @@ export function resolveSshJumpRoute(
     const hop = profiles.find((profile) => profile.id === id)
     if (!hop) return { jumpHosts: [], error: 'missing' }
     if (hop.type !== 'ssh') return { jumpHosts: [], error: 'type' }
+    if (hop.sshNetworkInterface) return { jumpHosts: [], error: 'interface-conflict' }
     jumpHosts.push(hop)
     current = hop
   }
