@@ -39,6 +39,7 @@ regex = "1"
 encoding_rs = "0.8"
 rfd = "0.17"
 sha2 = "0.10"
+ttf-parser = "0.25.1"
 hmac = "0.12"
 hmac-next = { package = "hmac", version = "0.13" }
 sha1 = "0.11"

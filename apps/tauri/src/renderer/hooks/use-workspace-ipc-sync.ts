@@ -30,7 +30,7 @@ import {
 } from '@fileterm/core'
 import { emptyState, localPreviewFiles, previewLocalPath, previewState } from '../app/app-data'
 import { t } from '../i18n'
-import { setTerminalFontWeight } from '../app/font-metrics'
+import { setTerminalFontWeight, setTerminalLineHeight } from '../app/font-metrics'
 import { setTerminalRendererPreference } from '../app/terminal-renderer-preference'
 import { setTerminalZoomLockedPreference } from '../app/terminal-zoom-lock-preference'
 import { resolveRendererPlatform } from '../lib/renderer-platform'
@@ -263,6 +263,7 @@ export function useWorkspaceIpcSync({
       setTerminalRendererPreference(preferences.terminalRenderer)
       setTerminalZoomLockedPreference(preferences.terminalZoomLocked)
       setTerminalFontWeight(preferences.terminalFontWeight)
+      setTerminalLineHeight(preferences.terminalLineHeight)
       lastPersistedUiPreferencesRef.current = syncedUiPreferencesFrom(preferences)
       if (isThemeMode(preferences.theme)) {
         onThemeModeChangeRef.current(preferences.theme)
@@ -308,6 +309,7 @@ export function useWorkspaceIpcSync({
         setTerminalRendererPreference(preferences.terminalRenderer)
         setTerminalZoomLockedPreference(preferences.terminalZoomLocked)
         setTerminalFontWeight(preferences.terminalFontWeight)
+        setTerminalLineHeight(preferences.terminalLineHeight)
         lastPersistedUiPreferencesRef.current = syncedUiPreferencesFrom(preferences)
         setCanPersistUiPreferences(true)
         if (isThemeMode(preferences.theme)) {

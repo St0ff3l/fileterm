@@ -14,6 +14,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             locale: default_ui_locale().to_string(),
             terminal_renderer: default_terminal_renderer(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -92,6 +93,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(weight) = input.terminal_font_weight {
         preferences.terminal_font_weight = weight;
+    }
+    if let Some(line_height) = input.terminal_line_height {
+        preferences.terminal_line_height = line_height;
     }
     if let Some(terminal_renderer) = input.terminal_renderer {
         preferences.terminal_renderer = terminal_renderer;
@@ -382,6 +386,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             locale: None,
             terminal_renderer: None,
             terminal_font_weight: None,
+            terminal_line_height: None,
             diagnostic_log_categories: None,
             basic_logging_enabled: None,
             theme_config: None,
@@ -427,6 +432,7 @@ pub fn app_toggle_ui_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError
             locale: None,
             terminal_renderer: None,
             terminal_font_weight: None,
+            terminal_line_height: None,
             diagnostic_log_categories: None,
             basic_logging_enabled: None,
             theme_config: None,
@@ -479,6 +485,7 @@ pub fn app_adjust_ui_zoom(app: AppHandle, operation: &str) -> Result<UiPreferenc
             locale: None,
             terminal_renderer: None,
             terminal_font_weight: None,
+            terminal_line_height: None,
             diagnostic_log_categories: None,
             basic_logging_enabled: None,
             theme_config: None,

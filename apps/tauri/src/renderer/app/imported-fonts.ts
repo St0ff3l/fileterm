@@ -24,6 +24,7 @@ function syncImportedFontStyle() {
         '@font-face {',
         '  font-family: ' + JSON.stringify(font.family) + ';',
         '  src: url(' + JSON.stringify(dataUrl) + ') format(' + JSON.stringify(cssFontFormat(font.format)) + ');',
+        '  font-weight: ' + font.fontWeight + ';',
         '  font-display: swap;',
         '}'
       ].join('\n')
@@ -41,6 +42,15 @@ export function registerImportedFont(font: ImportedFont, dataUrl: string) {
   importedFontSources.set(font.id, { font, dataUrl })
   syncImportedFontStyle()
   notifyImportedFontsChanged()
+}
+
+export function getImportedFontWeightForBold(family: string): number | null {
+  const weights = [...importedFontSources.values()]
+    .filter(({ font }) => font.family === family)
+    .map(({ font }) => font.fontWeight)
+    .filter((weight) => weight >= 600)
+  if (weights.length === 0) return null
+  return weights.reduce((nearest, weight) => (Math.abs(weight - 700) < Math.abs(nearest - 700) ? weight : nearest))
 }
 
 export function registerImportedFonts(entries: Array<{ font: ImportedFont; dataUrl: string }>) {

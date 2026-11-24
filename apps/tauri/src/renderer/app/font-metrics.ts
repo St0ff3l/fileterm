@@ -6,6 +6,8 @@
  * does not. Keep the font stack local to the app bundle and provide one
  * observer that asks consumers to remeasure at both boundaries.
  */
+import { DEFAULT_TERMINAL_LINE_HEIGHT } from '@fileterm/core'
+import { getImportedFontWeightForBold } from './imported-fonts'
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
 import { MONO_FONT_FALLBACK } from './font-stacks'
 
@@ -17,6 +19,25 @@ export function getTerminalFontWeight(): 400 | 500 | 600 {
 
 export function setTerminalFontWeight(weight: number) {
   document.documentElement.style.setProperty('--terminal-font-weight', String(weight))
+}
+
+export function getTerminalFontBoldWeight() {
+  if (typeof document === 'undefined') return 700
+  const stack = getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim()
+  const firstFamily = stack.match(/^(?:"([^"]+)"|'([^']+)'|([^,]+))/)
+  const family = firstFamily?.[1] ?? firstFamily?.[2] ?? firstFamily?.[3]?.trim()
+  if (!family) return 700
+  return getImportedFontWeightForBold(family) ?? getTerminalFontWeight()
+}
+
+export function getTerminalLineHeight() {
+  if (typeof document === 'undefined') return DEFAULT_TERMINAL_LINE_HEIGHT
+  const lineHeight = Number(getComputedStyle(document.documentElement).getPropertyValue('--terminal-line-height'))
+  return Number.isFinite(lineHeight) && lineHeight >= 1 && lineHeight <= 1.5 ? lineHeight : DEFAULT_TERMINAL_LINE_HEIGHT
+}
+
+export function setTerminalLineHeight(lineHeight: number) {
+  document.documentElement.style.setProperty('--terminal-line-height', String(lineHeight))
 }
 
 export const FILETERM_MONO_FONT_FAMILY = MONO_FONT_FALLBACK

@@ -1918,6 +1918,9 @@ const zhCN = {
   terminalFontWeightHint:
     'WebGL 字体偏细时可调高字重。立即应用到所有终端，不改变界面字体或终端字号；实际效果取决于字体支持的字重。',
   terminalFontWeightSaveFailed: '终端字重保存失败，请重试。',
+  terminalLineHeight: '终端行高',
+  terminalLineHeightHint: '调整终端行间距，可选 1.00× 到 1.50×。',
+  terminalLineHeightSaveFailed: '终端行高保存失败，请重试。',
   terminalRenderer: '终端渲染器',
   terminalRendererHint: '设置仅对新建终端生效；已经打开的终端保持当前渲染器。',
   terminalRendererPreferenceSaveFailed: '无法保存终端渲染器设置。',
@@ -4446,6 +4449,9 @@ const enUS: typeof zhCN = {
   terminalFontWeightHint:
     'Increase the weight if WebGL text looks too thin. Applies immediately to all terminals while keeping interface fonts and terminal font size. Results depend on the weights supported by your font.',
   terminalFontWeightSaveFailed: 'Could not save terminal font weight. Try again.',
+  terminalLineHeight: 'Terminal line height',
+  terminalLineHeightHint: 'Adjust terminal row spacing from 1.00× to 1.50×.',
+  terminalLineHeightSaveFailed: 'Could not save terminal line height. Try again.',
   terminalRenderer: 'Terminal renderer',
   terminalRendererHint: 'Applies to newly opened terminals. Existing terminals keep their current renderer.',
   terminalRendererPreferenceSaveFailed: 'Unable to save the terminal renderer preference.',

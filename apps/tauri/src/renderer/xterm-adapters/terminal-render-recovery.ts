@@ -1,5 +1,5 @@
 import type { IDisposable, Terminal } from '@xterm/xterm'
-import { observeCanvasTextMetrics } from '../app/font-metrics'
+import { getTerminalFontBoldWeight, observeCanvasTextMetrics } from '../app/font-metrics'
 
 // WebKit can keep a newly visible surface at zero size for several compositor frames.
 export const TERMINAL_ACTIVATION_RECOVERY_ATTEMPTS = 16
@@ -70,6 +70,7 @@ export function registerTerminalBufferRenderRecovery(
 export function observeTerminalFontMetrics(terminal: Terminal, onMetricsChanged: () => void) {
   let disposed = false
   const dispose = observeCanvasTextMetrics((fontFamily) => {
+    terminal.options.fontWeightBold = getTerminalFontBoldWeight()
     // xterm ignores an unchanged family; pulse the whole stack to invalidate DOM glyph widths too.
     for (const family of [`${fontFamily}, ${fontFamily}`, fontFamily]) {
       if (disposed) return

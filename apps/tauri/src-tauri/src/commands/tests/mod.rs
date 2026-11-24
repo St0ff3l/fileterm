@@ -644,7 +644,7 @@ mod ui_preferences_tests {
 
     use super::{
         default_app_icon, default_basic_logging_enabled, default_local_terminal_shells, default_overview_section_order,
-        default_terminal_renderer, default_terminal_font_weight,
+        default_terminal_renderer, default_terminal_font_weight, default_terminal_line_height,
         default_compact_tab_bar, default_mask_connection_addresses, default_workspace_mode, default_ui_locale,
         default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
         default_theme_config, default_update_channel, normalize_local_terminal_shells,
@@ -827,6 +827,7 @@ mod ui_preferences_tests {
             locale: "zhCN".to_string(),
             terminal_renderer: "dom".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -896,6 +897,7 @@ mod ui_preferences_tests {
             locale: "zhCN".to_string(),
             terminal_renderer: "dom".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -943,6 +945,7 @@ mod ui_preferences_tests {
             locale: "unknown-locale".to_string(),
             terminal_renderer: "invalid".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -1060,6 +1063,7 @@ mod ui_preferences_tests {
             locale: "enUS".to_string(),
             terminal_renderer: "webgl".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -1127,6 +1131,7 @@ mod ui_preferences_tests {
             locale: "zhCN".to_string(),
             terminal_renderer: "dom".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -1195,6 +1200,7 @@ mod ui_preferences_tests {
             locale: "zhCN".to_string(),
             terminal_renderer: "dom".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -1253,6 +1259,7 @@ mod ui_preferences_tests {
             locale: "zhCN".to_string(),
             terminal_renderer: "dom".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -1496,6 +1503,7 @@ mod ui_preferences_tests {
             locale: "zhCN".to_string(),
             terminal_renderer: "dom".to_string(),
             terminal_font_weight: default_terminal_font_weight(),
+            terminal_line_height: default_terminal_line_height(),
             diagnostic_log_categories: crate::services::logging::default_categories(),
             basic_logging_enabled: default_basic_logging_enabled(),
             diagnostic_log_defaults_version: 2,
@@ -1540,6 +1548,7 @@ mod ui_preferences_tests {
         assert_eq!(preferences["updateChannel"], "beta");
         assert_eq!(preferences["terminalRenderer"], "dom");
         assert_eq!(preferences["terminalFontWeight"], 400);
+        assert_eq!(preferences["terminalLineHeight"], 1.05);
         assert_eq!(preferences["diagnosticLogCategories"]["connection"], false);
         assert_eq!(preferences["diagnosticLogCategories"]["performance"], false);
         assert_eq!(preferences["basicLoggingEnabled"], true);
@@ -1565,11 +1574,13 @@ mod ui_preferences_tests {
 
         let mut legacy = preferences.clone();
         legacy.as_object_mut().unwrap().remove("terminalFontWeight");
+        legacy.as_object_mut().unwrap().remove("terminalLineHeight");
         legacy.as_object_mut().unwrap().remove("diagnosticLogCategories");
         legacy.as_object_mut().unwrap().remove("basicLoggingEnabled");
         let mut loaded: UiPreferences = serde_json::from_value(legacy).unwrap();
         assert!(loaded.basic_logging_enabled);
         assert_eq!(loaded.terminal_font_weight, 400);
+        assert_eq!(loaded.terminal_line_height, default_terminal_line_height());
         assert_eq!(loaded.diagnostic_log_categories, crate::services::logging::default_categories());
         loaded.terminal_font_weight = 500;
         assert_eq!(normalize_ui_preferences(loaded).terminal_font_weight, 500);
@@ -1578,6 +1589,19 @@ mod ui_preferences_tests {
             value["terminalFontWeight"] = serde_json::json!(weight);
             let loaded: UiPreferences = serde_json::from_value(value).unwrap();
             assert_eq!(normalize_ui_preferences(loaded).terminal_font_weight, if weight == 600 { 600 } else { 400 });
+        }
+        let mut custom_line_height = preferences.clone();
+        custom_line_height["terminalLineHeight"] = serde_json::json!(1.25);
+        let loaded: UiPreferences = serde_json::from_value(custom_line_height).unwrap();
+        assert_eq!(normalize_ui_preferences(loaded).terminal_line_height, 1.25);
+        for line_height in [0.5, 1.6, -1.0] {
+            let mut value = preferences.clone();
+            value["terminalLineHeight"] = serde_json::json!(line_height);
+            let loaded: UiPreferences = serde_json::from_value(value).unwrap();
+            assert_eq!(
+                normalize_ui_preferences(loaded).terminal_line_height,
+                default_terminal_line_height()
+            );
         }
 
         assert_eq!(preferences["workspaceMode"], "server-management");

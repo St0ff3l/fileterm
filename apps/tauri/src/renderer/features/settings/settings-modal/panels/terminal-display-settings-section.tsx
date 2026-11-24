@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FileTermDesktopApi, TerminalFontWeight, TerminalRenderer } from '@fileterm/core'
+import {
+  TERMINAL_LINE_HEIGHT_OPTIONS,
+  type FileTermDesktopApi,
+  type TerminalFontWeight,
+  type TerminalLineHeight,
+  type TerminalRenderer
+} from '@fileterm/core'
 import { FeedbackBubble } from '../../../../components/common/feedback-bubble/feedback-bubble'
-import { getTerminalFontWeight, setTerminalFontWeight } from '../../../../app/font-metrics'
+import {
+  getTerminalFontWeight,
+  getTerminalLineHeight,
+  setTerminalFontWeight,
+  setTerminalLineHeight
+} from '../../../../app/font-metrics'
 import { supportsTerminalRenderer } from '../../../../app/terminal-renderer-preference'
 import type { LocaleMessages } from '../../../../i18n'
 import { DropdownSelect } from '../../../common/dropdown-select'
@@ -38,11 +49,19 @@ export function TerminalDisplaySettingsSection() {
   } = useSettingsModalContext<TerminalDisplaySettingsContext>()
   const showRendererPreference = supportsTerminalRenderer(desktopApi?.platform)
   const [weight, setWeight] = useState(getTerminalFontWeight)
+  const [lineHeight, setLineHeight] = useState(getTerminalLineHeight)
   const [savingWeight, setSavingWeight] = useState(false)
+  const [savingLineHeight, setSavingLineHeight] = useState(false)
   const [weightError, setWeightError] = useState(false)
+  const [lineHeightError, setLineHeightError] = useState(false)
   const savingWeightRef = useRef(false)
+  const savingLineHeightRef = useRef(false)
   useEffect(
-    () => desktopApi?.onUiPreferencesChanged((preferences) => setWeight(preferences.terminalFontWeight)),
+    () =>
+      desktopApi?.onUiPreferencesChanged((preferences) => {
+        setWeight(preferences.terminalFontWeight)
+        setLineHeight(preferences.terminalLineHeight)
+      }),
     [desktopApi]
   )
   const saveWeight = async (nextWeight: TerminalFontWeight) => {
@@ -59,6 +78,22 @@ export function TerminalDisplaySettingsSection() {
     } finally {
       savingWeightRef.current = false
       setSavingWeight(false)
+    }
+  }
+  const saveLineHeight = async (nextLineHeight: TerminalLineHeight) => {
+    if (!desktopApi || savingLineHeightRef.current) return
+    savingLineHeightRef.current = true
+    setSavingLineHeight(true)
+    setLineHeightError(false)
+    try {
+      const preferences = await desktopApi.setUiPreferences({ terminalLineHeight: nextLineHeight })
+      setLineHeight(preferences.terminalLineHeight)
+      setTerminalLineHeight(preferences.terminalLineHeight)
+    } catch {
+      setLineHeightError(true)
+    } finally {
+      savingLineHeightRef.current = false
+      setSavingLineHeight(false)
     }
   }
 
@@ -84,6 +119,26 @@ export function TerminalDisplaySettingsSection() {
       <FeedbackBubble
         message={weightError ? t.terminalFontWeightSaveFailed : null}
         sourceKey="settings.terminal.font-weight"
+        tone="error"
+      />
+      <div className="theme-config-control" aria-busy={savingLineHeight}>
+        <span className="theme-config-label">{t.terminalLineHeight}</span>
+        <DropdownSelect
+          ariaLabel={t.terminalLineHeight}
+          className="theme-config-select"
+          disabled={!desktopApi || savingLineHeight}
+          value={String(lineHeight)}
+          onChange={(value) => void saveLineHeight(Number(value) as TerminalLineHeight)}
+          options={TERMINAL_LINE_HEIGHT_OPTIONS.map((value) => ({
+            value: String(value),
+            label: `${value.toFixed(2)}×`
+          }))}
+        />
+      </div>
+      <p className="settings-tools-hint">{t.terminalLineHeightHint}</p>
+      <FeedbackBubble
+        message={lineHeightError ? t.terminalLineHeightSaveFailed : null}
+        sourceKey="settings.terminal.line-height"
         tone="error"
       />
       {showRendererPreference ? (

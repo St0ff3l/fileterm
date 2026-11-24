@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { DEFAULT_UI_FONT_SCALE_PERCENT, DEFAULT_UI_ZOOM_PERCENT } from '@fileterm/core'
+import { DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_UI_FONT_SCALE_PERCENT, DEFAULT_UI_ZOOM_PERCENT } from '@fileterm/core'
 import { App } from './app'
 import { ErrorBoundary } from './features/common/error-boundary'
 import { createTauriApi } from '../bridge/tauri-api'
@@ -10,7 +10,7 @@ import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
 import { applyUiZoomPercent } from './app/ui-zoom'
 import { applyUiFontScalePercent } from './app/ui-font-scale'
-import { setTerminalFontWeight } from './app/font-metrics'
+import { setTerminalFontWeight, setTerminalLineHeight } from './app/font-metrics'
 import { setTerminalRendererPreference } from './app/terminal-renderer-preference'
 import { setTerminalZoomLockedPreference } from './app/terminal-zoom-lock-preference'
 import { MainWindowReveal } from './lib/main-window-reveal'
@@ -109,6 +109,7 @@ void createTauriApi()
         setTerminalRendererPreference(initialUiPreferences?.terminalRenderer ?? 'webgl')
         setTerminalZoomLockedPreference(initialUiPreferences?.terminalZoomLocked ?? false)
         setTerminalFontWeight(initialUiPreferences?.terminalFontWeight ?? 400)
+        setTerminalLineHeight(initialUiPreferences?.terminalLineHeight ?? DEFAULT_TERMINAL_LINE_HEIGHT)
         const searchParams = new URLSearchParams(window.location.search)
         const queryTheme = searchParams.get('theme')
         const isThemeMode = (val: unknown): val is ThemeMode =>

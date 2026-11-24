@@ -16,6 +16,7 @@ function fixture() {
     {
       exports,
       require: () => ({
+        getTerminalFontBoldWeight: () => 700,
         observeCanvasTextMetrics: (callback) => {
           notifyMetrics = callback
           return () => (notifyMetrics = null)
@@ -72,6 +73,7 @@ test('font calibration restores quoted stacks and cancels work when disposed dur
   const family = '"Family, With Comma", monospace'
   let dispose = exports.observeTerminalFontMetrics(terminal, () => families.push(terminal.options.fontFamily))
   metrics(family)
+  assert.equal(terminal.options.fontWeightBold, 700)
   assert.deepEqual(families, [`${family}, ${family}`, family])
   assert.equal(terminal.options.fontFamily, family)
   dispose()
