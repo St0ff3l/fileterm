@@ -37,6 +37,8 @@ pub struct UiPreferences {
     pub terminal_renderer: String,
     #[serde(default = "default_terminal_font_weight")]
     pub terminal_font_weight: u16,
+    #[serde(default = "default_terminal_line_height")]
+    pub terminal_line_height: f64,
     #[serde(default = "crate::services::logging::default_categories")]
     pub diagnostic_log_categories: BTreeMap<String, bool>,
     #[serde(default = "default_basic_logging_enabled")]
@@ -112,6 +114,7 @@ pub struct UiPreferencesInput {
     pub locale: Option<String>,
     pub terminal_renderer: Option<String>,
     pub terminal_font_weight: Option<u16>,
+    pub terminal_line_height: Option<f64>,
     pub diagnostic_log_categories: Option<BTreeMap<String, bool>>,
     pub basic_logging_enabled: Option<bool>,
     pub theme_config: Option<ThemeConfig>,
@@ -178,6 +181,14 @@ fn default_ui_locale() -> &'static str {
 fn default_terminal_font_weight() -> u16 {
     400
 }
+
+fn default_terminal_line_height() -> f64 {
+    1.05
+}
+
+const TERMINAL_LINE_HEIGHT_OPTIONS: [f64; 11] = [
+    1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5,
+];
 
 fn default_terminal_renderer() -> String {
     DEFAULT_TERMINAL_RENDERER.to_string()
@@ -548,6 +559,9 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     }
     if !matches!(preferences.terminal_font_weight, 400 | 500 | 600) {
         preferences.terminal_font_weight = default_terminal_font_weight();
+    }
+    if !TERMINAL_LINE_HEIGHT_OPTIONS.contains(&preferences.terminal_line_height) {
+        preferences.terminal_line_height = default_terminal_line_height();
     }
     preferences.diagnostic_log_categories = crate::services::logging::normalize_categories(
         preferences.diagnostic_log_categories,

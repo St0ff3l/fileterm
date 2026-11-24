@@ -8,7 +8,7 @@ use tauri::AppHandle;
 
 use crate::AppError;
 
-const FONT_INDEX_VERSION: u32 = 1;
+const FONT_INDEX_VERSION: u32 = 2;
 const MAX_FONT_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -16,6 +16,8 @@ const MAX_FONT_BYTES: usize = 32 * 1024 * 1024;
 pub struct ImportedFont {
     pub id: String,
     pub family: String,
+    #[serde(default = "default_font_weight")]
+    pub font_weight: u16,
     pub format: String,
     pub file_name: String,
     pub content_hash: String,
@@ -83,6 +85,7 @@ pub fn list(app: &AppHandle) -> Result<Vec<ImportedFont>, AppError> {
     };
 
     let before = index.fonts.len();
+    let metadata_migrated = migrate_legacy_font_metadata(&paths, &mut index);
     let mut stale_ids = Vec::new();
     index.fonts.retain(|font| match paths.font_path(font) {
         Ok(path) if path.is_file() => true,
@@ -91,7 +94,7 @@ pub fn list(app: &AppHandle) -> Result<Vec<ImportedFont>, AppError> {
             false
         }
     });
-    if index.fonts.len() != before {
+    if index.fonts.len() != before || metadata_migrated {
         index.version = FONT_INDEX_VERSION;
         if let Err(error) = write_index(&paths, &index) {
             crate::services::logging::error(
@@ -246,6 +249,19 @@ pub async fn import(app: &AppHandle) -> Result<Option<ImportedFont>, AppError> {
             return Err(error);
         }
     };
+    if migrate_legacy_font_metadata(&paths, &mut index) {
+        if let Err(error) = write_index(&paths, &index) {
+            crate::services::logging::error(
+                app,
+                "fonts",
+                format!(
+                    "font metadata migration failed path={} error={error}",
+                    paths.index_path.display()
+                ),
+            );
+            return Err(error);
+        }
+    }
     if let Some(existing) = index
         .fonts
         .iter()
@@ -292,10 +308,11 @@ pub async fn import(app: &AppHandle) -> Result<Option<ImportedFont>, AppError> {
         return Ok(Some(existing.clone()));
     }
 
-    let family = font_family_from_file_name(&file_name);
+    let metadata = font_metadata_from_bytes(&bytes, &file_name);
     let font = ImportedFont {
         id: format!("font-{content_hash}"),
-        family,
+        family: metadata.family,
+        font_weight: metadata.font_weight,
         format,
         file_name,
         content_hash,
@@ -548,6 +565,93 @@ fn read_index(paths: &FontPaths) -> Result<ImportedFontIndex, AppError> {
     Ok(index)
 }
 
+fn migrate_legacy_font_metadata(paths: &FontPaths, index: &mut ImportedFontIndex) -> bool {
+    if index.version >= FONT_INDEX_VERSION {
+        return false;
+    }
+
+    for font in &mut index.fonts {
+        let metadata = paths
+            .font_path(font)
+            .ok()
+            .and_then(|path| fs::read(path).ok())
+            .map(|bytes| font_metadata_from_bytes(&bytes, &font.file_name))
+            .unwrap_or_else(|| font_metadata_from_file_name(&font.file_name));
+        font.family = metadata.family;
+        font.font_weight = metadata.font_weight;
+    }
+    index.version = FONT_INDEX_VERSION;
+    true
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct FontMetadata {
+    family: String,
+    font_weight: u16,
+}
+
+fn font_metadata_from_bytes(bytes: &[u8], file_name: &str) -> FontMetadata {
+    let fallback = font_metadata_from_file_name(file_name);
+    let Ok(face) = ttf_parser::Face::parse(bytes, 0) else {
+        return fallback;
+    };
+
+    let family = font_name(
+        &face,
+        &[
+            ttf_parser::name_id::TYPOGRAPHIC_FAMILY,
+            ttf_parser::name_id::FAMILY,
+        ],
+    )
+    .map(|name| normalize_font_family(&name))
+    .filter(|family| !family.is_empty())
+    .unwrap_or(fallback.family);
+    let font_weight = if face.tables().os2.is_some() {
+        face.weight().to_number()
+    } else {
+        font_name(
+            &face,
+            &[
+                ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY,
+                ttf_parser::name_id::SUBFAMILY,
+            ],
+        )
+        .as_deref()
+        .and_then(font_weight_from_label)
+        .unwrap_or(fallback.font_weight)
+    };
+
+    FontMetadata {
+        family,
+        font_weight: if (1..=1000).contains(&font_weight) {
+            font_weight
+        } else {
+            fallback.font_weight
+        },
+    }
+}
+
+fn font_name(face: &ttf_parser::Face<'_>, ids: &[u16]) -> Option<String> {
+    ids.iter().find_map(|id| {
+        face.names()
+            .into_iter()
+            .find(|name| name.name_id == *id && name.is_unicode())
+            .and_then(|name| name.to_string())
+            .filter(|name| !name.trim().is_empty())
+    })
+}
+
+fn font_metadata_from_file_name(file_name: &str) -> FontMetadata {
+    let stem = Path::new(file_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("Imported Font");
+    FontMetadata {
+        family: font_family_from_file_name(file_name),
+        font_weight: font_weight_from_label(stem).unwrap_or_else(default_font_weight),
+    }
+}
+
 fn ensure_font_file(
     paths: &FontPaths,
     font: &ImportedFont,
@@ -610,9 +714,14 @@ fn font_family_from_file_name(file_name: &str) -> String {
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or("Imported Font");
-    let mut family = String::with_capacity(stem.len());
+    let stem = strip_font_style_suffix(stem);
+    normalize_font_family(stem)
+}
+
+fn normalize_font_family(value: &str) -> String {
+    let mut family = String::with_capacity(value.len());
     let mut previous_was_space = false;
-    for character in stem.chars() {
+    for character in value.chars() {
         let allowed =
             character.is_alphanumeric() || matches!(character, ' ' | '.' | '-' | '_' | '\'');
         if allowed {
@@ -636,6 +745,130 @@ fn font_family_from_file_name(file_name: &str) -> String {
     } else {
         family.chars().take(96).collect()
     }
+}
+
+fn strip_font_style_suffix(stem: &str) -> &str {
+    let words = font_name_words(stem);
+    let mut end = stem.len();
+    let mut remaining = words.len();
+
+    while remaining > 0
+        && matches!(
+            words[remaining - 1].2.as_str(),
+            "italic" | "oblique" | "roman"
+        )
+    {
+        end = words[remaining - 1].0;
+        remaining -= 1;
+    }
+    if remaining > 0 && font_weight_from_label(&words[remaining - 1].2).is_some() {
+        end = words[remaining - 1].0;
+        remaining -= 1;
+        if remaining > 0
+            && matches!(
+                words[remaining - 1].2.as_str(),
+                "semi" | "demi" | "extra" | "ultra"
+            )
+            && font_weight_from_label(&format!("{}{}", words[remaining - 1].2, words[remaining].2))
+                .is_some()
+        {
+            end = words[remaining - 1].0;
+        }
+    }
+    stem[..end].trim_end_matches(|character: char| !character.is_alphanumeric())
+}
+
+fn font_name_words(value: &str) -> Vec<(usize, usize, String)> {
+    let mut words = Vec::new();
+    let mut start = None;
+    for (index, character) in value.char_indices() {
+        if character.is_alphanumeric() {
+            start.get_or_insert(index);
+        } else if let Some(word_start) = start.take() {
+            words.push((
+                word_start,
+                index,
+                value[word_start..index].to_ascii_lowercase(),
+            ));
+        }
+    }
+    if let Some(word_start) = start {
+        words.push((
+            word_start,
+            value.len(),
+            value[word_start..].to_ascii_lowercase(),
+        ));
+    }
+    words
+}
+
+fn font_weight_from_label(label: &str) -> Option<u16> {
+    let words = font_name_words(label);
+    let mut word_count = words.len();
+    while word_count > 0 && matches!(words[word_count - 1].2.as_str(), "italic" | "oblique") {
+        word_count -= 1;
+    }
+    if word_count > 0 {
+        if let Ok(weight) = words[word_count - 1].2.parse::<u16>() {
+            if is_common_numeric_font_weight(weight) {
+                return Some(weight);
+            }
+        }
+    }
+
+    let compact: String = label
+        .chars()
+        .filter(|character| character.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    let compact = compact
+        .strip_suffix("italic")
+        .or_else(|| compact.strip_suffix("oblique"))
+        .unwrap_or(&compact);
+    let numeric_start = compact
+        .char_indices()
+        .rev()
+        .find(|(_, character)| !character.is_ascii_digit())
+        .map_or(0, |(index, character)| index + character.len_utf8());
+    if let Ok(weight) = compact[numeric_start..].parse::<u16>() {
+        if is_common_numeric_font_weight(weight) {
+            return Some(weight);
+        }
+    }
+    [
+        ("ultrablack", 900),
+        ("extrablack", 900),
+        ("black", 900),
+        ("heavy", 900),
+        ("ultrabold", 800),
+        ("extrabold", 800),
+        ("semibold", 600),
+        ("demibold", 600),
+        ("demi", 600),
+        ("bold", 700),
+        ("medium", 500),
+        ("regular", 400),
+        ("normal", 400),
+        ("book", 400),
+        ("roman", 400),
+        ("ultralight", 200),
+        ("extralight", 200),
+        ("light", 300),
+        ("thin", 100),
+    ]
+    .into_iter()
+    .find_map(|(suffix, weight)| compact.ends_with(suffix).then_some(weight))
+}
+
+fn is_common_numeric_font_weight(weight: u16) -> bool {
+    matches!(
+        weight,
+        100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950 | 1000
+    )
+}
+
+fn default_font_weight() -> u16 {
+    400
 }
 
 fn now_millis() -> u64 {

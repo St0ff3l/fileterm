@@ -1207,6 +1207,7 @@ export type ImportedFontFormat = 'ttf' | 'otf'
 export interface ImportedFont {
   id: string
   family: string
+  fontWeight: number
   format: ImportedFontFormat
   fileName: string
   contentHash: string
@@ -2266,6 +2267,9 @@ export const MAX_EFFECTIVE_UI_TEXT_SCALE_PERCENT = 200
 export type AppIconVariant = 'classic' | 'material' | 'clean'
 export type TerminalRenderer = 'dom' | 'webgl'
 export type TerminalFontWeight = 400 | 500 | 600
+export const TERMINAL_LINE_HEIGHT_OPTIONS = [1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const
+export type TerminalLineHeight = (typeof TERMINAL_LINE_HEIGHT_OPTIONS)[number]
+export const DEFAULT_TERMINAL_LINE_HEIGHT: TerminalLineHeight = 1.05
 
 export const DIAGNOSTIC_LOG_CATEGORIES = [
   'app',
@@ -2306,6 +2310,7 @@ export interface UiPreferences {
   locale: 'zhCN' | 'enUS'
   terminalRenderer: TerminalRenderer
   terminalFontWeight: TerminalFontWeight
+  terminalLineHeight: TerminalLineHeight
   basicLoggingEnabled: boolean
   diagnosticLogCategories: DiagnosticLogCategories
   diagnosticLogDefaultsVersion: number
@@ -2345,6 +2350,7 @@ export interface UiPreferencesInput {
   locale?: UiPreferences['locale']
   terminalRenderer?: UiPreferences['terminalRenderer']
   terminalFontWeight?: TerminalFontWeight
+  terminalLineHeight?: TerminalLineHeight
   basicLoggingEnabled?: boolean
   diagnosticLogCategories?: Partial<DiagnosticLogCategories>
   themeConfig?: ThemeConfig

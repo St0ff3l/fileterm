@@ -96,6 +96,7 @@ export function InterfaceSettingsPanel() {
     updateTerminalAnsiColor,
     updateTerminalSearchColors
   } = useSettingsModalContext<InterfaceSettingsPanelContext>()
+  const importedFontFamilies = Array.from(new Set(importedFonts.map((font) => font.family)))
 
   return (
     <div className="settings-panel">
@@ -374,10 +375,7 @@ export function InterfaceSettingsPanel() {
                         ? [{ value: 'SF Pro Text', label: 'SF Pro Text', disabled: true }]
                         : []),
                       { value: 'Noto Sans SC', label: 'Noto Sans SC' },
-                      ...importedFonts.map((font) => ({
-                        value: font.family,
-                        label: `${font.family} (${font.format.toUpperCase()})`
-                      }))
+                      ...importedFontFamilies.map((family) => ({ value: family, label: family }))
                     ]}
                     value={themeConfig.theme.fonts.ui ?? ''}
                   />
@@ -395,10 +393,7 @@ export function InterfaceSettingsPanel() {
                       { value: 'JetBrains Mono', label: 'JetBrains Mono' },
                       ...(systemFonts['SF Mono'] ? [{ value: 'SF Mono', label: 'SF Mono' }] : []),
                       { value: 'Cascadia Code', label: 'Cascadia Code' },
-                      ...importedFonts.map((font) => ({
-                        value: font.family,
-                        label: `${font.family} (${font.format.toUpperCase()})`
-                      }))
+                      ...importedFontFamilies.map((family) => ({ value: family, label: family }))
                     ]}
                     value={themeConfig.theme.fonts.code ?? ''}
                   />
@@ -436,13 +431,15 @@ export function InterfaceSettingsPanel() {
                     <div key={font.id} className="theme-config-imported-font-item">
                       <span className="theme-config-imported-font-name" title={font.fileName}>
                         {font.family}
-                        <span className="theme-config-imported-font-format">{font.format.toUpperCase()}</span>
+                        <span className="theme-config-imported-font-format">
+                          {font.fontWeight} · {font.format.toUpperCase()}
+                        </span>
                       </span>
                       <button
                         type="button"
                         className="flat-button danger theme-config-font-delete-btn"
-                        title={`${t.themeDeleteFont}: ${font.family}`}
-                        aria-label={`${t.themeDeleteFont}: ${font.family}`}
+                        title={`${t.themeDeleteFont}: ${font.family} ${font.fontWeight}`}
+                        aria-label={`${t.themeDeleteFont}: ${font.family} ${font.fontWeight}`}
                         onClick={() => setFontToDelete(font)}
                       >
                         <AppIcon name="trash" size={13} />
