@@ -20,6 +20,8 @@ export const TOPOLOGY_NODE_METRICS = ['ip', 'cpu', 'memory', 'disk', 'gpu', 'net
 export const DEFAULT_TOPOLOGY_NODE_METRICS: TopologyNodeMetric[] = ['cpu', 'memory']
 export const TOPOLOGY_NODE_ROLES = [
   'server',
+  'vm',
+  'workstation',
   'firewall',
   'router',
   'switch',

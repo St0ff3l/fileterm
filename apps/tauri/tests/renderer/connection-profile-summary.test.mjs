@@ -61,6 +61,8 @@ test('recent and all-connection cards display serial framing instead of network 
     '@fileterm/core': { DEFAULT_OVERVIEW_SECTION_ORDER },
     '../../i18n': { t: new Proxy({}, { get: (_target, key) => key }) },
     '../../app/connection-profile-summary': exports,
+    '../../app/device-role': { deviceRoleIcon: () => 'server' },
+    '../common/app-icon': { AppIcon: () => null },
     '../connections/connection-tree': tree,
     '../../components/common/material-icon/material-icon': { MaterialIcon: () => null }
   })

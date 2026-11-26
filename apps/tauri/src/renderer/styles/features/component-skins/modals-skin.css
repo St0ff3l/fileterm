@@ -51,9 +51,9 @@
   background: var(--bg-hover);
 }
 
-:root:not([data-theme]) .ssh-grid input:not(.selection-control),
-:root:not([data-theme*='light']) .ssh-grid input:not(.selection-control),
-:root[data-theme='default'] .ssh-grid input:not(.selection-control),
+:root:not([data-theme]) .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
+:root:not([data-theme*='light']) .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
+:root[data-theme='default'] .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
 :root:not([data-theme]) .ssh-grid .dropdown-select-trigger,
 :root:not([data-theme*='light']) .ssh-grid .dropdown-select-trigger,
 :root[data-theme='default'] .ssh-grid .dropdown-select-trigger,
@@ -87,9 +87,11 @@
   color: var(--text-main);
 }
 
-:root:not([data-theme]) .connection-form input:not(.selection-control),
-:root:not([data-theme*='light']) .connection-form input:not(.selection-control),
-:root[data-theme='default'] .connection-form input:not(.selection-control),
+:root:not([data-theme]) .connection-form input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
+:root:not([data-theme*='light'])
+  .connection-form
+  input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
+:root[data-theme='default'] .connection-form input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
 :root:not([data-theme]) .connection-form .dropdown-select-trigger,
 :root:not([data-theme*='light']) .connection-form .dropdown-select-trigger,
 :root[data-theme='default'] .connection-form .dropdown-select-trigger,
@@ -100,12 +102,16 @@
   color: var(--text-main);
 }
 
-:root:not([data-theme]) .connection-form input:not(.selection-control):focus,
-:root:not([data-theme*='light']) .connection-form input:not(.selection-control):focus,
-:root[data-theme='default'] .connection-form input:not(.selection-control):focus,
-:root:not([data-theme]) .ssh-grid input:not(.selection-control):focus,
-:root:not([data-theme*='light']) .ssh-grid input:not(.selection-control):focus,
-:root[data-theme='default'] .ssh-grid input:not(.selection-control):focus {
+:root:not([data-theme]) .connection-form input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):focus,
+:root:not([data-theme*='light'])
+  .connection-form
+  input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):focus,
+:root[data-theme='default']
+  .connection-form
+  input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):focus,
+:root:not([data-theme]) .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):focus,
+:root:not([data-theme*='light']) .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):focus,
+:root[data-theme='default'] .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):focus {
   box-shadow: var(--input-focus-shadow) !important;
   background: var(--input-bg) !important;
   outline: none !important;

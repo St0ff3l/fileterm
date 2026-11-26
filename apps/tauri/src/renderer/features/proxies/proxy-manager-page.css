@@ -4,3 +4,22 @@
   column-gap: 6px;
   padding-inline: 0 8px;
 }
+.proxy-manager-modal .proxy-manager-header {
+  gap: 8px 16px;
+  flex-wrap: wrap;
+}
+
+.proxy-manager-header-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  margin-inline-start: auto;
+  min-width: 0;
+}
+
+.proxy-manager-header-controls .connection-manager-search {
+  margin: 0;
+  max-inline-size: 100%;
+}

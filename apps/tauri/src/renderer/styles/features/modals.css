@@ -257,7 +257,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 .modal-card.ssh-modal .ssh-fieldset,
 .modal-card.ssh-modal .ssh-grid > *,
 .modal-card.ssh-modal .ssh-grid label,
-.modal-card.ssh-modal .ssh-grid input:not(.selection-control),
+.modal-card.ssh-modal .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
 .modal-card.ssh-modal .ssh-grid select,
 .modal-card.ssh-modal .ssh-grid textarea,
 .modal-card.ssh-modal .ssh-grid .dropdown-select-trigger,
@@ -819,7 +819,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   align-items: start;
 }
 
-.ssh-grid input:not([type='checkbox']):not([type='radio']),
+.ssh-grid input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input),
 .ssh-grid textarea,
 .ssh-grid .dropdown-select-trigger,
 .ssh-grid .ft-select-shell {
@@ -845,14 +845,14 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   resize: vertical;
 }
 
-.ssh-grid input:not(.selection-control):hover:not(:disabled),
+.ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):hover:not(:disabled),
 .ssh-grid textarea:hover:not(:disabled),
 .ssh-grid .dropdown-select-trigger:hover:not(:disabled),
 .ssh-grid .ft-select-shell:hover:not(:has(select:disabled)) {
   border-color: var(--border-default);
 }
 
-.ssh-grid input:not(.selection-control):focus {
+.ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input):focus {
   outline: none;
   box-shadow: var(--input-focus-shadow);
 }
@@ -1778,7 +1778,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   font-weight: 500;
 }
 
-.connection-form input,
+.connection-form input:not(.ft-tag-input__field):not(.ft-input),
 .connection-form .dropdown-select-trigger,
 .connection-form .ft-select-shell {
   width: 100%;
@@ -1799,14 +1799,14 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   padding: 0;
 }
 
-.connection-form input:focus,
+.connection-form input:not(.ft-tag-input__field):not(.ft-input):focus,
 .connection-form .dropdown-select-trigger:focus-visible,
 .connection-form .ft-select-shell:focus-within {
   outline: none;
   box-shadow: var(--input-focus-shadow);
 }
 
-.connection-form input:hover,
+.connection-form input:not(.ft-tag-input__field):not(.ft-input):hover,
 .connection-form .dropdown-select-trigger:hover:not(:disabled),
 .connection-form .ft-select-shell:hover:not(:has(select:disabled)) {
   border-color: var(--border-default);

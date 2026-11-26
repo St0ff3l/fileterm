@@ -69,7 +69,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
 
   const closeHomeTabById = (homeTabId: string) => {
     const closingTab = localTabs.find((tab) => tab.id === homeTabId)
-    // The overview is the server-management shell, so Cmd+W leaves it alone.
+    // Keep the overview shell alive when a tab-level close is requested.
     if (serverManagementMode && closingTab?.kind === 'home') {
       return
     }
@@ -222,6 +222,11 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     const totalClosableItems = localTabs.length + visibleWorkspaceTabs.length
 
     if (currentActiveLocalTab) {
+      if (serverManagementMode && currentActiveLocalTab.kind === 'home') {
+        onCloseCurrentWindow()
+        return
+      }
+
       if (!serverManagementMode && totalClosableItems <= 1 && currentActiveLocalTab.kind !== 'transfers') {
         onCloseCurrentWindow()
         return
@@ -271,6 +276,7 @@ export function createWorkspaceTabsContextActions(context: WorkspaceTabsContextA
     }
 
     if (serverManagementMode) {
+      onCloseCurrentWindow()
       return
     }
 

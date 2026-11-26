@@ -1,5 +1,7 @@
 import { useRef } from 'react'
+import { deviceRoleIcon } from '../../app/device-role'
 import { Button } from '../../components/common/button/button'
+import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { formatMessage, t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
 import { SelectionControl } from '../common/selection-control'
@@ -28,7 +30,8 @@ export function ServerManagementList({
   onSortChange,
   onCheck,
   onClearSelection,
-  onSelect
+  onSelect,
+  onTagClick
 }: {
   label: string
   batchEligible(id: string): boolean
@@ -42,6 +45,7 @@ export function ServerManagementList({
   onCheck(id: string, checked: boolean): void
   onClearSelection(): void
   onSelect(id: string): void
+  onTagClick?(tag: string): void
 }) {
   const headers: Array<[ServerListColumn, string]> = [
     ['name', t.name],
@@ -116,6 +120,13 @@ export function ServerManagementList({
                   )}
                   <th scope="row">
                     <Button aria-pressed={selected} size="panel" variant="ghost">
+                      <span className="server-management-list-icon" aria-hidden="true">
+                        {row.protocol === 'serial' ? (
+                          <MaterialIcon name="usb" />
+                        ) : (
+                          <AppIcon name={deviceRoleIcon(row.deviceRole)} size={14} />
+                        )}
+                      </span>
                       <span className="server-management-list-name">{row.name}</span>
                     </Button>
                   </th>
@@ -133,7 +144,30 @@ export function ServerManagementList({
                       {statusLabel(row.status)}
                     </span>
                   </td>
-                  <td>{row.tags || '—'}</td>
+                  <td>
+                    {row.tagList?.length ? (
+                      <span className="server-management-list-tags" title={row.tags}>
+                        {row.tagList.slice(0, 3).map((tag) => (
+                          <button
+                            className="server-management-tag-chip"
+                            key={tag}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onTagClick?.(tag)
+                            }}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                        {row.tagList.length > 3 ? (
+                          <span className="server-management-tag-more">+{row.tagList.length - 3}</span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      row.tags || '—'
+                    )}
+                  </td>
                 </tr>
               )
             })}

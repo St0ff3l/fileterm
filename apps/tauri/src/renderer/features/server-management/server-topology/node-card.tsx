@@ -1,6 +1,7 @@
 import type { KeyboardEvent, PointerEvent } from 'react'
 import type { SystemMetrics, TopologyTcpProbeResult } from '@fileterm/core'
-import { AppIcon, type AppIconName } from '../../../features/common/app-icon'
+import { deviceRoleIcon, deviceRoleLabel } from '../../../app/device-role'
+import { AppIcon } from '../../../features/common/app-icon'
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
 import { t } from '../../../i18n'
 import { MaskedAddressText } from '../../system/system-resource-meters'
@@ -17,28 +18,6 @@ import {
 const NETWORK_ROWS_BY_SIZE = { compact: 1, standard: 4, expanded: 8 } as const
 const PROCESS_ROWS_BY_SIZE = { compact: 1, standard: 2, expanded: 4 } as const
 const SERVICE_ROWS_BY_SIZE = { compact: 1, standard: 2, expanded: 4 } as const
-
-const roleLabels: Record<TopologyNodeRole, string> = {
-  server: t.serverTopologyNodeRoleServer,
-  firewall: t.serverTopologyNodeRoleFirewall,
-  router: t.serverTopologyNodeRoleRouter,
-  switch: t.serverTopologyNodeRoleSwitch,
-  database: t.serverTopologyNodeRoleDatabase,
-  storage: t.serverTopologyNodeRoleStorage,
-  proxy: t.serverTopologyNodeRoleProxy,
-  custom: t.serverTopologyNodeRoleCustom
-}
-
-const roleIcons: Record<TopologyNodeRole, AppIconName> = {
-  server: 'server',
-  firewall: 'shield',
-  router: 'connections',
-  switch: 'connections',
-  database: 'database',
-  storage: 'disk',
-  proxy: 'cloud',
-  custom: 'grid'
-}
 
 function percent(value: number | undefined | null) {
   return value === undefined || value === null || !Number.isFinite(value)
@@ -146,8 +125,8 @@ export function TopologyNodeCard({
       type="button"
     >
       <span className="server-topology__node-meta">
-        {protocol === 'SERIAL' ? <MaterialIcon name="usb" /> : <AppIcon name={roleIcons[role]} />}
-        <span className="server-topology__node-role">{roleLabels[role]}</span>
+        {protocol === 'SERIAL' ? <MaterialIcon name="usb" /> : <AppIcon name={deviceRoleIcon(role)} />}
+        <span className="server-topology__node-role">{deviceRoleLabel(role)}</span>
         <span>{protocol}</span>
         {status ? <StatusIndicator role="img" aria-label={statusLabel} title={statusLabel} status={status} /> : null}
       </span>

@@ -1,4 +1,4 @@
-import type { CreateProfileInput, SshProfile } from '@fileterm/core'
+import type { ConnectionProfile, CreateProfileInput, SshProfile } from '@fileterm/core'
 import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { t } from '../../i18n'
 import './ssh-jump-route.css'
@@ -8,6 +8,8 @@ import { ConnectionProxySection } from './connection-proxy-section'
 import { ConnectionNetworkInterface } from './connection-network-interface'
 import { ConnectionTunnelSection } from './connection-tunnel-section'
 import type { ConnectionFormSetter } from './connection-modal-utils'
+import { NewSshRouteFormEntry, SshRouteFormEntry } from '../proxies/ssh-route-form-entry'
+import { eligibleSshRoutes } from '../proxies/ssh-route-rules'
 
 export function ConnectionNetworkSection({
   form,
@@ -16,6 +18,8 @@ export function ConnectionNetworkSection({
   routeError,
   routingMode,
   usedAsJumpHost,
+  profileId,
+  profiles,
   setForm
 }: {
   form: CreateProfileInput
@@ -24,11 +28,30 @@ export function ConnectionNetworkSection({
   routeError: string | null
   routingMode: 'direct' | 'jump'
   usedAsJumpHost: boolean
+  profileId?: string | null
+  profiles: ConnectionProfile[]
   setForm: ConnectionFormSetter
 }) {
   const supportsRouting = form.type === 'ssh'
   const supportsProxy = form.type === 'ssh' || form.type === 'sftp' || form.type === 'telnet' || form.type === 'ftp'
   const supportsTunnel = form.type === 'ssh'
+  const supportsRoutePolicy = supportsRouting && routingMode === 'direct' && form.authType !== 'sshConfig'
+  const routeProfileId =
+    supportsRoutePolicy && eligibleSshRoutes(profiles).some((profile) => profile.id === profileId) ? profileId : null
+  const manualSettings = (
+    <>
+      {(!supportsRoutePolicy && supportsRouting) || form.sshNetworkInterface ? (
+        <ConnectionNetworkInterface form={form} setForm={setForm} usedAsJumpHost={usedAsJumpHost} />
+      ) : null}
+      {supportsProxy ? (
+        <ConnectionProxySection
+          form={form}
+          setForm={setForm}
+          noProxyLabel={supportsRoutePolicy ? t.sshRouteNoExplicitProxy : undefined}
+        />
+      ) : null}
+    </>
+  )
   const selectedJumpProfileIds =
     form.jumpProfileIds ?? (form.jumpProfileId ? jumpRoute.map((profile) => profile.id) : [])
 
@@ -77,7 +100,7 @@ export function ConnectionNetworkSection({
                   className="network-routing-modes"
                   value={routingMode}
                   options={[
-                    { value: 'direct', label: t.direct },
+                    { value: 'direct', label: t.sshRouteWithoutJumpHost },
                     { value: 'jump', label: t.viaJumpHost }
                   ]}
                   onChange={(value) => {
@@ -196,10 +219,21 @@ export function ConnectionNetworkSection({
         </fieldset>
       ) : null}
 
-      {supportsRouting || form.sshNetworkInterface ? (
-        <ConnectionNetworkInterface form={form} setForm={setForm} usedAsJumpHost={usedAsJumpHost} />
-      ) : null}
-      {supportsProxy ? <ConnectionProxySection form={form} setForm={setForm} /> : null}
+      {routeProfileId ? (
+        <SshRouteFormEntry host={form.host} key={routeProfileId} profileId={routeProfileId} profiles={profiles}>
+          {manualSettings}
+        </SshRouteFormEntry>
+      ) : supportsRoutePolicy && !profileId ? (
+        <NewSshRouteFormEntry
+          form={form}
+          rule={form.sshRouteRule ?? null}
+          onChange={(rule) => setForm((previous) => ({ ...previous, sshRouteRule: rule ?? undefined }))}
+        >
+          {manualSettings}
+        </NewSshRouteFormEntry>
+      ) : (
+        manualSettings
+      )}
 
       {supportsTunnel ? <ConnectionTunnelSection form={form} setForm={setForm} /> : null}
     </div>

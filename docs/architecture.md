@@ -31,6 +31,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - SSH 会话连接
 - SSH shell 输出接入
 - SSH keyboard-interactive/MFA、SOCKS5/HTTP outbound proxy、多级 Jump Host（最多 8 个跳板） 与运行时 `-L/-R/-D` tunnel service；隧道运行状态归属具体 workspace tab，断线自动回收。
+- 代理管理的 SSH 线路页和服务器连接编辑器通过 Tauri 命令读写本机 `ssh-route-policy.json`。新建普通 SSH 连接时，创建命令按新连接 ID 保存单台规则，并通知已打开的线路页刷新。普通 SSH 的连接测试、建连和重连按服务器、标签或默认规则选用系统直连、已登记代理及 Windows 指定网卡。Rust 在握手前按目标健康统计择优、切线并输出脱敏记录；短期健康与线路事件仅驻留进程内。配置格式及客户端支持见 [SSH 线路计划](./plans/active/ssh-route-policy.md)。
 - SSH 连接可保存 Base32 OTP 密钥与可选提示识别文本，通过 keyboard-interactive 自动提交标准 TOTP（SHA-1、6 位、30 秒）；每次认证最多自动提交一次，重复/不明确的提示保持手动输入。密钥复用 `profile-secrets.json` 加密凭据存储，公开快照只暴露 `hasSavedOtpSecret`。
 - SSH 私钥库：私钥、元数据和可选口令分离存储；连接 profile 仅保存 `privateKeyId`，口令交互通过 `ssh:interaction` 返回 renderer。
 - SSH 私钥导入同时支持文件和临时文本输入；文本只在导入弹窗与一次 IPC 调用期间存在，不进入 profile、workspace snapshot 或日志。

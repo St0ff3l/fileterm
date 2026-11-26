@@ -139,6 +139,11 @@ pub async fn app_reconnect_tab(
                         session
                             .terminal_transcript
                             .push_str("\r\n--- 重新连接 ---\r\n");
+                        if profile["type"] == "ssh" && session.transfer_endpoint.is_some() {
+                            session.terminal_transcript.push_str(
+                                "--- 将启动新的远端 Shell，上一会话状态无法保留 / New remote shell; previous session state is lost ---\r\n",
+                            );
+                        }
                     }
                     session.terminal_transcript.push_str("连接主机...\r\n");
                     // Cap to 200k chars (matches Electron's BoundedTextBuffer).

@@ -126,7 +126,7 @@ tokens -> theme vars -> component skins -> terminal colors
 FileTerm 的层级主要靠边界，不靠重装饰。
 
 - 外层区域：浅灰背景 + 1px 边线。
-- 面板：白色背景 + 1px border，必要时使用非常弱的阴影。
+- 面板：白色背景 + 1px border，必要时使用非常弱的阴影。卡片与面板的底部操作栏与主体保持同一背景色，仅用 1px 语义分割线（`--border-subtle`）分隔，不单独填充不同灰阶底色。
 - 表格：表头使用 `--surface-table-head`，行分割使用 `--border-light`。
 - 浮层：使用 `--popover-bg`、`--popover-shadow`、`--modal-backdrop-bg`。
 - 命令 Dock：使用玻璃感半透明表面，但只作为工具条，不做大面积毛玻璃背景。

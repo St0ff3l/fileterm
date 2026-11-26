@@ -9,8 +9,8 @@ async fn run_worker_loop(
     if profile.get("type").and_then(Value::as_str) == Some("sftp") {
         return run_sftp_only_worker_loop(tab_id, profile, cmd_rx, app, cancellation).await;
     }
-    let terminal_input_rx =
-        terminal_input_rx.ok_or_else(|| "SSH worker requires a terminal input channel".to_string())?;
+    let terminal_input_rx = terminal_input_rx
+        .ok_or_else(|| "SSH worker requires a terminal input channel".to_string())?;
     // Every detached channel task belongs to this connection attempt. Drop
     // cancels pending listings/writers even when the remote shell exits first.
     let cancellation = cancellation.child_token();
@@ -55,7 +55,12 @@ async fn run_worker_loop(
         .get("jumpProfileIds")
         .and_then(Value::as_array)
         .map(|ids| !ids.is_empty())
-        .unwrap_or_else(|| profile.get("jumpProfileId").and_then(Value::as_str).is_some());
+        .unwrap_or_else(|| {
+            profile
+                .get("jumpProfileId")
+                .and_then(Value::as_str)
+                .is_some()
+        });
     let direct_login_hint =
         crate::sessions::system_metrics::jumpserver_direct_login_hint(&username);
     let route_hint = if jump_host_configured {
@@ -99,6 +104,7 @@ async fn run_worker_loop(
             Some("main".to_string()),
             SshInteractionFlow::new(),
             cancellation.clone(),
+            None,
         ) => result,
     } {
         Ok(h) => h,
@@ -221,7 +227,8 @@ async fn run_worker_loop(
     // Normal terminal bytes are serialized here so a slow SSH channel cannot
     // block the session event loop. Ctrl+C bypasses this queue below via the
     // SSH SIGINT request and also keeps its raw 0x03 byte as a fallback.
-    let (terminal_write_tx, mut terminal_write_rx) = mpsc::unbounded_channel::<TerminalInput<Vec<u8>>>();
+    let (terminal_write_tx, mut terminal_write_rx) =
+        mpsc::unbounded_channel::<TerminalInput<Vec<u8>>>();
     let terminal_writer = Arc::clone(&shell_writer);
     let terminal_writer_cancellation = cancellation.clone();
     let terminal_writer_app = app.clone();

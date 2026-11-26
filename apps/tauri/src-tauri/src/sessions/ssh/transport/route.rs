@@ -52,9 +52,9 @@ fn resolve_ssh_route(profile: &Value, profiles: &[Value]) -> Result<Vec<Value>, 
     use crate::services::ssh_network_interface::{has_preference, jump_conflict, validate};
     validate(profile)?;
     if let Some(jump_ids) = profile.get("jumpProfileIds") {
-        let jump_ids = jump_ids.as_array().ok_or_else(|| {
-            "SSH Jump Host route must be an array of profile IDs".to_string()
-        })?;
+        let jump_ids = jump_ids
+            .as_array()
+            .ok_or_else(|| "SSH Jump Host route must be an array of profile IDs".to_string())?;
         if jump_ids.len() > MAX_SSH_JUMP_HOSTS {
             return Err(format!(
                 "SSH route supports at most {MAX_SSH_JUMP_HOSTS} Jump Hosts"
@@ -89,7 +89,9 @@ fn resolve_ssh_route(profile: &Value, profiles: &[Value]) -> Result<Vec<Value>, 
                 .cloned()
                 .ok_or_else(|| format!("Jump Host profile '{jump_id}' not found"))?;
             if hop.get("type").and_then(Value::as_str) != Some("ssh") {
-                return Err(format!("Jump Host profile '{jump_id}' must be an SSH profile"));
+                return Err(format!(
+                    "Jump Host profile '{jump_id}' must be an SSH profile"
+                ));
             }
             if has_preference(&hop) {
                 return Err(jump_conflict(&hop));
@@ -106,7 +108,9 @@ fn resolve_ssh_route(profile: &Value, profiles: &[Value]) -> Result<Vec<Value>, 
         }
         let mut target = profile.clone();
         if target.get("type").and_then(Value::as_str) != Some("ssh") {
-            return Err(format!("Jump Host profile '{target_id}' must be an SSH profile"));
+            return Err(format!(
+                "Jump Host profile '{target_id}' must be an SSH profile"
+            ));
         }
         port_from_profile(&target, 22, "SSH")?;
         apply_legacy_connection_overrides(&mut target);
@@ -197,6 +201,7 @@ impl<H: Handler + 'static> Drop for SshSessionCleanup<H> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn open_session(
     profile: &Value,
     app: &AppHandle,
@@ -205,7 +210,15 @@ async fn open_session(
     interaction_window_label: Option<String>,
     flow: SshInteractionFlow,
     cancellation: CancellationToken,
+    draft_route: Option<SshRouteRule>,
 ) -> Result<OpenSshSession, String> {
+    let standalone_sftp = profile["type"] == "sftp";
+    let transport_profile = standalone_sftp.then(|| {
+        let mut profile = profile.clone();
+        profile["type"] = Value::String("ssh".into());
+        profile
+    });
+    let profile = transport_profile.as_ref().unwrap_or(profile);
     let has_jump_route = profile
         .get("jumpProfileIds")
         .and_then(Value::as_array)
@@ -225,11 +238,29 @@ async fn open_session(
         Vec::new()
     };
     let route = expand_ssh_config_route(resolve_ssh_route(profile, &profiles)?, app)?;
+    let policy = if let Some(rule) = draft_route {
+        let path = crate::storage::workspace_file(app, SSH_ROUTE_POLICY_FILE)
+            .map_err(|error| error.to_string())?;
+        Some(SshRouteSelection {
+            scope: "server",
+            label: profile["name"].as_str().unwrap_or_default().to_owned(),
+            rule,
+            storage_root: path
+                .parent()
+                .ok_or("Missing SSH route policy directory")?
+                .to_owned(),
+        })
+    } else if !standalone_sftp && route.len() == 1 && route_policy_eligible(&route[0]) {
+        load_ssh_route_policy(app, profile).await?
+    } else {
+        None
+    };
     let mut cleanup = SshSessionCleanup {
         handles: Vec::new(),
     };
     let mut remote_sshid = Vec::new();
     let mut disconnect_reason = Arc::new(StdMutex::new(None));
+    let mut selected_endpoint = None;
     for (index, hop) in route.iter().enumerate() {
         let authentication_target = if route.len() == 1 {
             SshAuthenticationTarget::Direct
@@ -243,9 +274,9 @@ async fn open_session(
             _ = cancellation.cancelled() => return Err("SSH connection canceled".to_string()),
             result = open_session_hop(hop, app, tab_id, interaction_timeout,
                 interaction_window_label.clone(), authentication_target, flow.clone(),
-                cancellation.clone(), &mut cleanup) => result,
+                cancellation.clone(), &mut cleanup, policy.as_ref()) => result,
         };
-        (remote_sshid, disconnect_reason) = result.map_err(|error| {
+        (remote_sshid, disconnect_reason, selected_endpoint) = result.map_err(|error| {
             let name = hop.get("name").and_then(Value::as_str).unwrap_or("SSH");
             format!("SSH hop {} ({name}): {error}", index + 1)
         })?;
@@ -254,7 +285,8 @@ async fn open_session(
         .last()
         .is_some_and(|target| ssh_config_agent_forwarding(target).is_some());
     Ok(OpenSshSession {
-        transfer_endpoint: crate::sessions::transfer_endpoint::fingerprint(&route),
+        transfer_endpoint: selected_endpoint
+            .unwrap_or_else(|| crate::sessions::transfer_endpoint::fingerprint(&route)),
         agent_forwarding,
         handle: cleanup.handles.last().unwrap().clone(),
         cleanup,

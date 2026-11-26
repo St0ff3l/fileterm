@@ -4,6 +4,8 @@ import telnetIcon from '../../assets/icons/network/app-telnet.svg?raw'
 import gridIcon from '../../assets/icons/navigation/app-grid.svg?raw'
 import menuIcon from '../../assets/icons/system/app-menu.svg?raw'
 import serverIcon from '../../assets/icons/network/app-server.svg?raw'
+import vmIcon from '../../assets/icons/network/app-vm.svg?raw'
+import workstationIcon from '../../assets/icons/network/app-workstation.svg?raw'
 import connectionsIcon from '../../assets/icons/network/app-connections.svg?raw'
 import keyIcon from '../../assets/icons/security/app-key.svg?raw'
 import lockIcon from '../../assets/icons/security/app-lock.svg?raw'
@@ -70,6 +72,8 @@ const sources = {
   grid: gridIcon,
   menu: menuIcon,
   server: serverIcon,
+  vm: vmIcon,
+  workstation: workstationIcon,
   connections: connectionsIcon,
   key: keyIcon,
   lock: lockIcon,

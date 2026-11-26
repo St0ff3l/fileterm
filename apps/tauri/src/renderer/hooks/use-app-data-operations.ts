@@ -122,9 +122,18 @@ export function useAppDataOperations({
     }
 
     const defaultPort = form.type === 'ftp' ? 21 : form.type === 'telnet' ? 23 : form.type === 'serial' ? 0 : 22
+    const sshRouteRule =
+      !editingProfileId &&
+      form.type === 'ssh' &&
+      form.authType !== 'sshConfig' &&
+      !(form.jumpProfileIds?.length || form.jumpProfileId)
+        ? form.sshRouteRule
+        : undefined
     return {
       ...form,
-      sshNetworkInterface: form.sshNetworkInterface ?? null,
+      sshRouteRule,
+      sshNetworkInterface: sshRouteRule ? null : (form.sshNetworkInterface ?? null),
+      ...(sshRouteRule ? { proxy: undefined, proxyProfileId: undefined, proxyPassword: undefined } : {}),
       host: normalizedHost,
       port: Number(form.port) || defaultPort,
       ...(form.type === 'sftp'

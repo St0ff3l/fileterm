@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Button } from '../../../components/common/button/button'
+import { PanelActionButton } from '../../../components/common/panel-action-button/panel-action-button'
 import { Textarea } from '../../../components/common/input/input'
 import { t } from '../../../i18n'
 import { TOPOLOGY_MEMO_LIMIT } from '../server-topology-model'
@@ -31,9 +31,9 @@ export function NodeMemo({ memo, onSave }: { memo: string; onSave(value: string)
         rows={5}
         value={draft}
       />
-      <Button disabled={draft === memo} size="panel" type="submit">
+      <PanelActionButton disabled={draft === memo} type="submit">
         {t.save}
-      </Button>
+      </PanelActionButton>
     </form>
   )
 }

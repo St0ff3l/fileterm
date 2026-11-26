@@ -1,3 +1,5 @@
+import type { ConnectionDeviceRole } from '@fileterm/core'
+
 type ServerListStatus = 'connected' | 'connecting' | 'idle'
 
 export interface ServerListRow {
@@ -7,9 +9,11 @@ export interface ServerListRow {
   protocol: string
   status: ServerListStatus
   tags: string
+  tagList?: string[]
+  deviceRole?: ConnectionDeviceRole
 }
 
-export type ServerListColumn = Exclude<keyof ServerListRow, 'id'>
+export type ServerListColumn = 'name' | 'address' | 'protocol' | 'status' | 'tags'
 
 export interface ServerListSort {
   column: ServerListColumn

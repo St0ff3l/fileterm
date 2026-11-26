@@ -17,6 +17,7 @@ description: 修改 FileTerm renderer 的 React/TSX、组件 CSS、主题 token�
 - 新增纵向滚动默认复用 `features/common/vertical-scrollbar.tsx` 并隐藏原生纵向滚动条；横向、第三方编辑器内部及协议组件自带滚动可保留专用实现。
 - UI 图标使用本地 SVG / `AppIcon` 和 currentColor，按功能域归档；应用身份资产与 UI 图标隔离，不引入 WebFont 或 CDN。
 - 同组按钮高度、圆角和内边距一致，异步操作防止重复提交并保留错误反馈。
+- 卡片与面板的底部操作栏（footer）与主体保持同一背景色，仅用 1px `--border-subtle` 分隔，不为 footer 单独填充 `--surface-hover`、`--surface-inset` 等异色灰底。
 - 输入框、textarea 与下拉框聚焦/展开时禁止新增彩色描边，统一消费 `--input-focus-shadow`（中性 inset 内环＋加深外阴影）；复合输入仅外壳绘制一次。既有 hover 反馈（包括文件工具栏蓝框）保持不变；按钮、复选/单选与校验状态不跟随重置。forced-colors 下保留系统键盘焦点回退，详见控件约束。
 - 深色输入只保留中性内环，不绘制外部深色底层；亮色可用轻量外阴影。路径/筛选、运行时隧道和命令代码区使用既有单层 1px 边框反馈，禁止与硬内环叠成粗边。终端底部命令输入栏保持原样。
 

@@ -3,6 +3,8 @@ import type { ConnectionFolder, ConnectionProfile, OverviewSectionId } from '@fi
 import { DEFAULT_OVERVIEW_SECTION_ORDER } from '@fileterm/core'
 import { t } from '../../i18n'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
+import { deviceRoleIcon } from '../../app/device-role'
+import { AppIcon } from '../common/app-icon'
 import { buildConnectionTree, flattenConnectionProfiles } from '../connections/connection-tree'
 import './overview-page.css'
 
@@ -66,7 +68,11 @@ export function OverviewPage({
     >
       <div className="recent-card-header">
         <div className={`recent-icon recent-icon-${profile.type.toLowerCase()}`}>
-          <MaterialIcon name="dns" className="material-symbols-outlined" />
+          {profile.type === 'serial' ? (
+            <MaterialIcon name="usb" className="material-symbols-outlined" />
+          ) : (
+            <AppIcon name={deviceRoleIcon(profile.deviceRole)} size={18} />
+          )}
         </div>
         <div className={`type-badge type-badge-${profile.type.toLowerCase()}`}>{profile.type.toUpperCase()}</div>
       </div>

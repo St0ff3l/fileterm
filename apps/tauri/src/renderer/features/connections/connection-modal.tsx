@@ -22,6 +22,7 @@ import { ConnectionNetworkSection } from './connection-network-section'
 import { ConnectionFilePaneSection } from './connection-file-pane-section'
 import { ConnectionReliabilitySection } from './connection-reliability-section'
 import { ConnectionSessionLogSection } from './connection-session-log-section'
+import { collectKnownConnectionTags } from '../../app/device-role'
 import { ConnectionSshAdvancedSection } from './connection-ssh-advanced-section'
 import { ConnectionTransferAdvancedSection } from './connection-transfer-advanced-section'
 import { ConnectionSshSection } from './connection-ssh-section'
@@ -431,6 +432,7 @@ export function ConnectionModal({
                     connectionDefaults={connectionDefaults}
                     form={form}
                     groupOptions={groupOptions}
+                    tagSuggestions={collectKnownConnectionTags(profiles)}
                     hasSavedPassword={hasSavedPassword}
                     hasSavedOtpSecret={hasSavedOtpSecret}
                     hasSavedSuPassword={hasSavedSuPassword}
@@ -457,6 +459,8 @@ export function ConnectionModal({
                 {section === 'network' && supportsNetwork ? (
                   <ConnectionNetworkSection
                     form={form}
+                    profileId={editingProfileId}
+                    profiles={profiles}
                     jumpHosts={jumpHosts}
                     jumpRoute={jumpRoute.jumpHosts}
                     routeError={jumpRouteError}

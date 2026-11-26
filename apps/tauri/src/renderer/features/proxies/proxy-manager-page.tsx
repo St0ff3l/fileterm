@@ -18,6 +18,8 @@ import { targetsNestedManagerControl } from '../common/manager-interactions'
 import { SshProxyAssignmentDialog } from './ssh-proxy-assignment-dialog'
 import { ProxyEditDialog } from './proxy-edit-dialog'
 import { TunnelEditDialog } from '../tunnels/tunnel-edit-dialog'
+import { SshRouteManager } from './ssh-route-manager'
+import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import './proxy-manager-page.css'
 
 type ProtocolFilter = 'ssh' | 'http-tunnel' | 'socks5' | 'http-connect'
@@ -57,6 +59,7 @@ export function ProxyManagerPage({
   const { tunnels, error: tunnelError, clearError: clearTunnelError, saveTunnel, deleteTunnel } = tunnelLibrary
   const [assignmentProxy, setAssignmentProxy] = useState<ProxyProfile | null>(null)
   const [assignmentNotice, setAssignmentNotice] = useState('')
+  const [showRoutes, setShowRoutes] = useState(false)
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [isActionsExpanded, setIsActionsExpanded] = useState(false)
@@ -132,7 +135,7 @@ export function ProxyManagerPage({
     socks5: { label: t.socks5Proxies, count: stats.socks5Count, icon: 'brand' },
     'http-connect': { label: t.httpConnectProxies, count: stats.httpProxyCount, icon: 'server' }
   } as const
-  const activeFilterLabel = filters[activeFilter].label
+  const activeFilterLabel = showRoutes ? t.sshRouteManager : filters[activeFilter].label
   const renderFilter = (filter: ActiveFilter) => (
     <FilterButton
       key={filter}
@@ -236,21 +239,35 @@ export function ProxyManagerPage({
 
   return (
     <div className="modal-card manager-modal connection-manager-modal proxy-manager-modal manager-inline">
-      <div className="connection-manager-header">
+      <div className="connection-manager-header proxy-manager-header">
         <span className="connection-manager-title">
           <AppIcon className="proxy-manager-title-icon" name="shield" size={26} />
           <span>{t.proxyManager}</span>
         </span>
-        <label className="connection-manager-search">
-          <AppIcon name="search" size={14} />
-          <input
-            aria-label={t.filterProxies}
-            placeholder={t.filterProxies}
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+        <div className="proxy-manager-header-controls">
+          <SegmentedControl
+            ariaLabel={t.proxyManager}
+            variant="neutral"
+            value={showRoutes ? 'routes' : 'profiles'}
+            options={[
+              { value: 'profiles', label: t.proxyManager },
+              { value: 'routes', label: t.sshRouteManager }
+            ]}
+            onChange={(value) => setShowRoutes(value === 'routes')}
           />
-        </label>
+          {!showRoutes ? (
+            <label className="connection-manager-search">
+              <AppIcon name="search" size={14} />
+              <input
+                aria-label={t.filterProxies}
+                placeholder={t.filterProxies}
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </label>
+          ) : null}
+        </div>
       </div>
 
       {libraryError ? (
@@ -275,92 +292,96 @@ export function ProxyManagerPage({
         </div>
       ) : null}
 
-      <div className="connection-manager-layout">
-        <aside className="connection-manager-sidebar" aria-label="Proxy and tunnel filters">
-          {renderFilter('all')}
-          {renderFilter('socks5')}
-          {renderFilter('http-connect')}
-          {renderFilter('ssh')}
-          {renderFilter('http-tunnel')}
-        </aside>
+      {showRoutes ? (
+        <SshRouteManager profiles={profiles} proxies={proxies} />
+      ) : (
+        <div className="connection-manager-layout">
+          <aside className="connection-manager-sidebar" aria-label="Proxy and tunnel filters">
+            {renderFilter('all')}
+            {renderFilter('socks5')}
+            {renderFilter('http-connect')}
+            {renderFilter('ssh')}
+            {renderFilter('http-tunnel')}
+          </aside>
 
-        <section className="connection-manager-main">
-          <div className="manager-table connection-manager-table proxy-manager-table">
-            <div className="manager-head">
-              <span>{t.name}</span>
-              <span>{t.host}</span>
-              <span>{t.port}</span>
-              <span>{t.proxyAuthStatus}</span>
-              <span>{t.type}</span>
-              <span>{t.proxyBoundConnections}</span>
-              <span>{t.actions}</span>
+          <section className="connection-manager-main">
+            <div className="manager-table connection-manager-table proxy-manager-table">
+              <div className="manager-head">
+                <span>{t.name}</span>
+                <span>{t.host}</span>
+                <span>{t.port}</span>
+                <span>{t.proxyAuthStatus}</span>
+                <span>{t.type}</span>
+                <span>{t.proxyBoundConnections}</span>
+                <span>{t.actions}</span>
+              </div>
+              <div className="manager-body connection-manager-body">
+                {entries.map((entry) => (
+                  <ManagerRow
+                    key={`${entry.kind}:${entry.item.id}`}
+                    entry={entry}
+                    testState={entry.kind === 'proxy' ? testStates[entry.item.id] : undefined}
+                    onEdit={() => openEntry(entry)}
+                    onManageAssignments={entry.kind === 'proxy' ? () => openAssignments(entry.item) : undefined}
+                    onDelete={() => {
+                      setDeletingEntry(entry)
+                      setDeleteError(null)
+                    }}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setContextMenu({ entry, position: { x: event.clientX, y: event.clientY } })
+                    }}
+                    onTest={() => {
+                      if (entry.kind === 'proxy') void handleTestProxy(entry.item)
+                    }}
+                  />
+                ))}
+                {entries.length === 0 ? (
+                  <div className="connection-manager-empty">
+                    {searchQuery.trim() ? t.noMatchingConnections : t.noProxiesTitle}
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <div className="manager-body connection-manager-body">
-              {entries.map((entry) => (
-                <ManagerRow
-                  key={`${entry.kind}:${entry.item.id}`}
-                  entry={entry}
-                  testState={entry.kind === 'proxy' ? testStates[entry.item.id] : undefined}
-                  onEdit={() => openEntry(entry)}
-                  onManageAssignments={entry.kind === 'proxy' ? () => openAssignments(entry.item) : undefined}
-                  onDelete={() => {
-                    setDeletingEntry(entry)
-                    setDeleteError(null)
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    setContextMenu({ entry, position: { x: event.clientX, y: event.clientY } })
-                  }}
-                  onTest={() => {
-                    if (entry.kind === 'proxy') void handleTestProxy(entry.item)
-                  }}
-                />
-              ))}
-              {entries.length === 0 ? (
-                <div className="connection-manager-empty">
-                  {searchQuery.trim() ? t.noMatchingConnections : t.noProxiesTitle}
-                </div>
-              ) : null}
-            </div>
-          </div>
 
-          <div className={`connection-manager-floating-drawer ${isActionsExpanded ? 'expanded' : ''}`}>
-            <div className="drawer-options-wrapper">
+            <div className={`connection-manager-floating-drawer ${isActionsExpanded ? 'expanded' : ''}`}>
+              <div className="drawer-options-wrapper">
+                <button
+                  className="drawer-option-btn secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    openTunnelCreate()
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <AppIcon name="plus" size={13} />
+                  <span>{t.addTunnel}</span>
+                </button>
+                <button
+                  className="drawer-option-btn primary-btn"
+                  type="button"
+                  onClick={() => {
+                    openProxyCreate('socks5')
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <AppIcon name="plus" size={13} />
+                  <span>{t.addProxy}</span>
+                </button>
+              </div>
               <button
-                className="drawer-option-btn secondary-btn"
+                aria-label={t.expandActions || '操作'}
+                className="drawer-trigger-btn"
                 type="button"
-                onClick={() => {
-                  openTunnelCreate()
-                  setIsActionsExpanded(false)
-                }}
+                onClick={() => setIsActionsExpanded((expanded) => !expanded)}
               >
-                <AppIcon name="plus" size={13} />
-                <span>{t.addTunnel}</span>
-              </button>
-              <button
-                className="drawer-option-btn primary-btn"
-                type="button"
-                onClick={() => {
-                  openProxyCreate('socks5')
-                  setIsActionsExpanded(false)
-                }}
-              >
-                <AppIcon name="plus" size={13} />
-                <span>{t.addProxy}</span>
+                <AppIcon name="plus" size={16} />
               </button>
             </div>
-            <button
-              aria-label={t.expandActions || '操作'}
-              className="drawer-trigger-btn"
-              type="button"
-              onClick={() => setIsActionsExpanded((expanded) => !expanded)}
-            >
-              <AppIcon name="plus" size={16} />
-            </button>
-          </div>
-        </section>
-      </div>
+          </section>
+        </div>
+      )}
 
       {assignmentProxy ? (
         <SshProxyAssignmentDialog

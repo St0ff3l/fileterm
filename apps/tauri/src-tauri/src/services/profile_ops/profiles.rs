@@ -79,11 +79,13 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
     let id = new_id("profile");
     let mut profile = ensure_object(&input);
     profile.remove(BACKUP_IDENTITY_FIELD);
+    let ssh_route_draft = profile.remove("sshRouteRule");
     if profile.get("sshNetworkInterface") == Some(&Value::Null) {
         profile.remove("sshNetworkInterface");
     }
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, None);
+    normalize_profile_device_role(&mut profile);
     normalize_profile_tags(&mut profile);
     profile.insert("id".to_string(), Value::String(id.clone()));
     profile.insert("group".to_string(), Value::String(group));
@@ -97,7 +99,12 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
         .map_err(AppError::Command)?;
     profiles.insert(0, profile_value.clone());
 
-    persist_profiles(app, &profiles)?;
+    crate::sessions::ssh::persist_new_profile_with_ssh_route(
+        app,
+        &profile_value,
+        ssh_route_draft,
+        || persist_profiles(app, &profiles),
+    )?;
     Ok(profile_value)
 }
 
@@ -175,8 +182,10 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
         profile.remove("sshNetworkInterface");
     }
     preserve_trusted_host_fingerprint(&mut profile, Some(&previous));
+    profile.remove("sshRouteRule");
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, Some(&previous));
+    normalize_profile_device_role(&mut profile);
     normalize_profile_tags(&mut profile);
     profile.insert("id".to_string(), Value::String(profile_id.to_string()));
     profile.insert("group".to_string(), Value::String(group));
@@ -192,6 +201,21 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
     let profile_value = Value::Object(profile);
     crate::services::ssh_network_interface::validate_save(&profile_value, &profiles)
         .map_err(AppError::Command)?;
+    if [
+        "tags",
+        "type",
+        "authType",
+        "proxy",
+        "proxyProfileId",
+        "sshNetworkInterface",
+        "jumpProfileIds",
+        "jumpProfileId",
+    ]
+    .iter()
+    .any(|field| profile_value[*field] != previous[*field])
+    {
+        crate::sessions::ssh::validate_ssh_route_profile(app, &profile_value)?;
+    }
     profiles[previous_idx] = profile_value.clone();
 
     persist_profiles(app, &profiles)?;
@@ -225,7 +249,9 @@ fn set_default_directory_in_profile(
     path: &str,
 ) -> Result<(), AppError> {
     if path.trim().is_empty() || path.contains('\0') || path.len() > 32768 {
-        return Err(AppError::Command("Invalid default directory path".to_string()));
+        return Err(AppError::Command(
+            "Invalid default directory path".to_string(),
+        ));
     }
     let field = match pane {
         "local" => "localPath",
