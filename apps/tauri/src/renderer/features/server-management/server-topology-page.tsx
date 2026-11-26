@@ -13,6 +13,7 @@ import { getConnectionCapabilities } from '@fileterm/core'
 import { getUiFontScaleRatio } from '../../app/ui-font-scale'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { Button } from '../../components/common/button/button'
+import { PanelActionButton } from '../../components/common/panel-action-button/panel-action-button'
 import { ConfirmActionDialog } from '../../components/common/confirm-action-dialog/confirm-action-dialog'
 import { DropdownSelect } from '../../components/common/dropdown-select/dropdown-select'
 import { Input } from '../../components/common/input/input'
@@ -729,9 +730,9 @@ export function ServerTopologyPage({
                     >
                       {t.save}
                     </Button>
-                    <Button onClick={() => setPendingRemoval('link')} size="panel" variant="ghost">
+                    <PanelActionButton onClick={() => setPendingRemoval('link')}>
                       {t.serverTopologyRemoveLink}
-                    </Button>
+                    </PanelActionButton>
                   </div>
                 </form>
               </>
@@ -917,9 +918,9 @@ export function ServerTopologyPage({
                   onSave={(memo) => save(updateTopologyNodeMemo(storeLayout(), selected.id, memo))}
                 />
                 {!routeNodeIds.has(selectedId) && (
-                  <Button size="panel" variant="ghost" onClick={() => setPendingRemoval('node')}>
+                  <PanelActionButton onClick={() => setPendingRemoval('node')}>
                     {t.serverTopologyRemoveNode}
-                  </Button>
+                  </PanelActionButton>
                 )}
               </>
             ) : (

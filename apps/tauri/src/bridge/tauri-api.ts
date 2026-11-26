@@ -74,6 +74,8 @@ import type {
   ListAiModelsInput,
   ProxyProfile,
   SshProxyAssignmentInput,
+  SshRouteActivity,
+  SshRoutePolicySnapshot,
   CreateProxyProfileInput,
   UpdateProxyProfileInput,
   TunnelProfile,
@@ -430,6 +432,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<void>('app_write_diagnostic_log', { level, scope, message }),
     listSerialPorts: () => invoke<SerialPortInfo[]>('app_list_serial_ports'),
     listSshNetworkInterfaces: () => invoke<SshNetworkInterfaceInfo[]>('app_list_ssh_network_interfaces'),
+    getSshRoutePolicy: () => invoke<SshRoutePolicySnapshot>('app_get_ssh_route_policy'),
+    saveSshRoutePolicy: (expected, policy) =>
+      invoke<SshRoutePolicySnapshot>('app_save_ssh_route_policy', { expected, policy }),
+    probeSshRoutePolicy: (profileId) => invoke<SshRoutePolicySnapshot>('app_probe_ssh_route_policy', { profileId }),
+    controlSshRouteClient: (kind, start) =>
+      invoke<SshRoutePolicySnapshot>('app_control_ssh_route_client', { kind, start }),
+    onSshRouteActivity: (listener) => subscribe<SshRouteActivity>('ssh-route:activity', listener),
+    onSshRoutePolicyChanged: (listener) => subscribe<null>('ssh-route:policy-changed', listener),
     onSerialPortsChanged: (listener: (ports: SerialPortInfo[]) => void) => subscribe('serial:ports-changed', listener),
     serialControl: (tabId: string, action: SerialControlAction, value?: boolean, durationMs?: number) =>
       invoke<SerialLineStatus>('app_serial_control', { tabId, action, value, durationMs }),

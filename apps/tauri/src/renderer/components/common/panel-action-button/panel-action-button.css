@@ -1,0 +1,8 @@
+/*
+ * Borderless ghost panel action button (32px height, transparent resting surface).
+ * Strictly consumes semantic tokens. Zero hardcoded colors.
+ */
+
+.ft-panel-action-btn {
+  justify-self: start;
+}

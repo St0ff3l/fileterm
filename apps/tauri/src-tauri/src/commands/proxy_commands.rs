@@ -26,3 +26,37 @@ pub async fn app_test_proxy_profile(
 ) -> Result<crate::services::proxies::ProxyTestResult, AppError> {
     crate::services::proxies::test_proxy(&app, input).await
 }
+
+#[tauri::command]
+pub(crate) fn app_get_ssh_route_policy(
+    app: AppHandle,
+) -> Result<crate::sessions::ssh::SshRoutePolicySnapshot, AppError> {
+    crate::sessions::ssh::ssh_route_policy_snapshot(&app)
+}
+
+#[tauri::command]
+pub(crate) async fn app_save_ssh_route_policy(
+    app: AppHandle,
+    expected: crate::sessions::ssh::SshRoutePolicy,
+    policy: crate::sessions::ssh::SshRoutePolicy,
+) -> Result<crate::sessions::ssh::SshRoutePolicySnapshot, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
+    crate::sessions::ssh::save_ssh_route_policy(&app, expected, policy)
+}
+
+#[tauri::command]
+pub(crate) async fn app_probe_ssh_route_policy(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<crate::sessions::ssh::SshRoutePolicySnapshot, AppError> {
+    crate::sessions::ssh::probe_ssh_route_policy(&app, &profile_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn app_control_ssh_route_client(
+    app: AppHandle,
+    kind: crate::sessions::ssh::SshRouteClient,
+    start: bool,
+) -> Result<crate::sessions::ssh::SshRoutePolicySnapshot, AppError> {
+    crate::sessions::ssh::control_ssh_route_client(&app, kind, start)
+}

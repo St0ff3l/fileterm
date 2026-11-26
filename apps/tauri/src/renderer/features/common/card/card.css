@@ -52,7 +52,6 @@
 .ft-card__footer {
   padding: 12px 16px;
   border-top: 1px solid var(--border-subtle);
-  background-color: var(--surface-hover);
   display: flex;
   align-items: center;
   justify-content: flex-end;

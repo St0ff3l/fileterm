@@ -140,8 +140,15 @@ test('connection settings show the complete route and explain invalid references
       '../common/dropdown-select': {
         DropdownSelect: ({ options }) => createElement('span', null, options.map((option) => option.label).join(' | '))
       },
-      './connection-proxy-section': { ConnectionProxySection: () => null },
-      './connection-network-interface': { ConnectionNetworkInterface: () => null },
+      './connection-proxy-section': { ConnectionProxySection: () => createElement('span', null, 'proxy-settings') },
+      './connection-network-interface': {
+        ConnectionNetworkInterface: () => createElement('span', null, 'adapter-settings')
+      },
+      '../proxies/ssh-route-form-entry': {
+        SshRouteFormEntry: ({ children }) => createElement('section', { id: 'inline-route' }, children),
+        NewSshRouteFormEntry: ({ children }) => createElement('section', { id: 'draft-route' }, children)
+      },
+      '../proxies/ssh-route-rules': loadComponent('../../src/renderer/features/proxies/ssh-route-rules.ts'),
       './connection-tunnel-section': { ConnectionTunnelSection: () => null }
     }
   )
@@ -169,6 +176,27 @@ test('connection settings show the complete route and explain invalid references
   )
   assert.match(invalid, /role="alert">Missing jump host/)
   assert.doesNotMatch(invalid, /<ol/)
+  const direct = renderToStaticMarkup(
+    createElement(ConnectionNetworkSection, { ...props, profileId: 'entry', routingMode: 'direct' })
+  )
+  assert.match(direct, /id="inline-route">.*proxy-settings.*<\/section>/)
+  assert.doesNotMatch(direct, /adapter-settings/)
+  const legacyDirect = renderToStaticMarkup(
+    createElement(ConnectionNetworkSection, {
+      ...props,
+      form: { ...props.form, sshNetworkInterface: { adapterId: 'eth0' } },
+      profileId: 'entry',
+      routingMode: 'direct'
+    })
+  )
+  assert.match(legacyDirect, /id="inline-route">.*adapter-settings.*proxy-settings.*<\/section>/)
+  const savedJump = renderToStaticMarkup(
+    createElement(ConnectionNetworkSection, { ...props, profileId: 'middle', routingMode: 'direct' })
+  )
+  assert.doesNotMatch(savedJump, /id="inline-route"/)
+  const newDirect = renderToStaticMarkup(createElement(ConnectionNetworkSection, { ...props, routingMode: 'direct' }))
+  assert.match(newDirect, /id="draft-route">.*proxy-settings.*<\/section>/)
+  assert.doesNotMatch(newDirect, /adapter-settings/)
 })
 
 test('transfer status exposes every jump host and the final target', () => {

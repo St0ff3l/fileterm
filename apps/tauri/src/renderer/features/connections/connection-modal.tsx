@@ -457,6 +457,8 @@ export function ConnectionModal({
                 {section === 'network' && supportsNetwork ? (
                   <ConnectionNetworkSection
                     form={form}
+                    profileId={editingProfileId}
+                    profiles={profiles}
                     jumpHosts={jumpHosts}
                     jumpRoute={jumpRoute.jumpHosts}
                     routeError={jumpRouteError}

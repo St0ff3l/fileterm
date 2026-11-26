@@ -452,6 +452,51 @@ export interface SshNetworkInterfaceInfo {
   ipv6: boolean
 }
 
+export type SshRouteCandidate =
+  { type: 'direct' } | { type: 'proxy'; proxyId: string } | { type: 'interface'; adapterId: string }
+
+export type SshRouteRule =
+  | { mode: 'auto'; routes: SshRouteCandidate[] }
+  | { mode: 'preferred'; primary: SshRouteCandidate; fallback: SshRouteCandidate[] }
+  | { mode: 'fixed'; route: SshRouteCandidate }
+
+export interface SshRoutePolicy {
+  servers: Record<string, SshRouteRule>
+  tags: Record<string, { priority: number; rule: SshRouteRule }>
+  default: SshRouteRule | null
+  clients: Partial<Record<SshRouteClientKind, { executable: string; config: string | null }>>
+}
+
+export type SshRouteClientKind = 'v2ray' | 'amnezia' | 'easyTier'
+
+export interface SshRouteClientStatus {
+  kind: SshRouteClientKind
+  running: boolean
+  lastExit: number | null
+  endpoints: { type: 'socks5' | 'http'; host: string; port: number }[]
+}
+
+export interface SshRouteActivity {
+  id: number
+  profileId: string
+  tabId: string
+  scope: 'server' | 'tag' | 'default'
+  rule: string
+  route: SshRouteCandidate
+  stage: 'probe' | 'transport' | 'authenticated'
+  elapsedMs: number
+  observedAt: number
+  failure:
+    'missingProxy' | 'invalidProxy' | 'proxyStorage' | 'unsupportedInterface' | 'transportFailed' | 'timeout' | null
+  fallback: boolean
+}
+
+export interface SshRoutePolicySnapshot {
+  policy: SshRoutePolicy
+  activity: SshRouteActivity[]
+  clients: SshRouteClientStatus[]
+}
+
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
   /** Disable the 24-hour ceiling for size-based SHA-256 transfer verification timeouts. */
@@ -1441,6 +1486,8 @@ export interface CreateProfileInput {
   sftpEnabled?: boolean
   connectionOverrides?: SshConnectionOverrides
   sshNetworkInterface?: SshNetworkInterfacePreference | null
+  /** Optional rule saved with a new SSH connection. */
+  sshRouteRule?: SshRouteRule
   proxy?: ProxyConfig
   proxyPassword?: string
   proxyProfileId?: string
@@ -2934,6 +2981,12 @@ export interface FileTermDesktopApi {
   writeDiagnosticLog(level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', scope: string, message: string): Promise<void>
   listSerialPorts(): Promise<SerialPortInfo[]>
   listSshNetworkInterfaces(): Promise<SshNetworkInterfaceInfo[]>
+  getSshRoutePolicy(): Promise<SshRoutePolicySnapshot>
+  saveSshRoutePolicy(expected: SshRoutePolicy, policy: SshRoutePolicy): Promise<SshRoutePolicySnapshot>
+  probeSshRoutePolicy(profileId: string): Promise<SshRoutePolicySnapshot>
+  controlSshRouteClient(kind: SshRouteClientKind, start: boolean): Promise<SshRoutePolicySnapshot>
+  onSshRouteActivity(listener: (activity: SshRouteActivity) => void): () => void
+  onSshRoutePolicyChanged(listener: () => void): () => void
   onSerialPortsChanged(listener: (ports: SerialPortInfo[]) => void): () => void
   serialControl(
     tabId: string,

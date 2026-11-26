@@ -7,7 +7,15 @@ import { useProxyLibrary } from '../../hooks/use-proxy-library'
 import { ProxyEditDialog } from '../proxies/proxy-edit-dialog'
 import type { ConnectionFormSetter } from './connection-modal-utils'
 
-export function ConnectionProxySection({ form, setForm }: { form: CreateProfileInput; setForm: ConnectionFormSetter }) {
+export function ConnectionProxySection({
+  form,
+  setForm,
+  noProxyLabel = t.proxySourceDirect
+}: {
+  form: CreateProfileInput
+  setForm: ConnectionFormSetter
+  noProxyLabel?: string
+}) {
   const { proxies, saveProxy, testProxy } = useProxyLibrary()
 
   const selectedProxy = useMemo(() => {
@@ -22,7 +30,7 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
   }, [form.proxyProfileId, form.proxy?.type])
 
   const options = useMemo(() => {
-    const list: Array<{ value: string; label: string }> = [{ value: 'none', label: t.proxySourceDirect }]
+    const list: Array<{ value: string; label: string }> = [{ value: 'none', label: noProxyLabel }]
 
     if (form.proxyProfileId && !proxies.some((proxy) => proxy.id === form.proxyProfileId)) {
       list.push({ value: `saved:${form.proxyProfileId}`, label: t.proxySourceSaved })
@@ -37,7 +45,7 @@ export function ConnectionProxySection({ form, setForm }: { form: CreateProfileI
 
     list.push({ value: 'custom', label: t.proxySourceCustom })
     return list
-  }, [form.proxyProfileId, proxies])
+  }, [form.proxyProfileId, noProxyLabel, proxies])
 
   const handleSelectChange = (value: string) => {
     if (value === 'none') {

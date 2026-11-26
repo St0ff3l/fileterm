@@ -11,8 +11,6 @@ async fn run_sftp_only_worker_loop(
     session_profile["sftpEnabled"] = Value::Bool(true);
     session_profile["enableExecChannel"] = Value::Bool(false);
     session_profile["enableResourceMonitoring"] = Value::Bool(false);
-    let mut transport_profile = session_profile.clone();
-    transport_profile["type"] = Value::String("ssh".to_string());
     let host = session_profile
         .get("host")
         .and_then(Value::as_str)
@@ -29,13 +27,14 @@ async fn run_sftp_only_worker_loop(
         biased;
         _ = cancellation.cancelled() => return Ok(SshWorkerExit::cancelled()),
         result = open_session(
-            &transport_profile,
+            &session_profile,
             app,
             tab_id,
             SSH_INTERACTION_TIMEOUT,
             Some("main".to_string()),
             SshInteractionFlow::new(),
             cancellation.clone(),
+            None,
         ) => result,
     }?;
     crate::services::logging::session(
@@ -76,7 +75,9 @@ async fn run_sftp_only_worker_loop(
     }
     let (sftp, unavailable_reason) = initialize_sftp_session(&startup).await;
     let Some(sftp) = sftp else {
-        return Err(unavailable_reason.unwrap_or_else(|| "SFTP subsystem is unavailable".to_string()));
+        return Err(
+            unavailable_reason.unwrap_or_else(|| "SFTP subsystem is unavailable".to_string())
+        );
     };
     update_tab_status_and_emit_without_snapshot(app, tab_id, WorkspaceTabStatus::Connected).await;
     schedule_workspace_snapshot_emit(app);
@@ -85,7 +86,10 @@ async fn run_sftp_only_worker_loop(
         "INFO",
         "sftp",
         tab_id,
-        format!("SFTP-only session ready startup_elapsed_ms={}", started_at.elapsed().as_millis()),
+        format!(
+            "SFTP-only session ready startup_elapsed_ms={}",
+            started_at.elapsed().as_millis()
+        ),
     );
 
     let transfer_sftp_slot: TransferSftpSlot = Arc::new(Mutex::new(None));

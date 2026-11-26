@@ -1,4 +1,5 @@
 export * from './button/button'
+export * from './panel-action-button/panel-action-button'
 export * from './card/card'
 export * from './dialog/dialog'
 export * from './input/input'
