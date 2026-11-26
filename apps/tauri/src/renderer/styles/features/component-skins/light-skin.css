@@ -300,11 +300,11 @@
 
 :root[data-theme*='light'] .file-tabs button,
 :root[data-theme*='light'] .file-tab-actions button,
-:root[data-theme*='light'] .ssh-grid input:not(.selection-control),
+:root[data-theme*='light'] .ssh-grid input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
 :root[data-theme*='light'] .ssh-grid .dropdown-select-trigger,
 :root[data-theme*='light'] .ssh-grid .ft-select-shell,
 :root[data-theme*='light'] .ssh-grid textarea,
-:root[data-theme*='light'] .connection-form input:not(.selection-control),
+:root[data-theme*='light'] .connection-form input:not(.selection-control):not(.ft-tag-input__field):not(.ft-input),
 :root[data-theme*='light'] .connection-form .dropdown-select-trigger,
 :root[data-theme*='light'] .connection-form .ft-select-shell {
   background: var(--input-bg);

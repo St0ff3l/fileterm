@@ -1,6 +1,7 @@
 import { useId, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS } from '@fileterm/core'
+import { CONNECTION_DEVICE_ROLES, DEFAULT_TOPOLOGY_SERVICE_PROBE_INTERVAL_SECONDS } from '@fileterm/core'
 import type {
+  ConnectionDeviceRole,
   ConnectionProfile,
   SessionSnapshot,
   SystemMetrics,
@@ -11,6 +12,7 @@ import type {
 } from '@fileterm/core'
 import { getConnectionCapabilities } from '@fileterm/core'
 import { getUiFontScaleRatio } from '../../app/ui-font-scale'
+import { profileToForm } from '../../app/app-data'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { Button } from '../../components/common/button/button'
 import { PanelActionButton } from '../../components/common/panel-action-button/panel-action-button'
@@ -614,7 +616,7 @@ export function ServerTopologyPage({
                     node={node}
                     fontScale={fontScale}
                     name={nodeName(node.id)}
-                    role={proxy ? 'proxy' : node.role}
+                    role={proxy ? 'proxy' : (profile?.deviceRole ?? node.role)}
                     protocol={
                       profile ? protocol(profile) : (proxy?.type.toUpperCase() ?? t.serverTopologyMissingProfile)
                     }
@@ -803,6 +805,18 @@ export function ServerTopologyPage({
                         <dd>{selectedSystem}</dd>
                       </div>
                     ) : null}
+                    {selectedProfile.tags?.length ? (
+                      <div className="server-topology__tags">
+                        <dt>{t.connectionTags}</dt>
+                        <dd>
+                          {selectedProfile.tags.map((tag) => (
+                            <span className="server-topology__tag-chip" key={tag}>
+                              {tag}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                    ) : null}
                     {'note' in selectedProfile && selectedProfile.note?.trim() ? (
                       <div className="server-topology__note">
                         <dt>{t.note}</dt>
@@ -827,10 +841,23 @@ export function ServerTopologyPage({
                   <NodeIdentitySettings
                     key={`identity:${selected.id}`}
                     label={selected.label ?? ''}
-                    onChange={(role: TopologyNodeRole, label: string) =>
+                    onChange={(role: TopologyNodeRole, label: string) => {
                       save(updateTopologyNodeIdentity(storeLayout(), selected.id, role, label))
-                    }
-                    role={selected.role}
+                      if (
+                        CONNECTION_DEVICE_ROLES.includes(role as ConnectionDeviceRole) &&
+                        selectedProfile.deviceRole !== role
+                      ) {
+                        void window.fileterm
+                          ?.updateProfile(selectedProfile.id, {
+                            ...profileToForm(selectedProfile),
+                            deviceRole: role as ConnectionDeviceRole
+                          })
+                          .catch((error) => {
+                            console.error('Failed to sync device role to profile:', error)
+                          })
+                      }
+                    }}
+                    role={selectedProfile.deviceRole ?? selected.role}
                   />
                 ) : null}
                 <NodeDisplaySettings

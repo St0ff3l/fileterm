@@ -1,0 +1,154 @@
+/*
+ * Standard Common TagInput Styles
+ * Strictly consumes semantic tokens. Zero hardcoded colors.
+ */
+
+.ft-tag-input {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.ft-tag-input__shell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--control-height-md);
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  cursor: text;
+  transition:
+    border-color var(--transition-normal),
+    box-shadow var(--transition-normal),
+    background-color var(--transition-normal);
+}
+
+.ft-tag-input__shell:hover:not(.ft-tag-input--disabled .ft-tag-input__shell) {
+  border-color: var(--border-default);
+}
+
+.ft-tag-input:not(.ft-tag-input--disabled) .ft-tag-input__shell:focus-within {
+  box-shadow: var(--input-focus-shadow);
+  background-color: var(--surface-input-focus);
+  outline: none;
+}
+
+.ft-tag-input--disabled .ft-tag-input__shell {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ft-tag-input__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 6px 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-chip);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.ft-tag-input__chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ft-tag-input__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.ft-tag-input__chip-remove:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ft-tag-input__field {
+  flex: 1 1 88px;
+  min-width: 64px;
+  height: 26px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  line-height: normal;
+  outline: none;
+  box-shadow: none;
+}
+
+.ft-tag-input__field:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.ft-tag-input__field::placeholder {
+  color: var(--text-muted);
+}
+
+.ft-tag-input__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-context-menu);
+  background: var(--surface-context-menu);
+  box-shadow: var(--shadow-context-menu);
+}
+
+.ft-tag-input__option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: var(--control-height-sm);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-context-menu);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.ft-tag-input__option:hover,
+.ft-tag-input__option.is-active {
+  background: var(--surface-hover);
+}

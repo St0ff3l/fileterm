@@ -15,6 +15,7 @@ import { Input } from '../../components/common/input/input'
 import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { SidebarToggle } from '../../components/common/sidebar-toggle/sidebar-toggle'
+import { deviceRoleIcon, deviceRoleLabel, resolveProfileDeviceRole } from '../../app/device-role'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { MaskedAddressText } from '../system/system-resource-meters'
 import { formatMessage, getLocale, t } from '../../i18n'
@@ -538,13 +539,16 @@ export function ServerManagementOverview({
               onClearSelection={clearSelection}
               onSelect={setSelectedProfileId}
               onSortChange={setListSort}
+              onTagClick={(tag) => setSelectedTag((current) => (current === tag ? '' : tag))}
               rows={visibleProfiles.map((profile) => ({
                 id: profile.id,
                 name: profile.name,
                 address: connectionProfileSummary(profile),
                 protocol: profile.type,
                 status: filterStatus(statusByProfile.get(profile.id)?.status),
-                tags: (profile.tags ?? []).join(', ')
+                tags: (profile.tags ?? []).join(', '),
+                tagList: profile.tags ?? [],
+                deviceRole: profile.deviceRole
               }))}
               selectedId={selectedProfile?.id}
               sort={listSort}
@@ -569,7 +573,15 @@ export function ServerManagementOverview({
                     }}
                   >
                     <span className="server-dashboard-card-heading">
-                      <MaterialIcon name={profile.type === 'serial' ? 'usb' : 'dns'} />
+                      {profile.type === 'serial' ? (
+                        <MaterialIcon name="usb" />
+                      ) : (
+                        <AppIcon
+                          className="server-dashboard-card-icon"
+                          name={deviceRoleIcon(profile.deviceRole)}
+                          size={16}
+                        />
+                      )}
                       <button aria-pressed={isSelected} className="server-dashboard-card-name" type="button">
                         {profile.name}
                       </button>
@@ -595,7 +607,28 @@ export function ServerManagementOverview({
                       <ResourceRing label={t.disk} value={resources.disk} detail={resources.diskDetail} />
                     </span>
                     <span className="server-dashboard-card-foot">
-                      {profile.note ? (
+                      {profile.tags?.length ? (
+                        <span
+                          className="server-dashboard-card-tags"
+                          onClick={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => event.stopPropagation()}
+                        >
+                          {profile.tags.slice(0, 3).map((tag) => (
+                            <button
+                              className={`server-dashboard-tag-chip${selectedTag === tag ? ' is-active' : ''}`}
+                              key={tag}
+                              title={tag}
+                              type="button"
+                              onClick={() => setSelectedTag((current) => (current === tag ? '' : tag))}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                          {profile.tags.length > 3 ? (
+                            <span className="server-dashboard-tag-more">+{profile.tags.length - 3}</span>
+                          ) : null}
+                        </span>
+                      ) : profile.note ? (
                         <span className="server-dashboard-card-note" title={profile.note}>
                           {profile.note}
                         </span>
@@ -690,6 +723,23 @@ export function ServerManagementOverview({
                       `${selectedProfile.username}@${selectedProfile.host}:${selectedProfile.port}`
                     )}
                   </p>
+                  <div className="server-inspector-meta">
+                    <span className="server-inspector-role">
+                      <AppIcon name={deviceRoleIcon(selectedProfile.deviceRole)} size={12} />
+                      <span>{deviceRoleLabel(resolveProfileDeviceRole(selectedProfile))}</span>
+                    </span>
+                    {selectedProfile.tags?.map((tag) => (
+                      <button
+                        className={`server-dashboard-tag-chip${selectedTag === tag ? ' is-active' : ''}`}
+                        key={tag}
+                        title={tag}
+                        type="button"
+                        onClick={() => setSelectedTag((current) => (current === tag ? '' : tag))}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <ServerProfileActions

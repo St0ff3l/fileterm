@@ -89,8 +89,22 @@ export interface CommandTemplate extends BaseEntity {
 
 export type FilePaneMode = 'local' | 'remote-tree'
 
+export const CONNECTION_DEVICE_ROLES = [
+  'server',
+  'vm',
+  'workstation',
+  'router',
+  'switch',
+  'firewall',
+  'database',
+  'storage'
+] as const
+
+export type ConnectionDeviceRole = (typeof CONNECTION_DEVICE_ROLES)[number]
+
 export interface BaseProfile extends BaseEntity {
   type: SessionType
+  deviceRole?: ConnectionDeviceRole
   tags?: string[]
   /** Serial profiles keep these inert placeholders; devicePath remains their only endpoint. */
   host: string
@@ -467,7 +481,7 @@ export interface SshRoutePolicy {
   clients: Partial<Record<SshRouteClientKind, { executable: string; config: string | null }>>
 }
 
-export type SshRouteClientKind = 'v2ray' | 'amnezia' | 'easyTier'
+export type SshRouteClientKind = 'v2ray' | 'clashVerge' | 'amnezia' | 'easyTier'
 
 export interface SshRouteClientStatus {
   kind: SshRouteClientKind
@@ -1423,6 +1437,7 @@ export interface SshKeyImportResult {
 
 export interface CreateProfileInput {
   type: SessionType
+  deviceRole?: ConnectionDeviceRole
   tags?: string[]
   name: string
   host: string

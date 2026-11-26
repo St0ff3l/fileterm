@@ -568,9 +568,15 @@
   box-shadow: none !important;
 }
 
-:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
-:root:not([data-theme*='light']) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
-:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
+:root:not([data-theme])
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input),
+:root:not([data-theme*='light'])
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input),
+:root[data-theme='default']
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input),
 :root:not([data-theme]) .modal-card.ssh-modal .dropdown-select-trigger,
 :root:not([data-theme*='light']) .modal-card.ssh-modal .dropdown-select-trigger,
 :root[data-theme='default'] .modal-card.ssh-modal .dropdown-select-trigger,
@@ -589,9 +595,15 @@
     box-shadow var(--duration-hover) !important;
 }
 
-:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
-:root:not([data-theme*='light']) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
-:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
+:root:not([data-theme])
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input):hover,
+:root:not([data-theme*='light'])
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input):hover,
+:root[data-theme='default']
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input):hover,
 :root:not([data-theme]) .modal-card.ssh-modal .dropdown-select-trigger:hover:not(:disabled),
 :root:not([data-theme*='light']) .modal-card.ssh-modal .dropdown-select-trigger:hover:not(:disabled),
 :root[data-theme='default'] .modal-card.ssh-modal .dropdown-select-trigger:hover:not(:disabled),
@@ -604,9 +616,15 @@
   border-color: var(--border-default) !important;
 }
 
-:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
-:root:not([data-theme*='light']) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
-:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus {
+:root:not([data-theme])
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input):focus,
+:root:not([data-theme*='light'])
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input):focus,
+:root[data-theme='default']
+  .modal-card.ssh-modal
+  input:not([type='checkbox']):not([type='radio']):not(.ft-tag-input__field):not(.ft-input):focus {
   box-shadow: var(--input-focus-shadow) !important;
   background: var(--input-bg) !important;
   outline: none !important;

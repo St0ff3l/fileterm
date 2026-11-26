@@ -99,8 +99,9 @@
 
 .ssh-route-panel-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
   margin-top: auto;
   padding: 10px 16px;
@@ -163,12 +164,19 @@
   font-size: var(--font-size-sm);
 }
 
+.ssh-route-panel .ssh-route-scope-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+
 .ssh-route-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  margin-inline-start: auto;
 }
 
 /* Route Editor & Candidates */

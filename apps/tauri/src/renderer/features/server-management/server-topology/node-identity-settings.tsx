@@ -1,20 +1,11 @@
 import { useId } from 'react'
-import { Button } from '../../../components/common/button/button'
+import { CONNECTION_DEVICE_ROLES, type ConnectionDeviceRole } from '@fileterm/core'
+import { deviceRoleLabel } from '../../../app/device-role'
 import { DropdownSelect } from '../../../components/common/dropdown-select/dropdown-select'
 import { Input } from '../../../components/common/input/input'
+import { PanelActionButton } from '../../../components/common/panel-action-button/panel-action-button'
 import { t } from '../../../i18n'
-import { TOPOLOGY_NODE_ROLES, TOPOLOGY_NODE_LABEL_LIMIT, type TopologyNodeRole } from '../server-topology-model'
-
-const roleLabels: Record<TopologyNodeRole, string> = {
-  server: t.serverTopologyNodeRoleServer,
-  firewall: t.serverTopologyNodeRoleFirewall,
-  router: t.serverTopologyNodeRoleRouter,
-  switch: t.serverTopologyNodeRoleSwitch,
-  database: t.serverTopologyNodeRoleDatabase,
-  storage: t.serverTopologyNodeRoleStorage,
-  proxy: t.serverTopologyNodeRoleProxy,
-  custom: t.serverTopologyNodeRoleCustom
-}
+import { TOPOLOGY_NODE_LABEL_LIMIT, type TopologyNodeRole } from '../server-topology-model'
 
 export function NodeIdentitySettings({
   role,
@@ -26,6 +17,10 @@ export function NodeIdentitySettings({
   onChange(role: TopologyNodeRole, label: string): void
 }) {
   const id = useId()
+  const baseRoles: readonly TopologyNodeRole[] = CONNECTION_DEVICE_ROLES
+  const options = (baseRoles.includes(role as ConnectionDeviceRole) ? baseRoles : [...baseRoles, role]).map(
+    (value) => ({ value, label: deviceRoleLabel(value) })
+  )
 
   return (
     <section className="server-topology__identity-settings">
@@ -34,14 +29,14 @@ export function NodeIdentitySettings({
         id={`${id}-role`}
         ariaLabel={t.serverTopologyNodeRole}
         onChange={(value) => onChange(value as TopologyNodeRole, label)}
-        options={TOPOLOGY_NODE_ROLES.map((value) => ({ value, label: roleLabels[value] }))}
+        options={options}
         value={role}
       />
       <div className="server-topology__identity-label">
         <label htmlFor={`${id}-label`}>{t.serverTopologyNodeLabel}</label>
-        <Button disabled={!label} onClick={() => onChange(role, '')} size="panel" variant="ghost">
+        <PanelActionButton disabled={!label} onClick={() => onChange(role, '')}>
           {t.serverTopologyNodeLabelRestore}
-        </Button>
+        </PanelActionButton>
       </div>
       <Input
         id={`${id}-label`}

@@ -29,14 +29,16 @@ fn normalizes_compatible_json() {
 #[test]
 fn native_export_and_import_preserve_tags_and_accept_legacy_profiles() {
     let mut profiles = vec![
-        json!({"name":"prod", "type":"ssh", "host":"prod.example", "tags":[" 生产 ", "", "生产", "db\r\nprimary", 42]}),
-        json!({"name":"legacy", "type":"ssh", "host":"legacy.example"}),
+        json!({"name":"prod", "type":"ssh", "host":"prod.example", "deviceRole":"vm", "tags":[" 生产 ", "", "生产", "db\r\nprimary", 42]}),
+        json!({"name":"legacy", "type":"ssh", "host":"legacy.example", "deviceRole":"invalid-role"}),
         json!({"name":"empty", "type":"ssh", "host":"empty.example", "tags":[]}),
     ];
     assert!(crate::services::profile_ops::heal_profiles(
         &mut profiles,
         &[]
     ));
+    assert_eq!(profiles[0]["deviceRole"], json!("vm"));
+    assert_eq!(profiles[1].get("deviceRole"), None);
     assert_eq!(profiles[0]["tags"], json!(["生产", "db", "primary"]));
     assert!(!crate::services::profile_ops::heal_profiles(
         &mut profiles,
@@ -46,6 +48,10 @@ fn native_export_and_import_preserve_tags_and_accept_legacy_profiles() {
     let bundle = build_export_payload(&profiles, "fileterm").unwrap();
     let entries = parse_json(&bundle.to_string(), "fileterm.json", &[]).unwrap();
     let tags = |index: usize| entries[index].input.as_ref().unwrap().get("tags").cloned();
+    assert_eq!(
+        entries[0].input.as_ref().unwrap().get("deviceRole"),
+        Some(&json!("vm"))
+    );
     assert_eq!(tags(0), Some(json!(["生产", "db", "primary"])));
     assert_eq!(tags(1), None);
     assert_eq!(tags(2), Some(json!([])));

@@ -137,6 +137,43 @@ mod ssh_route_policy_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn ssh_route_client_accepts_clash_verge_desktop_executable_without_config() {
+        let root = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir(&root).unwrap();
+        let exe_name = if cfg!(windows) {
+            "clash-verge.exe"
+        } else {
+            "clash-verge"
+        };
+        let valid_exe = root.join(exe_name);
+        let invalid_exe = root.join(if cfg!(windows) { "other.exe" } else { "other" });
+        std::fs::write(&valid_exe, b"").unwrap();
+        std::fs::write(&invalid_exe, b"").unwrap();
+
+        let policy: SshRoutePolicy = serde_json::from_value(json!({
+            "clients": {
+                "clashVerge": {
+                    "executable": valid_exe,
+                    "config": null
+                }
+            }
+        }))
+        .unwrap();
+        let saved = policy.clients.get(&SshRouteClient::ClashVerge).unwrap();
+        assert!(make_ssh_route_client_command(SshRouteClient::ClashVerge, saved).is_ok());
+        assert!(make_ssh_route_client_command(
+            SshRouteClient::ClashVerge,
+            &SshRouteClientConfig {
+                executable: invalid_exe,
+                config: None,
+            }
+        )
+        .is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     struct RouteFixtureProcess(RouteClientChild);
 
     impl Drop for RouteFixtureProcess {

@@ -6,6 +6,7 @@ use std::process::{
 #[serde(rename_all = "camelCase")]
 pub(crate) enum SshRouteClient {
     V2ray,
+    ClashVerge,
     Amnezia,
     EasyTier,
 }
@@ -48,14 +49,29 @@ impl SshRouteClient {
     fn name(self) -> &'static str {
         match self {
             Self::V2ray => "v2ray",
+            Self::ClashVerge => "clash-verge",
             Self::Amnezia => "amnezia",
             Self::EasyTier => "easytier",
         }
     }
 
+    fn display_name(self) -> &'static str {
+        match self {
+            Self::V2ray => "V2Ray",
+            Self::ClashVerge => "Clash Verge",
+            Self::Amnezia => "AmneziaVPN",
+            Self::EasyTier => "EasyTier",
+        }
+    }
+
+    fn is_desktop_gui(self) -> bool {
+        matches!(self, Self::ClashVerge | Self::Amnezia)
+    }
+
     fn executable_names(self) -> &'static [&'static str] {
         match self {
             Self::V2ray => &["v2ray"],
+            Self::ClashVerge => &["clash-verge", "clash-verge-rev"],
             Self::Amnezia => &["amneziavpn", "amnezia-vpn"],
             Self::EasyTier => &["easytier-core"],
         }
@@ -106,7 +122,7 @@ fn make_ssh_route_client_command(
     if let Some(parent) = executable.parent() {
         process.current_dir(parent);
     }
-    if kind != SshRouteClient::Amnezia {
+    if !kind.is_desktop_gui() {
         let config = definition.config.as_ref().ok_or_else(|| {
             AppError::Command("Choose a configuration file for this client".into())
         })?;
@@ -118,7 +134,7 @@ fn make_ssh_route_client_command(
             SshRouteClient::EasyTier => {
                 process.arg("--config-file").arg(config);
             }
-            SshRouteClient::Amnezia => unreachable!(),
+            SshRouteClient::ClashVerge | SshRouteClient::Amnezia => unreachable!(),
         }
         #[cfg(windows)]
         {
@@ -191,6 +207,7 @@ fn ssh_route_client_status(policy: &SshRoutePolicy) -> Vec<SshRouteClientStatus>
     let mut processes = SSH_ROUTE_CLIENTS.lock().expect("SSH route clients lock");
     [
         SshRouteClient::V2ray,
+        SshRouteClient::ClashVerge,
         SshRouteClient::Amnezia,
         SshRouteClient::EasyTier,
     ]
@@ -242,10 +259,11 @@ pub(crate) fn control_ssh_route_client(
             );
             process.last_exit = None;
         } else if !start {
-            if kind == SshRouteClient::Amnezia {
-                return Err(AppError::Command(
-                    "Close AmneziaVPN from its own interface".into(),
-                ));
+            if kind.is_desktop_gui() {
+                return Err(AppError::Command(format!(
+                    "Close {} from its own interface",
+                    kind.display_name()
+                )));
             }
             if let Some(child) = process.child.as_mut() {
                 child
@@ -271,7 +289,7 @@ pub(crate) fn control_ssh_route_client(
 pub(crate) fn stop_owned_ssh_route_clients() {
     let mut processes = SSH_ROUTE_CLIENTS.lock().expect("SSH route clients lock");
     for (kind, process) in processes.iter_mut() {
-        if *kind != SshRouteClient::Amnezia {
+        if !kind.is_desktop_gui() {
             if let Some(mut child) = process.child.take() {
                 let _ = child.kill();
                 let _ = child.wait();

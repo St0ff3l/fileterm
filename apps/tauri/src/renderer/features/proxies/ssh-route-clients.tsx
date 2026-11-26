@@ -7,7 +7,16 @@ import { t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
 
-const clients = { v2ray: 'V2Ray', amnezia: 'AmneziaVPN', easyTier: 'EasyTier' } as const
+const clients = {
+  v2ray: 'V2Ray',
+  clashVerge: 'Clash Verge',
+  amnezia: 'AmneziaVPN',
+  easyTier: 'EasyTier'
+} as const
+
+function isDesktopGuiClient(kind: SshRouteClientKind): boolean {
+  return kind === 'clashVerge' || kind === 'amnezia'
+}
 
 export function SshRouteClients({
   snapshot,
@@ -55,6 +64,7 @@ export function SshRouteClients({
       onSnapshotChange(await api.controlSshRouteClient(kind, start), false)
     })
   const running = Boolean(status?.running)
+  const desktopGui = isDesktopGuiClient(kind)
 
   return (
     <section className="ssh-route-panel ssh-route-clients">
@@ -102,10 +112,10 @@ export function SshRouteClients({
               onChange={(event) => setExecutable(event.target.value)}
             />
           </label>
-          {kind === 'amnezia' ? (
+          {desktopGui ? (
             <div className="ssh-route-callout">
               <AppIcon className="ssh-route-callout-icon" name="info" size={14} />
-              <p>{t.sshRouteAmneziaHint}</p>
+              <p>{kind === 'clashVerge' ? t.sshRouteClashVergeHint : t.sshRouteAmneziaHint}</p>
             </div>
           ) : (
             <label className="ssh-route-field">
@@ -172,7 +182,7 @@ export function SshRouteClients({
           >
             {t.sshRouteClientStart}
           </Button>
-          {kind !== 'amnezia' ? (
+          {!desktopGui ? (
             <Button
               className="ssh-route-stop-btn"
               size="panel"
@@ -188,14 +198,14 @@ export function SshRouteClients({
             size="panel"
             variant="primary"
             icon={<AppIcon name="check" size={14} />}
-            disabled={busy || running || !dirty || !executable.trim() || (kind !== 'amnezia' && !config.trim())}
+            disabled={busy || running || !dirty || !executable.trim() || (!desktopGui && !config.trim())}
             onClick={() =>
               void run(async (api) => {
                 const policy = {
                   ...snapshot.policy,
                   clients: {
                     ...snapshot.policy.clients,
-                    [kind]: { executable: executable.trim(), config: kind === 'amnezia' ? null : config.trim() }
+                    [kind]: { executable: executable.trim(), config: desktopGui ? null : config.trim() }
                   }
                 }
                 onSnapshotChange(await api.saveSshRoutePolicy(snapshot.policy, policy), true)

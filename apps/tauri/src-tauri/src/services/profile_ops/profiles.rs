@@ -85,6 +85,7 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
     }
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, None);
+    normalize_profile_device_role(&mut profile);
     normalize_profile_tags(&mut profile);
     profile.insert("id".to_string(), Value::String(id.clone()));
     profile.insert("group".to_string(), Value::String(group));
@@ -184,6 +185,7 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
     profile.remove("sshRouteRule");
     crate::services::totp::validate_profile(&profile)?;
     normalize_profile_secret_input(&mut profile, Some(&previous));
+    normalize_profile_device_role(&mut profile);
     normalize_profile_tags(&mut profile);
     profile.insert("id".to_string(), Value::String(profile_id.to_string()));
     profile.insert("group".to_string(), Value::String(group));

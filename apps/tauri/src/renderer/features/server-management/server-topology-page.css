@@ -177,6 +177,25 @@
   white-space: pre-wrap;
 }
 
+.server-topology__tags dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.server-topology__tag-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--surface-chip);
+  color: var(--text-secondary);
+  font-size: var(--ui-font-size-10px, 10px);
+  line-height: 1;
+}
+
 .server-topology__relations {
   display: grid;
   gap: 8px;

@@ -7,6 +7,7 @@ export function ConnectionSshSection({
   connectionDefaults,
   form,
   groupOptions,
+  tagSuggestions = [],
   hasSavedPassword,
   hasSavedOtpSecret,
   hasSavedSuPassword,
@@ -29,6 +30,7 @@ export function ConnectionSshSection({
   connectionDefaults: SshConnectionDefaults
   form: CreateProfileInput
   groupOptions: string[]
+  tagSuggestions?: string[]
   hasSavedPassword: boolean
   hasSavedOtpSecret: boolean
   hasSavedSuPassword: boolean
@@ -54,6 +56,7 @@ export function ConnectionSshSection({
         connectionDefaults={connectionDefaults}
         form={form}
         groupOptions={groupOptions}
+        tagSuggestions={tagSuggestions}
         isMacOs={isMacOs}
         isLoadingSerialPorts={isLoadingSerialPorts}
         isNetworkDevice={isNetworkDevice}

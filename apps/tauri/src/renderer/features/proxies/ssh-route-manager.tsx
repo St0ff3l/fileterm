@@ -10,6 +10,7 @@ import { outboundAddressFamily } from '../../app/ssh-network-interface'
 import { Button } from '../../components/common/button/button'
 import { FeedbackBubble } from '../../components/common/feedback-bubble/feedback-bubble'
 import { Input } from '../../components/common/input/input'
+import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
 import { ConfirmActionDialog } from '../common/confirm-action-dialog'
@@ -24,8 +25,7 @@ import {
   eligibleSshRoutes,
   fallbackSshRuleSource,
   sshRouteKey,
-  sshRuleRoutes,
-  type SshRouteEdit
+  sshRuleRoutes
 } from './ssh-route-rules'
 import './ssh-route-manager.css'
 
@@ -44,7 +44,9 @@ export function SshRouteManager({
 }) {
   const [snapshot, setSnapshot] = useState<SshRoutePolicySnapshot>()
   const [adapters, setAdapters] = useState<SshNetworkInterfaceInfo[]>([])
-  const [targetKey, setTargetKey] = useState('default')
+  const [selectedScope, setSelectedScope] = useState<'default' | 'tag' | 'server'>('default')
+  const [selectedTag, setSelectedTag] = useState('')
+  const [selectedServerId, setSelectedServerId] = useState('')
   const [previewServerId, setPreviewServerId] = useState('')
   const [draft, setDraft] = useState<SshRouteRule | null>()
   const [emptyMode, setEmptyMode] = useState<SshRouteMode | null>(null)
@@ -66,21 +68,19 @@ export function SshRouteManager({
   const servers = eligibleSshRoutes(profiles)
   const activeTags = [...new Set(servers.flatMap((item) => item.tags ?? []).filter(Boolean))].sort()
   const tags = [...new Set([...activeTags, ...Object.keys(baseline?.tags ?? {})])].sort()
-  const targetOptions = [
-    { value: 'default', label: t.sshRouteDefault, scope: 'default' as const, id: '' },
-    ...servers.map(({ id, name }) => ({ value: `server:${id}`, label: name, scope: 'server' as const, id })),
-    ...tags.map((id) => ({ value: `tag:${id}`, label: `${t.sshRouteTag} · ${id}`, scope: 'tag' as const, id })),
-    ...activeTags.map((id) => ({
-      value: `batch:${id}`,
-      label: `${t.sshRouteBatchShort} · ${id}`,
-      scope: 'batch' as const,
-      id
-    }))
-  ]
-  const target = targetOptions.find((item) => item.value === (profileId ? `server:${profileId}` : targetKey))
-  const scope = target?.scope
-  const tag = target?.scope === 'tag' || target?.scope === 'batch' ? target.id : ''
-  const serverId = target?.scope === 'server' ? target.id : target ? previewServerId : ''
+  const scope = profileId ? 'server' : selectedScope
+  const tag = scope === 'tag' ? (tags.includes(selectedTag) ? selectedTag : (tags[0] ?? '')) : ''
+  const matchedTagServerCount = tag ? servers.filter((item) => item.tags?.includes(tag)).length : 0
+  const activeServerId = profileId
+    ? profileId
+    : scope === 'server'
+      ? servers.some((item) => item.id === selectedServerId)
+        ? selectedServerId
+        : (servers[0]?.id ?? '')
+      : ''
+  const hasTarget =
+    scope === 'default' || (scope === 'tag' && Boolean(tag)) || (scope === 'server' && Boolean(activeServerId))
+  const serverId = scope === 'server' ? activeServerId : previewServerId
   const server = servers.find((item) => item.id === serverId)
   const tagPolicy = baseline && Object.hasOwn(baseline.tags, tag) ? baseline.tags[tag] : undefined
   const baseRule =
@@ -187,17 +187,28 @@ export function SshRouteManager({
     }
   }
 
-  const save = () =>
+  const save = (overrideTaggedServers = false) =>
     run(async () => {
       const api = window.fileterm
-      if (!baseline || !api || !scope) return
-      let edit: SshRouteEdit
-      if (scope === 'default') edit = { scope, rule }
-      else if (scope === 'tag') edit = { scope, tag, rule, priority: Number(tagPriority) }
-      else if (scope === 'server') edit = { scope, profileId: serverId, rule }
-      else if (rule) edit = { scope, tag, rule }
-      else return
-      const policy = applySshRouteEdit(baseline, edit, profiles)
+      if (!baseline || !api || !hasTarget) return
+      let policy = baseline
+      if (scope === 'default') {
+        policy = applySshRouteEdit(policy, { scope, rule }, profiles)
+      } else if (scope === 'tag') {
+        if (overrideTaggedServers) {
+          if (!rule) return
+          if (hasChanges) {
+            policy = applySshRouteEdit(policy, { scope: 'tag', tag, rule, priority: Number(tagPriority) }, profiles)
+          }
+          policy = applySshRouteEdit(policy, { scope: 'batch', tag, rule }, profiles)
+        } else {
+          policy = applySshRouteEdit(policy, { scope: 'tag', tag, rule, priority: Number(tagPriority) }, profiles)
+        }
+      } else if (scope === 'server') {
+        policy = applySshRouteEdit(policy, { scope, profileId: serverId, rule }, profiles)
+      } else {
+        return
+      }
       setSnapshot(await api.saveSshRoutePolicy(baseline, policy))
       setDraft(undefined)
       setEmptyMode(null)
@@ -224,7 +235,15 @@ export function SshRouteManager({
       !Number.isInteger(Number(tagPriority)) ||
       Number(tagPriority) < -2147483648 ||
       Number(tagPriority) > 2147483647)
-  const missingRoutes = emptyMode !== null || (scope === 'batch' && !rule)
+  const missingRoutes = emptyMode !== null
+  const canOverrideTaggedServers =
+    !profileId &&
+    scope === 'tag' &&
+    Boolean(tag) &&
+    matchedTagServerCount > 0 &&
+    Boolean(rule) &&
+    !emptyMode &&
+    !invalidPriority
   const showStatusTargetPicker = !profileId && scope !== 'server'
   const selectedScopeLabel = selected
     ? selected.scope === 'legacy'
@@ -282,25 +301,96 @@ export function SshRouteManager({
               </div>
             ) : null}
             {!profileId ? (
-              <label className="ssh-route-field">
-                <span className="ssh-route-field-label">{t.sshRouteApplyTo}</span>
-                <DropdownSelect
-                  ariaLabel={t.sshRouteApplyTo}
-                  placeholder={t.sshRouteApplyTo}
-                  value={targetKey}
-                  options={targetOptions}
-                  disabled={busy}
-                  onChange={(value) => {
-                    const next = targetOptions.find((item) => item.value === value)
-                    if (next?.scope === 'server') setPreviewServerId(next.id)
-                    setTargetKey(value)
+              <div className="ssh-route-field">
+                <span className="ssh-route-field-label">{t.sshRouteScope}</span>
+                <SegmentedControl
+                  ariaLabel={t.sshRouteScope}
+                  className="ssh-route-scope-control"
+                  variant="neutral"
+                  value={selectedScope}
+                  options={[
+                    { value: 'default', label: t.sshRouteDefault, disabled: busy },
+                    { value: 'tag', label: t.sshRouteByTag, disabled: busy },
+                    { value: 'server', label: t.sshRouteServer, disabled: busy }
+                  ]}
+                  onChange={(nextScope) => {
+                    setSelectedScope(nextScope)
+                    if (nextScope === 'server') {
+                      const nextId =
+                        selectedServerId && servers.some((item) => item.id === selectedServerId)
+                          ? selectedServerId
+                          : previewServerId && servers.some((item) => item.id === previewServerId)
+                            ? previewServerId
+                            : (servers[0]?.id ?? '')
+                      setSelectedServerId(nextId)
+                      if (nextId) setPreviewServerId(nextId)
+                    } else if (nextScope === 'tag') {
+                      const nextTag = selectedTag && tags.includes(selectedTag) ? selectedTag : (tags[0] ?? '')
+                      setSelectedTag(nextTag)
+                    }
                     resetDraft()
                   }}
                 />
-              </label>
+              </div>
             ) : null}
 
-            {scope === 'tag' && (rule || emptyMode) ? (
+            {!profileId && scope === 'tag' ? (
+              tags.length > 0 ? (
+                <div className="ssh-route-field">
+                  <span className="ssh-route-field-label">{t.sshRouteSelectTag}</span>
+                  <DropdownSelect
+                    ariaLabel={t.sshRouteSelectTag}
+                    placeholder={t.sshRouteSelectTag}
+                    value={tag}
+                    options={tags.map((id) => {
+                      const count = servers.filter((item) => item.tags?.includes(id)).length
+                      return {
+                        value: id,
+                        label: `${id} · ${t.sshRouteTagMatchedCount.replace('{count}', String(count))}`
+                      }
+                    })}
+                    disabled={busy}
+                    onChange={(nextTag) => {
+                      setSelectedTag(nextTag)
+                      resetDraft()
+                    }}
+                  />
+                  <p className="ssh-route-hint">{t.sshRouteTagScopeHint}</p>
+                </div>
+              ) : (
+                <div className="ssh-route-callout">
+                  <AppIcon className="ssh-route-callout-icon" name="info" size={14} />
+                  <p>{t.sshRouteNoTagsHint}</p>
+                </div>
+              )
+            ) : null}
+
+            {!profileId && scope === 'server' ? (
+              servers.length > 0 ? (
+                <label className="ssh-route-field">
+                  <span className="ssh-route-field-label">{t.sshRouteSelectTarget}</span>
+                  <DropdownSelect
+                    ariaLabel={t.sshRouteSelectTarget}
+                    placeholder={t.sshRouteSelectTarget}
+                    value={activeServerId}
+                    options={servers.map(({ id, name }) => ({ value: id, label: name }))}
+                    disabled={busy}
+                    onChange={(nextId) => {
+                      setSelectedServerId(nextId)
+                      setPreviewServerId(nextId)
+                      resetDraft()
+                    }}
+                  />
+                </label>
+              ) : (
+                <div className="ssh-route-callout">
+                  <AppIcon className="ssh-route-callout-icon" name="info" size={14} />
+                  <p>{t.sshRouteNoServersHint}</p>
+                </div>
+              )
+            ) : null}
+
+            {scope === 'tag' && hasTarget && (rule || emptyMode) ? (
               <label className="ssh-route-field">
                 <span className="ssh-route-field-label">{t.sshRoutePriority}</span>
                 <Input
@@ -315,7 +405,7 @@ export function SshRouteManager({
               </label>
             ) : null}
 
-            {target && baseline ? (
+            {hasTarget && baseline ? (
               <SshRouteEditor
                 disabled={busy}
                 emptyMode={emptyMode}
@@ -331,9 +421,7 @@ export function SshRouteManager({
                       })()
                     : scope === 'tag'
                       ? t.sshRouteInheritTag
-                      : scope === 'batch'
-                        ? t.sshRouteInheritBatch
-                        : t.sshRouteInherit
+                      : t.sshRouteInherit
                 }
                 onChange={setDraft}
                 onEmptyModeChange={setEmptyMode}
@@ -352,6 +440,11 @@ export function SshRouteManager({
           </div>
 
           <footer className="ssh-route-panel-footer">
+            {canOverrideTaggedServers ? (
+              <Button size="panel" variant="secondary" disabled={busy} onClick={() => setReview(true)}>
+                {t.sshRouteBatchShort}
+              </Button>
+            ) : null}
             <div className="ssh-route-actions">
               {hasChanges ? (
                 <Button size="panel" disabled={busy} onClick={resetDraft}>
@@ -362,21 +455,13 @@ export function SshRouteManager({
                 size="panel"
                 variant="primary"
                 icon={<AppIcon name="check" size={14} />}
-                disabled={
-                  !baseline ||
-                  !target ||
-                  !hasChanges ||
-                  invalidPriority ||
-                  (scope === 'batch' && !servers.some((item) => item.tags?.includes(tag))) ||
-                  busy
-                }
+                disabled={!baseline || !hasTarget || !hasChanges || invalidPriority || busy}
                 onClick={() => {
                   if (missingRoutes) {
                     pushFeedback(t.sshRouteSelectRequired, 'warning')
                     return
                   }
-                  if (scope === 'batch') setReview(true)
-                  else void save()
+                  void save()
                 }}
               >
                 {profileId ? t.sshRouteSaveConnectionRule : t.save}
@@ -550,12 +635,14 @@ export function SshRouteManager({
       {review ? (
         <ConfirmActionDialog
           title={t.sshRouteBatch}
-          description={t.sshRouteBulkWarning}
+          description={t.sshRouteBulkWarningCount
+            .replace('{tag}', tag)
+            .replace('{count}', String(matchedTagServerCount))}
           confirmLabel={t.save}
           onClose={() => setReview(false)}
           onConfirm={() => {
             setReview(false)
-            void save()
+            void save(true)
           }}
         />
       ) : null}

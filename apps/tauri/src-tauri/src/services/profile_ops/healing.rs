@@ -1,3 +1,33 @@
+const VALID_DEVICE_ROLES: &[&str] = &[
+    "server",
+    "vm",
+    "workstation",
+    "router",
+    "switch",
+    "firewall",
+    "database",
+    "storage",
+];
+
+fn normalize_profile_device_role(profile: &mut Map<String, Value>) -> bool {
+    let Some(original) = profile.get("deviceRole") else {
+        return false;
+    };
+    let Some(role) = original.as_str().map(str::trim) else {
+        profile.remove("deviceRole");
+        return true;
+    };
+    if !VALID_DEVICE_ROLES.contains(&role) {
+        profile.remove("deviceRole");
+        return true;
+    }
+    if original.as_str() == Some(role) {
+        return false;
+    }
+    profile.insert("deviceRole".to_string(), Value::String(role.to_string()));
+    true
+}
+
 fn normalize_profile_tags(profile: &mut Map<String, Value>) -> bool {
     let Some(original) = profile.get("tags") else {
         return false;
@@ -51,6 +81,7 @@ pub fn heal_profiles(profiles: &mut [Value], folders: &[Value]) -> bool {
             Some(o) => o,
             None => continue,
         };
+        dirty |= normalize_profile_device_role(obj);
         dirty |= normalize_profile_tags(obj);
         let group = obj
             .get("group")

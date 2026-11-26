@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button } from '../../components/common/button/button'
-import { Textarea } from '../../components/common/input/input'
+import { TagInput } from '../../components/common/tag-input/tag-input'
 import type {
+  ConnectionDeviceRole,
   CreateProfileInput,
   SerialPortInfo,
   SessionType,
@@ -10,6 +11,7 @@ import type {
 } from '@fileterm/core'
 import './connection-low-resource-mode.css'
 import './connection-ssh-general-section.css'
+import { connectionDeviceRoleOptions } from '../../app/device-role'
 import { SegmentedControl } from '../../components/common/segmented-control/segmented-control'
 import { normalizeConnectionHost } from '@fileterm/shared'
 import { localizeSerialTerminalText, t } from '../../i18n'
@@ -28,6 +30,7 @@ export function ConnectionSshGeneralSection({
   connectionDefaults,
   form,
   groupOptions,
+  tagSuggestions = [],
   isMacOs,
   isLoadingSerialPorts,
   isNetworkDevice,
@@ -44,6 +47,7 @@ export function ConnectionSshGeneralSection({
   connectionDefaults: SshConnectionDefaults
   form: CreateProfileInput
   groupOptions: string[]
+  tagSuggestions?: string[]
   isMacOs: boolean
   isLoadingSerialPorts: boolean
   isNetworkDevice: boolean
@@ -57,8 +61,10 @@ export function ConnectionSshGeneralSection({
   refreshSerialPorts(): Promise<void>
   setForm: ConnectionFormSetter
 }) {
+  const tagsInputId = useId()
   const [showLowResourceHelp, setShowLowResourceHelp] = useState(false)
   const lowResourceMode = isLowResourceSshMode(form, connectionDefaults)
+  const deviceRoleOptions = connectionDeviceRoleOptions()
   // The alias resolves HostName and Port from ~/.ssh/config.
   const usesSshConfigAlias = form.type === 'ssh' && form.authType === 'sshConfig'
   return (
@@ -257,14 +263,37 @@ export function ConnectionSshGeneralSection({
             ) : null}
           </>
         ) : null}
-        <label>
-          {t.group}:
-          <DropdownSelect
-            value={form.group ?? ''}
-            options={groupOptions.map((group) => ({ value: group, label: group }))}
-            onChange={(value) => setForm((prev) => ({ ...prev, group: value }))}
+        <div className="span-2 ssh-general-taxonomy-row">
+          <label>
+            {t.group}:
+            <DropdownSelect
+              value={form.group ?? ''}
+              options={groupOptions.map((group) => ({ value: group, label: group }))}
+              onChange={(value) => setForm((prev) => ({ ...prev, group: value }))}
+            />
+          </label>
+          <label>
+            {t.connectionDeviceRole}:
+            <DropdownSelect
+              ariaLabel={t.connectionDeviceRole}
+              value={form.deviceRole ?? 'server'}
+              options={deviceRoleOptions}
+              onChange={(value) => setForm((prev) => ({ ...prev, deviceRole: value as ConnectionDeviceRole }))}
+            />
+          </label>
+        </div>
+        <div className="span-2 ssh-general-tags-row">
+          <label className="ssh-general-tags-label" htmlFor={tagsInputId}>
+            {t.connectionTags}:
+          </label>
+          <TagInput
+            ariaLabel={t.connectionTags}
+            id={tagsInputId}
+            suggestions={tagSuggestions}
+            value={form.tags ?? []}
+            onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
           />
-        </label>
+        </div>
         <label className="span-2">
           {t.name}:
           <input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
@@ -567,17 +596,6 @@ export function ConnectionSshGeneralSection({
             ) : null}
           </div>
         ) : null}
-        <label className="full">
-          {t.connectionTagsPerLine}
-          <Textarea
-            rows={2}
-            value={form.tags?.join('\n') ?? ''}
-            onChange={(event) => {
-              const tags = event.target.value.split('\n')
-              setForm((prev) => ({ ...prev, tags }))
-            }}
-          />
-        </label>
         <label className="full">
           {t.note}:
           <textarea

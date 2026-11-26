@@ -135,6 +135,57 @@
   text-overflow: ellipsis;
 }
 
+.server-management-list-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.server-management-list-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.server-management-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 88px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--surface-chip);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--ui-font-size-10px, 10px);
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.server-management-tag-chip:hover {
+  border-color: var(--border-default);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.server-management-tag-more {
+  flex: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-10px, 10px);
+}
+
 .server-management-list td > .server-dashboard-status {
   margin-inline-start: 0;
 }
