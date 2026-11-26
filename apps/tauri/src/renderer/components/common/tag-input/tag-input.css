@@ -125,16 +125,20 @@
   max-height: 180px;
   overflow-y: auto;
   padding: 4px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-context-menu);
   background: var(--surface-context-menu);
   box-shadow: var(--shadow-context-menu);
+  animation: ft-tag-input-menu-in var(--duration-sm) var(--ease-out);
 }
 
 .ft-tag-input__option {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
   width: 100%;
+  min-width: 0;
   height: var(--control-height-sm);
   padding: 0 8px;
   border: 0;
@@ -143,12 +147,43 @@
   color: var(--text-context-menu);
   font-family: var(--font-ui);
   font-size: var(--font-size-sm);
+  font-weight: 400;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  outline: none;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.ft-tag-input__option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ft-tag-input__option:hover,
 .ft-tag-input__option.is-active {
   background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+@keyframes ft-tag-input-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-tag-input__menu {
+    animation: none;
+  }
 }

@@ -183,7 +183,9 @@ export function TagInput({
                 inputRef.current?.focus()
               }}
             >
-              {item}
+              <span className="ft-tag-input__option-label" title={item}>
+                {item}
+              </span>
             </button>
           ))}
         </div>
