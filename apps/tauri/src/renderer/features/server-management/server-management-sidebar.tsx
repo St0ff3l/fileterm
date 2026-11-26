@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { ConnectionFolder, ConnectionProfile, SessionSnapshot, WorkspaceTab } from '@fileterm/core'
 import { MaterialIcon, type MaterialIconName } from '../../components/common/material-icon/material-icon'
 import { SidebarAlignedLabel } from '../../components/common/icon-label/icon-label'
+import { SidebarUpdateHint } from '../../components/common/sidebar-update-hint/sidebar-update-hint'
 import { connectionProfileSummary } from '../../app/connection-profile-summary'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/app-icon'
@@ -197,6 +198,10 @@ export function ServerManagementSidebar({
           <p className="server-management-empty">{t.noActiveServerConnections}</p>
         ) : null}
       </section>
+
+      <div className="server-management-sidebar-footer">
+        <SidebarUpdateHint active collapsed={collapsed} />
+      </div>
     </div>
   )
 }

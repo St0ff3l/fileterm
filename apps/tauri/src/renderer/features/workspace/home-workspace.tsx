@@ -1,4 +1,4 @@
-import { MaterialIcon, type MaterialIconName } from '../../components/common/material-icon/material-icon'
+import { MaterialIcon } from '../../components/common/material-icon/material-icon'
 import { SidebarAlignedLabel } from '../../components/common/icon-label/icon-label'
 import './home-workspace.css'
 import type {
@@ -9,7 +9,6 @@ import type {
   ConnectionProfile,
   McpAgentClientStatus,
   OverviewSectionId,
-  AppUpdateStatus,
   SavedTheme,
   SessionSnapshot,
   ThemeConfig,
@@ -24,7 +23,7 @@ import { useExternalUrl } from '../../hooks/use-external-url'
 import { FeedbackText } from '../common/feedback-text'
 import { AppIcon } from '../common/app-icon'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
-import { PortableUpdateDialog } from '../common/portable-update-dialog'
+import { SidebarUpdateHint } from '../../components/common/sidebar-update-hint/sidebar-update-hint'
 import { OverviewPage } from './overview-page'
 import { ConnectionManagerModal } from '../connections/connection-manager-modal'
 import { ProxyManagerPage, type ProxyManagerStats } from '../proxies/proxy-manager-page'
@@ -289,30 +288,6 @@ export function HomeWorkspace({
   // its sidebar wordmark because it has native traffic lights above it.
   const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
   const usesWindowsHomeLayout = rendererPlatform === 'win32' || rendererPlatform === 'linux'
-  const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
-  const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
-  const [isPortableUpdateDialogOpen, setPortableUpdateDialogOpen] = useState(false)
-
-  useEffect(() => {
-    if (updatePreviewState) {
-      const previewStatus: AppUpdateStatus = {
-        currentVersion: desktopApi?.appVersion ?? '1.0.0',
-        state:
-          updatePreviewState === 'downloading' || updatePreviewState === 'downloaded' || updatePreviewState === 'error'
-            ? updatePreviewState
-            : 'available',
-        availableVersion: '1.1.0',
-        progress: updatePreviewState === 'downloading' ? 62 : updatePreviewState === 'downloaded' ? 100 : undefined,
-        message: updatePreviewState === 'error' ? t.updateServerUnavailable : undefined
-      }
-      setUpdateStatus(previewStatus)
-      return
-    }
-    if (!desktopApi) return
-    void desktopApi.getUpdateStatus().then(setUpdateStatus)
-    return desktopApi.onUpdateStatus(setUpdateStatus)
-  }, [desktopApi, updatePreviewState])
-
   const homeBrandContent = usesWindowsHomeLayout
     ? getHomeBrandContent(desktopApi?.appName, desktopApi?.appVersion)
     : undefined
@@ -328,43 +303,6 @@ export function HomeWorkspace({
       void openExternalUrl('https://github.com/St0ff3l/fileterm')
     }
   }
-
-  const updateAction = () => {
-    if (updateStatus?.state === 'available') {
-      if (updateStatus.updateMode === 'release-page') {
-        if (updateStatus.isPortable) {
-          setPortableUpdateDialogOpen(true)
-        } else {
-          void openExternalUrl(updateStatus.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
-        }
-      } else {
-        void desktopApi?.downloadUpdate()
-      }
-    } else if (updateStatus?.state === 'downloaded') {
-      void desktopApi?.installUpdate()
-    } else if (updateStatus?.state === 'error') {
-      void desktopApi?.checkForUpdates()
-    }
-  }
-
-  const updateHint: { icon: MaterialIconName; label: string; title: string } | null =
-    updateStatus?.state === 'available'
-      ? {
-          icon: 'system_update_alt',
-          label: t.updateAvailableShort.replace('{version}', updateStatus.availableVersion ?? '—'),
-          title: updateStatus.updateMode === 'release-page' ? t.openReleasePage : t.downloadUpdate
-        }
-      : updateStatus?.state === 'downloading'
-        ? {
-            icon: 'downloading',
-            label: t.updateDownloadingShort.replace('{progress}', String(updateStatus.progress ?? 0)),
-            title: t.updateDownloading.replace('{progress}', String(updateStatus.progress ?? 0))
-          }
-        : updateStatus?.state === 'downloaded'
-          ? { icon: 'restart_alt', label: t.restartToUpdate, title: t.restartToUpdate }
-          : updateStatus?.state === 'error'
-            ? { icon: 'error', label: t.updateRetry, title: updateStatus.message ?? t.updateFailed }
-            : null
 
   return (
     <section
@@ -490,19 +428,7 @@ export function HomeWorkspace({
             <MaterialIcon name="star" className="material-symbols-outlined" />
             <SidebarAlignedLabel>GitHub</SidebarAlignedLabel>
           </button>
-          {updateHint ? (
-            <button
-              aria-label={updateHint.title}
-              className={`sidebar-update-hint is-${updateStatus?.state}`}
-              disabled={updateStatus?.state === 'downloading'}
-              onClick={updateAction}
-              title={updateHint.title}
-              type="button"
-            >
-              <MaterialIcon name={updateHint.icon} aria-hidden="true" className="material-symbols-outlined" />
-              <span>{updateHint.label}</span>
-            </button>
-          ) : null}
+          <SidebarUpdateHint active={!isServerManagementMode} collapsed={isSidebarCollapsed} />
           <FeedbackText message={externalUrlError} tone="error" />
         </div>
         <div
@@ -763,15 +689,6 @@ export function HomeWorkspace({
           {/* Footer nav hidden: Changelog, API Reference, Status — code/handlers preserved */}
         </footer>
       </main>
-      {isPortableUpdateDialogOpen ? (
-        <PortableUpdateDialog
-          onClose={() => setPortableUpdateDialogOpen(false)}
-          onOpenReleasePage={() => {
-            if (import.meta.env.DEV && !updateStatus?.isPortable) return
-            void openExternalUrl(updateStatus?.releaseUrl ?? 'https://github.com/St0ff3l/fileterm/releases')
-          }}
-        />
-      ) : null}
     </section>
   )
 }

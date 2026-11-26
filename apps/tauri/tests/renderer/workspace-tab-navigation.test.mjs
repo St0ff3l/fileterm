@@ -36,6 +36,18 @@ const { createWorkspaceTabsSessionActions } = load('../../src/renderer/hooks/wor
   './session-tab-memory': load('../../src/renderer/hooks/session-tab-memory.ts'),
   './workspace-tabs-utils': utils
 })
+const { createWorkspaceTabsContextActions } = load('../../src/renderer/hooks/workspace-tabs-context-actions.ts', {
+  '../app/app-utils': {
+    copyText() {},
+    homeTabKey: (id) => `home:${id}`,
+    insertTabKeyAfter() {},
+    reorderTabKeys() {},
+    sessionTabKey: (id) => `session:${id}`
+  },
+  '../i18n': i18n,
+  '../features/workspace/home-transition': { markHomeTabTransition() {} },
+  './workspace-tabs-utils': utils
+})
 const tabs = ['a', 'b', 'c', 'd'].map((id) => ({
   id,
   profileId: 'host',
@@ -133,6 +145,42 @@ test('grouped closing never leaves the host group or falls back to the home tab'
   assert.equal(utils.nextTabInHostGroup(entries, 'session:a1').key, 'session:a2')
   assert.equal(utils.nextTabInHostGroup(entries, 'home:network-a2').key, 'session:a2')
   assert.equal(utils.nextTabInHostGroup(entries, 'session:a2', ['session:a2', 'home:network-a2', 'session:a1']), null)
+})
+
+test('Cmd+W closes the main window from the server-management overview', async () => {
+  const closeRequests = []
+  const actions = createWorkspaceTabsContextActions({
+    desktopApi: {},
+    isBusy: false,
+    serverManagementMode: true,
+    localTabs: [{ id: 'home-1', kind: 'home', title: 'Overview' }],
+    activeLocalTabId: 'home-1',
+    visibleActiveSessionTabId: null,
+    visibleWorkspaceTabs: [],
+    onCloseCurrentWindow: () => closeRequests.push('close')
+  })
+
+  await actions.closeActiveWorkspaceItem()
+
+  assert.deepEqual(closeRequests, ['close'])
+})
+
+test('Cmd+W closes the main window in server-management mode without an active tab', async () => {
+  const closeRequests = []
+  const actions = createWorkspaceTabsContextActions({
+    desktopApi: {},
+    isBusy: false,
+    serverManagementMode: true,
+    localTabs: [],
+    activeLocalTabId: null,
+    visibleActiveSessionTabId: null,
+    visibleWorkspaceTabs: [],
+    onCloseCurrentWindow: () => closeRequests.push('close')
+  })
+
+  await actions.closeActiveWorkspaceItem()
+
+  assert.deepEqual(closeRequests, ['close'])
 })
 
 test('management close selects the next tab of the same host instead of another server', async () => {
