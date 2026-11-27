@@ -18,7 +18,6 @@ import { DropdownSelect } from '../common/dropdown-select'
 import type { FeedbackTextTone } from '../common/feedback-text'
 import { VerticalScrollbar } from '../common/vertical-scrollbar'
 import { SshRouteEditor, sshRouteOptions, type SshRouteMode } from './ssh-route-editor'
-import { SshRouteClients } from './ssh-route-clients'
 import {
   applySshRouteEdit,
   effectiveSshRule,
@@ -616,18 +615,6 @@ export function SshRouteManager({
               )}
             </div>
           </section>
-        ) : null}
-
-        {!profileId && snapshot ? (
-          <SshRouteClients
-            snapshot={snapshot}
-            proxies={proxies}
-            onSnapshotChange={(next, policyChanged) => {
-              setSnapshot((current) =>
-                !current || policyChanged ? next : { ...current, clients: next.clients, activity: next.activity }
-              )
-            }}
-          />
         ) : null}
       </div>
       {!profileId ? <VerticalScrollbar scrollRef={scrollRef} /> : null}

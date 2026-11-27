@@ -61,7 +61,7 @@ test('only ordinary SSH appears in tag and server policy editing', () => {
 })
 
 test('batch saves target only tagged ordinary SSH profiles without mutating the previous policy', () => {
-  const baseline = { servers: { kept: proxy }, tags: {}, default: null, clients: {} }
+  const baseline = { servers: { kept: proxy }, tags: {}, default: null }
   const next = helpers.applySshRouteEdit(baseline, { scope: 'batch', tag: 'office', rule: direct }, [
     ssh,
     { ...ssh, id: 'other', tags: ['elsewhere'] },

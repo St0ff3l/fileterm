@@ -662,7 +662,6 @@ pub fn run() {
             crate::commands::app_get_ssh_route_policy,
             crate::commands::app_save_ssh_route_policy,
             crate::commands::app_probe_ssh_route_policy,
-            crate::commands::app_control_ssh_route_client,
             crate::commands::app_save_proxy_profile,
             crate::commands::app_delete_proxy_profile,
             crate::commands::app_test_proxy_profile,
@@ -732,7 +731,6 @@ pub fn run() {
 
             if matches!(_event, tauri::RunEvent::Exit) {
                 flush_main_window_geometry(_app_handle);
-                crate::sessions::ssh::stop_owned_ssh_route_clients();
                 crate::services::mcp::remove_runtime_descriptor(_app_handle);
             }
 

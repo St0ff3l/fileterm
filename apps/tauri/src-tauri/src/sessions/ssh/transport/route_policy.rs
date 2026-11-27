@@ -43,8 +43,6 @@ pub(crate) struct SshRoutePolicy {
     #[serde(default)]
     tags: HashMap<String, SshTagRule>,
     default: Option<SshRouteRule>,
-    #[serde(default)]
-    clients: HashMap<SshRouteClient, SshRouteClientConfig>,
 }
 
 struct SshRouteSelection {

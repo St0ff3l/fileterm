@@ -1,6 +1,6 @@
 # SSH 自动线路选择与代理线路管理
 
-状态：普通 SSH 的本机规则、桌面管理、目标探测、健康排序、故障切换和受支持客户端控制已接入。真实 AmneziaVPN Local Proxy 与 EasyTier 双线路验收仍待完成。
+状态：普通 SSH 的本机规则、桌面管理、目标探测、健康排序、故障切换已接入。FileTerm 不启动或接管第三方代理/组网客户端；用户自行运行客户端，FileTerm 只使用手动登记的代理端点或网卡线路。真实 AmneziaVPN Local Proxy 与 EasyTier 双线路验收仍待完成。
 
 ## 目标
 
@@ -10,7 +10,7 @@
 
 ## 本机试用
 
-在「代理与隧道 → SSH 选路与故障切换」选全局默认或一台服务器，选择策略和出口。已有标签或已保存的标签规则会出现在选择框中，批量覆盖仅针对仍有服务器使用的标签，并在保存前提示覆盖。新建普通 SSH 连接时可在「网络与代理 → SSH 连接出口」配置单台规则，规则随连接保存后出现在管理页。编辑已有连接时，用「保存 SSH 线路」保存单台规则，手动代理和网卡随连接保存。两处使用同一份单台规则，管理页也显示已有的手动出口。保存后可在管理页探测目标并查看拨号、探测和切换记录。
+在「代理与隧道 → SSH 选路与故障切换」选全局默认或一台服务器，选择策略和出口。已有标签或已保存的标签规则会出现在选择框中，批量覆盖仅针对仍有服务器使用的标签，并在保存前提示覆盖。新建普通 SSH 连接时可在「网络与代理 → SSH 连接出口」配置单台规则，规则随连接保存后出现在管理页。编辑已有连接时，用「保存 SSH 线路」保存单台规则，手动代理和网卡随连接保存。两处使用同一份单台规则，管理页也显示已有的手动出口。保存后可在管理页探测目标并查看拨号、探测和切换记录。V2Ray、AmneziaVPN、EasyTier 等客户端由用户自行启动和配置；FileTerm 不扫描、启动或停止这些客户端。
 
 在 FileTerm 的数据目录中，将 `ssh-route-policy.json` 放在 `profiles.json` 旁边。Windows 便携版使用可执行文件旁的 `config` 目录。每次建连重新读取文件，缺少文件时沿用现有配置。下面的服务器 ID、标签、代理 ID 和适配器 ID 需替换为本机值。连接 ID 和标签可在 `profiles.json` 中查看，已登记代理的 ID 在同目录的 `proxies.json` 中。Windows 适配器 ID 可通过 `Get-NetAdapter | Select-Object Name, InterfaceGuid, Status` 查看。
 
@@ -52,25 +52,20 @@
 - 连接日志中可按 `SSH route` 找到线路引用、策略来源、耗时、传输阶段失败类别及是否使用了备用线路。拨号阶段使用已登记代理的凭据。SSH 握手、主机密钥检查和认证在选中一条线路后执行一次。
 - v2ray 和 Amnezia 可在客户端实际提供 SOCKS5 或 HTTP CONNECT 端点时，通过已登记的代理接入。EasyTier 使用系统路由或显式绑定 Windows 虚拟网卡。
 
-### 客户端控制
+### 第三方客户端接入（由用户启动）
 
-「本地线路客户端」可保存本机可执行文件路径及已有配置文件路径。只有点击「启动客户端」才会启动进程。FileTerm 停止自己启动的 V2Ray Core 或 EasyTier Core，并在正常退出时回收它们。进程运行状态与目标连通性分别显示。
+- **V2Ray、Clash Verge、AmneziaVPN**：用户自行启动并配置客户端。在 FileTerm 的代理管理页手动登记其 SOCKS5 或 HTTP CONNECT 端点，再把代理加入 SSH 线路规则。Amnezia Local Proxy 需先在客户端内启用；端口变化后手动更新代理。
+- **EasyTier**：用户自行启动并加入组网。在线路规则中选择 EasyTier 虚拟网卡，或在系统路由已覆盖目标时选择系统直连。
+- FileTerm 不扫描本机端口，不启动/停止第三方客户端，不读取或改写它们的配置，也不修改系统代理、路由表或 DNS。
 
-| 客户端          | 支持入口                               | 出口与状态                                                                                                |
-| --------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| V2Ray Core 5.x  | `v2ray run -c <config>`                | 可从指定的标准 JSON 配置登记明确绑定回环、无需认证的 SOCKS5 或 HTTP 入站。其他端点在代理库手动登记。      |
-| Clash Verge     | 启动已安装的桌面客户端                 | 在客户端内查看混合代理端口（默认通常为 127.0.0.1:7897）并在代理库登记，或在 TUN 模式下选用其虚拟网卡。    |
-| AmneziaVPN      | 启动已安装的桌面客户端                 | Local Proxy 须在客户端内启用。使用客户端显示的地址和端口在代理库登记。切换后端口变化时更新该代理。        |
-| EasyTier Core 2 | `easytier-core --config-file <config>` | EasyTier 建立组网后，从系统接口清单选取其虚拟网卡。线路模式为直连，可在系统默认路由已覆盖时选用系统直连。 |
-
-参考 CLI 与 Local Proxy 操作见 [V2Fly 命令文档](https://github.com/v2fly/v2fly-github-io/blob/master/docs/en_US/guide/command.md)、[Amnezia Local Proxy](https://docs.amnezia.org/documentation/instructions/local-proxy/) 和 [EasyTier 命令行配置](https://doc.easytier.cn/en/guide/network/configurations.html)。
+客户端配置参考：[Amnezia Local Proxy](https://docs.amnezia.org/documentation/instructions/local-proxy/) 和 [EasyTier 命令行配置](https://doc.easytier.cn/en/guide/network/configurations.html)。
 
 ## 当前实现基础
 
 - `SshProfile` 已有 `proxyProfileId`、自定义 SOCKS5/HTTP 代理、`sshNetworkInterface`、跳板配置和 `tags`。连接编辑器已有标签输入，标签无需再造一套服务器分组字段。
 - 代理库保存 FileTerm 可连接的 SOCKS5/HTTP 端点；连接时 Rust 根据规则建立直连或代理流。应用无需修改系统代理。
 - Windows 出站网卡选择已在连接级实现，支持保存适配器标识并在建连时解析索引。当前网卡选择与代理、跳板互斥；普通 SSH 网卡选择还限定 IP 字面量。
-- SSH 路由解析、代理/直连/网卡拨号分别位于 `sessions/ssh/transport/route.rs` 与 `transport/proxy.rs`。自动选择应在统一的 SSH 传输规划层增加，不应让 renderer 直接建连接或探测网络。
+- SSH 路由解析、代理/直连/网卡拨号由 `sessions/ssh/transport/route.rs`、`transport/proxy.rs` 和 `transport/route_policy.rs` 统一规划；renderer 不直接建连接或探测网络。
 - 应用已有结构化 connection 日志，可记录路由选择和失败，不应把代理口令、密钥或认证数据写入日志。
 
 ## 术语与规则建议
@@ -142,10 +137,10 @@
 
 ### 4. 第三方工具适配
 
-- **v2ray**：首版优先把客户端暴露的 SOCKS/HTTP 本地入站登记为标准代理端点，复用现有 SOCKS5/HTTP CONNECT 拨号。探测本地监听及目标连通；自动发现动态端口或启停进程另行做版本化适配。
-- **Amnezia**：区分 VPN 虚拟网卡出口与 Local Proxy 出口。不同模式不是同一个线路；按用户实际版本确认本地代理类型、端口变化和状态来源。首版用已登记的标准端点或网卡接入，不读取/改写私有配置。
-- **EasyTier**：按用户现有用法作为直连组网线路，通过虚拟网卡/已安装路由到达覆盖网 SSH 地址；验证目标网段实际由该线路承载。虽然 EasyTier 也有可选 SOCKS 服务，首版不擅自把用户的直连模式改为代理模式。
-- 只有在产品公开且稳定的 API/CLI、权限边界和版本兼容矩阵确定后，才增加客户端状态自动发现或进程控制。不得通过模拟 GUI 点击、任意脚本、扫描本机端口或修改第三方私有配置实现“接管”。用户停止第三方客户端时，FileTerm 只报告线路不可用，不擅自杀进程或改系统代理。
+- **V2Ray / Clash Verge**：由用户运行客户端并登记其 SOCKS5/HTTP 本地端点，复用现有代理拨号。FileTerm 不自动发现动态端口或管理进程。
+- **Amnezia**：区分 VPN 虚拟网卡出口与 Local Proxy 出口。用户启用 Local Proxy 后，手动登记客户端显示的标准代理端点；不读取或改写私有配置。
+- **EasyTier**：作为直连组网线路，通过用户选择的虚拟网卡或已安装路由访问覆盖网 SSH 地址；不把 EasyTier 直连模式改为代理模式，也不由 FileTerm 启停进程。
+- 本计划不实现第三方客户端的进程生命周期管理、端口扫描、系统代理/路由/DNS 修改或 GUI 自动化。用户停止客户端后，FileTerm 只报告线路不可用。
 
 ### 5. 回归与验收
 

@@ -159,11 +159,6 @@
   line-height: 1.3;
 }
 
-.ssh-route-mono-input .ft-input {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-}
-
 .ssh-route-panel .ssh-route-scope-control {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -553,42 +548,6 @@
   color: var(--text-muted);
 }
 
-.ssh-route-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 9px;
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  line-height: 1.4;
-  background: var(--surface-chip);
-  color: var(--text-secondary);
-}
-
-.ssh-route-status-pill.is-running {
-  background: var(--status-success-bg);
-  color: var(--status-success);
-}
-
-/* Local Route Clients Panel */
-.ssh-route-clients {
-  grid-column: 1 / -1;
-}
-
-.ssh-route-clients-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-items: end;
-}
-
-@container (min-width: 680px) {
-  .ssh-route-clients-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 .ssh-route-callout {
   display: flex;
   align-items: flex-start;
@@ -611,47 +570,6 @@
   flex: none;
   margin-top: 2px;
   color: var(--status-info);
-}
-
-.ssh-route-endpoints {
-  display: grid;
-  gap: 8px;
-}
-
-.ssh-route-endpoint-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  background: var(--surface-input);
-  border: 1px solid var(--border-subtle);
-}
-
-.ssh-route-endpoint-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.ssh-route-endpoint-addr {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.ssh-route-stop-btn:not(:disabled) {
-  border-color: var(--status-danger);
-  color: var(--status-danger);
-}
-
-.ssh-route-stop-btn:hover:not(:disabled) {
-  background: var(--status-danger-bg);
-  border-color: var(--status-danger);
 }
 
 /* The connection editor already owns the page scrollbar. */
