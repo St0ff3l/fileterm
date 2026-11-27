@@ -52,6 +52,17 @@
   grid-template-rows: auto auto auto minmax(100px, 1fr);
 }
 
+.server-dashboard-create-btn.ft-btn {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.server-dashboard-create-btn .ft-btn__icon > .material-symbols-outlined {
+  font-size: var(--ui-font-size-18px, 18px);
+}
+
 .server-dashboard-toolbar {
   display: grid;
   gap: 10px;

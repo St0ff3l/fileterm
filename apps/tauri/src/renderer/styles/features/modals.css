@@ -1093,7 +1093,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   gap: 5px;
   white-space: nowrap;
 }
@@ -1829,7 +1829,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   height: 36px;
   padding: 0 20px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-sm, 4px);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-prominent);
   font-weight: var(--button-font-weight);
@@ -1911,7 +1911,7 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   min-height: 36px;
   height: 36px;
   padding: 0 16px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   gap: 6px;
   font-size: var(--button-font-size-regular);
   min-width: 82px;

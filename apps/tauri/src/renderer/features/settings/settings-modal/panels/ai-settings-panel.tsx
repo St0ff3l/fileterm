@@ -600,7 +600,7 @@ export function AiSettingsPanel() {
               type="button"
               onClick={() => void saveAiProvider()}
             >
-              <AppIcon name="disk" size={14} />
+              <AppIcon name="save" size={14} />
               <span className="ai-settings-action-label">
                 <span>{aiOperation === 'save' ? t.aiSettingsSaving : t.aiSettingsSave}</span>
                 <span aria-hidden="true" className="ai-settings-action-label-reserve">

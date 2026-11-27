@@ -83,7 +83,7 @@
   min-height: 36px;
   height: 36px;
   padding: 0 16px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);

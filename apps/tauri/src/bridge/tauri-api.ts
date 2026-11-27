@@ -436,8 +436,6 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     saveSshRoutePolicy: (expected, policy) =>
       invoke<SshRoutePolicySnapshot>('app_save_ssh_route_policy', { expected, policy }),
     probeSshRoutePolicy: (profileId) => invoke<SshRoutePolicySnapshot>('app_probe_ssh_route_policy', { profileId }),
-    controlSshRouteClient: (kind, start) =>
-      invoke<SshRoutePolicySnapshot>('app_control_ssh_route_client', { kind, start }),
     onSshRouteActivity: (listener) => subscribe<SshRouteActivity>('ssh-route:activity', listener),
     onSshRoutePolicyChanged: (listener) => subscribe<null>('ssh-route:policy-changed', listener),
     onSerialPortsChanged: (listener: (ports: SerialPortInfo[]) => void) => subscribe('serial:ports-changed', listener),

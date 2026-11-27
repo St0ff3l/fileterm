@@ -478,16 +478,6 @@ export interface SshRoutePolicy {
   servers: Record<string, SshRouteRule>
   tags: Record<string, { priority: number; rule: SshRouteRule }>
   default: SshRouteRule | null
-  clients: Partial<Record<SshRouteClientKind, { executable: string; config: string | null }>>
-}
-
-export type SshRouteClientKind = 'v2ray' | 'clashVerge' | 'amnezia' | 'easyTier'
-
-export interface SshRouteClientStatus {
-  kind: SshRouteClientKind
-  running: boolean
-  lastExit: number | null
-  endpoints: { type: 'socks5' | 'http'; host: string; port: number }[]
 }
 
 export interface SshRouteActivity {
@@ -508,7 +498,6 @@ export interface SshRouteActivity {
 export interface SshRoutePolicySnapshot {
   policy: SshRoutePolicy
   activity: SshRouteActivity[]
-  clients: SshRouteClientStatus[]
 }
 
 export interface SshProfile extends NetworkProfile {
@@ -2999,7 +2988,6 @@ export interface FileTermDesktopApi {
   getSshRoutePolicy(): Promise<SshRoutePolicySnapshot>
   saveSshRoutePolicy(expected: SshRoutePolicy, policy: SshRoutePolicy): Promise<SshRoutePolicySnapshot>
   probeSshRoutePolicy(profileId: string): Promise<SshRoutePolicySnapshot>
-  controlSshRouteClient(kind: SshRouteClientKind, start: boolean): Promise<SshRoutePolicySnapshot>
   onSshRouteActivity(listener: (activity: SshRouteActivity) => void): () => void
   onSshRoutePolicyChanged(listener: () => void): () => void
   onSerialPortsChanged(listener: (ports: SerialPortInfo[]) => void): () => void

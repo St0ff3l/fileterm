@@ -24,7 +24,6 @@ struct SshRouteActivity {
 pub(crate) struct SshRoutePolicySnapshot {
     policy: SshRoutePolicy,
     activity: Vec<SshRouteActivity>,
-    clients: Vec<SshRouteClientStatus>,
 }
 
 impl SshRouteSelection {
@@ -115,7 +114,6 @@ pub(crate) fn ssh_route_policy_snapshot(
     let path = crate::storage::workspace_file(app, SSH_ROUTE_POLICY_FILE)?;
     let policy = read_route_policy_file(&path)?;
     Ok(SshRoutePolicySnapshot {
-        clients: ssh_route_client_status(&policy),
         policy,
         activity: SSH_ROUTE_ACTIVITY
             .lock()
@@ -138,11 +136,6 @@ pub(crate) fn save_ssh_route_policy(
             "SSH route rules changed in another window. Reload and review them before saving."
                 .into(),
         ));
-    }
-    for (kind, definition) in &policy.clients {
-        if expected.clients.get(kind) != Some(definition) {
-            make_ssh_route_client_command(*kind, definition)?;
-        }
     }
     for rule in policy
         .servers

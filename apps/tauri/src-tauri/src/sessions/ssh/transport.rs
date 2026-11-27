@@ -7,7 +7,6 @@ include!("transport/jump.rs");
 include!("transport/proxy.rs");
 include!("transport/route_policy.rs");
 include!("transport/route_health.rs");
-include!("transport/route_clients.rs");
 include!("transport/route_management.rs");
 include!("transport/credentials.rs");
 include!("transport/ssh_config_route.rs");

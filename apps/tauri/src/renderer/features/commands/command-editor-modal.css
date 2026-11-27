@@ -1,0 +1,403 @@
+.command-editor-fieldset {
+  border: 0;
+  display: contents;
+  margin: 0;
+  padding: 0;
+}
+
+.modal-card.command-dialog.command-editor-page {
+  width: min(660px, calc(100vw - 48px));
+  min-height: 0;
+  max-height: calc(100dvh - 48px);
+}
+
+.command-dialog .command-dialog-scroll-region {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+:root .command-dialog .command-dialog-body {
+  padding: 14px 16px;
+}
+
+:root .command-editor-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+.command-form-standalone-body {
+  padding: 0;
+}
+
+:root .command-form-standalone-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  scrollbar-gutter: auto;
+}
+
+.command-editor-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.command-form-standalone-page .command-editor-stack {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.command-form-standalone-page .command-editor-workbench {
+  flex: 1 1 auto;
+  min-height: 220px;
+}
+
+.command-form-standalone-page .command-editor-workbench__editor {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 150px;
+}
+
+:root .command-form-standalone-page .command-editor-workbench__editor .command-code-area {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 150px;
+  max-height: none;
+}
+
+.command-editor-meta-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.command-editor-dialog-form .command-editor-row,
+.command-form-standalone-page .command-editor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(160px, 0.55fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.command-editor-dialog-form .command-editor-field,
+.command-form-standalone-page .command-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+}
+
+.command-editor-field__label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Unified Terminal Command Workbench Frame */
+.command-editor-workbench {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-terminal);
+  transition: border-color var(--duration-hover) var(--ease-out);
+}
+
+.command-editor-workbench:hover {
+  border-color: var(--border-default);
+}
+
+.command-editor-workbench:focus-within {
+  border-color: var(--input-focus-inset);
+}
+
+.command-editor-workbench.is-invalid,
+.command-editor-workbench.is-invalid:hover,
+.command-editor-workbench.is-invalid:focus-within {
+  border-color: var(--status-danger);
+}
+
+.command-editor-workbench__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-sidebar) 76%, var(--surface-card));
+}
+
+.command-editor-workbench__heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.command-editor-workbench__heading .app-icon {
+  color: var(--accent-secondary);
+}
+
+.command-editor-workbench__params {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.command-editor-workbench__params-label {
+  color: var(--text-muted);
+  font-size: var(--ui-font-size-11px, 11px);
+  font-weight: 500;
+}
+
+.command-editor-workbench__chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.command-editor-param-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-11px, 11px);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out);
+}
+
+.command-editor-param-chip:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent-secondary) 55%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-secondary) 12%, var(--surface-card));
+  color: var(--accent-secondary);
+}
+
+.command-editor-param-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+
+.command-editor-param-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.command-editor-workbench__editor {
+  background: var(--surface-terminal);
+}
+
+:root .command-editor-workbench__editor .command-code-area {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  height: 176px;
+  min-height: 176px;
+  max-height: 176px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+:root .command-editor-workbench__editor .command-line-numbers {
+  min-width: 36px;
+  padding: 8px 0;
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--surface-sidebar) 28%, var(--surface-terminal));
+}
+
+:root .command-editor-workbench__editor .command-line-number {
+  height: 20px;
+  min-height: 20px;
+  line-height: 20px;
+  padding: 0 8px;
+  opacity: 0.65;
+}
+
+:root .command-editor-workbench__editor textarea {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 20px;
+}
+
+.command-editor-workbench__statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-sidebar) 62%, var(--surface-card));
+}
+
+.command-editor-workbench__status-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.command-editor-workbench__tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: var(--ui-font-size-11px, 11px);
+  line-height: 1.4;
+}
+
+.command-editor-workbench__tip .app-icon {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+.command-editor-detected-params__label {
+  color: var(--text-muted);
+  font-size: var(--ui-font-size-11px, 11px);
+  font-weight: 500;
+}
+
+.command-editor-detected-params__list {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.command-editor-detected-params__tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--accent-secondary) 38%, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-secondary) 12%, var(--surface-card));
+  color: var(--accent-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-11px, 11px);
+  line-height: 1;
+}
+
+.command-editor-cr-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-10px, 10px);
+  line-height: 1;
+  opacity: 0.5;
+  transition:
+    opacity var(--duration-hover) var(--ease-out),
+    color var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out),
+    background-color var(--duration-hover) var(--ease-out);
+}
+
+.command-editor-cr-badge.is-active {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent-secondary) 36%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent-secondary) 10%, var(--surface-card));
+  color: var(--accent-secondary);
+}
+
+/* Balanced Footer: execution option on left, actions on right */
+:root .modal-card.command-dialog > .form-actions.command-dialog-actions.command-editor-footer,
+:root .command-form-standalone-body > .form-actions.command-dialog-actions.command-editor-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--dialog-surface);
+}
+
+.command-editor-footer .command-editor-checkbox-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--duration-hover) var(--ease-out);
+}
+
+.command-editor-footer .command-editor-checkbox-row:hover {
+  color: var(--text-primary);
+}
+
+.command-editor-footer .command-editor-checkbox-row input.selection-control {
+  margin-top: 0;
+}
+
+.command-editor-footer__buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .command-editor-dialog-form .command-editor-row,
+  .command-form-standalone-page .command-editor-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :root .modal-card.command-dialog > .form-actions.command-dialog-actions.command-editor-footer,
+  :root .command-form-standalone-body > .form-actions.command-dialog-actions.command-editor-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .command-editor-footer__buttons {
+    justify-content: flex-end;
+  }
+}

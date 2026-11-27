@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FileTerm 表单控件圆角预览</title>
     <link rel="stylesheet" href="../../../apps/tauri/src/renderer/styles/tokens/foundations.css" />
+    <link rel="stylesheet" href="../../../apps/tauri/src/renderer/components/common/button/button.css" />
     <link rel="stylesheet" href="../../../apps/tauri/src/renderer/components/common/input/input.css" />
     <link
       rel="stylesheet"
@@ -26,9 +27,19 @@
         --surface-hover: #2a2a2a;
         --surface-section: #303030;
         --action-primary-bg: #1687e8;
-        --action-primary-hover: #0f79d3;
+        --action-primary-hover: #1179d4;
+        --action-primary-active: #0c68b8;
         --action-primary-text: #fff;
+        --action-secondary-bg: transparent;
+        --action-secondary-hover: #2a2a2a;
+        --action-secondary-active: #303030;
+        --action-secondary-text: #e7e7e7;
+        --action-danger-bg: #c93b3b;
+        --action-danger-hover: #b73636;
+        --action-danger-active: #9e2d2d;
+        --action-danger-text: #fff;
         --focus-outline: #8bbfff;
+        --accent-focus-ring: rgba(139, 191, 255, 0.28);
         --surface-input-focus: #202020;
         --border-subtle: #343434;
         --subtab-bar-border: var(--border-subtle);
@@ -51,9 +62,20 @@
         --surface-card: #fff;
         --surface-hover: #e8e8e8;
         --surface-section: #e3e3e3;
-        --action-primary-bg: #086bc4;
-        --action-primary-hover: #075da9;
+        --action-primary-bg: #3b82f6;
+        --action-primary-hover: #2563eb;
+        --action-primary-active: #1d4ed8;
+        --action-primary-text: #fff;
+        --action-secondary-bg: transparent;
+        --action-secondary-hover: #e8e8e8;
+        --action-secondary-active: #e3e3e3;
+        --action-secondary-text: #252525;
+        --action-danger-bg: #d32f2f;
+        --action-danger-hover: #c32b2b;
+        --action-danger-active: #9a1616;
+        --action-danger-text: #fff;
         --focus-outline: #3b82f6;
+        --accent-focus-ring: rgba(59, 130, 246, 0.25);
         --surface-input-focus: #fff;
         --border-subtle: #d4d4d4;
         --border-default: #aaa;
@@ -161,6 +183,17 @@
         resize: none;
       }
 
+      .button-preview-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .field--full {
+        grid-column: 1 / -1;
+      }
+
       .preview-section {
         margin-top: 28px;
         padding-top: 22px;
@@ -240,7 +273,9 @@
       <header>
         <p class="eyebrow">设置 / 连接表单</p>
         <h1>表单与设置控件圆角预览</h1>
-        <p class="description">圆角以 CSS 像素计。公共下拉框有自绘菜单和系统原生菜单两种实现，闭合外框均为 4px。</p>
+        <p class="description">
+          圆角以 CSS 像素计。基础输入框、公共下拉框（自绘/原生）与常规操作按钮统一为 4px（--radius-sm）。
+        </p>
       </header>
       <section class="controls-grid" aria-label="基础表单控件">
         <div class="field">
@@ -271,12 +306,20 @@
           <label for="remote-path">文本区域 <span class="token">--radius-sm · 4px</span></label>
           <textarea id="remote-path" class="ft-textarea" readonly>/srv/projects/demo</textarea>
         </div>
+        <div class="field field--full">
+          <label>公共操作按钮 <span class="token">--radius-sm · 4px</span></label>
+          <div class="button-preview-row">
+            <button class="ft-btn ft-btn--md ft-btn--primary" type="button">保存自定义主题</button>
+            <button class="ft-btn ft-btn--md ft-btn--secondary" type="button">测试连接</button>
+            <button class="ft-btn ft-btn--md ft-btn--danger" type="button">删除</button>
+          </div>
+        </div>
       </section>
       <section class="preview-section">
         <h2>外观与主题</h2>
         <dl class="radius-list">
           <div>
-            <dt>筛选设置、保存自定义主题、主题卡片内的窗口预览</dt>
+            <dt>筛选设置、主题卡片内的窗口预览</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
               ><code class="token">6px</code>
@@ -297,7 +340,7 @@
             </dd>
           </div>
           <div>
-            <dt>主题预设、自定义名称、主题预览条、颜色值输入框</dt>
+            <dt>主题预设、自定义名称、保存自定义主题、删除自定义主题、主题预览条、颜色值输入框</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
               ><code class="token">4px</code>
@@ -330,14 +373,14 @@
         <h2>会话安全</h2>
         <dl class="radius-list">
           <div>
-            <dt>主密码与远程备份密码卡片、底部操作按钮</dt>
+            <dt>主密码与远程备份密码卡片</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
               ><code class="token">6px</code>
             </dd>
           </div>
           <div>
-            <dt>空闲自动锁定下拉框、密码输入框</dt>
+            <dt>空闲自动锁定下拉框、密码输入框、底部操作按钮</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
               ><code class="token">4px</code>
@@ -349,14 +392,14 @@
         <h2>应用更新</h2>
         <dl class="radius-list">
           <div>
-            <dt>更新检查、更新通道和更新状态卡片、检查更新按钮</dt>
+            <dt>更新检查、更新通道和更新状态卡片</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
               ><code class="token">6px</code>
             </dd>
           </div>
           <div>
-            <dt>更新设置下拉框</dt>
+            <dt>更新设置下拉框、检查更新按钮</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
               ><code class="token">4px</code>
@@ -375,7 +418,7 @@
         <h2>配置同步</h2>
         <dl class="radius-list">
           <div>
-            <dt>保存、测试连接、打开安全设置、上传和下载按钮、上次同步标记、上传下载图标底板</dt>
+            <dt>上次同步标记、上传下载图标底板</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 6px" aria-hidden="true"></span
               ><code class="token">6px</code>
@@ -396,7 +439,7 @@
             </dd>
           </div>
           <div>
-            <dt>同步表单输入框和策略下拉框</dt>
+            <dt>同步表单输入框、策略下拉框、保存/测试连接/打开安全设置与上传/下载按钮</dt>
             <dd>
               <span class="radius-swatch" style="--sample-radius: 4px" aria-hidden="true"></span
               ><code class="token">4px</code>

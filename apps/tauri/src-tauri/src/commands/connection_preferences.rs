@@ -175,10 +175,18 @@ pub struct ThemeSemanticColors {
     pub diff_removed: String,
     pub skill: String,
     pub keyword: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub telnet: Option<String>,
     #[serde(default)]
     pub sftp: String,
     #[serde(default)]
     pub ftp: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_rx: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_tx: Option<String>,
     /// Newer semantic controls are optional on disk so older theme exports
     /// can still be deserialized and filled by `normalize_theme_config`.
     #[serde(default)]
@@ -193,6 +201,10 @@ pub struct ThemeSemanticColors {
     pub error: String,
     #[serde(default)]
     pub success: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub danger_action: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -274,14 +286,20 @@ fn codex_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
                 skill: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+                total: Some(if is_light { "#2563eb" } else { "#60a5fa" }.to_string()),
+                telnet: Some(if is_light { "#0284c7" } else { "#38bdf8" }.to_string()),
                 sftp: if is_light { "#0284c7" } else { "#38bdf8" }.to_string(),
                 ftp: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
+                network_rx: Some(if is_light { "#0284c7" } else { "#38bdf8" }.to_string()),
+                network_tx: Some(if is_light { "#ba2623" } else { "#f43f5e" }.to_string()),
                 secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
                 text_secondary: if is_light { "#667085" } else { "#a9a9b2" }.to_string(),
                 info: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
                 warning: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
                 error: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
                 success: if is_light { "#059669" } else { "#34d399" }.to_string(),
+                primary_action: Some(if is_light { "#339cff" } else { "#0169cc" }.to_string()),
+                danger_action: Some(if is_light { "#dc2626" } else { "#c93b3b" }.to_string()),
             },
             surface: if is_light { "#ffffff" } else { "#111111" }.to_string(),
             surface_secondary: if is_light { "#ffffff" } else { "#1b1b1b" }.to_string(),
@@ -332,14 +350,20 @@ fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
                 skill: if is_light { "#7c3aed" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#fbbf24" }.to_string(),
+                total: Some(if is_light { "#2563eb" } else { "#60a5fa" }.to_string()),
+                telnet: Some(if is_light { "#0284c7" } else { "#38bdf8" }.to_string()),
                 sftp: if is_light { "#0284c7" } else { "#38bdf8" }.to_string(),
                 ftp: if is_light { "#9333ea" } else { "#c084fc" }.to_string(),
+                network_rx: Some(if is_light { "#3b82f6" } else { "#65a9ff" }.to_string()),
+                network_tx: Some(if is_light { "#ef4444" } else { "#ff7474" }.to_string()),
                 secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
                 text_secondary: if is_light { "#5e5e61" } else { "#9b9b9b" }.to_string(),
                 info: if is_light { "#3b82f6" } else { "#38bdf8" }.to_string(),
                 warning: if is_light { "#d97706" } else { "#ffcc00" }.to_string(),
                 error: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
                 success: if is_light { "#168a53" } else { "#34d399" }.to_string(),
+                primary_action: Some(if is_light { "#3b82f6" } else { "#1687e8" }.to_string()),
+                danger_action: Some(if is_light { "#d32f2f" } else { "#c93b3b" }.to_string()),
             },
             surface: if is_light { "#F4F4F6" } else { "#151515" }.to_string(),
             surface_secondary: if is_light { "#ffffff" } else { "#1e1e1e" }.to_string(),
@@ -540,6 +564,36 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
             &mut config.theme.semantic_colors.success,
             &fallback.theme.semantic_colors.success,
         );
+    }
+    for (color, fallback_color) in [
+        (
+            &mut config.theme.semantic_colors.total,
+            &fallback.theme.semantic_colors.total,
+        ),
+        (
+            &mut config.theme.semantic_colors.telnet,
+            &fallback.theme.semantic_colors.telnet,
+        ),
+        (
+            &mut config.theme.semantic_colors.network_rx,
+            &fallback.theme.semantic_colors.network_rx,
+        ),
+        (
+            &mut config.theme.semantic_colors.network_tx,
+            &fallback.theme.semantic_colors.network_tx,
+        ),
+        (
+            &mut config.theme.semantic_colors.primary_action,
+            &fallback.theme.semantic_colors.primary_action,
+        ),
+        (
+            &mut config.theme.semantic_colors.danger_action,
+            &fallback.theme.semantic_colors.danger_action,
+        ),
+    ] {
+        if let Some(value) = color {
+            normalize_theme_color(value, fallback_color.as_deref().unwrap_or(&fallback.theme.accent));
+        }
     }
     config.theme.overrides.retain(|key, value| {
         let valid_key = !key.trim().is_empty() && key.len() <= 128;

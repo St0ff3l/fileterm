@@ -370,7 +370,7 @@
   justify-content: center;
   gap: 7px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-main);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);

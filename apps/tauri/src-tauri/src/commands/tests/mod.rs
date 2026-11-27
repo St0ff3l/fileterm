@@ -772,6 +772,29 @@ mod ui_preferences_tests {
     }
 
     #[test]
+    fn theme_action_and_network_semantic_colors_roundtrip() {
+        let mut value = serde_json::to_value(default_theme_config()).unwrap();
+        value["codeThemeId"] = serde_json::json!("custom");
+        value["theme"]["semanticColors"]["primaryAction"] = serde_json::json!("#2568b5");
+        value["theme"]["semanticColors"]["dangerAction"] = serde_json::json!("#b91c1c");
+        value["theme"]["semanticColors"]["total"] = serde_json::json!("#3b82f6");
+        value["theme"]["semanticColors"]["telnet"] = serde_json::json!("#0ea5e9");
+        value["theme"]["semanticColors"]["networkRx"] = serde_json::json!("#38bdf8");
+        value["theme"]["semanticColors"]["networkTx"] = serde_json::json!("#f43f5e");
+
+        let config: super::ThemeConfig = serde_json::from_value(value).unwrap();
+        let normalized = normalize_theme_config(config, "dark");
+        let saved = serde_json::to_value(normalized).unwrap();
+
+        assert_eq!(saved["theme"]["semanticColors"]["primaryAction"], "#2568B5");
+        assert_eq!(saved["theme"]["semanticColors"]["dangerAction"], "#B91C1C");
+        assert_eq!(saved["theme"]["semanticColors"]["total"], "#3B82F6");
+        assert_eq!(saved["theme"]["semanticColors"]["telnet"], "#0EA5E9");
+        assert_eq!(saved["theme"]["semanticColors"]["networkRx"], "#38BDF8");
+        assert_eq!(saved["theme"]["semanticColors"]["networkTx"], "#F43F5E");
+    }
+
+    #[test]
     fn canonicalizes_legacy_fileterm_variant_id() {
         let mut config = default_theme_config();
         config.code_theme_id = "fileterm-dark".to_string();

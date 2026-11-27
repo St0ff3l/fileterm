@@ -51,12 +51,3 @@ pub(crate) async fn app_probe_ssh_route_policy(
 ) -> Result<crate::sessions::ssh::SshRoutePolicySnapshot, AppError> {
     crate::sessions::ssh::probe_ssh_route_policy(&app, &profile_id).await
 }
-
-#[tauri::command]
-pub(crate) async fn app_control_ssh_route_client(
-    app: AppHandle,
-    kind: crate::sessions::ssh::SshRouteClient,
-    start: bool,
-) -> Result<crate::sessions::ssh::SshRoutePolicySnapshot, AppError> {
-    crate::sessions::ssh::control_ssh_route_client(&app, kind, start)
-}

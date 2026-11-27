@@ -2431,7 +2431,7 @@
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular);
 }
 
@@ -2843,7 +2843,7 @@
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-card);
   color: var(--text-muted);
   font-size: var(--button-font-size-compact);
@@ -3333,7 +3333,7 @@
   height: 24px;
   padding: 0 8px;
   border-color: transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   background: transparent;
   color: var(--action-secondary-text);
   font-size: var(--button-font-size-compact);
@@ -3615,7 +3615,7 @@
 .ssh-tunnel-form-actions button,
 .ssh-tunnel-secondary-action {
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-main);
   background: transparent;
   padding: 6px 9px;
@@ -3654,7 +3654,7 @@
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
   gap: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
 }
 .ssh-tunnel-actions .danger {
   color: var(--status-danger);
@@ -3804,7 +3804,7 @@
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
 }
@@ -3813,7 +3813,7 @@
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
 }
