@@ -86,11 +86,11 @@
 :root:not([data-theme]) .command-form-standalone,
 :root:not([data-theme*='light']) .command-form-standalone,
 :root[data-theme='default'] .command-form-standalone {
-  width: min(900px, 88vw) !important;
-  min-height: min(560px, calc(100dvh - 48px)) !important;
+  width: min(660px, calc(100vw - 48px));
+  min-height: 0;
   background: var(--dialog-content-bg) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 16px !important;
+  border-radius: 14px !important;
   box-shadow: var(--modal-card-shadow) !important;
 }
 
@@ -124,8 +124,8 @@
 :root:not([data-theme]) .command-editor-page,
 :root:not([data-theme*='light']) .command-editor-page,
 :root[data-theme='default'] .command-editor-page {
-  width: min(900px, 88vw) !important;
-  min-height: min(560px, calc(100dvh - 48px)) !important;
+  width: min(660px, calc(100vw - 48px));
+  min-height: 0;
 }
 
 /* Headers */
@@ -136,7 +136,7 @@
 :root:not([data-theme*='light']) .command-form-standalone .connection-manager-header,
 :root[data-theme='default'] .command-form-standalone .connection-manager-header {
   background: var(--dialog-header-bg) !important;
-  border-bottom: 1px solid var(--border-light) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
   padding: 0 16px !important;
   min-height: var(--dialog-header-height) !important;
 }
@@ -180,22 +180,20 @@
 :root:not([data-theme]) .command-dialog-body,
 :root:not([data-theme*='light']) .command-dialog-body,
 :root[data-theme='default'] .command-dialog-body {
-  /* Keep the form centered whether a native scrollbar is present or not. */
-  padding: 16px 20px 0 !important;
-  scrollbar-gutter: stable both-edges;
+  padding: 14px 16px;
 }
 
 /* Labels */
-:root:not([data-theme]) .command-editor-dialog-form label,
-:root:not([data-theme*='light']) .command-editor-dialog-form label,
-:root[data-theme='default'] .command-editor-dialog-form label,
-:root:not([data-theme]) .command-form-standalone-page label,
-:root:not([data-theme*='light']) .command-form-standalone-page label,
-:root[data-theme='default'] .command-form-standalone-page label {
-  color: var(--text-main) !important;
-  font-size: var(--ui-font-size-13px, 13px) !important;
-  font-weight: 500 !important;
-  margin-bottom: 4px !important;
+:root:not([data-theme]) .command-editor-dialog-form label:not(.command-editor-checkbox-row),
+:root:not([data-theme*='light']) .command-editor-dialog-form label:not(.command-editor-checkbox-row),
+:root[data-theme='default'] .command-editor-dialog-form label:not(.command-editor-checkbox-row),
+:root:not([data-theme]) .command-form-standalone-page label:not(.command-editor-checkbox-row),
+:root:not([data-theme*='light']) .command-form-standalone-page label:not(.command-editor-checkbox-row),
+:root[data-theme='default'] .command-form-standalone-page label:not(.command-editor-checkbox-row) {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  margin-bottom: 0;
 }
 
 /* Form inputs (textbox, select, textarea) */
@@ -236,7 +234,7 @@
   border: 1px solid var(--border-subtle) !important;
   border-radius: var(--radius-sm, 4px) !important;
   color: var(--text-main) !important;
-  font-size: var(--ui-font-size-14px, 14px) !important;
+  font-size: var(--font-size-sm) !important;
   min-height: 36px !important;
   height: 36px !important;
   padding: 0 12px !important;
@@ -332,7 +330,7 @@
 :root:not([data-theme*='light']) .command-form-standalone-page .command-code-area,
 :root[data-theme='default'] .command-form-standalone-page .command-code-area {
   background: var(--input-bg) !important;
-  border: 1px solid var(--border-light) !important;
+  border: 1px solid var(--border-subtle) !important;
   border-radius: var(--radius-sm, 4px) !important;
   overflow: hidden !important;
   transition:
@@ -358,8 +356,8 @@
 :root:not([data-theme]) .command-line-numbers,
 :root:not([data-theme*='light']) .command-line-numbers,
 :root[data-theme='default'] .command-line-numbers {
-  background: var(--bg-main) !important;
-  border-right: 1px solid var(--border-light) !important;
+  background: var(--surface-canvas);
+  border-right: 1px solid var(--border-subtle);
 }
 
 :root:not([data-theme]) .command-line-number,
@@ -405,9 +403,9 @@
 :root:not([data-theme*='light']) .command-dialog-actions,
 :root[data-theme='default'] .command-dialog-actions {
   background: var(--dialog-surface) !important;
-  margin: 14px -20px -16px -20px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border-light) !important;
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle) !important;
 }
 
 /* Cancel / Flat Button */
@@ -466,9 +464,9 @@
 :root:not([data-theme]) .command-editor-checkbox-row,
 :root:not([data-theme*='light']) .command-editor-checkbox-row,
 :root[data-theme='default'] .command-editor-checkbox-row {
-  margin-top: 4px !important;
-  font-size: var(--ui-font-size-13px, 13px) !important;
-  color: var(--text-main) !important;
+  margin-top: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
 }
 
 :root:not([data-theme]) .command-editor-dialog-params > span,
@@ -477,8 +475,8 @@
 :root:not([data-theme]) .command-editor-checkbox-row span,
 :root:not([data-theme*='light']) .command-editor-checkbox-row span,
 :root[data-theme='default'] .command-editor-checkbox-row span {
-  font-size: var(--ui-font-size-13px, 13px) !important;
-  font-weight: 500 !important;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
 }
 
 :root:not([data-theme]) .command-param-hints-row > small,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
 
 const COMMAND_EDITOR_MIN_LINE_COUNT = 14
 
@@ -10,7 +10,9 @@ export function CommandCodeEditor({
   autoFocus = false,
   ariaLabel,
   className,
-  readOnly = false
+  minLines = COMMAND_EDITOR_MIN_LINE_COUNT,
+  readOnly = false,
+  textareaRef: externalTextareaRef
 }: {
   value: string
   onChange?(value: string): void
@@ -19,16 +21,19 @@ export function CommandCodeEditor({
   autoFocus?: boolean
   ariaLabel?: string
   className?: string
+  minLines?: number
   readOnly?: boolean
+  textareaRef?: RefObject<HTMLTextAreaElement | null>
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const internalTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = externalTextareaRef ?? internalTextareaRef
   const lineNumRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (autoFocus) {
       textareaRef.current?.focus()
     }
-  }, [autoFocus])
+  }, [autoFocus, textareaRef])
 
   const handleTextareaScroll = () => {
     if (lineNumRef.current && textareaRef.current) {
@@ -36,7 +41,7 @@ export function CommandCodeEditor({
     }
   }
 
-  const lineCount = Math.max(value.split('\n').length, COMMAND_EDITOR_MIN_LINE_COUNT)
+  const lineCount = Math.max(value.split('\n').length, minLines)
 
   return (
     <div className="command-code-area">

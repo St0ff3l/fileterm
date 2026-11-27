@@ -1960,20 +1960,18 @@
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
-  padding: 16px 20px;
+  padding: 0;
   box-sizing: border-box;
 }
 
 .command-editor-dialog-form {
-  padding: 16px 20px;
+  padding: 0;
 }
 
 .command-form-standalone-page {
   min-height: 0;
   overflow-y: auto;
-  /* Mirror the focus-ring clearance around the scrollable form. */
-  padding-inline: 8px;
-  scrollbar-gutter: stable both-edges;
+  padding: 14px 16px;
 }
 
 .command-form-standalone-page label:not(.command-editor-checkbox-row) {
@@ -2121,7 +2119,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 0 2px;
+  padding: 0;
 }
 
 .command-editor-grid {
