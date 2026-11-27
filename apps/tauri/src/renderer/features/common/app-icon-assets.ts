@@ -34,6 +34,7 @@ import refreshIcon from '../../assets/icons/actions/app-refresh.svg?raw'
 import searchIcon from '../../assets/icons/actions/app-search.svg?raw'
 import plusIcon from '../../assets/icons/actions/app-plus.svg?raw'
 import editIcon from '../../assets/icons/actions/app-edit.svg?raw'
+import saveIcon from '../../assets/icons/actions/app-save.svg?raw'
 import trashIcon from '../../assets/icons/actions/app-trash.svg?raw'
 import transferIcon from '../../assets/icons/files/app-transfer.svg?raw'
 import uploadIcon from '../../assets/icons/files/app-upload.svg?raw'
@@ -102,6 +103,7 @@ const sources = {
   search: searchIcon,
   plus: plusIcon,
   edit: editIcon,
+  save: saveIcon,
   trash: trashIcon,
   transfer: transferIcon,
   upload: uploadIcon,

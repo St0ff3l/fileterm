@@ -157,7 +157,7 @@ export function LocalTerminalSettingsPanel() {
           >
             <StableButtonContent
               busy={isSavingLocalTerminalShells}
-              icon={<AppIcon name="disk" size={14} />}
+              icon={<AppIcon name="save" size={14} />}
               label={t.localTerminalShellSave}
             />
           </button>

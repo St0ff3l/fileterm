@@ -206,7 +206,7 @@ export function SyncSettingsPanel() {
                 >
                   <StableButtonContent
                     busy={syncOperation === 'save'}
-                    icon={<AppIcon name="disk" size={14} />}
+                    icon={<AppIcon name="save" size={14} />}
                     label={t.save}
                   />
                 </button>
@@ -509,7 +509,7 @@ export function SyncSettingsPanel() {
                 >
                   <StableButtonContent
                     busy={syncOperation === 's3-save'}
-                    icon={<AppIcon name="disk" size={14} />}
+                    icon={<AppIcon name="save" size={14} />}
                     label={t.save}
                   />
                 </button>
