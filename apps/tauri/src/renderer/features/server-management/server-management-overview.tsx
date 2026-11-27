@@ -438,9 +438,14 @@ export function ServerManagementOverview({
               <MaterialIcon name="dashboard" />
               <span>{title}</span>
             </h1>
-            <Button icon={<MaterialIcon name="add" />} onClick={onCreateConnection} variant="primary">
-              {t.newConnection}
-            </Button>
+            <Button
+              aria-label={t.newConnection}
+              className="server-dashboard-create-btn"
+              icon={<MaterialIcon name="add" />}
+              onClick={onCreateConnection}
+              title={t.newConnection}
+              variant="secondary"
+            />
           </header>
 
           <div className="server-dashboard-toolbar" data-clear-selection>

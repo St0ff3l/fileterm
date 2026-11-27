@@ -599,7 +599,7 @@
   min-height: 36px;
   height: 36px;
   --control-padding-x-md: 16px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
 }
@@ -1124,7 +1124,7 @@
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
@@ -1608,7 +1608,7 @@
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   gap: 6px;
@@ -1895,7 +1895,7 @@
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   white-space: nowrap;
@@ -1911,7 +1911,7 @@
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--status-danger) 40%, var(--border-subtle));
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   background: color-mix(in srgb, var(--status-danger) 10%, var(--surface-card));
   color: var(--status-danger);
   font-size: var(--button-font-size-regular, 12px);
@@ -2518,7 +2518,7 @@
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   gap: 6px;
@@ -2627,7 +2627,7 @@
   gap: 6px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
 }
@@ -2806,7 +2806,7 @@
   min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-hover);
   color: var(--text-main);
   font-size: var(--ui-font-size-12px, 12px);
@@ -2925,7 +2925,7 @@
   min-height: 36px;
   height: 36px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   padding: 0 12px;
   background: transparent;
   color: var(--text-main);
@@ -2940,7 +2940,7 @@
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular);
 }
 @media (max-width: 600px) {

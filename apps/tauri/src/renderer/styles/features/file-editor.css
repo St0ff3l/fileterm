@@ -66,7 +66,7 @@
   min-width: 82px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-compact);
   font-weight: var(--button-font-weight);

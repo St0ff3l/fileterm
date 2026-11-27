@@ -205,7 +205,7 @@
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   gap: 6px;

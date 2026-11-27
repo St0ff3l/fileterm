@@ -415,7 +415,7 @@
 :root:not([data-theme*='light']) .command-dialog-actions .flat-button,
 :root[data-theme='default'] .command-dialog-actions .flat-button {
   color: var(--text-main) !important;
-  border-radius: var(--radius-md, 6px) !important;
+  border-radius: var(--radius-sm, 4px) !important;
   min-height: 36px !important;
   height: 36px !important;
   min-width: 82px !important;
@@ -436,7 +436,7 @@
   background: var(--button-primary-bg) !important;
   color: var(--button-primary-text) !important;
   border: 1px solid var(--button-primary-border) !important;
-  border-radius: var(--radius-md, 6px) !important;
+  border-radius: var(--radius-sm, 4px) !important;
   min-height: 36px !important;
   height: 36px !important;
   min-width: 82px !important;
@@ -650,7 +650,7 @@
   background: var(--button-primary-bg) !important;
   color: var(--button-primary-text) !important;
   border: 1px solid var(--button-primary-border) !important;
-  border-radius: var(--radius-md, 6px) !important;
+  border-radius: var(--radius-sm, 4px) !important;
 }
 
 :root:not([data-theme]) .modal-card.ssh-modal .form-actions .primary-button:hover,

@@ -408,7 +408,7 @@
 }
 
 .command-pane-actions .primary-button.compact {
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--button-font-size-compact);
   line-height: var(--button-line-height);
 }
@@ -2348,7 +2348,7 @@
   min-height: 36px;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   font-size: var(--ui-font-size-13px, 13px);
   font-weight: 600;
 }

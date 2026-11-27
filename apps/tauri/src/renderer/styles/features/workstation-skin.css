@@ -1431,7 +1431,7 @@ input:where(
 
 .flat-button,
 .primary-button {
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
 }
 
 @media (max-width: 1100px) {
