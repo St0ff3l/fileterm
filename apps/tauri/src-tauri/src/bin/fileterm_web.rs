@@ -54,14 +54,19 @@ async fn main() {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let router = build_router(WebServerState::new(
-        app.clone(),
-        runtime,
-        dist_dir,
-        session_token,
-    ));
+    let mut state = WebServerState::new(app.clone(), runtime, dist_dir, session_token);
+    if std::env::var_os("FILETERM_WEB_DOCKER_LOGIN").is_some() {
+        let account_file = std::env::var_os("FILETERM_WEB_ACCOUNT_FILE").map(PathBuf::from);
+        state = match state.with_docker_login(account_file) {
+            Ok(state) => state,
+            Err(error) => {
+                eprintln!("Failed to open FileTerm Web account storage: {error}");
+                std::process::exit(1);
+            }
+        };
+    }
 
-    let result = serve(router).await;
+    let result = serve(build_router(state)).await;
     shutdown_runtime(&app).await;
     if let Err(error) = result {
         eprintln!("FileTerm Web server exited with error: {error}");

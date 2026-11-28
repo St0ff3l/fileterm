@@ -49,11 +49,41 @@ network_options() {
 }
 network_options "$PORT"
 
-echo "==> Starting container with default credentials on http://127.0.0.1:$PORT..."
+echo "==> Verifying the first-run Docker login and forced credential setup..."
 docker run -d \
   --name "$CONTAINER_NAME" --cap-drop ALL --security-opt no-new-privileges \
   "${network_args[@]}" \
   -v "${VOLUME_NAME}:/data" \
+  "$IMAGE" >/dev/null
+
+for _ in $(seq 1 60); do
+  if curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+python3 "$ROOT_DIR/apps/tauri/web/tests/smoke.py" \
+  --base-url "http://127.0.0.1:${PORT}" \
+  --username tester --password "$PASSWORD" --phase verify-managed-login
+docker restart "$CONTAINER_NAME" >/dev/null
+for _ in $(seq 1 60); do
+  if curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+python3 "$ROOT_DIR/apps/tauri/web/tests/smoke.py" \
+  --base-url "http://127.0.0.1:${PORT}" \
+  --username tester --password "${PASSWORD}-updated" --phase verify-managed-restart
+docker rm -f "$CONTAINER_NAME" >/dev/null
+
+echo "==> Starting container with deployment-managed Basic Auth on http://127.0.0.1:$PORT..."
+docker run -d \
+  --name "$CONTAINER_NAME" --cap-drop ALL --security-opt no-new-privileges \
+  "${network_args[@]}" \
+  -v "${VOLUME_NAME}:/data" \
+  -e "FILETERM_WEB_USERNAME=tester" \
+  -e "FILETERM_WEB_PASSWORD=$PASSWORD" \
   "$IMAGE" >/dev/null
 
 for _ in $(seq 1 60); do
@@ -76,8 +106,8 @@ docker exec "$CONTAINER_NAME" sh -ec '
 echo "==> Running HTTP/WebSocket/Playwright UI smoke tests (pass 1)..."
 python3 "$ROOT_DIR/apps/tauri/web/tests/smoke.py" \
   --base-url "http://127.0.0.1:${PORT}" \
-  --username admin \
-  --password admin \
+  --username tester \
+  --password "$PASSWORD" \
   --phase create-and-verify
 
 echo "==> Checking migration from a root-owned volume and verifying persistence..."

@@ -407,3 +407,128 @@ async fn staged_download_streams_chunks_and_cleans_up_on_disconnect() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn docker_login_requires_setup_and_revokes_previous_session_after_rotation() {
+    let temp = TempDirGuard::new("fileterm-managed-login");
+    let account_file = temp.path().join(".web-account.json");
+    let state = test_state(&temp)
+        .with_docker_login(Some(account_file.clone()))
+        .unwrap();
+    let app = build_router(state);
+    let post = |path: &str, cookie: &str, payload: Value| {
+        Request::builder()
+            .method("POST")
+            .uri(path)
+            .header(COOKIE, cookie)
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .unwrap()
+    };
+    let login = |name: &str, password: &str| {
+        post(
+            "/api/web/login",
+            "",
+            json!({"username": name, "password": password}),
+        )
+    };
+    let cookie = |response: &axum::response::Response| {
+        response.headers()[SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    let default = app.clone().oneshot(login("admin", "admin")).await.unwrap();
+    assert_eq!(default.status(), StatusCode::NO_CONTENT);
+    let initial_cookie = cookie(&default);
+    let rpc = |cookie: &str| {
+        post(
+            "/api/rpc",
+            cookie,
+            json!({"command": "app_get_snapshot", "args": {}}),
+        )
+    };
+    assert_eq!(
+        app.clone()
+            .oneshot(rpc(&initial_cookie))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    let password = "custom-password-for-test";
+    let update = |cookie: &str, current: &str| {
+        post(
+            "/api/web/credentials",
+            cookie,
+            json!({"username": "operator", "password": password, "currentPassword": current}),
+        )
+    };
+    let changed = app
+        .clone()
+        .oneshot(update(&initial_cookie, ""))
+        .await
+        .unwrap();
+    assert_eq!(changed.status(), StatusCode::NO_CONTENT);
+    let current_cookie = cookie(&changed);
+    assert_eq!(
+        app.clone()
+            .oneshot(rpc(&initial_cookie))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(rpc(&current_cookie))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(update(&current_cookie, "wrong"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        app.oneshot(update(&current_cookie, password))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+
+    let restarted = build_router(
+        test_state(&temp)
+            .with_docker_login(Some(account_file.clone()))
+            .unwrap(),
+    );
+    assert_eq!(
+        restarted
+            .clone()
+            .oneshot(login("admin", "admin"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        restarted
+            .oneshot(login("operator", password))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert!(!std::fs::read_to_string(account_file)
+        .unwrap()
+        .contains(password));
+}

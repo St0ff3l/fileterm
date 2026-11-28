@@ -10,9 +10,9 @@ Run from the repository root:
 docker compose -f apps/tauri/web/compose.yaml up -d --build
 ```
 
-Open [http://localhost:34538](http://localhost:34538) and sign in with username `admin` and password `admin`. Set `FILETERM_WEB_PORT` to use another port.
+Open [http://localhost:34538](http://localhost:34538). For a new data volume with no deployment credentials, sign in with `admin` / `admin`. FileTerm opens **Settings → Web Login** and requires a new password before opening the workspace. You can change both the username and password there. FileTerm stores a password hash in `/data/.web-account.json`. Set `FILETERM_WEB_PORT` to use another port.
 
-Set a custom password before making FileTerm reachable from other devices. Set `FILETERM_WEB_USERNAME` to override the username.
+Complete setup locally before exposing FileTerm, or specify credentials at deployment. Deployment credentials take precedence over the stored account and are managed through Docker. Set `FILETERM_WEB_USERNAME` with a password to override the username. A deployment password also gives an administrator a way to recover access from the server.
 
 ```bash
 FILETERM_WEB_PASSWORD='change-me-now' \
@@ -50,13 +50,13 @@ On bridge, connect to SSH using a reachable host IP or a `host-gateway` alias.
 - **Custom certificate**: pass readable PEM mounts to the container and set `FILETERM_WEB_TLS_CERT` and `FILETERM_WEB_TLS_KEY` in the service environment.
 - **Host reverse proxy**: preserve the public Host, pass the external `X-Forwarded-Proto` and `X-Forwarded-Host`, and forward WebSocket connections to the loopback gateway. Caddy trusts loopback proxies for these headers in the default host configuration.
 
-Caddy authenticates the page, HTTP RPC, file requests and WebSocket upgrades. The Rust backend in Docker listens exclusively on a Unix socket inside a private directory. It checks request origins and requires its session cookie for WebSocket connections. The unauthenticated `/healthz` endpoint returns service metadata only. The standalone development binary also supports a loopback HTTP listener without the Caddy authentication layer.
+Caddy enforces Basic Auth when credentials are supplied at deploy time. Otherwise, the Docker login form uses an HttpOnly session cookie to protect RPC, file transfers, and WebSocket upgrades. Changing browser-managed credentials revokes the previous cookie and closes its WebSockets. The Rust backend listens exclusively on a Unix socket inside a private directory and checks request origins. The unauthenticated `/healthz` endpoint returns service metadata only. The standalone development binary also supports a loopback HTTP listener without the Caddy authentication layer.
 
 ## Architecture, data persistence, and upgrades
 
 - **Native Web stack**: the React renderer detects the `Web` runtime via `/api/bootstrap`, routes RPC calls to `POST /api/rpc`, streams events and terminal output over `/api/ws`, renders native sub-windows via modal overlays (`WebWindowOverlayHost`), and transfers browser files through `/api/web/*`.
 - **Container boundary**: local terminals, local file browsing, SSH agents, and network connections run inside the container as its configured user environment. Mount host directories or SSH keys explicitly if needed.
-- **Persistent volume (`/data`)**: `fileterm-data` stores FileTerm profiles/settings, `/data/.machine-id` (for encrypted credential compatibility), and `/data/.session-secret`. Keep the named volume across container rebuilds and image upgrades.
+- **Persistent volume (`/data`)**: `fileterm-data` stores FileTerm profiles/settings, `/data/.machine-id` (for encrypted credential compatibility), `/data/.session-secret`, and the browser-managed Web account when configured. Keep the named volume across container rebuilds and image upgrades.
 
 ### Existing data volumes
 

@@ -1,3 +1,5 @@
+import { getWebLoginStatus } from '../../../../bridge/web-login'
+import { WebLoginSettingsPanel } from './panels/web-login-settings-panel'
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
 import { SidebarAlignedLabel } from '../../../components/common/icon-label/icon-label'
 import type { McpAgentClientStatus, SavedTheme, ThemeConfig, UiPreferences, WorkspaceMode } from '@fileterm/core'
@@ -95,6 +97,7 @@ export function SettingsModal({
     inline
   })
 
+  const webLogin = getWebLoginStatus()
   const content = (
     <SettingsModalProvider value={settingsPanelContext}>
       <div
@@ -148,6 +151,10 @@ export function SettingsModal({
           </aside>
 
           <main className="connection-manager-main">
+            {activeTab === 'web-login' && webLogin && (
+              <WebLoginSettingsPanel status={webLogin} onSaved={() => window.location.reload()} />
+            )}
+
             {activeTab === 'local-terminal' ? <LocalTerminalSettingsPanel /> : null}
 
             {activeTab === 'ai' ? <AiSettingsPanel /> : null}

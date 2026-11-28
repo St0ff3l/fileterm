@@ -6,6 +6,16 @@ const languageNames = {
 } as const
 
 const zhCN = {
+  webLoginSettings: 'Web 登录',
+  webLoginSetupHint: '首次登录后，请设置 Web 登录账号和新密码，再进入工作台。',
+  webLoginDeploymentManaged: '登录凭据由 Docker 部署配置管理。',
+  webLoginCurrentPassword: '当前密码',
+  webLoginNewPassword: '新密码',
+  webLoginPasswordRules: '用户名可以包含字母、数字、点、下划线和连字符。密码至少需要 12 个字符。',
+  webLoginSignIn: '登录',
+  webLoginInvalid: '用户名或密码不正确。',
+  webLoginCurrentPasswordInvalid: '当前密码不正确。若会话已过期，请刷新后重新登录。',
+  webLoginSaveFailed: '无法完成请求，请重试。',
   resizeTableColumn: '调整“{label}”列宽',
   networkConnections: '网络连接',
   networkAllIpv4: '所有 IPv4 地址',
@@ -2537,6 +2547,18 @@ const zhCN = {
 
 const enUS: typeof zhCN = {
   ...zhCN,
+  webLoginSettings: 'Web Login',
+  webLoginSetupHint: 'Set your Web login username and a new password before opening the workspace.',
+  webLoginDeploymentManaged: 'Your Docker deployment manages the sign-in credentials.',
+  webLoginCurrentPassword: 'Current password',
+  webLoginNewPassword: 'New password',
+  webLoginPasswordRules:
+    'Usernames can contain letters, digits, dots, underscores, and hyphens. Use at least 12 characters for the password.',
+  webLoginSignIn: 'Sign in',
+  webLoginInvalid: 'The username or password is incorrect.',
+  webLoginCurrentPasswordInvalid:
+    'Check your current password. If your session has expired, refresh and sign in again.',
+  webLoginSaveFailed: 'The request failed. Try again.',
   resizeTableColumn: 'Resize {label} column',
   networkConnections: 'Network connections',
   networkAllIpv4: 'All IPv4 addresses',

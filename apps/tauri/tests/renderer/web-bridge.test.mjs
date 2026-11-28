@@ -172,9 +172,10 @@ test('web bridge bootstraps metadata, handles RPC, dispatches WS events & acks t
   const appEvents = load('../../src/renderer/lib/app-events.ts', {}, globals)
   const terminalOutput = load('../../src/bridge/events/terminal-output.ts', {}, globals)
   const sharedApi = load('../../src/bridge/shared-api.ts', {}, globals)
+  const webLogin = load('../../src/bridge/web-login.ts', {}, globals)
   const webTransport = load(
     '../../src/bridge/web-transport.ts',
-    { './events/terminal-output': terminalOutput },
+    { './events/terminal-output': terminalOutput, './web-login': webLogin },
     globals
   )
   const { createWebApi } = load(
@@ -191,6 +192,7 @@ test('web bridge bootstraps metadata, handles RPC, dispatches WS events & acks t
   assert.equal(api.isDesktop, false)
   assert.equal(api.platform, 'web')
   assert.equal(api.runtimeName, 'Web')
+  assert.equal(webLogin.getWebLoginStatus(), null)
   assert.equal(sockets.length, 1)
   assert.ok(sockets[0].url.startsWith('wss://fileterm.example:8443/api/ws?clientId='))
 

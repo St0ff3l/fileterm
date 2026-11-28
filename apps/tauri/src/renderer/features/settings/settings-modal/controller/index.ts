@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { t } from '../../../../i18n'
+import { getWebLoginStatus } from '../../../../../bridge/web-login'
 import { SETTINGS_SIDEBAR_ITEMS, SETTINGS_TAB_SEARCH_TERMS } from '../constants'
 import { useAiSettingsController } from './ai'
 import { useAgentSettingsController } from './agent'
@@ -20,19 +21,23 @@ export function useSettingsModalController(options: SettingsModalControllerOptio
   const state = useSettingsModalState(initialTab, uiPreferences)
   const { activeTab, settingsSearchQuery, desktopApi } = state
 
+  const dockerWebLogin = getWebLoginStatus() !== null
   const visibleSettingsTabs = useMemo(() => {
+    const items = SETTINGS_SIDEBAR_ITEMS.filter((item) => item.tab !== 'web-login' || dockerWebLogin)
     const query = settingsSearchQuery.trim().toLocaleLowerCase()
     if (!query) {
-      return new Set(SETTINGS_SIDEBAR_ITEMS.map((item) => item.tab))
+      return new Set(items.map((item) => item.tab))
     }
 
     return new Set(
-      SETTINGS_SIDEBAR_ITEMS.filter((item) => {
-        const searchText = `${t[item.labelKey]} ${SETTINGS_TAB_SEARCH_TERMS[item.tab]}`.toLocaleLowerCase()
-        return searchText.includes(query)
-      }).map((item) => item.tab)
+      items
+        .filter((item) => {
+          const searchText = `${t[item.labelKey]} ${SETTINGS_TAB_SEARCH_TERMS[item.tab]}`.toLocaleLowerCase()
+          return searchText.includes(query)
+        })
+        .map((item) => item.tab)
     )
-  }, [locale, settingsSearchQuery])
+  }, [dockerWebLogin, locale, settingsSearchQuery])
 
   const preferences = useSettingsPreferencesController({ state })
   const theme = useThemeSettingsController({

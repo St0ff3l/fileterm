@@ -4,9 +4,11 @@ import {
   type TerminalOutputListener
 } from './events/terminal-output'
 import type { BridgeMetadata, BridgeTransport } from './transport'
+import { setWebLoginStatus, type WebLoginStatus } from './web-login'
 
 export interface WebBootstrapPayload extends BridgeMetadata {
   serverOs?: string
+  webLogin?: WebLoginStatus | null
 }
 
 interface ServerWsMessage {
@@ -60,7 +62,10 @@ export class WebBridgeTransport implements BridgeTransport {
       throw new Error(`Bootstrap failed with HTTP ${response.status}`)
     }
     const metadata = (await response.json()) as WebBootstrapPayload
-    await this.ensureSocket()
+    setWebLoginStatus(metadata.webLogin ?? null)
+    if (metadata.webLogin?.mode !== 'login' && metadata.webLogin?.mode !== 'setup') {
+      await this.ensureSocket()
+    }
     return metadata
   }
 

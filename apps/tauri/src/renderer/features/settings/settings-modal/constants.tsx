@@ -20,6 +20,7 @@ import { type LocaleMessages } from '../../../i18n'
 import { type AppIconName } from '../../common/app-icon'
 
 export type SettingsTab =
+  | 'web-login'
   | 'ai'
   | 'agent'
   | 'connections'
@@ -50,6 +51,7 @@ export type SettingsSidebarItem = {
 } & ({ materialIcon: MaterialIconName; appIcon?: never } | { appIcon: AppIconName; materialIcon?: never })
 
 export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
+  { tab: 'web-login', labelKey: 'webLoginSettings', appIcon: 'shield-check' },
   { tab: 'interface', labelKey: 'interfaceSettings', materialIcon: 'palette' },
   { tab: 'workspace-mode', labelKey: 'workspaceMode', appIcon: 'workspace-mode' },
   { tab: 'local-terminal', labelKey: 'terminalSettings', appIcon: 'terminal-file' },
@@ -66,6 +68,7 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
 ]
 
 export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
+  'web-login': 'docker web login username password 登录 账号 用户名 密码',
   interface:
     'appearance theme color font ui window startup size menu bar tray icon macos layout tab tabs host group row compact height titlebar file panel 外观 界面 主题 颜色 字体 窗口 启动 大小 菜单栏 托盘 图标 布局 标签 标签页 二级 主机 分组 单行 紧凑 高度 标题栏 文件区域',
   'workspace-mode':

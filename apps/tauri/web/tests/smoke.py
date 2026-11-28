@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import ssl
 import urllib.error
 import urllib.request
@@ -88,14 +89,66 @@ def verify_http_guards(base_url: str, auth_header: str, insecure: bool):
     assert status == 401, f"/api/ws without session cookie expected 401, got {status}"
 
 
-def verify_browser_ui(base_url: str, username: str, password: str, phase: str):
+def browser_launch_options():
     launch_kwargs: dict = {"headless": True}
     chrome_path = os.environ.get("FILETERM_TEST_CHROME")
     if chrome_path and os.path.exists(chrome_path):
         launch_kwargs["executable_path"] = chrome_path
 
+    return launch_kwargs
+
+
+def verify_managed_login(base_url: str, username: str, password: str, phase: str):
     with sync_playwright() as p:
-        browser = p.chromium.launch(**launch_kwargs)
+        browser = p.chromium.launch(**browser_launch_options())
+        context = browser.new_context(locale="en-US")
+        page = context.new_page()
+        page.goto(base_url)
+        form = page.locator(".web-login-form")
+        form.wait_for()
+        rpc = f"{base_url}/api/rpc"
+        assert context.request.post(rpc, data={}).status == 401
+
+        if phase == "verify-managed-login":
+            form.locator("input[type=text]").fill("admin")
+            form.locator("input[type=password]").fill("admin")
+            form.locator("button[type=submit]").click()
+            form.locator("input[autocomplete=new-password]").wait_for()
+            assert context.request.post(rpc, data={}).status == 403
+
+            form.locator("input[type=text]").fill(username)
+            form.locator("input[autocomplete=new-password]").fill(password)
+            form.locator("button[type=submit]").click()
+            page.wait_for_selector(".fs-shell")
+            page.locator(".home-sidebar").get_by_role(
+                "button", name=re.compile(r"^(Settings|设置)$")
+            ).click()
+            settings_items = page.locator(".settings-modal .connection-manager-sidebar-item")
+            assert settings_items.first.inner_text().strip() in {"Web Login", "Web 登录"}
+            settings_items.first.click()
+            form.locator("input[autocomplete=current-password]").fill(password)
+            form.locator("input[autocomplete=new-password]").fill(f"{password}-updated")
+            form.locator("button[type=submit]").click()
+            page.wait_for_selector(".web-login-form", state="hidden")
+            page.wait_for_selector(".fs-shell")
+            assert context.request.post(
+                rpc, data={"command": "app_get_snapshot", "args": {}}
+            ).status == 200
+        else:
+            assert context.request.post(
+                f"{base_url}/api/web/login", data={"username": "admin", "password": "admin"}
+            ).status == 401
+            form.locator("input[type=text]").fill(username)
+            form.locator("input[type=password]").fill(password)
+            form.locator("button[type=submit]").click()
+            page.wait_for_selector(".fs-shell")
+
+        browser.close()
+
+
+def verify_browser_ui(base_url: str, username: str, password: str, phase: str):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(**browser_launch_options())
         context = browser.new_context(
             http_credentials={"username": username, "password": password},
             ignore_https_errors=True,
@@ -157,13 +210,16 @@ def main():
     parser.add_argument("--password", required=True)
     parser.add_argument("--insecure", action="store_true")
     parser.add_argument(
-        "--phase", choices=["create-and-verify", "verify-persisted"], required=True
+        "--phase", choices=["create-and-verify", "verify-persisted", "verify-managed-login", "verify-managed-restart"], required=True
     )
     args = parser.parse_args()
 
-    token = base64.b64encode(f"{args.username}:{args.password}".encode("utf-8")).decode("ascii")
-    verify_http_guards(args.base_url, f"Basic {token}", args.insecure)
-    verify_browser_ui(args.base_url, args.username, args.password, args.phase)
+    if args.phase.startswith("verify-managed-"):
+        verify_managed_login(args.base_url, args.username, args.password, args.phase)
+    else:
+        token = base64.b64encode(f"{args.username}:{args.password}".encode("utf-8")).decode("ascii")
+        verify_http_guards(args.base_url, f"Basic {token}", args.insecure)
+        verify_browser_ui(args.base_url, args.username, args.password, args.phase)
     print(f"Smoke phase '{args.phase}' passed on {args.base_url}")
 
 

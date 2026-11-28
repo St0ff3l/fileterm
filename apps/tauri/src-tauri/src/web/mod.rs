@@ -1,4 +1,5 @@
 mod files;
+mod login;
 mod rpc;
 mod ws;
 
@@ -30,6 +31,8 @@ pub struct WebServerState {
     pub runtime: Arc<WebRuntime>,
     pub dist_dir: PathBuf,
     pub session_token: String,
+    login: Option<Arc<login::WebLogin>>,
+    docker_login: bool,
 }
 
 impl WebServerState {
@@ -44,7 +47,17 @@ impl WebServerState {
             runtime,
             dist_dir,
             session_token,
+            login: None,
+            docker_login: false,
         }
+    }
+    pub fn with_docker_login(mut self, account_file: Option<PathBuf>) -> std::io::Result<Self> {
+        self.docker_login = true;
+        self.login = account_file
+            .map(login::WebLogin::open)
+            .transpose()?
+            .map(Arc::new);
+        Ok(self)
     }
 }
 
@@ -132,6 +145,14 @@ pub fn build_router(state: WebServerState) -> Router {
         .route("/api/rpc", post(rpc::handle_rpc))
         .route("/api/ws", get(ws::handle_ws))
         .route(
+            "/api/web/login",
+            post(login::sign_in).layer(DefaultBodyLimit::max(4096)),
+        )
+        .route(
+            "/api/web/credentials",
+            post(login::change).layer(DefaultBodyLimit::max(4096)),
+        )
+        .route(
             "/api/web/stage-upload",
             post(files::stage_upload).layer(DefaultBodyLimit::max(MAX_UPLOAD_BODY_BYTES)),
         )
@@ -179,7 +200,13 @@ async fn handle_bootstrap(
     State(state): State<WebServerState>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
+    let login_status = match &state.login {
+        Some(login) => login.status(&headers).await,
+        None if state.docker_login => json!({ "mode": "deployment" }),
+        None => Value::Null,
+    };
     let mut response = Json(json!({
+        "webLogin": login_status,
         "platform": "web",
         "serverOs": std::env::consts::OS,
         "arch": crate::commands::app_get_arch(),
@@ -198,23 +225,8 @@ async fn handle_bootstrap(
     }))
     .into_response();
 
-    let is_https = headers
-        .get("x-forwarded-proto")
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|proto| proto.eq_ignore_ascii_case("https"));
-    let cookie = if is_https {
-        format!(
-            "{WEB_SESSION_COOKIE}={}; HttpOnly; SameSite=Strict; Path=/; Secure",
-            state.session_token
-        )
-    } else {
-        format!(
-            "{WEB_SESSION_COOKIE}={}; HttpOnly; SameSite=Strict; Path=/",
-            state.session_token
-        )
-    };
-    if let Ok(header_value) = HeaderValue::from_str(&cookie) {
-        response.headers_mut().append(SET_COOKIE, header_value);
+    if state.login.is_none() {
+        set_session_cookie(&mut response, &headers, &state.session_token);
     }
     response
         .headers_mut()
@@ -222,9 +234,30 @@ async fn handle_bootstrap(
     Ok(response)
 }
 
+fn set_session_cookie(response: &mut Response, headers: &HeaderMap, token: &str) {
+    let is_https = headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|proto| proto.eq_ignore_ascii_case("https"));
+    let cookie = if is_https {
+        format!(
+            "{WEB_SESSION_COOKIE}={}; HttpOnly; SameSite=Strict; Path=/; Secure",
+            token
+        )
+    } else {
+        format!(
+            "{WEB_SESSION_COOKIE}={}; HttpOnly; SameSite=Strict; Path=/",
+            token
+        )
+    };
+    if let Ok(header_value) = HeaderValue::from_str(&cookie) {
+        response.headers_mut().append(SET_COOKIE, header_value);
+    }
+}
+
 async fn security_and_cache_middleware(
     State(state): State<WebServerState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Response {
     let path = request.uri().path().to_string();
@@ -235,7 +268,7 @@ async fn security_and_cache_middleware(
         if !origin_matches_host(headers) {
             return (StatusCode::FORBIDDEN, "Origin mismatch").into_response();
         }
-        if !has_valid_session_cookie(headers, &state.session_token) {
+        if state.login.is_none() && !has_valid_session_cookie(headers, &state.session_token) {
             return (
                 StatusCode::UNAUTHORIZED,
                 "Missing or invalid session cookie",
@@ -248,6 +281,23 @@ async fn security_and_cache_middleware(
     ) && !origin_matches_host(headers)
     {
         return (StatusCode::FORBIDDEN, "Origin mismatch").into_response();
+    }
+
+    if let Some(login) = &state.login {
+        if path.starts_with("/api/")
+            && !matches!(
+                path.as_str(),
+                "/api/bootstrap" | "/api/web/login" | "/api/web/credentials"
+            )
+        {
+            let session = match login.authorize(headers).await {
+                Ok(session) => session,
+                Err(status) => return status.into_response(),
+            };
+            if path == "/api/ws" {
+                request.extensions_mut().insert(session);
+            }
+        }
     }
 
     let mut response = next.run(request).await;

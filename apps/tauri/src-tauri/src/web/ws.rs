@@ -34,6 +34,7 @@ enum ClientWsMessage {
 pub async fn handle_ws(
     State(state): State<WebServerState>,
     Query(query): Query<WsQuery>,
+    session: Option<axum::Extension<tokio::sync::watch::Receiver<String>>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
     let client_id = query
@@ -45,7 +46,15 @@ pub async fn handle_ws(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "main".to_string());
 
-    ws.on_upgrade(move |socket| run_ws_session(state, client_id, window_label, socket))
+    ws.on_upgrade(move |socket| {
+        run_ws_session(
+            state,
+            client_id,
+            window_label,
+            socket,
+            session.map(|session| session.0),
+        )
+    })
 }
 
 fn serialize_server_message(message: WebServerMessage) -> Option<String> {
@@ -81,6 +90,7 @@ async fn run_ws_session(
     client_id: String,
     window_label: String,
     socket: WebSocket,
+    mut session: Option<tokio::sync::watch::Receiver<String>>,
 ) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (direct_tx, mut direct_rx) = mpsc::channel::<WebServerMessage>(WS_OUTBOX_CAPACITY);
@@ -135,7 +145,20 @@ async fn run_ws_session(
         }
     });
 
-    while let Some(frame_result) = ws_receiver.next().await {
+    loop {
+        let frame_result = tokio::select! {
+            biased;
+            _ = async {
+                match &mut session {
+                    Some(session) => { let _ = session.changed().await; }
+                    None => std::future::pending().await,
+                }
+            } => break,
+            frame = ws_receiver.next() => match frame {
+                Some(frame) => frame,
+                None => break,
+            },
+        };
         let Ok(frame) = frame_result else {
             break;
         };

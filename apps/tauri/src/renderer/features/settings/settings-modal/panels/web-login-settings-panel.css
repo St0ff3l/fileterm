@@ -1,0 +1,30 @@
+.web-login-page {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+}
+
+.web-login-page .modal-card.manager-modal {
+  width: min(100%, 520px);
+  height: auto;
+}
+
+.web-login-page .settings-panel {
+  padding: 20px;
+}
+
+.web-login-form {
+  display: grid;
+  gap: 12px;
+  max-width: 400px;
+}
+
+.web-login-field {
+  display: grid;
+  gap: 6px;
+}
+
+.web-login-form button {
+  justify-self: start;
+}

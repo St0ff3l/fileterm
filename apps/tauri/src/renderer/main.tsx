@@ -4,6 +4,8 @@ import { DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_UI_FONT_SCALE_PERCENT, DEFAULT_UI
 import { App } from './app'
 import { ErrorBoundary } from './features/common/error-boundary'
 import { createRuntimeApi, isDesktopRuntime } from '../bridge/runtime-api'
+import { getWebLoginStatus } from '../bridge/web-login'
+import { WebLoginSettingsPanel } from './features/settings/settings-modal/panels/web-login-settings-panel'
 import { getLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
@@ -102,6 +104,22 @@ void createRuntimeApi()
     document.documentElement.dataset.platform = resolveRendererPlatform(api.platform)
     if (api.platform === 'linux') {
       document.documentElement.dataset.linuxWindowCorners = api.linuxWindowCornerStyle ?? 'square'
+    }
+
+    const webLogin = getWebLoginStatus()
+    if (webLogin?.mode === 'login' || webLogin?.mode === 'setup') {
+      applyThemeVariables('fileterm-dark')
+      renderRoot(
+        <main className="web-login-page">
+          <div className="modal-card manager-modal settings-modal">
+            <div className="connection-manager-header">
+              <h1 className="connection-manager-title">{webLogin.mode === 'setup' ? t.settings : 'FileTerm'}</h1>
+            </div>
+            <WebLoginSettingsPanel status={webLogin} onSaved={() => window.location.reload()} />
+          </div>
+        </main>
+      )
+      return
     }
 
     // Read durable UI preferences before mounting React. App state is then
