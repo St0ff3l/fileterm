@@ -49,9 +49,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
   HOME=/data \
   XDG_DATA_HOME=/data/.local/share \
   XDG_CONFIG_HOME=/data/.config \
-  FILETERM_WEB_BIND=127.0.0.1:18420 \
   FILETERM_WEB_DIST_DIR=/opt/fileterm/dist \
-  FILETERM_WEB_PORT=8080 \
+  FILETERM_WEB_PORT=34538 \
+  FILETERM_WEB_LISTEN=127.0.0.1 \
   FILETERM_WEB_USERNAME=fileterm \
   FILETERM_WEB_TLS=off
 
@@ -66,7 +66,10 @@ RUN apt-get update \
   && mkdir -p /opt/fileterm/dist /data/.local/share /data/.config /etc/fileterm \
   && rm -f /etc/machine-id \
   && ln -s /data/.machine-id /etc/machine-id \
-  && chmod 0750 /data
+  && groupadd -g 10001 fileterm \
+  && useradd -u 10001 -g 10001 -d /data -M fileterm \
+  && chown -R 10001:10001 /data \
+  && chmod 0700 /data
 
 COPY --from=caddy-source /usr/bin/caddy /usr/local/bin/caddy
 COPY --from=frontend-builder /src/apps/tauri/dist /opt/fileterm/dist
@@ -75,10 +78,12 @@ COPY apps/tauri/web/entrypoint.sh /opt/fileterm/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/fileterm-web /usr/local/bin/caddy /opt/fileterm/entrypoint.sh
 
-EXPOSE 8080
+USER 10001:10001
+EXPOSE 34538
 VOLUME ["/data"]
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=6 \
-  CMD curl -fsS http://127.0.0.1:18420/healthz >/dev/null || exit 1
+  CMD curl -kfsS "http://127.0.0.1:${FILETERM_WEB_PORT}/healthz" >/dev/null || \
+      curl -kfsS "https://127.0.0.1:${FILETERM_WEB_PORT}/healthz" >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/opt/fileterm/entrypoint.sh"]

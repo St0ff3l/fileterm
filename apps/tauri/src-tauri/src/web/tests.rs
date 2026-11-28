@@ -364,3 +364,46 @@ where
     .await
     .unwrap()
 }
+
+#[tokio::test]
+async fn staged_download_streams_chunks_and_cleans_up_on_disconnect() {
+    let temp = TempDirGuard::new("fileterm-web-stream-test");
+    let state = test_state(&temp);
+    let file = temp.path().join("large.bin");
+    std::fs::File::create(&file)
+        .unwrap()
+        .set_len(4 * 1024 * 1024)
+        .unwrap();
+    let token = state
+        .runtime
+        .register_download(
+            file.clone(),
+            None,
+            "large.bin".into(),
+            "application/octet-stream".into(),
+        )
+        .await;
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/web/downloads/{token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(file.exists());
+    let mut stream = response.into_body().into_data_stream();
+    let first_chunk = stream.next().await.unwrap().unwrap();
+    assert_eq!(first_chunk.len(), 64 * 1024);
+    drop(stream);
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while file.exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+}

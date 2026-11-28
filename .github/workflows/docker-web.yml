@@ -39,7 +39,7 @@ jobs:
       - name: Build and test image
         run: |
           docker build -f apps/tauri/web/Dockerfile -t fileterm-web:ci .
-          FILETERM_TEST_TLS=1 bash apps/tauri/web/tests/run.sh fileterm-web:ci
+          FILETERM_TEST_NETWORK=host FILETERM_TEST_TLS=1 bash apps/tauri/web/tests/run.sh fileterm-web:ci
       - name: Export tested image
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.preview_tag != ''
         run: docker save fileterm-web:ci | gzip > fileterm-web-${{ matrix.arch }}.tar.gz

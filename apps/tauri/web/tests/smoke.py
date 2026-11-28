@@ -49,8 +49,12 @@ def verify_http_guards(base_url: str, auth_header: str, insecure: bool):
     assert json.loads(body).get("runtime") == "web"
 
     # Unauthenticated access is rejected with 401
-    for path in ["/", "/api/bootstrap", "/api/ws"]:
+    for path in ["/", "/api/bootstrap", "/api/ws", "/api/web/export-connections"]:
         status, _, _ = http_get(opener, f"{base_url}{path}")
+        assert status == 401, f"unauthenticated {path} expected 401, got {status}"
+
+    for path in ["/api/rpc", "/api/web/stage-upload"]:
+        status, _, _ = http_post(opener, f"{base_url}{path}", {})
         assert status == 401, f"unauthenticated {path} expected 401, got {status}"
 
     # Authenticated /api/bootstrap sets HttpOnly cookie and returns Web metadata

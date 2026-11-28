@@ -5,15 +5,19 @@ services:
       dockerfile: apps/tauri/web/Dockerfile
     container_name: fileterm-web
     restart: unless-stopped
-    ports:
-      - '127.0.0.1:${FILETERM_WEB_PORT:-34538}:8080'
+    network_mode: host
     environment:
-      FILETERM_WEB_PORT: '8080'
+      FILETERM_WEB_PORT: '${FILETERM_WEB_PORT:-34538}'
       FILETERM_WEB_USERNAME: '${FILETERM_WEB_USERNAME:-fileterm}'
       FILETERM_WEB_PASSWORD: '${FILETERM_WEB_PASSWORD:-}'
       FILETERM_WEB_PASSWORD_HASH: '${FILETERM_WEB_PASSWORD_HASH:-}'
       FILETERM_WEB_TLS: '${FILETERM_WEB_TLS:-off}'
+      FILETERM_WEB_LISTEN: '127.0.0.1'
       TZ: '${TZ:-Asia/Shanghai}'
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - fileterm-data:/data
 

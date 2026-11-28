@@ -1,19 +1,54 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use axum::extract::{Multipart, Path as AxumPath, Query, State};
+use axum::body::{Body, Bytes};
+use axum::extract::{multipart::Field, Multipart, Path as AxumPath, Query, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::runtime::remove_staged_path;
 use crate::services::transfers::TransferConflictPolicy;
 use crate::web::{api_error, content_disposition_attachment, sanitize_file_name, WebServerState};
 
 const PREPARE_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// Owns a staging path until a successful handoff. Dropping an HTTP request or
+/// response also drops this guard and schedules filesystem cleanup.
+struct StagedCleanup(Option<PathBuf>);
+
+impl Drop for StagedCleanup {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            drop(crate::runtime::spawn_blocking(move || {
+                remove_staged_path(path)
+            }));
+        }
+    }
+}
+
+async fn write_multipart_file(
+    mut field: Field<'_>,
+    path: &Path,
+) -> Result<(), (StatusCode, String)> {
+    let storage_error =
+        |error: std::io::Error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string());
+    let mut file = tokio::fs::File::create_new(path)
+        .await
+        .map_err(storage_error)?;
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|error| (error.status(), error.to_string()))?
+    {
+        file.write_all(&chunk).await.map_err(storage_error)?;
+    }
+    file.flush().await.map_err(storage_error)
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,37 +81,28 @@ pub async fn stage_upload(
         );
     }
 
+    let mut cleanup = StagedCleanup(Some(staging_dir.clone()));
     let mut staged_paths = Vec::new();
-    while let Ok(Some(field)) = multipart.next_field().await {
-        let fallback = format!("upload-{}", staged_paths.len() + 1);
-        let raw_name = field.file_name().unwrap_or(&fallback).to_string();
-        let file_name = sanitize_file_name(&raw_name, &fallback);
-        let target_path = unique_file_path(&staging_dir, &file_name);
-        let bytes = match field.bytes().await {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                remove_staged_path(staging_dir);
-                return api_error(
-                    StatusCode::BAD_REQUEST,
-                    format!("读取上传文件失败: {error}"),
-                );
-            }
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(Some(field)) => field,
+            Ok(None) => break,
+            Err(error) => return api_error(error.status(), error.to_string()),
         };
-        if let Err(error) = tokio::fs::write(&target_path, bytes).await {
-            remove_staged_path(staging_dir);
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("保存暂存上传文件失败: {error}"),
-            );
+        let fallback = format!("upload-{}", staged_paths.len() + 1);
+        let file_name = sanitize_file_name(field.file_name().unwrap_or(&fallback), &fallback);
+        let target_path = unique_file_path(&staging_dir, &file_name);
+        if let Err((status, error)) = write_multipart_file(field, &target_path).await {
+            return api_error(status, error);
         }
         staged_paths.push(target_path.to_string_lossy().into_owned());
     }
 
     if staged_paths.is_empty() {
-        remove_staged_path(staging_dir);
         return api_error(StatusCode::BAD_REQUEST, "未收到任何上传文件");
     }
 
+    cleanup.0.take();
     Json(json!({ "paths": staged_paths })).into_response()
 }
 
@@ -220,15 +246,29 @@ pub async fn serve_download(
         return api_error(StatusCode::NOT_FOUND, "下载链接已失效或已被使用");
     };
 
-    let cleanup_target = entry.cleanup_dir.unwrap_or_else(|| entry.file_path.clone());
-    let bytes = tokio::fs::read(&entry.file_path).await;
-    crate::runtime::spawn_blocking(move || remove_staged_path(cleanup_target));
-
-    let Ok(bytes) = bytes else {
+    let cleanup = StagedCleanup(Some(
+        entry.cleanup_dir.unwrap_or_else(|| entry.file_path.clone()),
+    ));
+    let Ok(file) = tokio::fs::File::open(&entry.file_path).await else {
         return api_error(StatusCode::NOT_FOUND, "下载文件不存在");
     };
-
-    let mut response = (StatusCode::OK, bytes).into_response();
+    let size = file.metadata().await.ok().map(|metadata| metadata.len());
+    let stream =
+        futures_util::stream::try_unfold((file, cleanup), |(mut file, cleanup)| async move {
+            let mut chunk = vec![0; 64 * 1024];
+            let count = file.read(&mut chunk).await?;
+            if count == 0 {
+                return Ok::<_, std::io::Error>(None);
+            }
+            chunk.truncate(count);
+            Ok(Some((Bytes::from(chunk), (file, cleanup))))
+        });
+    let mut response = Body::from_stream(stream).into_response();
+    if let Some(size) = size {
+        response
+            .headers_mut()
+            .insert(axum::http::header::CONTENT_LENGTH, size.into());
+    }
     if let Ok(ct) = axum::http::HeaderValue::from_str(&entry.content_type) {
         response.headers_mut().insert(CONTENT_TYPE, ct);
     }
@@ -287,40 +327,28 @@ pub async fn preview_connection_import(
         );
     }
 
+    let _cleanup = StagedCleanup(Some(staging_dir.clone()));
     let mut paths = Vec::new();
-    while let Ok(Some(field)) = multipart.next_field().await {
-        let fallback = format!("import-{}.json", paths.len() + 1);
-        let raw_name = field.file_name().unwrap_or(&fallback).to_string();
-        let file_name = sanitize_file_name(&raw_name, &fallback);
-        let target_path = unique_file_path(&staging_dir, &file_name);
-        let bytes = match field.bytes().await {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                remove_staged_path(staging_dir);
-                return api_error(
-                    StatusCode::BAD_REQUEST,
-                    format!("读取导入文件失败: {error}"),
-                );
-            }
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(Some(field)) => field,
+            Ok(None) => break,
+            Err(error) => return api_error(error.status(), error.to_string()),
         };
-        if let Err(error) = tokio::fs::write(&target_path, bytes).await {
-            remove_staged_path(staging_dir);
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("写入导入暂存文件失败: {error}"),
-            );
+        let fallback = format!("import-{}.json", paths.len() + 1);
+        let file_name = sanitize_file_name(field.file_name().unwrap_or(&fallback), &fallback);
+        let target_path = unique_file_path(&staging_dir, &file_name);
+        if let Err((status, error)) = write_multipart_file(field, &target_path).await {
+            return api_error(status, error);
         }
         paths.push(target_path);
     }
 
     if paths.is_empty() {
-        remove_staged_path(staging_dir);
         return api_error(StatusCode::BAD_REQUEST, "未选择任何导入文件");
     }
-
     let result =
         crate::services::connections::create_import_plan_from_paths(&state.app, paths).await;
-    remove_staged_path(staging_dir);
     match result {
         Ok(plan) => Json(plan).into_response(),
         Err(error) => api_error(StatusCode::BAD_REQUEST, error.to_string()),

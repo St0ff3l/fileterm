@@ -36,12 +36,6 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() {
-    let bind_raw =
-        std::env::var("FILETERM_WEB_BIND").unwrap_or_else(|_| DEFAULT_WEB_BIND.to_string());
-    let bind_addr: SocketAddr = bind_raw.parse().unwrap_or_else(|error| {
-        eprintln!("Invalid FILETERM_WEB_BIND '{bind_raw}': {error}");
-        std::process::exit(2);
-    });
     let dist_dir = std::env::var_os("FILETERM_WEB_DIST_DIR")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
@@ -56,10 +50,6 @@ async fn main() {
         std::process::exit(1);
     }
 
-    let listener = TcpListener::bind(bind_addr).await.unwrap_or_else(|error| {
-        eprintln!("Failed to bind FileTerm Web listener on {bind_addr}: {error}");
-        std::process::exit(1);
-    });
     let session_token = std::env::var("FILETERM_WEB_SESSION_SECRET")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -71,14 +61,37 @@ async fn main() {
         session_token,
     ));
 
-    println!("FileTerm Web listening on http://{bind_addr}");
-
-    if let Err(error) = axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-    {
+    let result = serve(router).await;
+    shutdown_runtime(&app).await;
+    if let Err(error) = result {
         eprintln!("FileTerm Web server exited with error: {error}");
+        std::process::exit(1);
+    }
+}
+
+async fn serve(router: axum::Router) -> std::io::Result<()> {
+    #[cfg(unix)]
+    if let Some(path) = std::env::var_os("FILETERM_WEB_SOCKET").filter(|value| !value.is_empty()) {
+        let listener = tokio::net::UnixListener::bind(PathBuf::from(path))?;
+        return axum::serve(listener, router)
+            .with_graceful_shutdown(shutdown_signal())
+            .await;
     }
 
-    shutdown_runtime(&app).await;
+    let raw = std::env::var("FILETERM_WEB_BIND").unwrap_or_else(|_| DEFAULT_WEB_BIND.into());
+    let address: SocketAddr = raw.parse().map_err(std::io::Error::other)?;
+    if !address.ip().is_loopback() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "The development HTTP listener must use a loopback address",
+        ));
+    }
+    let listener = TcpListener::bind(address).await?;
+    println!(
+        "FileTerm Web development listener on http://{}",
+        listener.local_addr()?
+    );
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
 }

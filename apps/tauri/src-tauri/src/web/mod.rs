@@ -9,9 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use axum::extract::{DefaultBodyLimit, Request, State};
-use axum::http::header::{
-    AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, COOKIE, HOST, ORIGIN, SET_COOKIE,
-};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, HOST, ORIGIN, SET_COOKIE};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -252,9 +250,6 @@ async fn security_and_cache_middleware(
         return (StatusCode::FORBIDDEN, "Origin mismatch").into_response();
     }
 
-    // Never allow authorization/session headers to accidentally bypass reverse proxy expectations.
-    let _ = headers.get(AUTHORIZATION);
-
     let mut response = next.run(request).await;
     if !response.headers().contains_key(CACHE_CONTROL) {
         if path.starts_with("/assets/") {
@@ -278,34 +273,21 @@ fn origin_matches_host(headers: &HeaderMap) -> bool {
     let Ok(parsed_origin) = url::Url::parse(origin) else {
         return false;
     };
-    let Some(origin_host) = parsed_origin.host_str() else {
-        return false;
-    };
-    let origin_authority = match parsed_origin.port() {
-        Some(port) => format!("{origin_host}:{port}"),
-        None => origin_host.to_string(),
-    };
-    let request_host = headers
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("http");
+    let authority = headers
         .get("x-forwarded-host")
         .or_else(|| headers.get(HOST))
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.split(',').next().unwrap_or(value).trim())
-        .filter(|value| !value.is_empty());
-
-    let Some(request_host) = request_host else {
+        .and_then(|value| value.to_str().ok());
+    let Some(authority) = authority else {
         return false;
     };
-
-    if origin_authority.eq_ignore_ascii_case(request_host) {
-        return true;
-    }
-
-    // Also match bare hostname when standard ports (80/443) or reverse-proxy ports differ only by implicit default port.
-    let request_hostname = request_host
-        .strip_prefix('[')
-        .and_then(|s| s.split(']').next())
-        .unwrap_or_else(|| request_host.split(':').next().unwrap_or(request_host));
-    parsed_origin.port().is_none() && origin_host.eq_ignore_ascii_case(request_hostname)
+    let Ok(expected) = url::Url::parse(&format!("{scheme}://{authority}")) else {
+        return false;
+    };
+    matches!(scheme, "http" | "https") && parsed_origin.origin() == expected.origin()
 }
 
 fn has_valid_session_cookie(headers: &HeaderMap, expected_token: &str) -> bool {

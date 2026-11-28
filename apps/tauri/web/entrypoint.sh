@@ -4,10 +4,10 @@ set -euo pipefail
 export HOME="${HOME:-/data}"
 export XDG_DATA_HOME="${XDG_DATA_HOME:-/data/.local/share}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/data/.config}"
-export FILETERM_WEB_BIND="${FILETERM_WEB_BIND:-127.0.0.1:18420}"
 export FILETERM_WEB_DIST_DIR="${FILETERM_WEB_DIST_DIR:-/opt/fileterm/dist}"
 
-WEB_PORT="${FILETERM_WEB_PORT:-8080}"
+WEB_PORT="${FILETERM_WEB_PORT:-34538}"
+WEB_LISTEN="${FILETERM_WEB_LISTEN:-127.0.0.1}"
 WEB_USER="${FILETERM_WEB_USERNAME:-fileterm}"
 WEB_PASSWORD="${FILETERM_WEB_PASSWORD:-}"
 WEB_PASSWORD_HASH="${FILETERM_WEB_PASSWORD_HASH:-}"
@@ -16,7 +16,7 @@ TLS_MODE="${FILETERM_WEB_TLS:-off}"
 TLS_CERT="${FILETERM_WEB_TLS_CERT:-}"
 TLS_KEY="${FILETERM_WEB_TLS_KEY:-}"
 
-if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || (( WEB_PORT < 1 || WEB_PORT > 65535 )); then
+if ! [[ "$WEB_PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( WEB_PORT < 1 || WEB_PORT > 65535 )); then
   echo "ERROR: FILETERM_WEB_PORT must be between 1 and 65535 (got '$WEB_PORT')." >&2
   exit 2
 fi
@@ -35,6 +35,11 @@ EOF
   exit 2
 fi
 
+if [[ ! -w /data ]]; then
+  echo 'ERROR: /data must be writable by FileTerm UID 10001. See the existing-volume migration in the Docker README.' >&2
+  exit 2
+fi
+umask 077
 mkdir -p /data /data/.local/share /data/.config /data/.local/share/com.fileterm.desktop
 chmod 0700 /data || true
 
@@ -50,11 +55,7 @@ fi
 if [[ -z "${FILETERM_WEB_SESSION_SECRET:-}" ]]; then
   SESSION_SECRET_FILE="/data/.session-secret"
   if [[ ! -s "$SESSION_SECRET_FILE" ]]; then
-    if [[ -r /proc/sys/kernel/random/uuid ]]; then
-      tr -d '\n' </proc/sys/kernel/random/uuid >"$SESSION_SECRET_FILE"
-    else
-      date +%s%N | sha256sum | cut -c1-32 >"$SESSION_SECRET_FILE"
-    fi
+    tr -d '\n' </proc/sys/kernel/random/uuid >"$SESSION_SECRET_FILE"
     chmod 0600 "$SESSION_SECRET_FILE" || true
   fi
   export FILETERM_WEB_SESSION_SECRET="$(cat "$SESSION_SECRET_FILE")"
@@ -92,23 +93,31 @@ fi
 
 unset WEB_PASSWORD FILETERM_WEB_PASSWORD
 
-CADDYFILE_PATH="/tmp/Caddyfile"
+RUNTIME_DIR="$(mktemp -d)"
+export FILETERM_WEB_SOCKET="$RUNTIME_DIR/backend.sock"
+CADDYFILE_PATH="$RUNTIME_DIR/Caddyfile"
 (
   umask 077
   {
-    printf '{\n\tadmin off\n'
+    printf '{\n\tadmin off\n\tpersist_config off\n'
+    if [[ "$WEB_LISTEN" == "127.0.0.1" ]]; then
+      printf '\tservers {\n\t\ttrusted_proxies static 127.0.0.1/32 ::1/128\n\t}\n'
+    fi
     if [[ -n "$CADDY_GLOBAL_EXTRA" ]]; then
       printf '%s\n' "$CADDY_GLOBAL_EXTRA"
     fi
     printf '}\n\n'
     printf '%s {\n' "$CADDY_SITE_ADDRESS"
+    printf '\tbind %s\n' "$WEB_LISTEN"
     if [[ -n "$CADDY_TLS_LINE" ]]; then
       printf '%s\n' "$CADDY_TLS_LINE"
     fi
-    cat <<'EOF'
+    cat <<EOF
 	@health path /healthz
 	handle @health {
-		reverse_proxy 127.0.0.1:18420
+		reverse_proxy unix/$FILETERM_WEB_SOCKET {
+			header_up -Authorization
+		}
 	}
 
 	handle {
@@ -116,8 +125,10 @@ EOF
     if [[ -n "$CADDY_AUTH_BLOCK" ]]; then
       printf '%s\n' "$CADDY_AUTH_BLOCK"
     fi
-    cat <<'EOF'
-		reverse_proxy 127.0.0.1:18420
+    cat <<EOF
+		reverse_proxy unix/$FILETERM_WEB_SOCKET {
+			header_up -Authorization
+		}
 	}
 }
 EOF
@@ -132,6 +143,7 @@ BACKEND_PID=$!
 CADDY_PID=""
 cleanup() {
   local exit_code=$?
+  trap - SIGTERM SIGINT EXIT
   if [[ -n "$CADDY_PID" ]] && kill -0 "$CADDY_PID" 2>/dev/null; then
     kill -TERM "$CADDY_PID" 2>/dev/null || true
     wait "$CADDY_PID" 2>/dev/null || true
@@ -140,13 +152,15 @@ cleanup() {
     kill -TERM "$BACKEND_PID" 2>/dev/null || true
     wait "$BACKEND_PID" 2>/dev/null || true
   fi
+  rm -f -- "$CADDYFILE_PATH" "$FILETERM_WEB_SOCKET"
+  rmdir -- "$RUNTIME_DIR"
   exit "$exit_code"
 }
 trap cleanup SIGTERM SIGINT EXIT
 
 ready=0
 for _ in $(seq 1 60); do
-  if curl -fsS "http://${FILETERM_WEB_BIND}/healthz" >/dev/null 2>&1; then
+  if curl --unix-socket "$FILETERM_WEB_SOCKET" -fsS http://localhost/healthz >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -158,7 +172,7 @@ for _ in $(seq 1 60); do
 done
 
 if [[ "$ready" -ne 1 ]]; then
-  echo "ERROR: fileterm-web health check timed out on ${FILETERM_WEB_BIND}." >&2
+  echo "ERROR: fileterm-web socket health check timed out." >&2
   exit 1
 fi
 
