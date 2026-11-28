@@ -106,19 +106,10 @@ void createRuntimeApi()
       document.documentElement.dataset.linuxWindowCorners = api.linuxWindowCornerStyle ?? 'square'
     }
 
-    const webLogin = getWebLoginStatus()
+    const webLogin = isDesktop || api.isDesktop ? null : getWebLoginStatus()
     if (webLogin?.mode === 'login' || webLogin?.mode === 'setup') {
       applyThemeVariables('fileterm-dark')
-      renderRoot(
-        <main className="web-login-page">
-          <div className="modal-card manager-modal settings-modal">
-            <div className="connection-manager-header">
-              <h1 className="connection-manager-title">{webLogin.mode === 'setup' ? t.settings : 'FileTerm'}</h1>
-            </div>
-            <WebLoginSettingsPanel status={webLogin} onSaved={() => window.location.reload()} />
-          </div>
-        </main>
-      )
+      renderRoot(<WebLoginSettingsPanel status={webLogin} onSaved={() => window.location.reload()} standalone />)
       return
     }
 

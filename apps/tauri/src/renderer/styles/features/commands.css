@@ -1919,7 +1919,8 @@
 .command-form-standalone {
   position: relative;
   width: 100%;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   padding: 0 !important;
   border: 0;
@@ -2057,10 +2058,11 @@
 .command-manager-modal.standalone {
   box-shadow: none !important;
   border-radius: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
+  width: 100% !important;
+  height: 100% !important;
   max-width: none !important;
   min-height: 0 !important;
+  max-height: none !important;
   display: grid !important;
   grid-template-rows: auto 1fr !important;
   padding: 0 !important;
@@ -2375,9 +2377,13 @@
 
 .command-manager-modal {
   width: min(1040px, calc(100vw - 56px)) !important;
-  min-height: min(680px, calc(100vh - 56px)) !important;
   max-width: 1040px !important;
+  max-height: calc(100dvh - 56px);
   padding: 0 !important;
+}
+
+.command-manager-modal:not(.standalone) {
+  min-height: min(680px, calc(100vh - 56px)) !important;
 }
 
 .command-manager-body {

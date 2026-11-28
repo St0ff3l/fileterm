@@ -210,16 +210,6 @@ export function useWorkspaceModals({
     void desktopApi?.confirmCloseWindow(action)
   }
 
-  const openCommandManagerFromSettings = () => {
-    setShowSettings(false)
-    openCommandManager()
-  }
-
-  const openConnectionManagerFromSettings = () => {
-    setShowSettings(false)
-    openConnectionManager()
-  }
-
   return {
     closeConnectionForm,
     connectionGroupOptions,
@@ -227,9 +217,7 @@ export function useWorkspaceModals({
     form,
     formError,
     openCommandManager,
-    openCommandManagerFromSettings,
     openConnectionManager,
-    openConnectionManagerFromSettings,
     openCreateConnection,
     openCreateModal,
     openEditConnection,

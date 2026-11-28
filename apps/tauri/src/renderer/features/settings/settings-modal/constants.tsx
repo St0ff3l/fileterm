@@ -17,6 +17,7 @@ import {
 } from '@fileterm/core'
 import { getSavedThemeConfig, getThemeConfigFromTokenPreset, type Iterm2ThemePresetId } from '../../../app/theme-config'
 import { type LocaleMessages } from '../../../i18n'
+import { type WebLoginStatus } from '../../../../bridge/web-login'
 import { type AppIconName } from '../../common/app-icon'
 
 export type SettingsTab =
@@ -29,11 +30,14 @@ export type SettingsTab =
   | 'local-terminal'
   | 'security'
   | 'sync'
-  | 'tools'
   | 'updates'
   | 'logs'
   | 'language'
   | 'about'
+
+export function isWebLoginTabAvailable(isDesktop: boolean, webLoginStatus: WebLoginStatus | null): boolean {
+  return !isDesktop && webLoginStatus !== null
+}
 
 export type SyncFeedback = {
   kind: 'success' | 'error'
@@ -61,7 +65,6 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'security', labelKey: 'securitySettings', appIcon: 'shield-check' },
   { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
   { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update_alt' },
-  { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
   { tab: 'logs', labelKey: 'logsSettings', appIcon: 'log' },
   { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' },
   { tab: 'about', labelKey: 'aboutSettings', materialIcon: 'info' }
@@ -82,7 +85,6 @@ export const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
   security: 'security session lock password backup credentials safe 安全 会话 锁屏 密码 备份 凭据',
   sync: 'sync webdav s3 backup cloud configuration 同步 备份 云端',
   updates: 'update release version beta stable 更新 版本 发布',
-  tools: 'manager connection command key shortcut 管理器 连接 命令 密钥 快捷键',
   logs: 'log diagnostics category performance ssh monitoring transfer 日志 诊断 分类 开关 性能 监控 传输',
   language: 'language locale chinese english 中文 英文 语言',
   about: 'about fileterm system platform version license open source fig 关于 系统 平台 版本 许可 开源'

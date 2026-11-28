@@ -594,8 +594,6 @@ export function HomeWorkspace({
                 onSetCustomThemes={onSetCustomThemes}
                 locale={locale}
                 onSetLocale={onSetLocale}
-                onOpenCommandManager={() => selectTab('command-manager')}
-                onOpenConnectionManager={() => selectTab('connection-manager')}
                 onOpenLogsDirectory={onOpenLogsDirectory}
                 onLaunchLocalAgent={onLaunchLocalAgent}
                 workspaceMode={isServerManagementMode ? 'server-management' : 'standard'}

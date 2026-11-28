@@ -459,7 +459,18 @@ async fn docker_login_requires_setup_and_revokes_previous_session_after_rotation
             .status(),
         StatusCode::FORBIDDEN
     );
-    let password = "custom-password-for-test";
+    let too_short = app
+        .clone()
+        .oneshot(post(
+            "/api/web/credentials",
+            &initial_cookie,
+            json!({"username": "operator", "password": "7chars!", "currentPassword": ""}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(too_short.status(), StatusCode::BAD_REQUEST);
+
+    let password = "pass1234";
     let update = |cookie: &str, current: &str| {
         post(
             "/api/web/credentials",
@@ -498,12 +509,38 @@ async fn docker_login_requires_setup_and_revokes_previous_session_after_rotation
             .status(),
         StatusCode::FORBIDDEN
     );
+    let rotated = app
+        .clone()
+        .oneshot(update(&current_cookie, password))
+        .await
+        .unwrap();
+    assert_eq!(rotated.status(), StatusCode::NO_CONTENT);
+    let rotated_cookie = cookie(&rotated);
+
+    // Changing only the username while leaving the new password empty preserves the existing password.
+    let rename_only = app
+        .clone()
+        .oneshot(post(
+            "/api/web/credentials",
+            &rotated_cookie,
+            json!({"username": "operator2", "password": "", "currentPassword": password}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(rename_only.status(), StatusCode::NO_CONTENT);
+    let renamed_cookie = cookie(&rename_only);
+
+    // A non-empty new password shorter than 8 characters is still rejected.
     assert_eq!(
-        app.oneshot(update(&current_cookie, password))
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::NO_CONTENT
+        app.oneshot(post(
+            "/api/web/credentials",
+            &renamed_cookie,
+            json!({"username": "operator2", "password": "short", "currentPassword": password}),
+        ))
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::BAD_REQUEST
     );
 
     let restarted = build_router(
@@ -522,7 +559,7 @@ async fn docker_login_requires_setup_and_revokes_previous_session_after_rotation
     );
     assert_eq!(
         restarted
-            .oneshot(login("operator", password))
+            .oneshot(login("operator2", password))
             .await
             .unwrap()
             .status(),

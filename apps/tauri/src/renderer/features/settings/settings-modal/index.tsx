@@ -1,3 +1,4 @@
+import { isDesktopRuntime } from '../../../../bridge/runtime-api'
 import { getWebLoginStatus } from '../../../../bridge/web-login'
 import { WebLoginSettingsPanel } from './panels/web-login-settings-panel'
 import { MaterialIcon } from '../../../components/common/material-icon/material-icon'
@@ -19,7 +20,6 @@ import { LocalTerminalSettingsPanel } from './panels/local-terminal-settings-pan
 import { SyncSettingsPanel } from './panels/sync-settings-panel'
 import { AboutSettingsPanel } from './panels/about-settings-panel'
 import { LogsSettingsPanel } from './panels/logs-settings-panel'
-import { ToolsSettingsPanel } from './panels/tools-settings-panel'
 import { UpdatesSettingsPanel } from './panels/updates-settings-panel'
 import { WorkspaceModeSettingsPanel } from './panels/workspace-mode-settings-panel'
 
@@ -34,8 +34,6 @@ export function SettingsModal({
   onSetCustomThemes,
   locale,
   onSetLocale,
-  onOpenCommandManager,
-  onOpenConnectionManager,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
   workspaceMode,
@@ -53,8 +51,6 @@ export function SettingsModal({
   onSetCustomThemes(value: SavedTheme[]): void
   locale: 'zhCN' | 'enUS'
   onSetLocale(value: 'zhCN' | 'enUS'): void
-  onOpenCommandManager(): void
-  onOpenConnectionManager(): void
   onOpenLogsDirectory(): void
   /** Opens an Agent in a visible local terminal; secrets never pass through MCP. */
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
@@ -87,17 +83,14 @@ export function SettingsModal({
     onSetCustomThemes,
     locale,
     onSetLocale,
-    onOpenCommandManager,
-    onOpenConnectionManager,
     onOpenLogsDirectory,
     onLaunchLocalAgent,
     workspaceMode,
     uiPreferences,
-    initialTab,
-    inline
+    initialTab
   })
 
-  const webLogin = getWebLoginStatus()
+  const webLogin = !isDesktopRuntime() && !desktopApi?.isDesktop ? getWebLoginStatus() : null
   const content = (
     <SettingsModalProvider value={settingsPanelContext}>
       <div
@@ -166,8 +159,6 @@ export function SettingsModal({
             {activeTab === 'interface' ? <InterfaceSettingsPanel /> : null}
 
             {activeTab === 'workspace-mode' ? <WorkspaceModeSettingsPanel /> : null}
-
-            {activeTab === 'tools' ? <ToolsSettingsPanel /> : null}
 
             {activeTab === 'security' ? (
               <SecuritySettingsPanel

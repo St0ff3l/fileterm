@@ -704,7 +704,8 @@
 /* Manager Modal Enhancements */
 .manager-modal {
   width: min(900px, calc(100vw - 40px));
-  min-height: 640px;
+  min-height: min(640px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
   padding: 24px;
 }
 
@@ -871,7 +872,8 @@
 /* Connection Manager Specific Styles */
 .connection-manager-modal {
   width: min(1040px, calc(100vw - 56px));
-  min-height: min(680px, calc(100vh - 56px));
+  min-height: min(680px, calc(100dvh - 56px));
+  max-height: calc(100dvh - 56px);
   padding: 0;
 }
 
@@ -945,7 +947,8 @@
 /* Command Manager Specific Styles */
 .command-manager-modal {
   width: min(900px, calc(100vw - 56px));
-  min-height: min(640px, calc(100vh - 56px));
+  min-height: min(640px, calc(100dvh - 56px));
+  max-height: calc(100dvh - 56px);
 }
 
 .command-manager-sidebar {
@@ -2453,77 +2456,6 @@
   box-shadow: 0 0 0 1px var(--focus-outline);
 }
 
-.tools-shortcuts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-}
-
-.tool-shortcut-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 16px;
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  transition:
-    background-color var(--duration-hover) var(--ease-out),
-    border-color var(--duration-hover) var(--ease-out),
-    color var(--duration-hover) var(--ease-out),
-    box-shadow var(--duration-hover) var(--ease-out),
-    opacity var(--duration-hover) var(--ease-out),
-    transform var(--duration-hover) var(--ease-out);
-}
-
-.tool-shortcut-card:hover {
-  border-color: var(--text-muted);
-  box-shadow: var(--shadow-sm);
-}
-
-.tool-card-icon {
-  font-size: var(--ui-font-size-20px, 20px);
-  color: var(--text-muted);
-  background: var(--bg-hover);
-  padding: 8px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tool-card-details {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-}
-
-.tool-card-details strong {
-  font-size: var(--ui-font-size-14px, 14px);
-  color: var(--text-main);
-}
-
-.tool-card-details p {
-  margin: 0;
-  font-size: var(--ui-font-size-12px, 12px);
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.tool-card-details button,
-.tool-card-details .primary-button.compact {
-  align-self: flex-start;
-  margin-top: 4px;
-  height: 36px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm, 4px);
-  font-size: var(--button-font-size-regular, 12px);
-  font-weight: 500;
-  gap: 6px;
-}
-
 .webdav-sync-form {
   --settings-form-control-height: 36px;
   --settings-form-control-inline-padding: 12px;
@@ -2972,8 +2904,7 @@
   .command-manager-item,
   .update-progress > span,
   .theme-card,
-  .lang-card,
-  .tool-shortcut-card {
+  .lang-card {
     transition-property: background-color, border-color, color, box-shadow, opacity;
   }
 }

@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { t } from '../../../../i18n'
+import { isDesktopRuntime } from '../../../../../bridge/runtime-api'
 import { getWebLoginStatus } from '../../../../../bridge/web-login'
-import { SETTINGS_SIDEBAR_ITEMS, SETTINGS_TAB_SEARCH_TERMS } from '../constants'
+import { isWebLoginTabAvailable, SETTINGS_SIDEBAR_ITEMS, SETTINGS_TAB_SEARCH_TERMS } from '../constants'
 import { useAiSettingsController } from './ai'
 import { useAgentSettingsController } from './agent'
 import { useSettingsModalEffects } from './effects'
@@ -17,11 +18,14 @@ import { useThemeSettingsController } from './theme'
 export type { SettingsModalControllerOptions } from './types'
 
 export function useSettingsModalController(options: SettingsModalControllerOptions) {
-  const { locale, initialTab, inline, onLaunchLocalAgent, uiPreferences } = options
+  const { locale, initialTab, onLaunchLocalAgent, uiPreferences } = options
   const state = useSettingsModalState(initialTab, uiPreferences)
   const { activeTab, settingsSearchQuery, desktopApi } = state
 
-  const dockerWebLogin = getWebLoginStatus() !== null
+  const dockerWebLogin = isWebLoginTabAvailable(
+    isDesktopRuntime() || Boolean(desktopApi?.isDesktop),
+    getWebLoginStatus()
+  )
   const visibleSettingsTabs = useMemo(() => {
     const items = SETTINGS_SIDEBAR_ITEMS.filter((item) => item.tab !== 'web-login' || dockerWebLogin)
     const query = settingsSearchQuery.trim().toLocaleLowerCase()
@@ -57,17 +61,10 @@ export function useSettingsModalController(options: SettingsModalControllerOptio
 
   useSettingsModalEffects({ state, initialTab, visibleSettingsTabs, uiPreferences })
 
-  const managerToolsHint = inline ? t.settingsManagersInlineHint : t.settingsManagersWindowHint
-  const managerToolsActionLabel = inline ? t.switchToManagerPage : t.openInSeparateWindow
-
   const settingsPanelContext = {
     t,
     desktopApi,
     ...preferences,
-    managerToolsHint,
-    managerToolsActionLabel,
-    onOpenConnectionManager: options.onOpenConnectionManager,
-    onOpenCommandManager: options.onOpenCommandManager,
     onOpenLogsDirectory: options.onOpenLogsDirectory,
     locale,
     onSetLocale: options.onSetLocale,

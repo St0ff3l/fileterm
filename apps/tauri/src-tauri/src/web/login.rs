@@ -12,6 +12,7 @@ use tokio::sync::{watch, Mutex};
 use super::{api_error, has_valid_session_cookie, set_session_cookie, WebServerState};
 
 const DEFAULT_CREDENTIAL: &str = "admin";
+const MIN_PASSWORD_LEN: usize = 8;
 
 #[derive(Deserialize, Serialize)]
 struct Account {
@@ -47,7 +48,7 @@ impl WebLogin {
         }
         match account.as_ref() {
             Some(account) => json!({ "mode": "managed", "username": account.username }),
-            None => json!({ "mode": "setup", "username": DEFAULT_CREDENTIAL }),
+            None => json!({ "mode": "setup", "username": "" }),
         }
     }
 
@@ -134,31 +135,45 @@ pub(super) async fn change(
     if !has_valid_session_cookie(&headers, &login.token.borrow()) {
         return Err(StatusCode::UNAUTHORIZED);
     }
+    let password_valid = if account.is_some() && input.password.is_empty() {
+        true
+    } else {
+        (MIN_PASSWORD_LEN..=256).contains(&input.password.len())
+    };
     if input.username.is_empty()
         || input.username.len() > 64
         || !input
             .username
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
-        || !(12..=256).contains(&input.password.len())
+        || !password_valid
     {
         return Ok(api_error(
             StatusCode::BAD_REQUEST,
             "Invalid username or password length",
         ));
     }
-    if let Some(account) = account.as_ref() {
+    let (salt, hash) = if let Some(account) = account.as_ref() {
         let current = input
             .current_password
             .filter(|value| value.len() <= 256)
             .ok_or(StatusCode::FORBIDDEN)?;
-        let hash = password_hash(current, account.salt).await?;
-        if !bool::from(hash.ct_eq(&account.hash)) {
+        let current_hash = password_hash(current, account.salt).await?;
+        if !bool::from(current_hash.ct_eq(&account.hash)) {
             return Err(StatusCode::FORBIDDEN);
         }
-    }
-    let salt = *uuid::Uuid::new_v4().as_bytes();
-    let hash = password_hash(input.password, salt).await?;
+        if input.password.is_empty() {
+            (account.salt, account.hash)
+        } else {
+            let salt = *uuid::Uuid::new_v4().as_bytes();
+            let hash = password_hash(input.password, salt).await?;
+            (salt, hash)
+        }
+    } else {
+        let salt = *uuid::Uuid::new_v4().as_bytes();
+        let hash = password_hash(input.password, salt).await?;
+        (salt, hash)
+    };
     let updated = Account {
         username: input.username,
         salt,
