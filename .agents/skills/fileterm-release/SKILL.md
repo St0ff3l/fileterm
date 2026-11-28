@@ -41,7 +41,7 @@ description: 准备或发布 FileTerm 版本说明、release 分支、tag 和 Gi
 
 ### 2. 发布说明正文格式
 
-编写或审查发布说明时读取 [双语模板与固定格式](references/release-notes.md)。保留双语顺序、各自的安装指南徽章、固定标题和逐字反馈块。
+编写或审查发布说明时读取 [双语模板与固定格式](references/release-notes.md)。保留双语顺序、各自的安装指南徽章、固定标题和逐字反馈块。桌面下载表格末尾还需包含 Docker Web（Linux AMD64 / ARM64）行，并列出当前版本 tag、Docker Hub、GHCR 和部署说明链接；中英文正文都要有对应行。
 
 ### 3. PR 合入 main
 

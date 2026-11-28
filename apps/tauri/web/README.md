@@ -2,7 +2,33 @@
 
 Run FileTerm as a native self-hosted Web application in Docker. The image compiles the standalone Rust backend binary (`fileterm-web` with `--no-default-features --features web`) together with the existing React renderer (`apps/tauri/dist`), fronted by Caddy for authentication and optional TLS — with zero Xvfb, X11, or noVNC.
 
-## Quick start with Docker Compose
+## Quick start without cloning the repository
+
+This beta release publishes a versioned, multi-platform image. The command below uses Docker's default bridge network and only exposes FileTerm on the local machine:
+
+```bash
+docker volume create fileterm-data
+docker run -d \
+  --name fileterm-web \
+  --restart unless-stopped \
+  --publish 127.0.0.1:34538:34538 \
+  --env FILETERM_WEB_PORT=34538 \
+  --env FILETERM_WEB_LISTEN=0.0.0.0 \
+  --volume fileterm-data:/data \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  st0ff3l/fileterm:v2.3.4-beta.15
+```
+
+The same image is also available as `ghcr.io/st0ff3l/fileterm:v2.3.4-beta.15`.
+
+Open [http://127.0.0.1:34538](http://127.0.0.1:34538). On a new data volume without deployment credentials, sign in with `admin` / `admin`; FileTerm requires you to change the username and password before opening the workspace. For access from another device, put FileTerm behind an HTTPS reverse proxy and configure a strong login before exposing it.
+
+Keep the `fileterm-data` volume when upgrading or recreating the container. It stores FileTerm settings, profiles, session secrets, and the browser-managed login. Back it up before moving or removing it.
+
+To set deployment credentials instead of using the first-login flow, add `--env-file ./fileterm.env` to `docker run` and create a private file with `FILETERM_WEB_USERNAME` and `FILETERM_WEB_PASSWORD`. Keep that file out of source control. Deployment credentials take precedence over the browser-managed account.
+
+## Compose from a source checkout
 
 Run from the repository root. Use a matching GitHub release tag for the image:
 
@@ -35,12 +61,18 @@ Set `FILETERM_WEB_DISABLE_AUTH=true` only when an authenticated reverse proxy ha
 
 ## Host networking and remote access
 
-On Linux, the default Compose service shares the host network. FileTerm can connect to the host's SSH server at `127.0.0.1:22` if SSH is listening there. Caddy listens on `127.0.0.1:34538`; use an HTTPS reverse proxy on the same host for access from another device. Docker Desktop requires its optional host networking support. A bridge deployment can override the following service settings:
+The no-clone command above uses bridge networking and is the recommended general-purpose setup. It binds to loopback, so a host-local HTTPS reverse proxy can reach FileTerm without publishing the service directly to the LAN.
+
+Use host networking on Linux when FileTerm must connect to an SSH server on the Docker host through `127.0.0.1:22`. The source-checkout Compose file uses this mode and Caddy listens on `127.0.0.1:34538`; no port mapping is used. Host networking shares the host network stack and reduces network isolation. Docker Desktop requires its optional host networking support.
+
+On bridge networking, connect to a service on the host using its reachable IP address or `host.docker.internal` rather than `127.0.0.1`. On Linux, add the host-gateway alias to the container if needed. The source-checkout Compose service can be changed to bridge mode as follows:
 
 ```yaml
 services:
   fileterm:
     network_mode: bridge
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       - '127.0.0.1:34538:34538'
     environment:
@@ -48,13 +80,21 @@ services:
       FILETERM_WEB_LISTEN: '0.0.0.0'
 ```
 
-On bridge, connect to SSH using a reachable host IP or a `host-gateway` alias.
+With this alias, use `host.docker.internal` as the SSH host name when connecting to the Docker host from FileTerm.
 
 - **Internal TLS**: set `FILETERM_WEB_TLS=internal` and use HTTPS. Trust the generated Caddy CA on the clients.
 - **Custom certificate**: pass readable PEM mounts to the container and set `FILETERM_WEB_TLS_CERT` and `FILETERM_WEB_TLS_KEY` in the service environment.
 - **Host reverse proxy**: preserve the public Host, pass the external `X-Forwarded-Proto` and `X-Forwarded-Host`, and forward WebSocket connections to the loopback gateway. Caddy trusts loopback proxies for these headers in the default host configuration.
 
 Caddy enforces Basic Auth when credentials are supplied at deploy time. Otherwise, the Docker login form uses an HttpOnly session cookie to protect RPC, file transfers, and WebSocket upgrades. Changing browser-managed credentials revokes the previous cookie and closes its WebSockets. The Rust backend listens exclusively on a Unix socket inside a private directory and checks request origins. The unauthenticated `/healthz` endpoint returns service metadata only. The standalone development binary also supports a loopback HTTP listener without the Caddy authentication layer.
+
+## Image tags and resource sizing
+
+Use the exact release tag, such as `st0ff3l/fileterm:v2.3.4-beta.15`. It contains both `linux/amd64` and `linux/arm64`; Docker selects the matching platform automatically. The `-amd64` and `-arm64` tags are available for explicitly selecting one architecture and are not separate application versions.
+
+The current beta release does not publish a `latest` tag. Always specify a version; an untagged `docker pull st0ff3l/fileterm` tries `latest` and will fail until that alias is published. Pre-releases should not move `latest`; reserve it for a stable release if you choose to offer that alias.
+
+FileTerm does not yet publish a tested minimum CPU or memory requirement, and the Compose file does not set hard resource limits. Start with Docker's normal resource allocation, then monitor usage under the number of concurrent sessions you expect before adding limits.
 
 ## Architecture, data persistence, and upgrades
 
