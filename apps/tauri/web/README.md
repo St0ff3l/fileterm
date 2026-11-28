@@ -2,16 +2,18 @@
 
 Run FileTerm as a native self-hosted Web application in Docker. The image compiles the standalone Rust backend binary (`fileterm-web` with `--no-default-features --features web`) together with the existing React renderer (`apps/tauri/dist`), fronted by Caddy for authentication and optional TLS — with zero Xvfb, X11, or noVNC.
 
-## Quick start without cloning the repository
+## Quick start on a Linux host or NAS (LAN access)
 
-This beta release publishes a versioned, multi-platform image. The command below uses Docker's default bridge network and only exposes FileTerm on the local machine:
+Docker Hub stores the image; it does not choose the container's network mode. Docker, Compose, or the NAS container manager makes that choice ([Compose `network_mode` reference](https://docs.docker.com/reference/compose-file/container-spec/#network_mode)). For direct LAN access on Linux or a NAS, use host networking and set `FILETERM_WEB_LISTEN=0.0.0.0`. The image defaults this listener to `127.0.0.1`, so host networking alone leaves FileTerm available only on the host itself.
+
+This follows the Home Assistant Container pattern: use host networking and open the service at the host's IP and port. Home Assistant's Synology instructions use Host network mode and the NAS IP as well ([Linux guide](https://www.home-assistant.io/installation/linux), [Synology guide](https://www.home-assistant.io/installation/alternative/)). With host networking, do not add a port mapping.
 
 ```bash
 docker volume create fileterm-data
 docker run -d \
   --name fileterm-web \
   --restart unless-stopped \
-  --publish 127.0.0.1:34538:34538 \
+  --network host \
   --env FILETERM_WEB_PORT=34538 \
   --env FILETERM_WEB_LISTEN=0.0.0.0 \
   --volume fileterm-data:/data \
@@ -22,7 +24,9 @@ docker run -d \
 
 The same image is also available as `ghcr.io/st0ff3l/fileterm:v2.3.4-beta.15`.
 
-Open [http://127.0.0.1:34538](http://127.0.0.1:34538). On a new data volume without deployment credentials, sign in with `admin` / `admin`; FileTerm requires you to change the username and password before opening the workspace. For access from another device, put FileTerm behind an HTTPS reverse proxy and configure a strong login before exposing it.
+Open `http://<NAS-LAN-IP>:34538` (for example, `http://192.168.1.10:34538`). `0.0.0.0` listens on all NAS interfaces. In Synology Container Manager, choose **Host** for Network and set `FILETERM_WEB_LISTEN` to `0.0.0.0`. If DSM Firewall is enabled, allow TCP port `34538` from your LAN.
+
+On a new data volume without deployment credentials, sign in with `admin` / `admin`; FileTerm requires you to change the username and password before opening the workspace. Keep the HTTP listener on a trusted network. For public access, use an HTTPS reverse proxy and configure a strong login before exposing it.
 
 Keep the `fileterm-data` volume when upgrading or recreating the container. It stores FileTerm settings, profiles, session secrets, and the browser-managed login. Back it up before moving or removing it.
 
@@ -40,9 +44,9 @@ docker compose -f apps/tauri/web/compose.yaml up -d --no-build
 
 For GHCR, use `ghcr.io/st0ff3l/fileterm:v2.3.4-beta.15`. To build from the checkout instead, leave `FILETERM_WEB_IMAGE` unset and run `docker compose -f apps/tauri/web/compose.yaml up -d --build`.
 
-Open [http://localhost:34538](http://localhost:34538). For a new data volume with no deployment credentials, sign in with `admin` / `admin`. FileTerm opens **Settings → Web Login** and requires a new password before opening the workspace. You can change both the username and password there. FileTerm stores a password hash in `/data/.web-account.json`. Set `FILETERM_WEB_PORT` to use another port.
+Open `http://<host>:34538` from a device that can reach the Docker host. When you run this Compose file on the same machine, `http://localhost:34538` also works. The service uses host networking and listens on all host interfaces. For a new data volume with no deployment credentials, sign in with `admin` / `admin`. FileTerm opens **Settings → Web Login** and requires a new password before opening the workspace. You can change both the username and password there. FileTerm stores a password hash in `/data/.web-account.json`. Set `FILETERM_WEB_PORT` to use another port.
 
-Complete setup locally before exposing FileTerm, or specify credentials at deployment. Deployment credentials take precedence over the stored account and are managed through Docker. Set `FILETERM_WEB_USERNAME` with a password to override the username. A deployment password also gives an administrator a way to recover access from the server.
+Keep first-time setup on a trusted network, or specify credentials at deployment. Deployment credentials take precedence over the stored account and are managed through Docker. Set `FILETERM_WEB_USERNAME` with a password to override the username. A deployment password also gives an administrator a way to recover access from the server.
 
 ```bash
 FILETERM_WEB_PASSWORD='change-me-now' \
@@ -61,11 +65,11 @@ Set `FILETERM_WEB_DISABLE_AUTH=true` only when an authenticated reverse proxy ha
 
 ## Host networking and remote access
 
-The no-clone command above uses bridge networking and is the recommended general-purpose setup. It binds to loopback, so a host-local HTTPS reverse proxy can reach FileTerm without publishing the service directly to the LAN.
+The quick-start command and source-checkout Compose file use host networking and listen on `0.0.0.0:34538`, making FileTerm available through the host's LAN IP. This is the same network pattern shown in Home Assistant's Linux Container instructions. Host networking shares the host network stack and reduces network isolation. No port mapping is used or needed; Docker rejects `ports` together with `network_mode: host`.
 
-Use host networking on Linux when FileTerm must connect to an SSH server on the Docker host through `127.0.0.1:22`. The source-checkout Compose file uses this mode and Caddy listens on `127.0.0.1:34538`; no port mapping is used. Host networking shares the host network stack and reduces network isolation. Docker Desktop requires its optional host networking support.
+FileTerm's Docker image defaults `FILETERM_WEB_LISTEN` to `127.0.0.1`. Set it to `0.0.0.0` for LAN access, including when using the image from Docker Hub with Host network mode. The host network also lets FileTerm reach an SSH server on the Docker host through `127.0.0.1:22`. Docker Desktop requires its optional host networking support.
 
-On bridge networking, connect to a service on the host using its reachable IP address or `host.docker.internal` rather than `127.0.0.1`. On Linux, add the host-gateway alias to the container if needed. The source-checkout Compose service can be changed to bridge mode as follows:
+For local-only access through a host-local reverse proxy, use bridge networking and publish the port on `127.0.0.1`. In this mode, Caddy inside the container must listen on `0.0.0.0` for the Docker port mapping to reach it. To connect to an SSH server on the Docker host from a bridge container, use its reachable IP or `host.docker.internal` rather than `127.0.0.1`. On Linux, add the host-gateway alias if needed. The source-checkout Compose service can be changed to this bridge setup:
 
 ```yaml
 services:
@@ -84,7 +88,7 @@ With this alias, use `host.docker.internal` as the SSH host name when connecting
 
 - **Internal TLS**: set `FILETERM_WEB_TLS=internal` and use HTTPS. Trust the generated Caddy CA on the clients.
 - **Custom certificate**: pass readable PEM mounts to the container and set `FILETERM_WEB_TLS_CERT` and `FILETERM_WEB_TLS_KEY` in the service environment.
-- **Host reverse proxy**: preserve the public Host, pass the external `X-Forwarded-Proto` and `X-Forwarded-Host`, and forward WebSocket connections to the loopback gateway. Caddy trusts loopback proxies for these headers in the default host configuration.
+- **Host reverse proxy**: for proxy-only access, set `FILETERM_WEB_LISTEN=127.0.0.1` with host networking. Preserve the public Host, pass the external `X-Forwarded-Proto` and `X-Forwarded-Host`, and forward WebSocket connections to the loopback gateway. Caddy trusts loopback proxies when this listener is set to `127.0.0.1`.
 
 Caddy enforces Basic Auth when credentials are supplied at deploy time. Otherwise, the Docker login form uses an HttpOnly session cookie to protect RPC, file transfers, and WebSocket upgrades. Changing browser-managed credentials revokes the previous cookie and closes its WebSockets. The Rust backend listens exclusively on a Unix socket inside a private directory and checks request origins. The unauthenticated `/healthz` endpoint returns service metadata only. The standalone development binary also supports a loopback HTTP listener without the Caddy authentication layer.
 
