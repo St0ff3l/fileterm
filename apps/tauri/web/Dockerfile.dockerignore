@@ -4,6 +4,8 @@
 apps/tauri/dist
 apps/tauri/src-tauri/target
 apps/tauri/web/.secrets
+**/.env
+**/.env.*
 tests
 docs/*
 !docs/quality

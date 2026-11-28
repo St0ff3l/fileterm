@@ -19,13 +19,13 @@ FILETERM_WEB_PASSWORD_HASH="$HASH" \
   docker compose -f apps/tauri/web/compose.yaml up -d --build
 ```
 
-Open [http://localhost:8080](http://localhost:8080) on the host (override with `FILETERM_WEB_PORT`). Sign in as `fileterm` (override with `FILETERM_WEB_USERNAME`) and the password you configured.
+Open [http://localhost:34538](http://localhost:34538) on the host (override with `FILETERM_WEB_PORT`). Sign in as `fileterm` (override with `FILETERM_WEB_USERNAME`) and the password you configured.
 
 The container refuses to start unless `FILETERM_WEB_PASSWORD` or `FILETERM_WEB_PASSWORD_HASH` is set (or `FILETERM_WEB_DISABLE_AUTH=true` when placed behind an authenticated reverse proxy).
 
 ## HTTPS and remote access
 
-`compose.yaml` binds the published port to `127.0.0.1` by default. For LAN or remote access, enable TLS in Caddy or place an HTTPS reverse proxy in front of `127.0.0.1:8080`:
+`compose.yaml` binds the published port to `127.0.0.1` by default. For LAN or remote access, enable TLS in Caddy or place an HTTPS reverse proxy in front of `127.0.0.1:34538`:
 
 - **Self-signed internal TLS**: set `FILETERM_WEB_TLS=internal`.
 - **Custom certificate**: mount PEM files and set `FILETERM_WEB_TLS_CERT` and `FILETERM_WEB_TLS_KEY`.
