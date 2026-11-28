@@ -4,11 +4,15 @@ Run FileTerm as a native self-hosted Web application in Docker. The image compil
 
 ## Quick start with Docker Compose
 
-Run from the repository root:
+Run from the repository root. Use a matching GitHub release tag for the image:
 
 ```bash
-docker compose -f apps/tauri/web/compose.yaml up -d --build
+export FILETERM_WEB_IMAGE=st0ff3l/fileterm:v2.3.4-beta.15
+docker compose -f apps/tauri/web/compose.yaml pull
+docker compose -f apps/tauri/web/compose.yaml up -d --no-build
 ```
+
+For GHCR, use `ghcr.io/st0ff3l/fileterm:v2.3.4-beta.15`. To build from the checkout instead, leave `FILETERM_WEB_IMAGE` unset and run `docker compose -f apps/tauri/web/compose.yaml up -d --build`.
 
 Open [http://localhost:34538](http://localhost:34538). For a new data volume with no deployment credentials, sign in with `admin` / `admin`. FileTerm opens **Settings → Web Login** and requires a new password before opening the workspace. You can change both the username and password there. FileTerm stores a password hash in `/data/.web-account.json`. Set `FILETERM_WEB_PORT` to use another port.
 
@@ -16,7 +20,7 @@ Complete setup locally before exposing FileTerm, or specify credentials at deplo
 
 ```bash
 FILETERM_WEB_PASSWORD='change-me-now' \
-  docker compose -f apps/tauri/web/compose.yaml up -d --build
+  docker compose -f apps/tauri/web/compose.yaml up -d --no-build
 ```
 
 Or pass a pre-hashed bcrypt password:
@@ -24,7 +28,7 @@ Or pass a pre-hashed bcrypt password:
 ```bash
 HASH="$(docker run --rm caddy:2 caddy hash-password --plaintext 'change-me-now')"
 FILETERM_WEB_PASSWORD_HASH="$HASH" \
-  docker compose -f apps/tauri/web/compose.yaml up -d --build
+  docker compose -f apps/tauri/web/compose.yaml up -d --no-build
 ```
 
 Set `FILETERM_WEB_DISABLE_AUTH=true` only when an authenticated reverse proxy handles sign-in.
@@ -70,15 +74,11 @@ docker run --rm --mount type=volume,source=web_fileterm-data,target=/data \
 
 Keep the existing `.machine-id` and credential files. For a host bind mount, give UID/GID `10001:10001` access to the required directory according to your host's permissions.
 
-## Publish a preview to Docker Hub
+## Release automation
 
-Create a public repository named `fileterm` under your Docker Hub account. In GitHub's **Settings → Secrets and variables → Actions**, set the repository variable `DOCKERHUB_USERNAME` to your Docker ID and the repository secret `DOCKERHUB_TOKEN` to a Docker Hub personal access token with Read & Write permission.
+Pushing a validated `v*` release tag starts the desktop build and the Docker build in the same GitHub Actions run. The Docker job tests both Linux architectures before publishing a multi-platform image with the exact Git tag to Docker Hub and GHCR. Each pre-release keeps its own version tag.
 
-Once the workflow is on `main`, run **FileTerm Docker Web** from GitHub Actions on `main`. Enter a tag such as `web-preview-0.1.0` and enable **Also publish the tagged preview to Docker Hub**. The workflow verifies the Linux `amd64` and `arm64` images before publishing both architectures together to GHCR and Docker Hub.
-
-```bash
-docker pull your-docker-id/fileterm:web-preview-0.1.0
-```
+The release job uses the GitHub Actions repository variable `DOCKERHUB_USERNAME` and the secret `DOCKERHUB_TOKEN` (a Docker Hub personal access token with Read & Write permission). The Docker Hub repository and GHCR package must be public for users to pull anonymously.
 
 ## Acceptance tests
 

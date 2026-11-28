@@ -6,16 +6,10 @@ name: FileTerm Docker Web
       - 'apps/tauri/**'
       - 'packages/**'
       - '.github/workflows/docker-web.yml'
-  workflow_dispatch:
-    inputs:
-      preview_tag:
-        description: Optional versioned image tag (example web-preview-0.1.0)
-        required: false
-        type: string
-      publish_dockerhub:
-        description: Also publish the tagged preview to Docker Hub
-        type: boolean
-        default: false
+  workflow_call:
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
 
 permissions:
   contents: read
@@ -45,17 +39,19 @@ jobs:
           docker build -f apps/tauri/web/Dockerfile -t fileterm-web:ci .
           FILETERM_TEST_NETWORK=host FILETERM_TEST_TLS=1 bash apps/tauri/web/tests/run.sh fileterm-web:ci
       - name: Export tested image
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.preview_tag != ''
+        shell: bash
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: docker save fileterm-web:ci | gzip > fileterm-web-${{ matrix.arch }}.tar.gz
       - uses: actions/upload-artifact@v6
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.preview_tag != ''
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: fileterm-web-${{ matrix.arch }}
           path: fileterm-web-${{ matrix.arch }}.tar.gz
           retention-days: 2
+          if-no-files-found: error
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.preview_tag != ''
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: smoke
     runs-on: ubuntu-24.04
     permissions:
@@ -68,37 +64,33 @@ jobs:
           merge-multiple: true
       - name: Publish the tested images and multi-platform tag
         env:
-          PREVIEW_TAG: ${{ inputs.preview_tag }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PUBLISH_DOCKERHUB: ${{ inputs.publish_dockerhub }}
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if ! [[ "$PREVIEW_TAG" =~ ^web-preview-[0-9]+\.[0-9]+\.[0-9]+([.-][a-z0-9.-]+)?$ ]]; then
-            echo '::error::Use a versioned tag such as web-preview-0.1.0.'
+          tag="$GITHUB_REF_NAME"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+([.-][a-z0-9]+)*)?$ ]] || (( ${#tag} > 122 )); then
+            echo '::error::Expected a version tag such as v2.3.4-beta.15.'
             exit 1
           fi
-          repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
-          images=("ghcr.io/$repository")
-          if [[ "$PUBLISH_DOCKERHUB" == true ]]; then
-            if [[ -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ]]; then
-              echo '::error::Set the DOCKERHUB_USERNAME repository variable and DOCKERHUB_TOKEN Actions secret.'
-              exit 1
-            fi
-            printf '%s' "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
-            images+=("docker.io/$DOCKERHUB_USERNAME/fileterm")
+          if [[ -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ]]; then
+            echo '::error::Set the DOCKERHUB_USERNAME repository variable and DOCKERHUB_TOKEN Actions secret.'
+            exit 1
           fi
+          repository="${GITHUB_REPOSITORY,,}"
+          images=("ghcr.io/$repository" "docker.io/$DOCKERHUB_USERNAME/fileterm")
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           for arch in amd64 arm64; do
             gzip -dc "fileterm-web-$arch.tar.gz" | docker load
             for image in "${images[@]}"; do
-              ref="$image:$PREVIEW_TAG-$arch"
+              ref="$image:$tag-$arch"
               docker tag fileterm-web:ci "$ref"
               docker push "$ref"
             done
           done
           for image in "${images[@]}"; do
-            docker buildx imagetools create -t "$image:$PREVIEW_TAG" \
-              "$image:$PREVIEW_TAG-amd64" "$image:$PREVIEW_TAG-arm64"
+            docker buildx imagetools create -t "$image:$tag" \
+              "$image:$tag-amd64" "$image:$tag-arm64"
           done

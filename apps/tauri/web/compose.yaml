@@ -1,5 +1,6 @@
 services:
   fileterm:
+    image: '${FILETERM_WEB_IMAGE:-fileterm-web:local}'
     build:
       context: ../../..
       dockerfile: apps/tauri/web/Dockerfile
