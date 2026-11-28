@@ -8,8 +8,8 @@ export FILETERM_WEB_DIST_DIR="${FILETERM_WEB_DIST_DIR:-/opt/fileterm/dist}"
 
 WEB_PORT="${FILETERM_WEB_PORT:-34538}"
 WEB_LISTEN="${FILETERM_WEB_LISTEN:-127.0.0.1}"
-WEB_USER="${FILETERM_WEB_USERNAME:-fileterm}"
-WEB_PASSWORD="${FILETERM_WEB_PASSWORD:-}"
+WEB_USER="${FILETERM_WEB_USERNAME:-admin}"
+WEB_PASSWORD="${FILETERM_WEB_PASSWORD:-admin}"
 WEB_PASSWORD_HASH="${FILETERM_WEB_PASSWORD_HASH:-}"
 DISABLE_AUTH="${FILETERM_WEB_DISABLE_AUTH:-false}"
 TLS_MODE="${FILETERM_WEB_TLS:-off}"
@@ -23,15 +23,6 @@ fi
 
 if [[ -n "$WEB_PASSWORD_HASH" && "$WEB_PASSWORD_HASH" != '$2'* ]]; then
   echo "ERROR: FILETERM_WEB_PASSWORD_HASH must be a bcrypt hash produced by 'caddy hash-password'." >&2
-  exit 2
-fi
-
-if [[ "$DISABLE_AUTH" != "true" && -z "$WEB_PASSWORD" && -z "$WEB_PASSWORD_HASH" ]]; then
-  cat >&2 <<'EOF'
-ERROR: FileTerm Web refuses to start without authentication credentials.
-Set FILETERM_WEB_PASSWORD (or FILETERM_WEB_PASSWORD_HASH) in compose/environment,
-or set FILETERM_WEB_DISABLE_AUTH=true only when placed behind an authenticated reverse proxy.
-EOF
   exit 2
 fi
 

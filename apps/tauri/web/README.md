@@ -4,7 +4,15 @@ Run FileTerm as a native self-hosted Web application in Docker. The image compil
 
 ## Quick start with Docker Compose
 
-Run from the repository root with either a plaintext password or a bcrypt hash produced by `caddy hash-password`:
+Run from the repository root:
+
+```bash
+docker compose -f apps/tauri/web/compose.yaml up -d --build
+```
+
+Open [http://localhost:34538](http://localhost:34538) and sign in with username `admin` and password `admin`. Set `FILETERM_WEB_PORT` to use another port.
+
+Set a custom password before making FileTerm reachable from other devices. Set `FILETERM_WEB_USERNAME` to override the username.
 
 ```bash
 FILETERM_WEB_PASSWORD='change-me-now' \
@@ -19,9 +27,7 @@ FILETERM_WEB_PASSWORD_HASH="$HASH" \
   docker compose -f apps/tauri/web/compose.yaml up -d --build
 ```
 
-Open [http://localhost:34538](http://localhost:34538) on the host (override with `FILETERM_WEB_PORT`). Sign in as `fileterm` (override with `FILETERM_WEB_USERNAME`) and the password you configured.
-
-The container refuses to start unless `FILETERM_WEB_PASSWORD` or `FILETERM_WEB_PASSWORD_HASH` is set (or `FILETERM_WEB_DISABLE_AUTH=true` when placed behind an authenticated reverse proxy).
+Set `FILETERM_WEB_DISABLE_AUTH=true` only when an authenticated reverse proxy handles sign-in.
 
 ## Host networking and remote access
 

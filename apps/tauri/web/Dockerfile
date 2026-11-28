@@ -52,7 +52,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
   FILETERM_WEB_DIST_DIR=/opt/fileterm/dist \
   FILETERM_WEB_PORT=34538 \
   FILETERM_WEB_LISTEN=127.0.0.1 \
-  FILETERM_WEB_USERNAME=fileterm \
   FILETERM_WEB_TLS=off
 
 RUN apt-get update \
