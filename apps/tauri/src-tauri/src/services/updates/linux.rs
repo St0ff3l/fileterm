@@ -260,6 +260,8 @@ fn install_appimage_with_backup(
 
 #[cfg(target_os = "linux")]
 pub(super) async fn install(app: &crate::runtime::AppHandle) -> Result<(), crate::AppError> {
+    use tauri::Manager;
+
     let Some(tauri_app) = app.tauri() else {
         return super::open_release_page(app).await;
     };
