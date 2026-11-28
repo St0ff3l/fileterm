@@ -70,6 +70,16 @@ docker run --rm --mount type=volume,source=web_fileterm-data,target=/data \
 
 Keep the existing `.machine-id` and credential files. For a host bind mount, give UID/GID `10001:10001` access to the required directory according to your host's permissions.
 
+## Publish a preview to Docker Hub
+
+Create a public repository named `fileterm` under your Docker Hub account. In GitHub's **Settings → Secrets and variables → Actions**, set the repository variable `DOCKERHUB_USERNAME` to your Docker ID and the repository secret `DOCKERHUB_TOKEN` to a Docker Hub personal access token with Read & Write permission.
+
+Once the workflow is on `main`, run **FileTerm Docker Web** from GitHub Actions on `main`. Enter a tag such as `web-preview-0.1.0` and enable **Also publish the tagged preview to Docker Hub**. The workflow verifies the Linux `amd64` and `arm64` images before publishing both architectures together to GHCR and Docker Hub.
+
+```bash
+docker pull your-docker-id/fileterm:web-preview-0.1.0
+```
+
 ## Acceptance tests
 
 With Docker, Python 3, `playwright` (`sync_playwright`), and Chromium/Chrome installed:
