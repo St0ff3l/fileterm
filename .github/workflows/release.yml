@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   validate-release-tag:
@@ -38,6 +39,16 @@ jobs:
           fi
 
           echo "Validated release tag on branch: $(printf '%s\n' "${release_branches}" | head -n 1)"
+
+  docker-web:
+    needs: validate-release-tag
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    uses: ./.github/workflows/docker-web.yml
+    permissions:
+      contents: read
+      packages: write
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-macos-arm64:
     needs: validate-release-tag
@@ -598,7 +609,16 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [validate-release-tag, build-macos-arm64, build-macos-x64, build-windows, build-linux, build-arch-packages]
+    needs:
+      [
+        validate-release-tag,
+        build-macos-arm64,
+        build-macos-x64,
+        build-windows,
+        build-linux,
+        build-arch-packages,
+        docker-web
+      ]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -607,6 +627,8 @@ jobs:
 
       - name: Download release artifacts
         uses: actions/download-artifact@v7
+        with:
+          pattern: FileTerm-*
 
       - name: Create combined desktop updater manifest
         run: node ./apps/tauri/scripts/create-updater-manifest.mjs --merge ./FileTerm-Windows-x64 ./FileTerm-Windows-arm64 ./FileTerm-macOS-arm64 ./FileTerm-macOS-x64 ./FileTerm-Linux-x86_64 ./FileTerm-Linux-arm64

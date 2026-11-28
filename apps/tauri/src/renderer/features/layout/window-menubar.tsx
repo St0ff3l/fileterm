@@ -45,6 +45,7 @@ export function WindowMenubar({
   onToggleTerminalZoomLock(): void
 }) {
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null)
+  const isDesktop = desktopApi?.isDesktop !== false
 
   const openMenuAt = (kind: WindowMenuKind, target: HTMLButtonElement) => {
     const rect = target.getBoundingClientRect()
@@ -53,7 +54,7 @@ export function WindowMenubar({
 
   const buildItems = (kind: WindowMenuKind): ContextMenuEntry[] => {
     if (kind === 'file') {
-      return [
+      const items: ContextMenuEntry[] = [
         {
           label: t.windowMenuNewConnection,
           action: () => void desktopApi?.openConnectionFormWindow('create')
@@ -67,10 +68,15 @@ export function WindowMenubar({
           action: () => void desktopApi?.openCommandManagerWindow()
         },
         { separator: true },
-        { label: t.windowMenuOpenLogs, action: () => void desktopApi?.openLogsDirectory() },
-        { separator: true },
-        { label: t.windowMenuExit, shortcut: SHORTCUT_EXIT, action: () => void desktopApi?.requestQuitApp() }
+        { label: t.windowMenuOpenLogs, action: () => void desktopApi?.openLogsDirectory() }
       ]
+      if (isDesktop) {
+        items.push(
+          { separator: true },
+          { label: t.windowMenuExit, shortcut: SHORTCUT_EXIT, action: () => void desktopApi?.requestQuitApp() }
+        )
+      }
+      return items
     }
     if (kind === 'view') {
       const items: ContextMenuEntry[] = [
@@ -148,7 +154,7 @@ export function WindowMenubar({
       className="window-menubar"
       data-tauri-drag-region="deep"
       onDoubleClick={(event) => {
-        if (event.target instanceof Element && event.target.closest('button')) {
+        if (!isDesktop || (event.target instanceof Element && event.target.closest('button'))) {
           return
         }
         void desktopApi?.toggleMaximizeCurrentWindow()
@@ -173,44 +179,48 @@ export function WindowMenubar({
         >
           {t.nativeMenuView}
         </button>
-        <button
-          aria-expanded={openMenu?.kind === 'window'}
-          aria-haspopup="menu"
-          className={openMenu?.kind === 'window' ? 'is-open' : undefined}
-          type="button"
-          onClick={(event) => openMenuAt('window', event.currentTarget)}
-        >
-          {t.nativeMenuWindow}
-        </button>
+        {isDesktop ? (
+          <button
+            aria-expanded={openMenu?.kind === 'window'}
+            aria-haspopup="menu"
+            className={openMenu?.kind === 'window' ? 'is-open' : undefined}
+            type="button"
+            onClick={(event) => openMenuAt('window', event.currentTarget)}
+          >
+            {t.nativeMenuWindow}
+          </button>
+        ) : null}
       </div>
-      <div className="window-control-buttons">
-        <button
-          aria-label={t.windowMinimize}
-          type="button"
-          onClick={() => {
-            void desktopApi?.minimizeCurrentWindow()
-          }}
-        >
-          <AppIcon name="window-minimize" size={10} strokeWidth={1.5} />
-        </button>
-        <button
-          aria-label={isMaximized ? t.windowRestore : t.windowMaximize}
-          type="button"
-          onClick={() => {
-            void desktopApi?.toggleMaximizeCurrentWindow()
-          }}
-        >
-          <AppIcon name={isMaximized ? 'window-restore' : 'window-maximize'} size={10} strokeWidth={1.5} />
-        </button>
-        <CloseButton
-          aria-label={t.windowClose}
-          onClick={() => {
-            void desktopApi?.closeCurrentWindow()
-          }}
-          iconStrokeWidth={2.4}
-          size="window"
-        />
-      </div>
+      {isDesktop ? (
+        <div className="window-control-buttons">
+          <button
+            aria-label={t.windowMinimize}
+            type="button"
+            onClick={() => {
+              void desktopApi?.minimizeCurrentWindow()
+            }}
+          >
+            <AppIcon name="window-minimize" size={10} strokeWidth={1.5} />
+          </button>
+          <button
+            aria-label={isMaximized ? t.windowRestore : t.windowMaximize}
+            type="button"
+            onClick={() => {
+              void desktopApi?.toggleMaximizeCurrentWindow()
+            }}
+          >
+            <AppIcon name={isMaximized ? 'window-restore' : 'window-maximize'} size={10} strokeWidth={1.5} />
+          </button>
+          <CloseButton
+            aria-label={t.windowClose}
+            onClick={() => {
+              void desktopApi?.closeCurrentWindow()
+            }}
+            iconStrokeWidth={2.4}
+            size="window"
+          />
+        </div>
+      ) : null}
       {openMenu ? (
         <ContextMenu
           className="window-context-menu"

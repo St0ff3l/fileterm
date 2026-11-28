@@ -1,5 +1,4 @@
 // Remote transfer commands.
-#[tauri::command]
 pub async fn app_queue_upload(
     app: AppHandle,
     file_names: Vec<String>,
@@ -8,7 +7,6 @@ pub async fn app_queue_upload(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_upload_file(
     app: AppHandle,
     tab_id: String,
@@ -34,7 +32,6 @@ pub async fn app_upload_file(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_download_file(
     app: AppHandle,
     tab_id: String,
@@ -60,7 +57,6 @@ pub async fn app_download_file(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_download_remote_path(
     app: AppHandle,
     tab_id: String,
@@ -93,7 +89,6 @@ pub async fn app_download_remote_path(
     }
 }
 
-#[tauri::command]
 pub async fn app_cancel_transfer(
     app: AppHandle,
     transfer_id: String,
@@ -102,7 +97,6 @@ pub async fn app_cancel_transfer(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_pause_transfer(
     app: AppHandle,
     transfer_id: String,
@@ -111,7 +105,6 @@ pub async fn app_pause_transfer(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_resume_transfer(
     app: AppHandle,
     transfer_id: String,
@@ -120,7 +113,6 @@ pub async fn app_resume_transfer(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_discard_transfer(
     app: AppHandle,
     transfer_id: String,
@@ -130,7 +122,6 @@ pub async fn app_discard_transfer(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_clear_transfers(
     app: AppHandle,
     transfer_ids: Vec<String>,
@@ -139,7 +130,6 @@ pub async fn app_clear_transfers(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_browse_transfer_directory(
     app: AppHandle,
     tab_id: String,
@@ -148,7 +138,6 @@ pub async fn app_browse_transfer_directory(
     crate::services::transfers::browse_copy_directory(&app, &tab_id, &path).await
 }
 
-#[tauri::command]
 pub async fn app_copy_between_servers(
     app: AppHandle,
     source_tab_id: String,

@@ -1,0 +1,26 @@
+services:
+  fileterm:
+    image: '${FILETERM_WEB_IMAGE:-fileterm-web:local}'
+    build:
+      context: ../../..
+      dockerfile: apps/tauri/web/Dockerfile
+    container_name: fileterm-web
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      FILETERM_WEB_PORT: '${FILETERM_WEB_PORT:-34538}'
+      FILETERM_WEB_USERNAME: '${FILETERM_WEB_USERNAME:-}'
+      FILETERM_WEB_PASSWORD: '${FILETERM_WEB_PASSWORD:-}'
+      FILETERM_WEB_PASSWORD_HASH: '${FILETERM_WEB_PASSWORD_HASH:-}'
+      FILETERM_WEB_TLS: '${FILETERM_WEB_TLS:-off}'
+      FILETERM_WEB_LISTEN: '127.0.0.1'
+      TZ: '${TZ:-Asia/Shanghai}'
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - fileterm-data:/data
+
+volumes:
+  fileterm-data:

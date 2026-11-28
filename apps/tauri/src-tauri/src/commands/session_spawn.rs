@@ -254,7 +254,7 @@ async fn spawn_local_terminal_tab(
         Ok(startup) => {
             let startup_app = app.clone();
             let startup_tab_id = tab_id.clone();
-            tauri::async_runtime::spawn(async move {
+            crate::runtime::spawn(async move {
                 finish_local_terminal_startup(&startup_app, &startup_tab_id, startup, true).await;
             });
         }

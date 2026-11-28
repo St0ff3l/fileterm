@@ -43,9 +43,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const desktopApi = window.fileterm
   const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
   const isWindowsDesktop = rendererPlatform === 'win32'
-  // Linux uses the same renderer-owned chrome as Windows. macOS remains on
+  // Linux and Web use the same renderer-owned chrome as Windows. macOS remains on
   // AppKit chrome because its traffic lights are intentionally native.
-  const usesCustomWindowChrome = isWindowsDesktop || rendererPlatform === 'linux'
+  const usesCustomWindowChrome = isWindowsDesktop || rendererPlatform === 'linux' || rendererPlatform === 'web'
 
   useEffect(() => {
     if (!isWindowsDesktop || !isMainWorkspaceWindow) return

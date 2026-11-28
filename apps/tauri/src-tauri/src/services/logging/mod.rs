@@ -21,11 +21,11 @@ pub use preferences::{
     default_categories, migrate_categories, normalize_categories, set_preferences,
 };
 
+use crate::runtime::AppHandle;
 use crate::storage::state_path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
-use tauri::AppHandle;
 use tracing_subscriber::prelude::*;
 
 static LOG_DIRECTORY: OnceLock<PathBuf> = OnceLock::new();

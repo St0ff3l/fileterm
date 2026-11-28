@@ -37,7 +37,7 @@ struct MainWindowGeometryPersistence {
 fn read_main_window_geometry(
     app: &AppHandle<Wry>,
 ) -> Result<Option<MainWindowGeometry>, crate::AppError> {
-    let path = crate::storage::workspace_file(app, MAIN_WINDOW_STATE_FILE)?;
+    let path = crate::storage::workspace_file(&crate::runtime_app(app), MAIN_WINDOW_STATE_FILE)?;
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -118,7 +118,7 @@ fn watch_window_display_changes(window: &WebviewWindow<Wry>, minimum: LogicalSiz
         }
         if let Err(error) = fit_existing_window_to_display(&tracked, minimum, display) {
             crate::services::logging::warn(
-                tracked.app_handle(),
+                &crate::runtime_app(tracked.app_handle()),
                 "window",
                 format!(
                     "unable to adapt display change label={}: {error}",
@@ -168,7 +168,7 @@ fn restore_main_window_geometry(
             Ok(None) => MainWindowGeometry::default(),
             Err(error) => {
                 crate::services::logging::warn(
-                    app,
+                    &crate::runtime_app(app),
                     "window",
                     format!("unable to read saved main window size: {error}"),
                 );
@@ -193,7 +193,7 @@ fn restore_main_window_geometry(
         );
         if let Err(error) = window.set_min_size(Some(minimum)) {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("unable to adapt minimum window size: {error}"),
             );
@@ -203,7 +203,7 @@ fn restore_main_window_geometry(
     if !geometry.maximized && window.is_maximized().unwrap_or(false) {
         if let Err(error) = window.unmaximize() {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("unable to unmaximize fixed-size main window: {error}"),
             );
@@ -211,7 +211,7 @@ fn restore_main_window_geometry(
     }
     if let Err(error) = window.set_size(size) {
         crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("unable to restore main window size: {error}"),
         );
@@ -220,7 +220,7 @@ fn restore_main_window_geometry(
     if geometry.maximized {
         if let Err(error) = window.maximize() {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("unable to restore maximized main window: {error}"),
             );
@@ -232,7 +232,7 @@ fn restore_main_window_geometry(
                 center_child_window_position(position, area, outer_size, Some((position, area)));
             if let Err(error) = window.set_position(centered) {
                 crate::services::logging::warn(
-                    app,
+                    &crate::runtime_app(app),
                     "window",
                     format!("unable to position main window in work area: {error}"),
                 );
@@ -265,7 +265,11 @@ fn schedule_main_window_geometry_save(app: &AppHandle<Wry>) {
 fn persist_main_window_geometry(app: &AppHandle<Wry>) {
     let persistence = app.state::<MainWindowGeometryPersistence>();
     let Ok(_guard) = persistence.write_lock.lock() else {
-        crate::services::logging::warn(app, "window", "main window size write lock is poisoned");
+        crate::services::logging::warn(
+            &crate::runtime_app(app),
+            "window",
+            "main window size write lock is poisoned",
+        );
         return;
     };
     let Some(window) = app.get_webview_window("main") else {
@@ -290,7 +294,7 @@ fn persist_main_window_geometry(app: &AppHandle<Wry>) {
 
     if let Err(error) = write_main_window_geometry(app, &geometry) {
         crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("unable to save main window size: {error}"),
         );
@@ -308,7 +312,7 @@ fn write_main_window_geometry(
     app: &AppHandle<Wry>,
     geometry: &MainWindowGeometry,
 ) -> Result<(), crate::AppError> {
-    let path = crate::storage::workspace_file(app, MAIN_WINDOW_STATE_FILE)?;
+    let path = crate::storage::workspace_file(&crate::runtime_app(app), MAIN_WINDOW_STATE_FILE)?;
     let temporary = path.with_file_name(format!(
         ".{MAIN_WINDOW_STATE_FILE}.{}.tmp",
         uuid::Uuid::new_v4()

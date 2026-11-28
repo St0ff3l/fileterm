@@ -1,5 +1,4 @@
 // Profile opening, pane layout, and background-session commands.
-#[tauri::command]
 pub async fn app_open_profile(
     app: AppHandle,
     profile_id: String,
@@ -39,7 +38,6 @@ pub async fn app_open_profile(
 /// connect action uses this so a server can be monitored (system metrics,
 /// connection history) while the overview stays in front; entering the
 /// terminal remains an explicit action that attaches the session.
-#[tauri::command]
 pub async fn app_open_profile_background(
     app: AppHandle,
     profile_id: String,
@@ -118,7 +116,6 @@ pub async fn app_open_profile_with_operation(
 ///
 /// 支持 SSH 与 Local Terminal session。两者都会创建独立 PTY / runtime；
 /// FTP / Telnet / Serial 暂不支持分屏。
-#[tauri::command]
 pub async fn app_split_tab(
     app: AppHandle,
     source_tab_id: String,
@@ -370,7 +367,6 @@ fn remove_split_pane_from_tabs(
 }
 
 /// 关闭分屏中的单个 pane。若 pane tree 只剩一个 leaf，退化回普通 tab。
-#[tauri::command]
 pub async fn app_close_pane(
     app: AppHandle,
     root_tab_id: String,
@@ -468,7 +464,6 @@ pub async fn app_close_pane(
 }
 
 /// 设置分屏中的活跃 pane。
-#[tauri::command]
 pub async fn app_set_active_pane(
     app: AppHandle,
     root_tab_id: String,
@@ -493,7 +488,6 @@ pub async fn app_set_active_pane(
 }
 
 /// 持久化分屏 weights（拖拽 resize 结束时调用）。
-#[tauri::command]
 pub async fn app_set_pane_weights(
     app: AppHandle,
     root_tab_id: String,
@@ -523,7 +517,6 @@ pub async fn app_set_pane_weights(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_activate_tab(
     app: AppHandle,
     tab_id: String,
@@ -596,7 +589,6 @@ fn detach_session_to_background_in_tabs(
 /// Hide a GUI session in the background without closing its connection.
 /// Management mode uses this when the last terminal view for a server is
 /// closed: the view disappears, but the managed server stays connected.
-#[tauri::command]
 pub async fn app_hide_session_to_background(
     app: AppHandle,
     tab_id: String,
@@ -646,7 +638,6 @@ fn next_visible_top_level_tab_id(
 /// Make an externally opened background session visible in the normal
 /// workspace and focus it. The existing worker/session is reused; this only
 /// changes presentation and active-tab routing.
-#[tauri::command]
 pub async fn app_attach_background_session(
     app: AppHandle,
     tab_id: String,
@@ -668,7 +659,6 @@ pub async fn app_attach_background_session(
 /// Hide an externally opened session from the visible tab bar without
 /// disconnecting its existing worker. The session remains available from the
 /// Background Sessions page and can be attached again later.
-#[tauri::command]
 pub async fn app_detach_session_to_background(
     app: AppHandle,
     tab_id: String,

@@ -1,4 +1,3 @@
-#[tauri::command]
 pub async fn app_get_network_connections(app: AppHandle, tab_id: String) -> Result<Value, AppError> {
     {
         let state = app.state::<crate::services::workspace::WorkspaceState>();

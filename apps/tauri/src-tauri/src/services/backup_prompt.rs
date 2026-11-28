@@ -5,7 +5,7 @@
 //! keeping this small boundary avoids duplicating the WebDAV/S3 flow while
 //! making a missing password a stable, renderer-detectable error.
 
-use tauri::AppHandle;
+use crate::runtime::AppHandle;
 use zeroize::Zeroizing;
 
 use crate::AppError;

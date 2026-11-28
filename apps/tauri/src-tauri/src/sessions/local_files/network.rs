@@ -631,7 +631,6 @@ fn connect_windows_smb(
     })
 }
 
-#[tauri::command]
 pub async fn app_connect_local_network_share(
     path: String,
     username: String,

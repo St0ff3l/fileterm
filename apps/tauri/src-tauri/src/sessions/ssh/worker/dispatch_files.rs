@@ -136,7 +136,7 @@ async fn dispatch_file_cmd(
     saved_su_password: &mut Option<String>,
     tab_id: &str,
     app: &AppHandle,
-    state: &tauri::State<'_, crate::services::workspace::WorkspaceState>,
+    state: &crate::runtime::State<'_, crate::services::workspace::WorkspaceState>,
     _tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
     exec_channel_enabled: bool,
 ) -> Result<bool, String> {

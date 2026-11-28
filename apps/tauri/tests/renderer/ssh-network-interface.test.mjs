@@ -57,17 +57,21 @@ test('renderer shows proxy, OpenSSH, and jump conflicts without erasing the pref
 test('Tauri bridge enumerates adapters and passes an explicit clear to the connection test', async () => {
   const rows = [{ id: 'adapter', name: 'WLAN', online: true, ipv4: true, ipv6: false }]
   const calls = []
+  const sharedApi = load('../../src/bridge/shared-api.ts', {})
   const { createTauriApi } = load(
     '../../src/bridge/tauri-api.ts',
     {
       '@tauri-apps/api/core': {
+        Channel: class {},
+        isTauri: () => true,
         invoke: async (...args) => {
           calls.push(args)
           return rows
         }
       },
       '@tauri-apps/api/window': { getCurrentWindow: () => ({ onDragDropEvent: async () => () => {} }) },
-      './runtime-metadata': { getRuntimeMetadata: async () => ({ platform: 'win32' }) }
+      './runtime-metadata': { getRuntimeMetadata: async () => ({ platform: 'win32' }) },
+      './shared-api': sharedApi
     },
     { window: { addEventListener() {} } }
   )

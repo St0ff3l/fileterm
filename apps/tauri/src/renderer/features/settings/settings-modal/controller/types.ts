@@ -11,12 +11,9 @@ export type SettingsModalControllerOptions = {
   onSetCustomThemes(value: SavedTheme[]): void
   locale: 'zhCN' | 'enUS'
   onSetLocale(value: 'zhCN' | 'enUS'): void
-  onOpenCommandManager(): void
-  onOpenConnectionManager(): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
   workspaceMode: WorkspaceMode
   uiPreferences: UiPreferences | undefined
   initialTab: SettingsTab
-  inline: boolean
 }

@@ -1,35 +1,68 @@
 [package]
 name = "fileterm"
-version = "2.3.4-beta.14"
+version = "2.3.4-beta.15"
 description = "FileTerm desktop workspace"
 authors = ["FileTerm"]
 edition = "2021"
+default-run = "fileterm"
 
 [features]
+default = ["desktop"]
+desktop = [
+  "dep:tauri",
+  "dep:tauri-build",
+  "dep:tauri-plugin-updater",
+  "dep:arboard",
+  "dep:open",
+  "dep:keepawake",
+  "dep:rfd",
+  "dep:gtk",
+  "dep:gdk",
+  "dep:objc2",
+  "dep:objc2-foundation",
+  "dep:objc2-app-kit",
+  "dep:block2",
+  "dep:objc2-quartz-core",
+  "dep:raw-window-handle",
+  "dep:window-vibrancy",
+  "dep:webview2-com",
+  "dep:image",
+]
+web = ["dep:axum", "dep:tower-http", "dep:futures-util", "dep:mime_guess", "dep:tar"]
 windows-scheduler-fixture = []
+
+[[bin]]
+name = "fileterm"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[[bin]]
+name = "fileterm-web"
+path = "src/bin/fileterm_web.rs"
+required-features = ["web"]
 
 [lib]
 name = "fileterm_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
 # Ubuntu and other modern Linux desktops default to Wayland. Keep the
 # data-control backend enabled so terminal copy/paste does not fall back to an
 # unavailable X11 clipboard in a pure Wayland session.
-arboard = { version = "3", features = ["wayland-data-control"] }
-open = "5"
-keepawake = "0.6.1"
+arboard = { version = "3", features = ["wayland-data-control"], optional = true }
+open = { version = "5", optional = true }
+keepawake = { version = "0.6.1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
-tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico", "macos-private-api"] }
-tauri-plugin-updater = "2.14.1"
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico", "macos-private-api"], optional = true }
+tauri-plugin-updater = { version = "2.14.1", optional = true }
 thiserror = "2"
 url = "2"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 russh = "0.63.1"
 russh-sftp = "2.3"
 async-trait = "0.1"
@@ -37,7 +70,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 regex = "1"
 encoding_rs = "0.8"
-rfd = "0.17"
+rfd = { version = "0.17", optional = true }
 sha2 = "0.10"
 ttf-parser = "0.25.1"
 hmac = "0.12"
@@ -61,11 +94,16 @@ suppaftp = { version = "=10.0.2", default-features = false, features = ["tokio-a
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 portable-pty = "0.9"
 sys-locale = "0.3.2"
+axum = { version = "0.8", features = ["ws", "multipart"], optional = true }
+tower-http = { version = "0.6", features = ["fs", "limit"], optional = true }
+futures-util = { version = "0.3", optional = true }
+mime_guess = { version = "2", optional = true }
+tar = { version = "0.4", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-raw-window-handle = "0.6"
-webview2-com = "0.39"
-image = { version = "0.25", default-features = false, features = ["png"] }
+raw-window-handle = { version = "0.6", optional = true }
+webview2-com = { version = "0.39", optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 windows-core = "0.62"
 windows = { version = "0.62", features = [
   "Win32_Foundation",
@@ -111,7 +149,7 @@ windows-sys = { version = "0.61", features = [
 libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2 = { version = "0.6", default-features = false, features = ["std"], optional = true }
 objc2-foundation = { version = "0.3.2", default-features = false, features = [
   "std",
   "NSArray",
@@ -125,7 +163,7 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = [
   "NSString",
   "NSURL",
   "NSUserDefaults",
-] }
+], optional = true }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
   "std",
   "NSApplication",
@@ -142,27 +180,29 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
   "NSWorkspace",
   "block2",
   "objc2-quartz-core",
-] }
-block2 = { version = "0.6.2", default-features = false, features = ["alloc"] }
+], optional = true }
+block2 = { version = "0.6.2", default-features = false, features = ["alloc"], optional = true }
 objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
   "std",
   "CALayer",
   "CATransaction",
   "CATransform3D",
   "objc2-core-foundation",
-] }
-raw-window-handle = "0.6"
-window-vibrancy = "0.6"
+], optional = true }
+raw-window-handle = { version = "0.6", optional = true }
+window-vibrancy = { version = "0.6", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Tauri exposes the native GTK window on Linux. Keep this target-scoped so the
 # tray restore path can request a real desktop activation without affecting
 # macOS or Windows builds.
-gtk = { version = "0.18", features = ["v3_24"] }
-gdk = "0.18"
+gtk = { version = "0.18", features = ["v3_24"], optional = true }
+gdk = { version = "0.18", optional = true }
 
 [dev-dependencies]
 rand = "0.10"
+tokio-tungstenite = "0.29"
+tower = { version = "0.5", features = ["util"] }
 
 [patch.crates-io]
 russh = { path = "../../../vendor/russh" }

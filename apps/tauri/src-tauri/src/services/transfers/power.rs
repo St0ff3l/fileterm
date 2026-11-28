@@ -7,19 +7,22 @@
 use std::sync::{mpsc, Arc, Mutex, Weak};
 use std::time::Duration;
 
-use tauri::AppHandle;
+use crate::runtime::AppHandle;
 use tokio::sync::watch;
 
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 #[derive(Default)]
 struct Manager {
     current: Mutex<Weak<Lease>>,
 }
 
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 pub(super) struct Lease {
     _release: mpsc::Sender<()>,
     ready: watch::Receiver<bool>,
 }
 
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 impl Lease {
     async fn wait_ready(&self, limit: Duration) -> bool {
         let mut ready = self.ready.clone();
@@ -29,6 +32,7 @@ impl Lease {
     }
 }
 
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 impl Manager {
     fn acquire_with<F, G>(&self, create: F) -> std::io::Result<Arc<Lease>>
     where
@@ -63,17 +67,21 @@ impl Manager {
     }
 }
 
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 static MANAGER: Manager = Manager {
     current: Mutex::new(Weak::new()),
 };
 
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 struct NativeGuard {
+    #[cfg(feature = "desktop")]
     native: Option<keepawake::KeepAwake>,
     app: AppHandle,
 }
 
 impl Drop for NativeGuard {
     fn drop(&mut self) {
+        #[cfg(feature = "desktop")]
         if let Some(native) = self.native.take() {
             drop(native);
             crate::services::logging::info(
@@ -82,62 +90,76 @@ impl Drop for NativeGuard {
                 "idle sleep inhibition released; all transfer leases ended",
             );
         }
+        #[cfg(not(feature = "desktop"))]
+        {
+            let _ = &self.app;
+        }
     }
 }
 
 pub(super) async fn acquire(app: AppHandle) -> Option<Arc<Lease>> {
-    let power_app = app.clone();
-    let lease = match MANAGER.acquire_with(move || {
-        let native = match keepawake::Builder::default()
-            .idle(true)
-            .display(false)
-            .sleep(false)
-            .app_name("FileTerm")
-            .app_reverse_domain("com.fileterm.desktop")
-            .reason("FileTerm file transfer in progress")
-            .create()
-        {
-            Ok(guard) => {
-                crate::services::logging::info(
-                    &power_app,
-                    "transfer:power",
-                    "idle sleep inhibition acquired; display sleep allowed",
-                );
-                Some(guard)
+    if app.is_web() {
+        return None;
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        return None;
+    }
+    #[cfg(feature = "desktop")]
+    {
+        let power_app = app.clone();
+        let lease = match MANAGER.acquire_with(move || {
+            let native = match keepawake::Builder::default()
+                .idle(true)
+                .display(false)
+                .sleep(false)
+                .app_name("FileTerm")
+                .app_reverse_domain("com.fileterm.desktop")
+                .reason("FileTerm file transfer in progress")
+                .create()
+            {
+                Ok(guard) => {
+                    crate::services::logging::info(
+                        &power_app,
+                        "transfer:power",
+                        "idle sleep inhibition acquired; display sleep allowed",
+                    );
+                    Some(guard)
+                }
+                Err(error) => {
+                    crate::services::logging::warn(
+                        &power_app,
+                        "transfer:power",
+                        format!("unable to inhibit idle sleep; transfer continues: {error}"),
+                    );
+                    None
+                }
+            };
+            NativeGuard {
+                native,
+                app: power_app,
             }
+        }) {
+            Ok(lease) => lease,
             Err(error) => {
                 crate::services::logging::warn(
-                    &power_app,
+                    &app,
                     "transfer:power",
-                    format!("unable to inhibit idle sleep; transfer continues: {error}"),
+                    format!("unable to start power owner thread; transfer continues: {error}"),
                 );
-                None
+                return None;
             }
         };
-        NativeGuard {
-            native,
-            app: power_app,
-        }
-    }) {
-        Ok(lease) => lease,
-        Err(error) => {
+        if !lease.wait_ready(Duration::from_secs(3)).await {
             crate::services::logging::warn(
                 &app,
                 "transfer:power",
-                format!("unable to start power owner thread; transfer continues: {error}"),
+                "idle sleep inhibition unavailable or initialization timed out; transfer continues",
             );
             return None;
         }
-    };
-    if !lease.wait_ready(Duration::from_secs(3)).await {
-        crate::services::logging::warn(
-            &app,
-            "transfer:power",
-            "idle sleep inhibition unavailable or initialization timed out; transfer continues",
-        );
-        return None;
+        Some(lease)
     }
-    Some(lease)
 }
 
 #[cfg(test)]

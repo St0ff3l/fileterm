@@ -22,7 +22,7 @@ async fn handle_worker_command_event(
     su_password: &mut Option<String>,
     tab_id: &str,
     app: &AppHandle,
-    state: &tauri::State<'_, crate::services::workspace::WorkspaceState>,
+    state: &crate::runtime::State<'_, crate::services::workspace::WorkspaceState>,
     tunnel_command_tx: &mpsc::UnboundedSender<TunnelCommand>,
     unavailable_reason: &str,
     exec_channel_enabled: bool,

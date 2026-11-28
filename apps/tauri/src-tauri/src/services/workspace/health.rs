@@ -10,7 +10,7 @@ pub fn augment_renderer_health(state: &WorkspaceState, message: &str) -> Option<
     if report.get("event")?.as_str()? != "renderer-health" {
         return None;
     }
-    let runtime = tauri::async_runtime::handle().inner().metrics();
+    let runtime = crate::runtime::tokio_handle().metrics();
     let workers = state.workers.try_read().ok();
     report["native"] = json!({
         "tokioAliveTasks": runtime.num_alive_tasks(),

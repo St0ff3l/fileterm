@@ -42,3 +42,6 @@ __pycache__/
 
 # Derived offline Fig data; rebuilt from the pinned npm dependency.
 /apps/tauri/src/renderer/features/terminal/autocomplete/specs/*.json
+
+# Local credentials for FileTerm Docker.
+apps/tauri/web/.secrets/

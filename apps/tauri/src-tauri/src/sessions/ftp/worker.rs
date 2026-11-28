@@ -6,7 +6,7 @@ pub fn start_ftp_worker(
     cancellation: CancellationToken,
 ) {
     crate::services::logging::session(&app, "INFO", "ftp", &tab_id, "worker starting");
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         let reconnect_mode = profile
             .get("reconnectMode")
             .and_then(Value::as_str)

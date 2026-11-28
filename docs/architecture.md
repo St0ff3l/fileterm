@@ -76,6 +76,12 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - SSH 初始文件目录以 SFTP `canonicalize(".")` 返回的服务端 Home 为准，不写死 `/volume1`、`/home` 或 `/usr/home`；初始目录列表、符号链接元数据和取消路径均有独立超时收口。远程系统指标对 FreeBSD 优先使用官方 `rctl`/`quota` 账号接口，缺失时回退到 `sysctl`/`swapinfo`/`df`/`ps` 主机级基础命令，不复用 Linux `/proc` 采集器；共享托管主机的 `devil info limits` 仅作为提供商补充来源。完整兼容边界、Debian 12 与 Serv00 记录见 [ADR-0007](./decisions/0007-portable-ssh-sftp-home-and-freebsd.md)。
 - 迁移期间 `packages/core` 的领域类型和现有 JSON 数据格式保持兼容；协议 controller 仍按 SSH、FTP、Telnet、Serial 分离。
 
+### 2.2 Docker 浏览器访问
+
+- `apps/tauri/web` 构建原生自托管 Web 版镜像：静态资源使用现有 `apps/tauri/dist`（React renderer），后端构建去除了桌面窗口依赖的 `fileterm-web`（Rust + Axum HTTP/WebSocket），由 Caddy 提供 Basic Auth 与可选 TLS，不包含 Xvfb、X11 或 noVNC。
+- 前端通过 `apps/tauri/src/bridge/` 的传输抽象（`WebBridgeTransport` + `WebWindowOverlayHost`）复用全部现有页面与组件，将独立子窗口切换为模态浮层，并通过 `/api/bootstrap`、`/api/rpc`、`/api/ws` 与 `/api/web/*` 连接同一套 Rust 会话、SFTP/FTP 与存储逻辑；请求侧启用 `HttpOnly` `fileterm_session` Cookie 与同源 `Origin` 校验。
+- `/data` 持久卷保存应用数据、`/data/.machine-id` 与 `/data/.session-secret`。部署与环境变量见 [FileTerm Web Docker 说明](../apps/tauri/web/README.md)。
+
 当前主题系统也已经开始成形，主要落点包括：
 
 - `apps/tauri/src/renderer/styles/themes/tokens.css`

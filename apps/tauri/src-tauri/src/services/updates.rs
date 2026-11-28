@@ -6,29 +6,35 @@
 //! same signed download flow with a recoverable app backup. Linux AppImage, DEB
 //! and RPM packages use signed, format-specific updates; other builds open Releases.
 
+use crate::runtime::AppHandle;
 use semver::Version;
 use serde::Deserialize;
-use tauri::{AppHandle, Emitter, Manager};
 
 use crate::AppError;
 
-#[cfg(any(test, target_os = "windows"))]
+#[cfg(all(feature = "desktop", any(test, target_os = "windows")))]
 pub mod portable;
 
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "desktop", target_os = "macos"))]
 mod macos;
 
-#[cfg(any(target_os = "linux", all(test, unix)))]
+#[cfg(all(feature = "desktop", any(target_os = "linux", all(test, unix))))]
 mod linux;
 
 const RELEASES_API: &str = "https://api.github.com/repos/St0ff3l/fileterm/releases?per_page=100";
 const LATEST_RELEASE_PAGE: &str = "https://github.com/St0ff3l/fileterm/releases/latest";
 const ALL_RELEASES_PAGE: &str = "https://github.com/St0ff3l/fileterm/releases";
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 const RELEASE_DOWNLOAD_BASE: &str = "https://github.com/St0ff3l/fileterm/releases/download";
 const DEFAULT_UPDATE_CHANNEL: &str = "beta";
 const RELEASE_PAGE_UPDATE_MODE: &str = "release-page";
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 const IN_APP_UPDATE_MODE: &str = "in-app";
 
 #[derive(Clone, Debug, Deserialize)]
@@ -56,7 +62,10 @@ struct UpdateSelection {
     release: SelectedRelease,
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 pub struct DownloadedUpdate {
     update: tauri_plugin_updater::Update,
     bytes: Vec<u8>,
@@ -104,16 +113,27 @@ const fn is_portable_build() -> bool {
     false
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn primary_update_mode(_app: &AppHandle) -> &'static str {
-    #[cfg(target_os = "linux")]
-    if linux::update_target(_app).is_none() {
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
+fn primary_update_mode(app: &AppHandle) -> &'static str {
+    if app.is_web() {
         return RELEASE_PAGE_UPDATE_MODE;
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(tauri_app) = app.tauri() {
+        if linux::update_target(tauri_app).is_none() {
+            return RELEASE_PAGE_UPDATE_MODE;
+        }
     }
     IN_APP_UPDATE_MODE
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+)))]
 const fn primary_update_mode(_: &AppHandle) -> &'static str {
     RELEASE_PAGE_UPDATE_MODE
 }
@@ -175,7 +195,10 @@ fn is_newer(candidate: &str, current: &str) -> bool {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 fn fallback_release_page(channel: &str) -> &'static str {
     if channel == "beta" {
         ALL_RELEASES_PAGE
@@ -287,7 +310,10 @@ async fn check_release_page_update(app: &AppHandle) -> serde_json::Value {
     })
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 fn updater_manifest_url(tag: &str) -> Result<url::Url, String> {
     let mut endpoint =
         url::Url::parse(RELEASE_DOWNLOAD_BASE).map_err(|error| format!("更新地址无效: {error}"))?;
@@ -300,15 +326,21 @@ fn updater_manifest_url(tag: &str) -> Result<url::Url, String> {
     Ok(endpoint)
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 fn updater_for_release(
     app: &AppHandle,
     tag: &str,
 ) -> Result<tauri_plugin_updater::Updater, String> {
     use tauri_plugin_updater::UpdaterExt;
 
+    let tauri_app = app
+        .tauri()
+        .ok_or_else(|| "当前运行环境不支持应用内更新".to_string())?;
     let endpoint = updater_manifest_url(tag)?;
-    let builder = app.updater_builder();
+    let builder = tauri_app.updater_builder();
     #[cfg(target_os = "windows")]
     let builder =
         match windows_update_target_for_portable(is_portable_build(), std::env::consts::ARCH) {
@@ -316,7 +348,8 @@ fn updater_for_release(
             None => builder,
         };
     #[cfg(target_os = "linux")]
-    let builder = builder.target(linux::update_target(app).ok_or("当前安装格式不支持应用内更新")?);
+    let builder =
+        builder.target(linux::update_target(tauri_app).ok_or("当前安装格式不支持应用内更新")?);
     let updater = builder
         .timeout(std::time::Duration::from_secs(20))
         .configure_client(|client| {
@@ -331,7 +364,10 @@ fn updater_for_release(
     Ok(updater)
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 async fn check_signed_update(app: &AppHandle) -> serde_json::Value {
     let selection = match fetch_release_selection(app).await {
         Ok(selection) => selection,
@@ -414,7 +450,10 @@ pub async fn check(app: &AppHandle) -> Result<serde_json::Value, AppError> {
         .clone();
     let _operation_guard = operation.lock().await;
 
-    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    #[cfg(all(
+        feature = "desktop",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
     {
         app.state::<crate::services::workspace::WorkspaceState>()
             .downloaded_update
@@ -436,13 +475,19 @@ pub async fn check(app: &AppHandle) -> Result<serde_json::Value, AppError> {
     )
     .await;
 
-    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    #[cfg(all(
+        feature = "desktop",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
     let status = if primary_update_mode(app) == IN_APP_UPDATE_MODE {
         check_signed_update(app).await
     } else {
         check_release_page_update(app).await
     };
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(all(
+        feature = "desktop",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    )))]
     let status = check_release_page_update(app).await;
 
     let state = status
@@ -477,7 +522,10 @@ pub async fn open_release_page(app: &AppHandle) -> Result<(), AppError> {
     result
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 fn current_update_mode(status: &serde_json::Value) -> &str {
     status
         .get("updateMode")
@@ -485,7 +533,10 @@ fn current_update_mode(status: &serde_json::Value) -> &str {
         .unwrap_or("in-app")
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[cfg(all(
+    feature = "desktop",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 async fn download_signed_update(app: &AppHandle) -> Result<(), AppError> {
     let update_operation = app
         .state::<crate::services::workspace::WorkspaceState>()
@@ -637,7 +688,7 @@ async fn download_signed_update(app: &AppHandle) -> Result<(), AppError> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(feature = "desktop", target_os = "windows"))]
 async fn install_windows_update(app: &AppHandle) -> Result<(), AppError> {
     if primary_update_mode(app) == RELEASE_PAGE_UPDATE_MODE {
         return open_release_page(app).await;
@@ -648,7 +699,10 @@ async fn install_windows_update(app: &AppHandle) -> Result<(), AppError> {
         .update_operation
         .clone();
     let _operation_guard = update_operation.lock().await;
-    if is_portable_build() && !crate::request_file_editors_for_quit(app).await? {
+    let Some(tauri_app) = app.tauri() else {
+        return open_release_page(app).await;
+    };
+    if is_portable_build() && !crate::request_file_editors_for_quit(tauri_app).await? {
         return Ok(());
     }
     let pending = app
@@ -693,36 +747,51 @@ async fn install_windows_update(app: &AppHandle) -> Result<(), AppError> {
         set_status(app, status).await;
     } else if is_portable_build() {
         crate::services::logging::info(app, "update", "portable helper ready; exiting for update");
-        app.exit(0);
+        tauri_app.exit(0);
     }
     Ok(())
 }
 
 pub async fn download(app: &AppHandle) -> Result<(), AppError> {
-    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    if app.is_web() {
+        return open_release_page(app).await;
+    }
+    #[cfg(all(
+        feature = "desktop",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
     {
         return download_signed_update(app).await;
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(all(
+        feature = "desktop",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    )))]
     {
         open_release_page(app).await
     }
 }
 
 pub async fn install(app: &AppHandle) -> Result<(), AppError> {
-    #[cfg(target_os = "macos")]
+    if app.is_web() {
+        return open_release_page(app).await;
+    }
+    #[cfg(all(feature = "desktop", target_os = "macos"))]
     {
         return macos::install(app).await;
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(all(feature = "desktop", target_os = "windows"))]
     {
         return install_windows_update(app).await;
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(all(feature = "desktop", target_os = "linux"))]
     {
         return linux::install(app).await;
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(all(
+        feature = "desktop",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    )))]
     {
         open_release_page(app).await
     }

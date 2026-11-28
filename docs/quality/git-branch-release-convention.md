@@ -14,7 +14,7 @@ FileTerm 采用标准 GitHub 流程：所有功能、修复和版本号更新先
 1. 在功能、修复或版本分支完成改动；版本号只修改根 `package.json`，随后运行 `npm run sync:version`。
 2. 提 Pull Request 到 `main`，并确认 CI、类型检查、测试与构建全部通过。
 3. 合并 Pull Request 后，从最新 `main` 创建并推送 `release/<version>`。
-4. 在该 release 分支对应提交创建 `v<version>` tag 并推送；GitHub Actions 验证 tag 位于 `release/*` 后执行各平台打包。
+4. 在该 release 分支对应提交创建 `v<version>` tag 并推送；GitHub Actions 验证 tag 位于 `release/*` 后执行桌面各平台打包，并构建和测试 Linux `amd64` / `arm64` Docker 镜像。通过测试的镜像用相同 tag 发布到 Docker Hub 和 GHCR。
 5. 稳定版本 tag（如 `v1.0.0`）创建正式 GitHub Release；带预发布后缀的 tag（如 `v1.0.1-beta.1`）创建 prerelease。
 
 ## Release notes 与贡献者展示

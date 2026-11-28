@@ -49,7 +49,10 @@ impl Default for WorkspaceState {
             next_workspace_snapshot_revision: Arc::new(AtomicU64::new(0)),
             active_pane_tab_id_by_root: Arc::new(RwLock::new(HashMap::new())),
             ai_session_revisions: Arc::new(RwLock::new(HashMap::new())),
-            #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+            #[cfg(all(
+                feature = "desktop",
+                any(target_os = "windows", target_os = "macos", target_os = "linux")
+            ))]
             downloaded_update: Arc::new(Mutex::new(None)),
         }
     }

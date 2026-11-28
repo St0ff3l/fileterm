@@ -414,7 +414,7 @@ fn context_mode_reads_terminal_transcript(mode: AiContextMode) -> bool {
 
 pub async fn create_context_preview(
     app: &AppHandle,
-    window: &WebviewWindow,
+    window_label: &str,
     input: CreateAiContextPreviewInput,
 ) -> Result<AiContextPreview, AppError> {
     let provider_id = normalize_provider_id(&input.provider_id)?;
@@ -441,7 +441,7 @@ pub async fn create_context_preview(
     let snapshot = StoredAiContextSnapshot {
         snapshot_id: crate::storage::new_id("ai-context"),
         expires_at_millis,
-        window_label: window.label().to_string(),
+        window_label: window_label.to_string(),
         provider_id,
         mode: input.mode,
         target,

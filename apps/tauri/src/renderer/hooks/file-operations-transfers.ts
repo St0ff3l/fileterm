@@ -211,9 +211,13 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
       let downloadDirectory: string | null | undefined = targetDirectory
       let markedBusy = false
       try {
-        downloadDirectory ??= await desktopApi.selectLocalDirectory()
-        if (!downloadDirectory) {
-          return
+        if (desktopApi.isDesktop) {
+          downloadDirectory ??= await desktopApi.selectLocalDirectory()
+          if (!downloadDirectory) {
+            return
+          }
+        } else {
+          downloadDirectory ??= ''
         }
 
         onBusyChange(true)
@@ -222,7 +226,9 @@ export function useFileOperationsTransfers(context: FileOperationsRuntime, navig
           const snapshot = await desktopApi.downloadRemotePath(activeTab.id, item.path, item.type, downloadDirectory)
           onApplySnapshot(snapshot)
         }
-        await openLocalDirectory(downloadDirectory)
+        if (desktopApi.isDesktop && downloadDirectory) {
+          await openLocalDirectory(downloadDirectory)
+        }
       } catch (error) {
         reportStatusError('下载文件或目录', error, { targetPath: downloadDirectory ?? undefined })
       } finally {

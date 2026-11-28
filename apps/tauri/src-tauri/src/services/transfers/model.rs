@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::runtime::{AppHandle, EventTarget};
 use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, EventTarget, Manager};
 use tokio::sync::{oneshot, watch};
 use tokio_util::sync::CancellationToken;
 

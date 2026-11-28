@@ -66,7 +66,6 @@ async fn probe_topology_target(
     }
 }
 
-#[tauri::command]
 pub async fn app_probe_topology_services(
     targets: Vec<TopologyTcpProbeTarget>,
 ) -> Result<Vec<TopologyTcpProbeResult>, AppError> {

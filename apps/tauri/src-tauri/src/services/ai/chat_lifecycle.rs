@@ -310,7 +310,7 @@ pub fn cancel_chat(request_id: &str) -> Result<(), AppError> {
 }
 
 fn emit_stream_event(
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     event: AiStreamEvent,
 ) -> Result<(), AppError> {
     channel
@@ -347,10 +347,10 @@ fn stream_error_event(error: AppError) -> AiStreamEvent {
 fn launch_chat_request(
     app: AppHandle,
     prepared: PreparedChatRequest,
-    channel: Channel<AiStreamEvent>,
+    channel: StreamChannel<AiStreamEvent>,
     cancellation: CancellationToken,
 ) {
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         let request_id = prepared.request.request_id.clone();
         let conversation_id = prepared.request.conversation_id.clone();
         let result = run_chat_request(&app, &prepared, &channel, &cancellation).await;
@@ -363,15 +363,15 @@ fn launch_chat_request(
 
 pub async fn start_chat(
     app: &AppHandle,
-    window: &WebviewWindow,
+    window_label: &str,
     input: StartAiChatInput,
-    channel: Channel<AiStreamEvent>,
+    channel: StreamChannel<AiStreamEvent>,
 ) -> Result<AiChatRequest, AppError> {
     let conversation_id = validate_conversation_id(&input.conversation_id)?;
     let request_id = crate::storage::new_id("ai-request");
     let cancellation = CancellationToken::new();
     register_chat_request(&request_id, &conversation_id, cancellation.clone())?;
-    let prepared = match prepare_start_chat(app, window.label(), input).await {
+    let prepared = match prepare_start_chat(app, window_label, input).await {
         Ok(mut prepared) => {
             prepared.request.request_id = request_id.clone();
             prepared
@@ -388,15 +388,15 @@ pub async fn start_chat(
 
 pub async fn retry_chat(
     app: &AppHandle,
-    window: &WebviewWindow,
+    window_label: &str,
     input: RetryAiChatInput,
-    channel: Channel<AiStreamEvent>,
+    channel: StreamChannel<AiStreamEvent>,
 ) -> Result<AiChatRequest, AppError> {
     let conversation_id = validate_conversation_id(&input.conversation_id)?;
     let request_id = crate::storage::new_id("ai-request");
     let cancellation = CancellationToken::new();
     register_chat_request(&request_id, &conversation_id, cancellation.clone())?;
-    let prepared = match prepare_retry_chat(app, window.label(), input).await {
+    let prepared = match prepare_retry_chat(app, window_label, input).await {
         Ok(mut prepared) => {
             prepared.request.request_id = request_id.clone();
             prepared

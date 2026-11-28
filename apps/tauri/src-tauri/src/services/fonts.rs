@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::AppHandle;
 
+use crate::runtime::AppHandle;
 use crate::AppError;
 
 const FONT_INDEX_VERSION: u32 = 2;
@@ -133,17 +133,34 @@ pub fn list(app: &AppHandle) -> Result<Vec<ImportedFont>, AppError> {
 }
 
 pub async fn import(app: &AppHandle) -> Result<Option<ImportedFont>, AppError> {
-    let Some(file) = rfd::AsyncFileDialog::new()
-        .set_title("导入字体")
-        .add_filter("字体文件", &["ttf", "otf"])
-        .pick_file()
-        .await
-    else {
-        crate::services::logging::debug(app, "fonts", "import canceled");
-        return Ok(None);
-    };
+    if app.is_web() {
+        return Err(AppError::Command(
+            "Web runtime imports fonts via HTTP upload".to_string(),
+        ));
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        return Err(AppError::Command(
+            "Desktop file dialog is unavailable in web-only build".to_string(),
+        ));
+    }
+    #[cfg(feature = "desktop")]
+    {
+        let Some(file) = rfd::AsyncFileDialog::new()
+            .set_title("导入字体")
+            .add_filter("字体文件", &["ttf", "otf"])
+            .pick_file()
+            .await
+        else {
+            crate::services::logging::debug(app, "fonts", "import canceled");
+            return Ok(None);
+        };
 
-    let source_path = file.path().to_path_buf();
+        import_from_path(app, file.path().to_path_buf()).map(Some)
+    }
+}
+
+pub fn import_from_path(app: &AppHandle, source_path: PathBuf) -> Result<ImportedFont, AppError> {
     let format = match source_path
         .extension()
         .and_then(|extension| extension.to_str())
@@ -305,7 +322,7 @@ pub async fn import(app: &AppHandle) -> Result<Option<ImportedFont>, AppError> {
                 existing_path.display()
             ),
         );
-        return Ok(Some(existing.clone()));
+        return Ok(existing.clone());
     }
 
     let metadata = font_metadata_from_bytes(&bytes, &file_name);
@@ -372,7 +389,7 @@ pub async fn import(app: &AppHandle) -> Result<Option<ImportedFont>, AppError> {
             font_path.display()
         ),
     );
-    Ok(Some(font))
+    Ok(font)
 }
 
 pub fn data_url(app: &AppHandle, font_id: &str) -> Result<Option<String>, AppError> {

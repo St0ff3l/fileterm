@@ -1,5 +1,4 @@
 // Terminal and remote-path opening commands.
-#[tauri::command]
 pub async fn app_open_local_terminal(
     app: AppHandle,
     options: Option<crate::sessions::local_terminal::LocalTerminalLaunchOptions>,
@@ -61,7 +60,6 @@ pub async fn app_open_local_terminal(
     snapshot
 }
 
-#[tauri::command]
 pub async fn app_write_terminal(
     app: AppHandle,
     tab_id: String,
@@ -87,44 +85,32 @@ pub async fn app_write_terminal(
     result
 }
 
-#[tauri::command]
 pub fn app_subscribe_terminal_data(
     app: AppHandle,
-    window: WebviewWindow,
-    channel: Channel<serde_json::Value>,
-) {
+    window_label: String,
+    channel: StreamChannel<serde_json::Value>,
+) -> u32 {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let channel_id = channel.id();
-    state.register_terminal_output_channel(window.label(), channel);
-    let channels = Arc::clone(&state.terminal_output_channels);
-    window.on_window_event(move |event| {
-        if matches!(event, tauri::WindowEvent::Destroyed) {
-            if let Ok(mut channels) = channels.lock() {
-                if let Some(subscription) = channels.remove(&channel_id) {
-                    subscription.close();
-                }
-            }
-        }
-    });
+    state.register_terminal_output_channel(&window_label, channel);
     crate::services::logging::debug(
         &app,
         "terminal",
-        format!("terminal output channel registered id={channel_id}"),
+        format!("terminal output channel registered id={channel_id} window={window_label}"),
     );
+    channel_id
 }
 
-#[tauri::command]
 pub fn app_ack_terminal_data(
     app: AppHandle,
-    window: WebviewWindow,
+    window_label: String,
     channel_id: u32,
     delivery_id: u64,
 ) {
     app.state::<crate::services::workspace::WorkspaceState>()
-        .ack_terminal_output(window.label(), channel_id, delivery_id);
+        .ack_terminal_output(&window_label, channel_id, delivery_id);
 }
 
-#[tauri::command]
 pub async fn app_resize_terminal(
     app: AppHandle,
     tab_id: String,

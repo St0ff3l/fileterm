@@ -10,7 +10,16 @@
 // 注意：这是 UI 层 pub/sub，不替代 Rust commands/events 边界（硬边界 #6
 // 针对的是系统能力走 Rust 的链路，UI 内部事件不在此列）。
 
-import type { TerminalZoomOperation } from '@fileterm/core'
+import type { FileEditorWindowInput, TerminalZoomOperation, TunnelProfileType } from '@fileterm/core'
+
+export type WebWindowRequest =
+  | { kind: 'connection-manager' }
+  | { kind: 'command-manager' }
+  | { kind: 'connection-form'; mode: 'create' | 'edit'; profileId?: string }
+  | { kind: 'command-form'; mode: 'create' | 'edit'; commandId?: string; folderId?: string; command?: string }
+  | { kind: 'proxy-form'; mode: 'create' | 'edit'; profileId?: string; proxyType?: 'socks5' | 'http' }
+  | { kind: 'tunnel-form'; mode: 'create' | 'edit'; profileId?: string; tunnelType?: TunnelProfileType }
+  | ({ kind: 'file-editor' } & FileEditorWindowInput)
 
 export const APP_EVENT = {
   /** Tauri 原生拖拽悬停（Finder/Explorer 拖入窗口时持续触发）。 */
@@ -19,6 +28,10 @@ export const APP_EVENT = {
   tauriNativeDrop: 'fileterm:tauri-native-drop',
   /** 远端文件区被 DOM 拖入事件标记为可投放目标。 */
   tauriRemoteDragOver: 'fileterm:tauri-remote-dragover',
+  /** 网页端打开弹窗视图（替代桌面端独立原生子窗口）。 */
+  webOpenWindow: 'fileterm:web-open-window',
+  /** 网页端关闭当前最顶层弹窗视图。 */
+  webCloseWindow: 'fileterm:web-close-window',
   /** 请求聚焦指定 tab 的终端。detail 为 tabId。 */
   focusTerminal: 'fileterm:focus-terminal',
   /** 请求当前终端执行复制。 */
@@ -44,6 +57,8 @@ export interface AppEventDetailMap {
     position: { x: number; y: number }
   }
   [APP_EVENT.tauriRemoteDragOver]: never
+  [APP_EVENT.webOpenWindow]: WebWindowRequest
+  [APP_EVENT.webCloseWindow]: never
   [APP_EVENT.focusTerminal]: string
   [APP_EVENT.terminalCopy]: never
   [APP_EVENT.terminalPaste]: never

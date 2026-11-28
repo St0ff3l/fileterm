@@ -86,7 +86,7 @@ gh release create "$TAG" \
   --prerelease
 ```
 
-如果仓库 workflow 已经负责创建 Release，不要手动重复创建；应只推送正确 tag，然后监督 workflow。不要改成只使用 `--notes-file`，也不要用自定义正文替代 `--generate-notes`。
+如果仓库 workflow 已经负责创建 Release，不要手动重复创建；应只推送正确 tag，然后监督 workflow。每次发布 tag 同时触发桌面构建和 Docker 构建，详见 `.github/workflows/docker-web.yml`。Docker 镜像使用与 GitHub Release 完全相同的 tag。不要改成只使用 `--notes-file`，也不要用自定义正文替代 `--generate-notes`。
 
 ### 6. 监督并验收
 
@@ -108,6 +108,7 @@ gh release view "v$VERSION"
 - 自定义正文之后出现 GitHub 自动生成的 `What's Changed`、`New Contributors`、`Full Changelog`。
 - `Contributors` 区域由 GitHub 自动生成，能看到官方头像和贡献者内容。
 - Release assets 数量和平台产物符合 workflow 预期。
+- Docker Web 的 Linux `amd64` 和 `arm64` 构建及浏览器测试通过。Docker Hub 和 GHCR 的同版本 tag 都包含两个架构，并通过无凭据的 `docker pull --platform linux/<arch>` 验证。两个渠道和桌面包均验收后才算发布完成。
 
 若官方生成区缺失，先检查 workflow 是否仍同时使用 `--notes` 和 `--generate-notes`，不要通过手工复制贡献者名单来“补齐”。
 

@@ -7,10 +7,10 @@
 //! - profile update / delete, folder update / delete, and entity order updates
 //!   follow the same cascade rules as the Electron side.
 
+use crate::runtime::AppHandle;
 use crate::storage::{new_id, read_json_array, workspace_file, write_json_array};
 use crate::AppError;
 use serde_json::{Map, Value};
-use tauri::AppHandle;
 
 const DEFAULT_GROUP: &str = "默认";
 pub(crate) const BACKUP_IDENTITY_FIELD: &str = "backupIdentity";

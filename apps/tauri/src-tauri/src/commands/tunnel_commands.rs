@@ -1,5 +1,4 @@
 // SSH tunnel commands.
-#[tauri::command]
 pub async fn app_list_ssh_tunnels(
     app: AppHandle,
     tab_id: String,
@@ -10,7 +9,6 @@ pub async fn app_list_ssh_tunnels(
     .await
 }
 
-#[tauri::command]
 pub async fn app_create_ssh_tunnel(
     app: AppHandle,
     tab_id: String,
@@ -23,7 +21,6 @@ pub async fn app_create_ssh_tunnel(
     .await
 }
 
-#[tauri::command]
 pub async fn app_start_ssh_tunnel(
     app: AppHandle,
     tab_id: String,
@@ -36,7 +33,6 @@ pub async fn app_start_ssh_tunnel(
     .await
 }
 
-#[tauri::command]
 pub async fn app_stop_ssh_tunnel(
     app: AppHandle,
     tab_id: String,
@@ -49,7 +45,6 @@ pub async fn app_stop_ssh_tunnel(
     .await
 }
 
-#[tauri::command]
 pub async fn app_delete_ssh_tunnel(
     app: AppHandle,
     tab_id: String,

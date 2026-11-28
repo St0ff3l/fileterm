@@ -15,11 +15,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{Local, SecondsFormat};
 use serde_json::Value;
-use tauri::{AppHandle, Manager};
 use tokio::fs::{self, OpenOptions};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::runtime::AppHandle;
 use crate::services::workspace::WorkspaceState;
 use crate::sessions::terminal::decode_terminal;
 use crate::AppError;
@@ -230,7 +230,7 @@ pub async fn start_for_tab(
 
     let app = app.clone();
     let tab_id = tab_id.to_string();
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         run_writer(file, receiver, dropped_chunks, &app, &tab_id, &path).await;
     });
 
@@ -298,13 +298,17 @@ pub async fn shutdown(state: &WorkspaceState) {
     }
 }
 
-/// Open a native save dialog and save the current in-memory transcript.
-/// Automatic logging is streamed separately, so this manual action can still
-/// export a bounded snapshot without changing the live writer.
-pub async fn save_current_session(
+struct PreparedSessionLogExport {
+    file_name: String,
+    #[cfg_attr(not(feature = "desktop"), allow(dead_code))]
+    default_directory: Option<PathBuf>,
+    bytes: Vec<u8>,
+}
+
+async fn prepare_session_log_export(
     app: &AppHandle,
     tab_id: &str,
-) -> Result<Option<String>, AppError> {
+) -> Result<PreparedSessionLogExport, AppError> {
     let state = app.state::<WorkspaceState>();
     let (title, session_type, profile_id, transcript) = {
         let (title, session_type, profile_id) = {
@@ -354,25 +358,11 @@ pub async fn save_current_session(
                 .map(PathBuf::from)
         });
 
-    let mut dialog = rfd::AsyncFileDialog::new()
-        .set_title("保存会话日志")
-        .set_file_name(format!(
-            "{}-{}.log",
-            sanitize_filename(&title),
-            unix_millis()
-        ))
-        .add_filter("会话日志", &["log", "txt"]);
-    if let Some(directory) = default_directory.filter(|path| path.is_dir()) {
-        dialog = dialog.set_directory(directory);
-    }
-    let Some(target) = dialog.save_file().await else {
-        return Ok(None);
-    };
-
+    let file_name = format!("{}-{}.log", sanitize_filename(&title), unix_millis());
     let header = format!(
         "# FileTerm 会话日志\r\n# 连接: {title}\r\n# 只记录终端输出，不记录键盘输入\r\n\r\n"
     );
-    if let Some(handle) = automatic_serial_log {
+    let bytes = if let Some(handle) = automatic_serial_log {
         sync_handle(&handle).await;
         let backup = PathBuf::from(format!("{}.1", handle.path.to_string_lossy()));
         let mut snapshot = Vec::new();
@@ -385,16 +375,64 @@ pub async fn save_current_session(
             .await
             .map_err(|error| AppError::Storage(format!("无法读取会话日志: {error}")))?;
         snapshot.extend(current);
-        fs::write(target.path(), snapshot)
-            .await
-            .map_err(|error| AppError::Storage(format!("无法保存会话日志: {error}")))?;
+        snapshot
     } else {
-        let content = format!("{header}{transcript}");
-        tokio::fs::write(target.path(), content.as_bytes())
+        format!("{header}{transcript}").into_bytes()
+    };
+
+    Ok(PreparedSessionLogExport {
+        file_name,
+        default_directory,
+        bytes,
+    })
+}
+
+pub async fn export_session_log_bytes(
+    app: &AppHandle,
+    tab_id: &str,
+) -> Result<(String, Vec<u8>), AppError> {
+    let prepared = prepare_session_log_export(app, tab_id).await?;
+    Ok((prepared.file_name, prepared.bytes))
+}
+
+/// Open a native save dialog and save the current in-memory transcript.
+/// Automatic logging is streamed separately, so this manual action can still
+/// export a bounded snapshot without changing the live writer.
+pub async fn save_current_session(
+    app: &AppHandle,
+    tab_id: &str,
+) -> Result<Option<String>, AppError> {
+    if app.is_web() {
+        return Err(AppError::Command(
+            "Web runtime exports session logs via HTTP download".to_string(),
+        ));
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        let _ = tab_id;
+        return Err(AppError::Command(
+            "Desktop save dialog is unavailable in web-only build".to_string(),
+        ));
+    }
+    #[cfg(feature = "desktop")]
+    {
+        let prepared = prepare_session_log_export(app, tab_id).await?;
+        let mut dialog = rfd::AsyncFileDialog::new()
+            .set_title("保存会话日志")
+            .set_file_name(&prepared.file_name)
+            .add_filter("会话日志", &["log", "txt"]);
+        if let Some(directory) = prepared.default_directory.filter(|path| path.is_dir()) {
+            dialog = dialog.set_directory(directory);
+        }
+        let Some(target) = dialog.save_file().await else {
+            return Ok(None);
+        };
+
+        tokio::fs::write(target.path(), &prepared.bytes)
             .await
             .map_err(|error| AppError::Storage(format!("无法保存会话日志: {error}")))?;
+        Ok(Some(target.path().to_string_lossy().into_owned()))
     }
-    Ok(Some(target.path().to_string_lossy().into_owned()))
 }
 
 async fn flush_handle(handle: SessionLogHandle) {

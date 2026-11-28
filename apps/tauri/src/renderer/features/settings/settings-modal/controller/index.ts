@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { t } from '../../../../i18n'
-import { SETTINGS_SIDEBAR_ITEMS, SETTINGS_TAB_SEARCH_TERMS } from '../constants'
+import { isDesktopRuntime } from '../../../../../bridge/runtime-api'
+import { getWebLoginStatus } from '../../../../../bridge/web-login'
+import { isWebLoginTabAvailable, SETTINGS_SIDEBAR_ITEMS, SETTINGS_TAB_SEARCH_TERMS } from '../constants'
 import { useAiSettingsController } from './ai'
 import { useAgentSettingsController } from './agent'
 import { useSettingsModalEffects } from './effects'
@@ -16,23 +18,30 @@ import { useThemeSettingsController } from './theme'
 export type { SettingsModalControllerOptions } from './types'
 
 export function useSettingsModalController(options: SettingsModalControllerOptions) {
-  const { locale, initialTab, inline, onLaunchLocalAgent, uiPreferences } = options
+  const { locale, initialTab, onLaunchLocalAgent, uiPreferences } = options
   const state = useSettingsModalState(initialTab, uiPreferences)
   const { activeTab, settingsSearchQuery, desktopApi } = state
 
+  const dockerWebLogin = isWebLoginTabAvailable(
+    isDesktopRuntime() || Boolean(desktopApi?.isDesktop),
+    getWebLoginStatus()
+  )
   const visibleSettingsTabs = useMemo(() => {
+    const items = SETTINGS_SIDEBAR_ITEMS.filter((item) => item.tab !== 'web-login' || dockerWebLogin)
     const query = settingsSearchQuery.trim().toLocaleLowerCase()
     if (!query) {
-      return new Set(SETTINGS_SIDEBAR_ITEMS.map((item) => item.tab))
+      return new Set(items.map((item) => item.tab))
     }
 
     return new Set(
-      SETTINGS_SIDEBAR_ITEMS.filter((item) => {
-        const searchText = `${t[item.labelKey]} ${SETTINGS_TAB_SEARCH_TERMS[item.tab]}`.toLocaleLowerCase()
-        return searchText.includes(query)
-      }).map((item) => item.tab)
+      items
+        .filter((item) => {
+          const searchText = `${t[item.labelKey]} ${SETTINGS_TAB_SEARCH_TERMS[item.tab]}`.toLocaleLowerCase()
+          return searchText.includes(query)
+        })
+        .map((item) => item.tab)
     )
-  }, [locale, settingsSearchQuery])
+  }, [dockerWebLogin, locale, settingsSearchQuery])
 
   const preferences = useSettingsPreferencesController({ state })
   const theme = useThemeSettingsController({
@@ -52,17 +61,10 @@ export function useSettingsModalController(options: SettingsModalControllerOptio
 
   useSettingsModalEffects({ state, initialTab, visibleSettingsTabs, uiPreferences })
 
-  const managerToolsHint = inline ? t.settingsManagersInlineHint : t.settingsManagersWindowHint
-  const managerToolsActionLabel = inline ? t.switchToManagerPage : t.openInSeparateWindow
-
   const settingsPanelContext = {
     t,
     desktopApi,
     ...preferences,
-    managerToolsHint,
-    managerToolsActionLabel,
-    onOpenConnectionManager: options.onOpenConnectionManager,
-    onOpenCommandManager: options.onOpenCommandManager,
     onOpenLogsDirectory: options.onOpenLogsDirectory,
     locale,
     onSetLocale: options.onSetLocale,

@@ -51,8 +51,6 @@ export function AppModalPortals({ model }: { model: AppViewModel }) {
     openCreateConnection,
     openEditConnection,
     openProfile,
-    openConnectionManagerFromSettings,
-    openCommandManagerFromSettings,
     windowCloseConfirm,
     resolveWindowCloseConfirmation,
     shortcutCloseConfirm,
@@ -362,8 +360,6 @@ export function AppModalPortals({ model }: { model: AppViewModel }) {
                   setLocale(nextLocale)
                   setLocaleState(nextLocale)
                 },
-                onOpenCommandManager: openCommandManagerFromSettings,
-                onOpenConnectionManager: openConnectionManagerFromSettings,
                 onOpenLogsDirectory: openLogsDirectory,
                 onLaunchLocalAgent: workspaceState.launchLocalAgent,
                 workspaceMode,

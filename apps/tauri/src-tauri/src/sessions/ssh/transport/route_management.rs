@@ -21,7 +21,7 @@ struct SshRouteActivity {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SshRoutePolicySnapshot {
+pub struct SshRoutePolicySnapshot {
     policy: SshRoutePolicy,
     activity: Vec<SshRouteActivity>,
 }

@@ -38,7 +38,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::sync::{Arc, Mutex};
-    use tauri::ipc::Channel;
+    use crate::runtime::StreamChannel;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::sync::oneshot;
@@ -362,9 +362,9 @@ mod tests {
             .expect("test client must build")
     }
 
-    fn stream_channel(events: Arc<Mutex<Vec<Value>>>) -> Channel<AiStreamEvent> {
-        Channel::new(move |body| {
-            let payload: Value = body.deserialize().expect("stream event should deserialize");
+    fn stream_channel(events: Arc<Mutex<Vec<Value>>>) -> StreamChannel<AiStreamEvent> {
+        StreamChannel::from_test_callback(move |event| {
+            let payload = serde_json::to_value(event).expect("stream event should serialize");
             events
                 .lock()
                 .expect("events lock should be available")

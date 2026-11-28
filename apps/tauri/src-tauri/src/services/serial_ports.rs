@@ -6,8 +6,8 @@
 
 use std::time::Duration;
 
+use crate::runtime::AppHandle;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
 use tokio::time::timeout;
 
 const SCAN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -28,7 +28,7 @@ pub struct SerialPortSnapshot {
 pub async fn list() -> Result<Vec<SerialPortSnapshot>, String> {
     let scan_result = timeout(
         SCAN_TIMEOUT,
-        tauri::async_runtime::spawn_blocking(tokio_serial::available_ports),
+        crate::runtime::spawn_blocking(tokio_serial::available_ports),
     )
     .await
     .map_err(|_| "串口设备扫描超时".to_string())?;
@@ -44,7 +44,7 @@ pub async fn list() -> Result<Vec<SerialPortSnapshot>, String> {
 /// requiring renderer-only polling to be the sole source of truth.
 pub fn start_watcher(app: &AppHandle) {
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         let mut previous = None;
         loop {
             if let Ok(ports) = list().await {

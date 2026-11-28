@@ -14,9 +14,16 @@ mod scheduler_policy;
 mod scheduler_sessions;
 #[cfg(target_os = "windows")]
 mod scheduler_threads;
-#[cfg(all(target_os = "windows", not(feature = "windows-scheduler-fixture")))]
+#[cfg(all(
+    feature = "desktop",
+    target_os = "windows",
+    not(feature = "windows-scheduler-fixture")
+))]
 pub(crate) mod webview_processes;
-#[cfg(all(target_os = "windows", feature = "windows-scheduler-fixture"))]
+#[cfg(all(
+    target_os = "windows",
+    any(not(feature = "desktop"), feature = "windows-scheduler-fixture")
+))]
 pub(crate) mod webview_processes {
     pub(crate) fn track<T>(_: &T) {}
 

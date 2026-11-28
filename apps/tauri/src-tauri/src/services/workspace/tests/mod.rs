@@ -6,8 +6,8 @@ mod tests {
         ConnectionCapabilities, PaneNode, SplitDirection, TransferRunHandle, WorkspaceState,
         WorkspaceTabStatus,
     };
+    use crate::runtime::StreamChannel;
     use std::sync::{Arc, Mutex};
-    use tauri::ipc::Channel;
 
     #[test]
     fn ssh_is_the_only_session_type_with_tunnel_capability() {
@@ -211,8 +211,7 @@ mod tests {
         let receiver_state = Arc::clone(&state);
         let channel_id = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let receiver_id = Arc::clone(&channel_id);
-        let channel = Channel::new(move |body| {
-            let payload: serde_json::Value = body.deserialize().unwrap();
+        let channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
             receiver_state.ack_terminal_output("main", receiver_id.load(std::sync::atomic::Ordering::Relaxed), payload["deliveryId"].as_u64().unwrap());
             received_messages.lock().unwrap().push(payload);
             Ok(())

@@ -3,7 +3,7 @@ async fn execute_copilot_tool_call(
     app: &AppHandle,
     prepared: &PreparedChatRequest,
     call: &ProviderToolCall,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<(ToolLoopResult, AiToolCallResult), AppError> {
     if cancellation.is_cancelled() {
@@ -493,7 +493,7 @@ fn request_cancelled_error() -> AppError {
 async fn run_chat_request(
     app: &AppHandle,
     prepared: &PreparedChatRequest,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<(), AppError> {
     emit_stream_event(

@@ -5,6 +5,7 @@
 //! running desktop application over an authenticated loopback socket. SSH,
 //! SFTP workers and connection secrets remain inside the desktop process.
 
+use crate::runtime::AppHandle;
 use crate::services::action_review::{
     request_action_approval, ActionApprovalDecision, ActionApprovalDetails, ActionApprovalSource,
     ACTION_APPROVAL_TIMEOUT, BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED,
@@ -37,7 +38,6 @@ use std::{
     time::Duration,
 };
 use subtle::ConstantTimeEq;
-use tauri::{AppHandle, Manager};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
     net::{TcpListener, TcpStream},

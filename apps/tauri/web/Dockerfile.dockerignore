@@ -1,0 +1,18 @@
+# Ignore heavy artifacts when building from repository root context.
+**/.git
+**/node_modules
+apps/tauri/dist
+apps/tauri/src-tauri/target
+apps/tauri/web/.secrets
+**/.env
+**/.env.*
+tests
+docs/*
+!docs/quality
+docs/quality/*
+!docs/quality/iterm2-color-scheme-attribution.md
+.agents
+.claude
+.idea
+.vscode
+*.log

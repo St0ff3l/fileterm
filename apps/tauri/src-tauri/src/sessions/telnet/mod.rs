@@ -1,7 +1,7 @@
+use crate::runtime::AppHandle;
 use base64::Engine;
 use serde_json::Value;
 use std::time::Instant;
-use tauri::AppHandle;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;

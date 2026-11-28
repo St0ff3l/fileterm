@@ -119,7 +119,6 @@ fn resolve_serial_transfer_directory(local_path: &str) -> Result<String, AppErro
     Ok(path.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
 pub async fn app_serial_control(
     app: AppHandle,
     tab_id: String,
@@ -149,7 +148,6 @@ pub async fn app_serial_control(
     .await
 }
 
-#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn app_serial_transfer(
     app: AppHandle,
@@ -254,7 +252,6 @@ pub async fn app_serial_transfer(
     result
 }
 
-#[tauri::command]
 pub async fn app_serial_cancel_transfer(app: AppHandle, tab_id: String) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let cancellation = state
@@ -268,7 +265,6 @@ pub async fn app_serial_cancel_transfer(app: AppHandle, tab_id: String) -> Resul
     Ok(())
 }
 
-#[tauri::command]
 pub async fn app_save_session_log(
     app: AppHandle,
     tab_id: String,

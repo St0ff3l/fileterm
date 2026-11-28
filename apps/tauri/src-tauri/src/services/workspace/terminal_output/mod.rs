@@ -1,11 +1,11 @@
 use super::WorkspaceState;
+use crate::runtime::StreamChannel;
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
 };
 use std::time::{Duration, Instant};
-use tauri::ipc::Channel;
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
@@ -23,7 +23,7 @@ pub(crate) struct TerminalOutputSubscription {
     output: Mutex<OutputQueue>,
     output_ready: Notify,
     closed: CancellationToken,
-    channel: Channel<serde_json::Value>,
+    channel: StreamChannel<serde_json::Value>,
     credit: Arc<Semaphore>,
     next_delivery_id: AtomicU64,
     pending: Mutex<HashMap<u64, OwnedSemaphorePermit>>,
@@ -194,7 +194,7 @@ impl WorkspaceState {
     pub fn register_terminal_output_channel(
         &self,
         window_label: &str,
-        channel: Channel<serde_json::Value>,
+        channel: StreamChannel<serde_json::Value>,
     ) {
         if let Ok(mut channels) = self.terminal_output_channels.lock() {
             // A reload replaces the renderer; its old credit can never be acknowledged.
@@ -219,7 +219,7 @@ impl WorkspaceState {
                 last_ack: Mutex::new(None),
             });
             channels.insert(subscription.channel.id(), Arc::clone(&subscription));
-            tauri::async_runtime::spawn(async move {
+            crate::runtime::spawn(async move {
                 loop {
                     tokio::select! {
                         biased;

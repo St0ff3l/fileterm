@@ -284,10 +284,11 @@ export function HomeWorkspace({
     }
   }, [isServerManagementMode, tabBarProps.activeSessionTabId])
   const { openExternalUrl, externalUrlError } = useExternalUrl(desktopApi, t.openExternalUrlFailed)
-  // Keep Linux on the same compact home-shell layout as Windows. macOS keeps
+  // Keep Linux and Web on the same compact home-shell layout as Windows. macOS keeps
   // its sidebar wordmark because it has native traffic lights above it.
   const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
-  const usesWindowsHomeLayout = rendererPlatform === 'win32' || rendererPlatform === 'linux'
+  const usesWindowsHomeLayout =
+    rendererPlatform === 'win32' || rendererPlatform === 'linux' || rendererPlatform === 'web'
   const homeBrandContent = usesWindowsHomeLayout
     ? getHomeBrandContent(desktopApi?.appName, desktopApi?.appVersion)
     : undefined
@@ -593,8 +594,6 @@ export function HomeWorkspace({
                 onSetCustomThemes={onSetCustomThemes}
                 locale={locale}
                 onSetLocale={onSetLocale}
-                onOpenCommandManager={() => selectTab('command-manager')}
-                onOpenConnectionManager={() => selectTab('connection-manager')}
                 onOpenLogsDirectory={onOpenLogsDirectory}
                 onLaunchLocalAgent={onLaunchLocalAgent}
                 workspaceMode={isServerManagementMode ? 'server-management' : 'standard'}

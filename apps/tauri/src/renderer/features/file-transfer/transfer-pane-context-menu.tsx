@@ -217,8 +217,8 @@ export function TransferPaneContextMenu({
           }}
           onDownload={() =>
             run(async (api) => {
-              const destination = await api.selectLocalDirectory()
-              if (destination)
+              const destination = api.isDesktop ? await api.selectLocalDirectory() : ''
+              if (destination !== null)
                 for (const item of items)
                   await api.downloadRemotePath(pane.endpoint, item.path, item.type, destination, {
                     conflictPolicy: policy

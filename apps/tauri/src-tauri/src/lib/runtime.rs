@@ -9,8 +9,9 @@ pub fn run() {
         .setup(|app| {
             // Initialize the logger before migration so portable-root and
             // legacy-source decisions remain diagnosable on first launch.
-            crate::services::logging::init(app.handle());
-            let migration_result = crate::storage::migrate_legacy_data_once(app.handle());
+            let runtime_app = crate::runtime_app(app.handle());
+            crate::services::logging::init(&runtime_app);
+            let migration_result = crate::storage::migrate_legacy_data_once(&runtime_app);
             // Install after `logging::init` so `LOG_DIRECTORY` is populated.
             // Captures panic location + payload for any spawned task that
             // panics (SSH worker, output pump, transfer service) — without
@@ -19,26 +20,33 @@ pub fn run() {
             crate::services::logging::install_panic_hook();
             if let Err(error) = migration_result.as_ref() {
                 crate::services::logging::error(
-                    app.handle(),
+                    &runtime_app,
                     "storage",
                     format!("startup migration failed: {error}"),
                 );
             }
             migration_result?;
-            match crate::commands::app_get_ui_preferences(app.handle().clone()) {
-                Ok(preferences) => crate::services::logging::set_preferences(preferences.basic_logging_enabled, preferences.diagnostic_log_categories),
-                Err(error) => crate::services::logging::warn(app.handle(), "logging", format!("unable to load log preferences: {error}")),
+            match crate::commands::app_get_ui_preferences(runtime_app.clone()) {
+                Ok(preferences) => crate::services::logging::set_preferences(
+                    preferences.basic_logging_enabled,
+                    preferences.diagnostic_log_categories,
+                ),
+                Err(error) => crate::services::logging::warn(
+                    &runtime_app,
+                    "logging",
+                    format!("unable to load log preferences: {error}"),
+                ),
             }
 
             match crate::storage::ensure_portable_marker() {
                 Ok(Some(marker)) => crate::services::logging::info(
-                    app.handle(),
+                    &runtime_app,
                     "storage",
                     format!("portable marker ready path={}", marker.display()),
                 ),
                 Ok(None) => {}
                 Err(error) => crate::services::logging::warn(
-                    app.handle(),
+                    &runtime_app,
                     "storage",
                     format!("unable to persist portable marker: {error}"),
                 ),
@@ -56,12 +64,12 @@ pub fn run() {
             let portable_directory = portable_directory
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "<none>".to_string());
-            let app_data_directory = crate::storage::app_data_directory(app.handle())
+            let app_data_directory = crate::storage::app_data_directory(&runtime_app)
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|error| format!("<unavailable:{error}>"));
-            match crate::storage::storage_root(app.handle()) {
+            match crate::storage::storage_root(&runtime_app) {
                 Ok(root) => crate::services::logging::info(
-                    app.handle(),
+                    &runtime_app,
                     "storage",
                     format!(
                         "resolved mode={storage_mode} compiled_portable={} executable={executable} root={} portable_config={portable_directory} app_data={app_data_directory}",
@@ -70,7 +78,7 @@ pub fn run() {
                     ),
                 ),
                 Err(error) => crate::services::logging::error(
-                    app.handle(),
+                    &runtime_app,
                     "storage",
                     format!(
                         "unable to resolve storage root mode={storage_mode} compiled_portable={} executable={executable} portable_config={portable_directory} app_data={app_data_directory}: {error}",
@@ -79,7 +87,7 @@ pub fn run() {
                 ),
             }
             crate::services::logging::info(
-                app.handle(),
+                &runtime_app,
                 "app",
                 format!(
                     "startup version={} platform={} arch={}",
@@ -90,8 +98,8 @@ pub fn run() {
             );
             app.manage(crate::services::WorkspaceState::default());
             app.manage(MainWindowGeometryPersistence::default());
-            crate::services::serial_ports::start_watcher(app.handle());
-            crate::services::mcp::start_runtime(app.handle())?;
+            crate::services::serial_ports::start_watcher(&runtime_app);
+            crate::services::mcp::start_runtime(&runtime_app)?;
             app.manage(FileEditorCloseRegistry::default());
             app.manage(QuitPreparationRegistry::default());
             app.manage(HiddenWithMainRegistry::default());
@@ -125,15 +133,16 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let Err(error) = apply_macos_main_window_vibrancy(&main_window) {
                 crate::services::logging::warn(
-                    app.handle(),
+                    &runtime_app,
                     "window",
                     format!("failed to apply macOS main-window vibrancy: {error}"),
                 );
             }
 
-            let remember_window_size = crate::commands::app_get_ui_preferences(app.handle().clone())
-                .map(|preferences| preferences.remember_window_size)
-                .unwrap_or(false);
+            let remember_window_size =
+                crate::commands::app_get_ui_preferences(runtime_app.clone())
+                    .map(|preferences| preferences.remember_window_size)
+                    .unwrap_or(false);
             restore_main_window_geometry(app.handle(), &main_window, remember_window_size);
             watch_window_display_changes(
                 &main_window,
@@ -143,7 +152,11 @@ pub fn run() {
             let app_handle = app.handle().clone();
             main_window.on_window_event(move |event| match event {
                 WindowEvent::CloseRequested { api, .. } => {
-                    crate::services::logging::info(&app_handle, "window", "main close requested");
+                    crate::services::logging::info(
+                        &crate::runtime_app(&app_handle),
+                        "window",
+                        "main close requested",
+                    );
                     flush_main_window_geometry(&app_handle);
                     api.prevent_close();
                     request_main_window_close(&app_handle, false);
@@ -164,7 +177,7 @@ pub fn run() {
             // lifecycle paths as Electron and build labels from persisted UI
             // preferences so the native chrome matches the renderer locale.
             let ui_preferences =
-                crate::commands::app_get_ui_preferences(app.handle().clone()).ok();
+                crate::commands::app_get_ui_preferences(runtime_app.clone()).ok();
             let is_english = ui_preferences
                 .as_ref()
                 .is_some_and(|preferences| preferences.locale == "enUS");
@@ -211,7 +224,11 @@ pub fn run() {
                     let Some(action) = tray_menu_action(event.id().as_ref()) else {
                         return;
                     };
-                    crate::services::logging::info(app, "tray", format!("menu action={action:?}"));
+                    crate::services::logging::info(
+                        &crate::runtime_app(app),
+                        "tray",
+                        format!("menu action={action:?}"),
+                    );
                     match action {
                         TrayMenuAction::OpenConnectionManager => {
                             open_child_window_from_native_event(
@@ -263,7 +280,7 @@ pub fn run() {
                         }
                     ) {
                         crate::services::logging::info(
-                            tray.app_handle(),
+                            &crate::runtime_app(tray.app_handle()),
                             "tray",
                             "left click toggle main window",
                         );
@@ -282,12 +299,12 @@ pub fn run() {
             // onUpdateStatus 订阅；updates::check 内部已有 single-flight
             // 互斥，用户在此期间手动点击"检查更新"会复用同一次结果。
             // 无法读取旧偏好时维持既有行为，默认检查更新。
-            let auto_check_updates = crate::commands::app_get_ui_preferences(app.handle().clone())
+            let auto_check_updates = crate::commands::app_get_ui_preferences(runtime_app.clone())
                 .map(|preferences| preferences.auto_check_updates)
                 .unwrap_or(true);
             if auto_check_updates {
-                let startup_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
+                let startup_handle = runtime_app.clone();
+                crate::runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                     let _ = crate::services::updates::check(&startup_handle).await;
                 });
@@ -301,7 +318,7 @@ pub fn run() {
                 install_macos_titlebar_observers(&main_window);
                 if !calibrate_macos_traffic_lights(&main_window) {
                     crate::services::logging::warn(
-                        app.handle(),
+                        &runtime_app,
                         "window",
                         "native titlebar unavailable before show",
                     );
@@ -314,7 +331,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             "about" => {
                 if let Err(error) = crate::macos_icon::show_about_panel(app) {
-                    crate::services::logging::warn(app, "app-icon", error);
+                    crate::services::logging::warn(&crate::runtime_app(app), "app-icon", error);
                 }
             }
             "new-connection" => {
@@ -372,7 +389,7 @@ pub fn run() {
                 );
             }
             "open-logs-directory" => {
-                let _ = crate::commands::app_open_logs_directory(app.clone());
+                let _ = crate::commands::app_open_logs_directory(crate::runtime_app(app));
             }
             "view-reload" => {
                 if let Some(window) = focused_webview_window(app) {
@@ -391,36 +408,41 @@ pub fn run() {
                 }
             }
             "view-ui-zoom-in" => {
-                if let Err(error) = crate::commands::app_adjust_ui_zoom(app.clone(), "in") {
+                let runtime_app = crate::runtime_app(app);
+                if let Err(error) = crate::commands::app_adjust_ui_zoom(runtime_app.clone(), "in") {
                     crate::services::logging::warn(
-                        app,
+                        &runtime_app,
                         "ui-preferences",
                         format!("failed to increase interface zoom: {error}"),
                     );
                 }
             }
             "view-ui-zoom-out" => {
-                if let Err(error) = crate::commands::app_adjust_ui_zoom(app.clone(), "out") {
+                let runtime_app = crate::runtime_app(app);
+                if let Err(error) = crate::commands::app_adjust_ui_zoom(runtime_app.clone(), "out") {
                     crate::services::logging::warn(
-                        app,
+                        &runtime_app,
                         "ui-preferences",
                         format!("failed to decrease interface zoom: {error}"),
                     );
                 }
             }
             "view-ui-zoom-reset" => {
-                if let Err(error) = crate::commands::app_adjust_ui_zoom(app.clone(), "reset") {
+                let runtime_app = crate::runtime_app(app);
+                if let Err(error) = crate::commands::app_adjust_ui_zoom(runtime_app.clone(), "reset")
+                {
                     crate::services::logging::warn(
-                        app,
+                        &runtime_app,
                         "ui-preferences",
                         format!("failed to reset interface zoom: {error}"),
                     );
                 }
             }
             "view-ui-zoom-lock" => {
-                if let Err(error) = crate::commands::app_toggle_ui_zoom_lock(app.clone()) {
+                let runtime_app = crate::runtime_app(app);
+                if let Err(error) = crate::commands::app_toggle_ui_zoom_lock(runtime_app.clone()) {
                     crate::services::logging::warn(
-                        app,
+                        &runtime_app,
                         "ui-preferences",
                         format!("failed to toggle interface zoom lock: {error}"),
                     );
@@ -442,9 +464,12 @@ pub fn run() {
                 }
             }
             "view-terminal-zoom-lock" => {
-                if let Err(error) = crate::commands::app_toggle_terminal_zoom_lock(app.clone()) {
+                let runtime_app = crate::runtime_app(app);
+                if let Err(error) =
+                    crate::commands::app_toggle_terminal_zoom_lock(runtime_app.clone())
+                {
                     crate::services::logging::warn(
-                        app,
+                        &runtime_app,
                         "ui-preferences",
                         format!("failed to toggle terminal zoom lock: {error}"),
                     );
@@ -509,200 +534,200 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
-            crate::commands::app_get_platform,
-            crate::commands::app_get_linux_window_corner_style,
-            crate::commands::app_get_mcp_agent_setup,
-            crate::commands::app_read_mcp_call_log,
-            crate::commands::app_get_arch,
-            crate::commands::app_get_runtime_version,
-            crate::commands::app_read_clipboard_text,
-            crate::commands::app_write_clipboard_text,
-            crate::commands::app_open_external_url,
-            crate::commands::app_get_update_status,
-            crate::commands::app_check_for_updates,
-            crate::commands::app_download_update,
-            crate::commands::app_install_update,
-            crate::commands::app_open_logs_directory,
-            crate::commands::app_write_diagnostic_log,
-            crate::commands::app_list_serial_ports,
-            crate::commands::app_serial_control,
-            crate::commands::app_serial_transfer,
-            crate::commands::app_serial_cancel_transfer,
-            crate::commands::app_save_session_log,
-            crate::commands::app_get_ui_preferences,
-            crate::commands::app_set_ui_preferences,
-            crate::commands::app_get_security_settings,
-            crate::commands::app_set_security_settings,
-            crate::commands::app_reset_security_backup_password,
-            crate::commands::app_verify_security_password,
-            crate::commands::app_list_local_terminal_shells,
-            crate::commands::app_list_ai_providers,
-            crate::commands::app_list_ai_models,
-            crate::commands::app_save_ai_provider,
-            crate::commands::app_delete_ai_provider,
-            crate::commands::app_test_ai_provider,
-            crate::commands::app_list_ai_conversations,
-            crate::commands::app_get_ai_conversation,
-            crate::commands::app_create_ai_conversation,
-            crate::commands::app_rename_ai_conversation,
-            crate::commands::app_summarize_ai_conversation_title,
-            crate::commands::app_delete_ai_message,
-            crate::commands::app_delete_ai_conversation,
-            crate::commands::app_get_ai_copilot_mode_state,
-            crate::commands::app_set_ai_copilot_mode,
-            crate::commands::app_set_ai_context_attach,
-            crate::commands::app_set_ai_dangerous_command_restrictions,
-            crate::commands::app_create_ai_context_preview,
-            crate::commands::app_start_ai_chat,
-            crate::commands::app_retry_ai_chat,
-            crate::commands::app_cancel_ai_chat,
-            crate::commands::app_get_ui_state_item,
-            crate::commands::app_set_ui_state_item,
-            crate::commands::app_remove_ui_state_item,
-            crate::commands::app_get_terminal_command_history,
-            crate::commands::app_set_terminal_command_history,
-            crate::commands::app_get_path_bookmarks,
-            crate::commands::app_update_path_bookmark,
-            crate::commands::app_get_command_send_preferences,
-            crate::commands::app_set_command_send_preferences,
-            crate::commands::app_get_snapshot,
-            crate::commands::app_get_connection_library,
-            crate::commands::app_list_imported_fonts,
-            crate::commands::app_import_font,
-            crate::commands::app_get_imported_font_data,
-            crate::commands::app_delete_imported_font,
-            crate::commands::app_list_ssh_keys,
-            crate::commands::app_list_ssh_config_hosts,
-            crate::commands::app_select_ssh_key_file,
-            crate::commands::app_import_ssh_key,
-            crate::commands::app_update_ssh_key_note,
-            crate::commands::app_delete_ssh_key,
-            crate::commands::app_preview_connection_import,
-            crate::commands::app_commit_connection_json_import,
-            crate::commands::app_export_connections,
-            crate::commands::app_export_connections_as_files,
-            crate::commands::app_get_webdav_sync_config,
-            crate::commands::app_set_webdav_sync_config,
-            crate::commands::app_test_webdav_sync,
-            crate::commands::app_upload_webdav_sync,
-            crate::commands::app_download_webdav_sync,
-            crate::commands::app_get_s3_backup_config,
-            crate::commands::app_set_s3_backup_config,
-            crate::commands::app_test_s3_backup,
-            crate::commands::app_upload_s3_backup,
-            crate::commands::app_download_s3_backup,
-            crate::commands::app_workspace_mutation,
-            crate::commands::app_open_window,
-            crate::commands::app_window_action,
-            crate::commands::app_is_window_maximized,
-            crate::commands::app_cancel_file_editor_close,
-            crate::commands::app_show_window_menu,
+            crate::commands::tauri_ipc::app_get_platform,
+            crate::commands::tauri_ipc::app_get_linux_window_corner_style,
+            crate::commands::tauri_ipc::app_get_mcp_agent_setup,
+            crate::commands::tauri_ipc::app_read_mcp_call_log,
+            crate::commands::tauri_ipc::app_get_arch,
+            crate::commands::tauri_ipc::app_get_runtime_version,
+            crate::commands::tauri_ipc::app_read_clipboard_text,
+            crate::commands::tauri_ipc::app_write_clipboard_text,
+            crate::commands::tauri_ipc::app_open_external_url,
+            crate::commands::tauri_ipc::app_get_update_status,
+            crate::commands::tauri_ipc::app_check_for_updates,
+            crate::commands::tauri_ipc::app_download_update,
+            crate::commands::tauri_ipc::app_install_update,
+            crate::commands::tauri_ipc::app_open_logs_directory,
+            crate::commands::tauri_ipc::app_write_diagnostic_log,
+            crate::commands::tauri_ipc::app_list_serial_ports,
+            crate::commands::tauri_ipc::app_serial_control,
+            crate::commands::tauri_ipc::app_serial_transfer,
+            crate::commands::tauri_ipc::app_serial_cancel_transfer,
+            crate::commands::tauri_ipc::app_save_session_log,
+            crate::commands::tauri_ipc::app_get_ui_preferences,
+            crate::commands::tauri_ipc::app_set_ui_preferences,
+            crate::commands::tauri_ipc::app_get_security_settings,
+            crate::commands::tauri_ipc::app_set_security_settings,
+            crate::commands::tauri_ipc::app_reset_security_backup_password,
+            crate::commands::tauri_ipc::app_verify_security_password,
+            crate::commands::tauri_ipc::app_list_local_terminal_shells,
+            crate::commands::tauri_ipc::app_list_ai_providers,
+            crate::commands::tauri_ipc::app_list_ai_models,
+            crate::commands::tauri_ipc::app_save_ai_provider,
+            crate::commands::tauri_ipc::app_delete_ai_provider,
+            crate::commands::tauri_ipc::app_test_ai_provider,
+            crate::commands::tauri_ipc::app_list_ai_conversations,
+            crate::commands::tauri_ipc::app_get_ai_conversation,
+            crate::commands::tauri_ipc::app_create_ai_conversation,
+            crate::commands::tauri_ipc::app_rename_ai_conversation,
+            crate::commands::tauri_ipc::app_summarize_ai_conversation_title,
+            crate::commands::tauri_ipc::app_delete_ai_message,
+            crate::commands::tauri_ipc::app_delete_ai_conversation,
+            crate::commands::tauri_ipc::app_get_ai_copilot_mode_state,
+            crate::commands::tauri_ipc::app_set_ai_copilot_mode,
+            crate::commands::tauri_ipc::app_set_ai_context_attach,
+            crate::commands::tauri_ipc::app_set_ai_dangerous_command_restrictions,
+            crate::commands::tauri_ipc::app_create_ai_context_preview,
+            crate::commands::tauri_ipc::app_start_ai_chat,
+            crate::commands::tauri_ipc::app_retry_ai_chat,
+            crate::commands::tauri_ipc::app_cancel_ai_chat,
+            crate::commands::tauri_ipc::app_get_ui_state_item,
+            crate::commands::tauri_ipc::app_set_ui_state_item,
+            crate::commands::tauri_ipc::app_remove_ui_state_item,
+            crate::commands::tauri_ipc::app_get_terminal_command_history,
+            crate::commands::tauri_ipc::app_set_terminal_command_history,
+            crate::commands::tauri_ipc::app_get_path_bookmarks,
+            crate::commands::tauri_ipc::app_update_path_bookmark,
+            crate::commands::tauri_ipc::app_get_command_send_preferences,
+            crate::commands::tauri_ipc::app_set_command_send_preferences,
+            crate::commands::tauri_ipc::app_get_snapshot,
+            crate::commands::tauri_ipc::app_get_connection_library,
+            crate::commands::tauri_ipc::app_list_imported_fonts,
+            crate::commands::tauri_ipc::app_import_font,
+            crate::commands::tauri_ipc::app_get_imported_font_data,
+            crate::commands::tauri_ipc::app_delete_imported_font,
+            crate::commands::tauri_ipc::app_list_ssh_keys,
+            crate::commands::tauri_ipc::app_list_ssh_config_hosts,
+            crate::commands::tauri_ipc::app_select_ssh_key_file,
+            crate::commands::tauri_ipc::app_import_ssh_key,
+            crate::commands::tauri_ipc::app_update_ssh_key_note,
+            crate::commands::tauri_ipc::app_delete_ssh_key,
+            crate::commands::tauri_ipc::app_preview_connection_import,
+            crate::commands::tauri_ipc::app_commit_connection_json_import,
+            crate::commands::tauri_ipc::app_export_connections,
+            crate::commands::tauri_ipc::app_export_connections_as_files,
+            crate::commands::tauri_ipc::app_get_webdav_sync_config,
+            crate::commands::tauri_ipc::app_set_webdav_sync_config,
+            crate::commands::tauri_ipc::app_test_webdav_sync,
+            crate::commands::tauri_ipc::app_upload_webdav_sync,
+            crate::commands::tauri_ipc::app_download_webdav_sync,
+            crate::commands::tauri_ipc::app_get_s3_backup_config,
+            crate::commands::tauri_ipc::app_set_s3_backup_config,
+            crate::commands::tauri_ipc::app_test_s3_backup,
+            crate::commands::tauri_ipc::app_upload_s3_backup,
+            crate::commands::tauri_ipc::app_download_s3_backup,
+            crate::commands::tauri_ipc::app_workspace_mutation,
+            crate::commands::tauri_ipc::app_open_window,
+            crate::commands::tauri_ipc::app_window_action,
+            crate::commands::tauri_ipc::app_is_window_maximized,
+            crate::commands::tauri_ipc::app_cancel_file_editor_close,
+            crate::commands::tauri_ipc::app_show_window_menu,
             // Phase 3 commands
-            crate::commands::app_open_profile,
-            crate::commands::app_open_profile_background,
-            crate::commands::app_activate_tab,
-            crate::commands::app_attach_background_session,
-            crate::commands::app_detach_session_to_background,
-            crate::commands::app_hide_session_to_background,
-            crate::commands::app_reconnect_tab,
-            crate::commands::app_retry_monitoring,
-            crate::commands::app_get_network_connections,
-            crate::commands::app_probe_topology_services,
-            crate::commands::app_set_monitoring_enabled,
-            crate::commands::app_disconnect_tab,
-            crate::commands::app_close_tab,
-            crate::commands::app_split_tab,
-            crate::commands::app_close_pane,
-            crate::commands::app_set_active_pane,
-            crate::commands::app_set_pane_weights,
-            crate::commands::app_open_local_terminal,
-            crate::commands::app_write_terminal,
-            crate::commands::app_subscribe_terminal_data,
-            crate::commands::app_ack_terminal_data,
-            crate::commands::app_resize_terminal,
-            crate::commands::app_open_remote_path,
-            crate::commands::app_list_remote_directory,
-            crate::commands::app_set_follow_shell_cwd,
-            crate::commands::app_execute_remote_command,
-            crate::commands::app_read_remote_file,
-            crate::commands::app_write_remote_file,
-            crate::commands::app_create_remote_directory,
-            crate::commands::app_create_remote_file,
-            crate::commands::app_copy_remote_path,
-            crate::commands::app_move_remote_path,
-            crate::commands::app_rename_remote_path,
-            crate::commands::app_delete_remote_path,
-            crate::commands::app_change_remote_permissions,
-            crate::commands::app_set_remote_file_access_mode,
-            crate::commands::app_browse_transfer_directory,
-            crate::commands::app_copy_between_servers,
-            crate::commands::app_queue_upload,
-            crate::commands::app_upload_file,
-            crate::commands::app_download_file,
-            crate::commands::app_download_remote_path,
-            crate::commands::app_cancel_transfer,
-            crate::commands::app_pause_transfer,
-            crate::commands::app_resume_transfer,
-            crate::commands::app_discard_transfer,
-            crate::commands::app_clear_transfers,
-            crate::commands::app_resolve_ssh_interaction,
-            crate::commands::app_resolve_sudo_password_prompt,
-            crate::commands::app_set_sudo_password_renderer_ready,
-            crate::commands::app_resolve_backup_password,
-            crate::commands::app_set_backup_password_renderer_ready,
-            crate::commands::app_list_ssh_tunnels,
-            crate::commands::app_create_ssh_tunnel,
-            crate::commands::app_start_ssh_tunnel,
-            crate::commands::app_stop_ssh_tunnel,
-            crate::commands::app_delete_ssh_tunnel,
-            crate::commands::app_list_tunnel_profiles,
-            crate::commands::app_save_tunnel_profile,
-            crate::commands::app_delete_tunnel_profile,
-            crate::commands::app_list_proxy_profiles,
-            crate::commands::app_get_ssh_route_policy,
-            crate::commands::app_save_ssh_route_policy,
-            crate::commands::app_probe_ssh_route_policy,
-            crate::commands::app_save_proxy_profile,
-            crate::commands::app_delete_proxy_profile,
-            crate::commands::app_test_proxy_profile,
+            crate::commands::tauri_ipc::app_open_profile,
+            crate::commands::tauri_ipc::app_open_profile_background,
+            crate::commands::tauri_ipc::app_activate_tab,
+            crate::commands::tauri_ipc::app_attach_background_session,
+            crate::commands::tauri_ipc::app_detach_session_to_background,
+            crate::commands::tauri_ipc::app_hide_session_to_background,
+            crate::commands::tauri_ipc::app_reconnect_tab,
+            crate::commands::tauri_ipc::app_retry_monitoring,
+            crate::commands::tauri_ipc::app_get_network_connections,
+            crate::commands::tauri_ipc::app_probe_topology_services,
+            crate::commands::tauri_ipc::app_set_monitoring_enabled,
+            crate::commands::tauri_ipc::app_disconnect_tab,
+            crate::commands::tauri_ipc::app_close_tab,
+            crate::commands::tauri_ipc::app_split_tab,
+            crate::commands::tauri_ipc::app_close_pane,
+            crate::commands::tauri_ipc::app_set_active_pane,
+            crate::commands::tauri_ipc::app_set_pane_weights,
+            crate::commands::tauri_ipc::app_open_local_terminal,
+            crate::commands::tauri_ipc::app_write_terminal,
+            crate::commands::tauri_ipc::app_subscribe_terminal_data,
+            crate::commands::tauri_ipc::app_ack_terminal_data,
+            crate::commands::tauri_ipc::app_resize_terminal,
+            crate::commands::tauri_ipc::app_open_remote_path,
+            crate::commands::tauri_ipc::app_list_remote_directory,
+            crate::commands::tauri_ipc::app_set_follow_shell_cwd,
+            crate::commands::tauri_ipc::app_execute_remote_command,
+            crate::commands::tauri_ipc::app_read_remote_file,
+            crate::commands::tauri_ipc::app_write_remote_file,
+            crate::commands::tauri_ipc::app_create_remote_directory,
+            crate::commands::tauri_ipc::app_create_remote_file,
+            crate::commands::tauri_ipc::app_copy_remote_path,
+            crate::commands::tauri_ipc::app_move_remote_path,
+            crate::commands::tauri_ipc::app_rename_remote_path,
+            crate::commands::tauri_ipc::app_delete_remote_path,
+            crate::commands::tauri_ipc::app_change_remote_permissions,
+            crate::commands::tauri_ipc::app_set_remote_file_access_mode,
+            crate::commands::tauri_ipc::app_browse_transfer_directory,
+            crate::commands::tauri_ipc::app_copy_between_servers,
+            crate::commands::tauri_ipc::app_queue_upload,
+            crate::commands::tauri_ipc::app_upload_file,
+            crate::commands::tauri_ipc::app_download_file,
+            crate::commands::tauri_ipc::app_download_remote_path,
+            crate::commands::tauri_ipc::app_cancel_transfer,
+            crate::commands::tauri_ipc::app_pause_transfer,
+            crate::commands::tauri_ipc::app_resume_transfer,
+            crate::commands::tauri_ipc::app_discard_transfer,
+            crate::commands::tauri_ipc::app_clear_transfers,
+            crate::commands::tauri_ipc::app_resolve_ssh_interaction,
+            crate::commands::tauri_ipc::app_resolve_sudo_password_prompt,
+            crate::commands::tauri_ipc::app_set_sudo_password_renderer_ready,
+            crate::commands::tauri_ipc::app_resolve_backup_password,
+            crate::commands::tauri_ipc::app_set_backup_password_renderer_ready,
+            crate::commands::tauri_ipc::app_list_ssh_tunnels,
+            crate::commands::tauri_ipc::app_create_ssh_tunnel,
+            crate::commands::tauri_ipc::app_start_ssh_tunnel,
+            crate::commands::tauri_ipc::app_stop_ssh_tunnel,
+            crate::commands::tauri_ipc::app_delete_ssh_tunnel,
+            crate::commands::tauri_ipc::app_list_tunnel_profiles,
+            crate::commands::tauri_ipc::app_save_tunnel_profile,
+            crate::commands::tauri_ipc::app_delete_tunnel_profile,
+            crate::commands::tauri_ipc::app_list_proxy_profiles,
+            crate::commands::tauri_ipc::app_get_ssh_route_policy,
+            crate::commands::tauri_ipc::app_save_ssh_route_policy,
+            crate::commands::tauri_ipc::app_probe_ssh_route_policy,
+            crate::commands::tauri_ipc::app_save_proxy_profile,
+            crate::commands::tauri_ipc::app_delete_proxy_profile,
+            crate::commands::tauri_ipc::app_test_proxy_profile,
             // Phase 2: profile / folder / command CRUD
-            crate::commands::app_create_profile,
-            crate::commands::app_update_profile,
-            crate::commands::app_assign_ssh_proxy,
-            crate::commands::app_list_ssh_network_interfaces,
-            crate::commands::app_set_profile_file_pane_mode,
-            crate::commands::app_set_profile_default_directory,
-            crate::commands::app_clear_trusted_host_fingerprint,
-            crate::commands::app_test_connection,
-            crate::commands::app_delete_profile,
-            crate::commands::app_update_folder,
-            crate::commands::app_delete_folder,
-            crate::commands::app_update_entity_order,
-            crate::commands::app_update_command_folder,
-            crate::commands::app_delete_command_folder,
-            crate::commands::app_update_command_order,
-            crate::commands::app_update_command_template,
-            crate::commands::app_delete_command_template,
-            crate::commands::app_execute_command_template,
-            crate::commands::app_run_command_batch,
-            crate::commands::app_list_command_batches,
-            crate::commands::app_resolve_mcp_approval,
-            crate::commands::app_resolve_action_approval,
-            crate::commands::app_execute_ai_terminal_handoff,
+            crate::commands::tauri_ipc::app_create_profile,
+            crate::commands::tauri_ipc::app_update_profile,
+            crate::commands::tauri_ipc::app_assign_ssh_proxy,
+            crate::commands::tauri_ipc::app_list_ssh_network_interfaces,
+            crate::commands::tauri_ipc::app_set_profile_file_pane_mode,
+            crate::commands::tauri_ipc::app_set_profile_default_directory,
+            crate::commands::tauri_ipc::app_clear_trusted_host_fingerprint,
+            crate::commands::tauri_ipc::app_test_connection,
+            crate::commands::tauri_ipc::app_delete_profile,
+            crate::commands::tauri_ipc::app_update_folder,
+            crate::commands::tauri_ipc::app_delete_folder,
+            crate::commands::tauri_ipc::app_update_entity_order,
+            crate::commands::tauri_ipc::app_update_command_folder,
+            crate::commands::tauri_ipc::app_delete_command_folder,
+            crate::commands::tauri_ipc::app_update_command_order,
+            crate::commands::tauri_ipc::app_update_command_template,
+            crate::commands::tauri_ipc::app_delete_command_template,
+            crate::commands::tauri_ipc::app_execute_command_template,
+            crate::commands::tauri_ipc::app_run_command_batch,
+            crate::commands::tauri_ipc::app_list_command_batches,
+            crate::commands::tauri_ipc::app_resolve_mcp_approval,
+            crate::commands::tauri_ipc::app_resolve_action_approval,
+            crate::commands::tauri_ipc::app_execute_ai_terminal_handoff,
             // Local files
-            crate::sessions::local_files::app_list_local_directory,
-            crate::sessions::local_files::app_connect_local_network_share,
-            crate::sessions::local_files::app_read_local_file,
-            crate::sessions::local_files::app_write_local_file,
-            crate::sessions::local_files::app_create_local_directory,
-            crate::sessions::local_files::app_create_local_file,
-            crate::sessions::local_files::app_copy_local_path,
-            crate::sessions::local_files::app_move_local_path,
-            crate::sessions::local_files::app_rename_local_path,
-            crate::sessions::local_files::app_delete_local_path,
-            crate::sessions::local_files::app_change_local_permissions,
-            crate::sessions::local_files::app_select_local_files,
-            crate::sessions::local_files::app_select_local_directory
+            crate::commands::tauri_ipc::app_list_local_directory,
+            crate::commands::tauri_ipc::app_connect_local_network_share,
+            crate::commands::tauri_ipc::app_read_local_file,
+            crate::commands::tauri_ipc::app_write_local_file,
+            crate::commands::tauri_ipc::app_create_local_directory,
+            crate::commands::tauri_ipc::app_create_local_file,
+            crate::commands::tauri_ipc::app_copy_local_path,
+            crate::commands::tauri_ipc::app_move_local_path,
+            crate::commands::tauri_ipc::app_rename_local_path,
+            crate::commands::tauri_ipc::app_delete_local_path,
+            crate::commands::tauri_ipc::app_change_local_permissions,
+            crate::commands::tauri_ipc::app_select_local_files,
+            crate::commands::tauri_ipc::app_select_local_directory
         ])
         .build(tauri::generate_context!())
         .expect("error while building FileTerm Tauri application")
@@ -710,12 +735,14 @@ pub fn run() {
             // Restore the saved icon after native windows are available.
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             if matches!(_event, tauri::RunEvent::Ready) {
-                if let Ok(preferences) = crate::commands::app_get_ui_preferences(_app_handle.clone()) {
+                let runtime_app = crate::runtime_app(_app_handle);
+                if let Ok(preferences) = crate::commands::app_get_ui_preferences(runtime_app.clone())
+                {
                     if let Err(error) =
                         crate::app_icon::set_app_icon(_app_handle, &preferences.app_icon)
                     {
                         crate::services::logging::warn(
-                            _app_handle,
+                            &runtime_app,
                             "app-icon",
                             format!("failed to restore app icon preference: {error}"),
                         );
@@ -730,8 +757,9 @@ pub fn run() {
             }
 
             if matches!(_event, tauri::RunEvent::Exit) {
+                let runtime_app = crate::runtime_app(_app_handle);
                 flush_main_window_geometry(_app_handle);
-                crate::services::mcp::remove_runtime_descriptor(_app_handle);
+                crate::services::mcp::remove_runtime_descriptor(&runtime_app);
             }
 
             #[cfg(target_os = "macos")]
@@ -740,7 +768,8 @@ pub fn run() {
                 crate::sessions::local_files::cleanup_network_mounts();
             }
             if matches!(_event, tauri::RunEvent::Exit) {
-                crate::services::logging::info(_app_handle, "app", "application exiting");
+                let runtime_app = crate::runtime_app(_app_handle);
+                crate::services::logging::info(&runtime_app, "app", "application exiting");
                 crate::services::logging::flush();
             }
         });

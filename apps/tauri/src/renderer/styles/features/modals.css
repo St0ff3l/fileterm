@@ -42,7 +42,10 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
 
 .modal-card.ssh-modal {
   width: min(900px, 88vw);
-  min-height: 560px;
+  min-height: min(560px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: 0 !important;
   overflow: hidden;
 }
@@ -301,17 +304,17 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   white-space: nowrap;
 }
 
-.modal-card.ssh-modal.standalone .ssh-modal-body {
+.modal-card.ssh-modal .ssh-modal-body {
   min-height: 0;
   overflow: clip;
 }
 
-.modal-card.ssh-modal.standalone .ssh-form-shell {
+.modal-card.ssh-modal .ssh-form-shell {
   min-height: 0;
   overflow: clip;
 }
 
-.modal-card.ssh-modal.standalone .ssh-form-page {
+.modal-card.ssh-modal .ssh-form-page {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;

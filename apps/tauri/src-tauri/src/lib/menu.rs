@@ -101,7 +101,7 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     let platform = std::env::consts::OS;
     let quit_accelerator = application_quit_accelerator(platform);
     let (terminal_zoom_locked, ui_zoom_locked) =
-        crate::commands::app_get_ui_preferences(app.clone())
+        crate::commands::app_get_ui_preferences(crate::runtime_app(app))
             .map(|preferences| (preferences.terminal_zoom_locked, preferences.ui_zoom_locked))
             .unwrap_or((false, false));
     let new_connection_menu = MenuItemBuilder::with_id(

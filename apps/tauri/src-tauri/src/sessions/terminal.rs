@@ -1,6 +1,6 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use tauri::{AppHandle, Emitter, Manager};
+use crate::runtime::AppHandle;
 
 pub const LOCAL_TERMINAL_STARTUP_TRANSCRIPT: &str = "Starting local shell...\r\n";
 

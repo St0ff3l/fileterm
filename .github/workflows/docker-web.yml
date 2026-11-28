@@ -1,0 +1,96 @@
+name: FileTerm Docker Web
+
+'on':
+  pull_request:
+    paths:
+      - 'apps/tauri/**'
+      - 'packages/**'
+      - '.github/workflows/docker-web.yml'
+  workflow_call:
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install browser fixture dependencies
+        run: |
+          python -m pip install playwright==1.65.2
+          python -m playwright install --with-deps chromium
+      - name: Build and test image
+        run: |
+          docker build -f apps/tauri/web/Dockerfile -t fileterm-web:ci .
+          FILETERM_TEST_NETWORK=host FILETERM_TEST_TLS=1 bash apps/tauri/web/tests/run.sh fileterm-web:ci
+      - name: Export tested image
+        shell: bash
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: docker save fileterm-web:ci | gzip > fileterm-web-${{ matrix.arch }}.tar.gz
+      - uses: actions/upload-artifact@v6
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        with:
+          name: fileterm-web-${{ matrix.arch }}
+          path: fileterm-web-${{ matrix.arch }}.tar.gz
+          retention-days: 2
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: fileterm-web-*
+          merge-multiple: true
+      - name: Publish the tested images and multi-platform tag
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+([.-][a-z0-9]+)*)?$ ]] || (( ${#tag} > 122 )); then
+            echo '::error::Expected a version tag such as v2.3.4-beta.15.'
+            exit 1
+          fi
+          if [[ -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ]]; then
+            echo '::error::Set the DOCKERHUB_USERNAME repository variable and DOCKERHUB_TOKEN Actions secret.'
+            exit 1
+          fi
+          repository="${GITHUB_REPOSITORY,,}"
+          images=("ghcr.io/$repository" "docker.io/$DOCKERHUB_USERNAME/fileterm")
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for arch in amd64 arm64; do
+            gzip -dc "fileterm-web-$arch.tar.gz" | docker load
+            for image in "${images[@]}"; do
+              ref="$image:$tag-$arch"
+              docker tag fileterm-web:ci "$ref"
+              docker push "$ref"
+            done
+          done
+          for image in "${images[@]}"; do
+            docker buildx imagetools create -t "$image:$tag" \
+              "$image:$tag-amd64" "$image:$tag-arm64"
+          done

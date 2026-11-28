@@ -1,4 +1,3 @@
-#[tauri::command]
 pub async fn app_retry_monitoring(
     app: AppHandle,
     tab_id: String,
@@ -10,7 +9,6 @@ pub async fn app_retry_monitoring(
         .map_err(AppError::Storage)
 }
 
-#[tauri::command]
 pub async fn app_set_monitoring_enabled(
     app: AppHandle,
     tab_id: String,
@@ -61,7 +59,7 @@ fn schedule_disabled_monitoring_cleanup(app: &AppHandle, defaults: &SshConnectio
         .filter(|profile| !monitoring_enabled_for_profile(profile))
         .collect();
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         if disabled.is_empty() {
             return;
         }

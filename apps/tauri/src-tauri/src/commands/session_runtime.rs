@@ -387,7 +387,6 @@ pub(crate) async fn mcp_list_remote_directory(
 /// servers use a dedicated exec channel; network-device sessions send the
 /// native command through their already-visible raw PTY because they do not
 /// expose a POSIX shell or a portable process-exit protocol.
-#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn app_execute_remote_command(
     app: AppHandle,

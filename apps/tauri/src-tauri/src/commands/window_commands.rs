@@ -1,5 +1,4 @@
 // Workspace mutation and native window commands.
-#[tauri::command]
 pub async fn app_workspace_mutation(
     app: AppHandle,
     operation: String,
@@ -58,8 +57,8 @@ pub struct OpenWindowInput {
     pub encoding: Option<String>,
 }
 
-#[tauri::command]
-pub async fn app_open_window(app: AppHandle, input: OpenWindowInput) -> Result<(), AppError> {
+#[cfg(feature = "desktop")]
+pub async fn app_open_window(app: tauri::AppHandle, input: OpenWindowInput) -> Result<(), AppError> {
     // WebView2 can deadlock when WebviewWindowBuilder is used from a
     // synchronous Tauri command on Windows. Keep the command asynchronous and
     // perform the blocking builder call on a worker thread so the native event
@@ -70,28 +69,31 @@ pub async fn app_open_window(app: AppHandle, input: OpenWindowInput) -> Result<(
         .map_err(|error| AppError::Window(format!("子窗口创建任务失败: {error}")))?
 }
 
+#[cfg(feature = "desktop")]
 fn renderer_approved_close_should_destroy(window_label: &str) -> bool {
     window_label != "main"
 }
 
-fn destroy_child_window_after_invoke_reply(window: WebviewWindow) {
+#[cfg(feature = "desktop")]
+fn destroy_child_window_after_invoke_reply(window: tauri::WebviewWindow) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(CHILD_WINDOW_DESTROY_DELAY).await;
         let _ = window.destroy();
     });
 }
 
-#[tauri::command]
+#[cfg(feature = "desktop")]
 pub async fn app_window_action(
-    app: AppHandle,
-    window: WebviewWindow,
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     action: String,
 ) -> Result<(), AppError> {
+    use tauri::{Emitter, Manager};
     match action.as_str() {
         "show" => {
             if let Err(error) = window.unminimize() {
                 crate::services::logging::warn(
-                    &app,
+                    &crate::runtime_app(&app),
                     "window",
                     format!(
                         "unminimize before show failed label={}: {error}",
@@ -176,20 +178,23 @@ pub async fn app_window_action(
                 quit_registry.cancel();
                 return Ok(());
             }
+            let runtime_app = crate::runtime_app(&app);
             // Quit the entire app. Used by the renderer when the user
             // confirms a Cmd+Q / tray-quit request. Persist paused transfer
             // checkpoints before exiting so a restart never silently loses a
             // resumable file.
-            if let Err(error) = crate::services::transfers::shutdown(&app).await {
+            if let Err(error) = crate::services::transfers::shutdown(&runtime_app).await {
                 quit_registry.cancel();
                 return Err(error);
             }
-            shutdown_session_workers(&app).await;
+            shutdown_session_workers(&runtime_app).await;
             // 清除持久化的 home tab UI 状态，确保下次启动只恢复一个默认新建标签页，
             // 而不是上一次退出前残留的所有 home tab。失败仅记录警告，不阻断退出。
-            if let Err(error) = app_remove_ui_state_item(app.clone(), "main.tab-ui".to_string()) {
+            if let Err(error) =
+                app_remove_ui_state_item(runtime_app.clone(), "main.tab-ui".to_string())
+            {
                 crate::services::logging::warn(
-                    &app,
+                    &runtime_app,
                     "workspace",
                     format!("failed to clear home tab ui state on quit: {error}"),
                 );
@@ -201,20 +206,20 @@ pub async fn app_window_action(
     Ok(())
 }
 
-#[tauri::command]
-pub fn app_is_window_maximized(window: WebviewWindow) -> bool {
+#[cfg(feature = "desktop")]
+pub fn app_is_window_maximized(window: tauri::WebviewWindow) -> bool {
     window.is_maximized().unwrap_or(false)
 }
 
-#[tauri::command]
-pub fn app_cancel_file_editor_close(app: AppHandle, window: WebviewWindow) {
+#[cfg(feature = "desktop")]
+pub fn app_cancel_file_editor_close(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     crate::cancel_file_editor_close(&app, &window);
 }
 
-#[tauri::command]
+#[cfg(feature = "desktop")]
 pub fn app_show_window_menu(
-    app: AppHandle,
-    window: WebviewWindow,
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     menu_type: String,
     x: f64,
     y: f64,

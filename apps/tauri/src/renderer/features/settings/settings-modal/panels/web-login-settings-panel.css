@@ -1,0 +1,188 @@
+.web-login-page {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.web-login-page::before {
+  position: absolute;
+  inset: -20%;
+  content: '';
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--action-primary-bg) 14%, transparent), transparent 40%),
+    radial-gradient(circle at 80% 85%, color-mix(in srgb, var(--action-primary-bg) 7%, transparent), transparent 35%);
+  pointer-events: none;
+}
+
+.web-login-page__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--border-subtle) 50%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--border-subtle) 50%, transparent) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.web-login-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 400px);
+  padding: 32px 28px 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-modal);
+}
+
+.web-login-card__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.web-login-card__mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 14px;
+}
+
+.web-login-card__icon {
+  display: block;
+  width: 56px;
+  height: 56px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.web-login-card__brand {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.web-login-card__title {
+  margin: 0 0 6px;
+  color: var(--text-primary);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+}
+
+.web-login-card__subtitle {
+  max-width: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  text-wrap: balance;
+}
+
+.web-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.web-login-settings-panel .web-login-form {
+  max-width: 420px;
+}
+
+.web-login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.web-login-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.web-login-label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  line-height: var(--line-height-normal);
+}
+
+.web-login-field-meta {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.web-login-password-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color var(--transition-normal),
+    background-color var(--transition-normal);
+}
+
+.web-login-password-toggle:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.web-login-password-toggle:focus-visible {
+  outline: 2px solid var(--accent-focus-ring);
+  outline-offset: 1px;
+}
+
+.web-login-password-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.web-login-rules {
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
+.web-login-error {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--status-danger) 35%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.web-login-actions {
+  display: flex;
+  margin-top: 4px;
+}
+
+.web-login-submit-full {
+  width: 100%;
+  font-weight: 600;
+}

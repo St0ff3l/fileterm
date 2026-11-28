@@ -44,7 +44,7 @@ pub(crate) fn show_window_context_menu(
             "Window menu position is invalid".to_string(),
         ));
     }
-    let is_english = crate::commands::app_get_ui_preferences(app.clone())
+    let is_english = crate::commands::app_get_ui_preferences(crate::runtime_app(app))
         .map(|preferences| preferences.locale == "enUS")
         .unwrap_or(false);
     let quit_accelerator = application_quit_accelerator(std::env::consts::OS);
@@ -297,7 +297,7 @@ fn center_child_window_on_main(app: &AppHandle<Wry>, child: &WebviewWindow<Wry>)
     let label = child.label();
     let Some(main) = app.get_webview_window("main") else {
         crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("center skipped label={label}: main window unavailable"),
         );
@@ -308,7 +308,7 @@ fn center_child_window_on_main(app: &AppHandle<Wry>, child: &WebviewWindow<Wry>)
         Ok(position) => position,
         Err(error) => {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("center skipped label={label}: main position unavailable: {error}"),
             );
@@ -319,7 +319,7 @@ fn center_child_window_on_main(app: &AppHandle<Wry>, child: &WebviewWindow<Wry>)
         Ok(size) => size,
         Err(error) => {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("center skipped label={label}: main size unavailable: {error}"),
             );
@@ -330,7 +330,7 @@ fn center_child_window_on_main(app: &AppHandle<Wry>, child: &WebviewWindow<Wry>)
         Ok(size) => size,
         Err(error) => {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("center skipped label={label}: child size unavailable: {error}"),
             );
@@ -345,7 +345,7 @@ fn center_child_window_on_main(app: &AppHandle<Wry>, child: &WebviewWindow<Wry>)
         Ok(None) => None,
         Err(error) => {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("work area unavailable label={label}: {error}"),
             );
@@ -356,7 +356,7 @@ fn center_child_window_on_main(app: &AppHandle<Wry>, child: &WebviewWindow<Wry>)
     let position = center_child_window_position(main_position, main_size, child_size, work_area);
     if let Err(error) = child.set_position(position) {
         crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("center failed label={label} position={position:?}: {error}"),
         );
@@ -438,7 +438,7 @@ fn configure_windows_webview_zoom(window: &WebviewWindow<Wry>) {
 
     if let Err(error) = install_result {
         crate::services::logging::warn(
-            window.app_handle(),
+            &crate::runtime_app(window.app_handle()),
             "window",
             format!("failed to disable WebView2 page zoom: {error}"),
         );

@@ -28,7 +28,7 @@ async fn request_sudo_password_prompt(
         notify("unavailable");
         return Err(AppError::Command(needed_code.to_string()));
     }
-    crate::show_main_window(app);
+    app.show_main_window();
     let current_session_revision = state.ai_session_revision(tab_id).await.to_string();
     let expected_session_revision = expected_session_revision
         .map(str::trim)
@@ -160,7 +160,7 @@ fn emit_sudo_password_prompt_cancelled(app: &AppHandle, request_id: &str) {
 }
 
 fn main_window_exists(app: &AppHandle) -> bool {
-    app.get_webview_window("main").is_some()
+    app.has_window("main")
 }
 
 fn privileged_command_kind(command: &str) -> Option<PrivilegedCommandKind> {

@@ -59,7 +59,7 @@ async fn resolve_serial_device(
 
     let scan = tokio::time::timeout(
         Duration::from_secs(3),
-        tauri::async_runtime::spawn_blocking(tokio_serial::available_ports),
+        crate::runtime::spawn_blocking(tokio_serial::available_ports),
     )
     .await
     .map_err(|_| SerialWorkerError::retryable("串口设备身份扫描超时".to_string()))?

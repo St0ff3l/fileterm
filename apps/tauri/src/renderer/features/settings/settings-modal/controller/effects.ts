@@ -24,7 +24,6 @@ export function useSettingsModalEffects({
   const {
     activeTab,
     setActiveTab,
-    settingsSearchQuery,
     desktopApi,
     updatePreviewState,
     setUpdateStatus,
@@ -96,7 +95,7 @@ export function useSettingsModalEffects({
   }, [initialTab])
 
   useEffect(() => {
-    if (!settingsSearchQuery.trim() || visibleSettingsTabs.has(activeTab)) {
+    if (visibleSettingsTabs.has(activeTab) || visibleSettingsTabs.size === 0) {
       return
     }
 
@@ -104,7 +103,7 @@ export function useSettingsModalEffects({
     if (nextTab) {
       setActiveTab(nextTab)
     }
-  }, [activeTab, settingsSearchQuery, visibleSettingsTabs])
+  }, [activeTab, visibleSettingsTabs])
 
   useEffect(() => {
     if (updatePreviewState) {

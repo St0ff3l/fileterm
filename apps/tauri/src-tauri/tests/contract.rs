@@ -83,10 +83,15 @@ fn command_body<'a>(source: &'a str, name: &str) -> &'a str {
         .find(&marker)
         .unwrap_or_else(|| panic!("command `{name}` must exist"));
     let remainder = &source[start..];
-    let end = remainder[1..]
-        .find("#[tauri::command]")
-        .map(|index| index + 1)
-        .unwrap_or(remainder.len());
+    let next_async = remainder[1..]
+        .find("\npub async fn ")
+        .map(|index| index + 1);
+    let next_sync = remainder[1..].find("\npub fn ").map(|index| index + 1);
+    let end = match (next_async, next_sync) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) | (None, Some(a)) => a,
+        (None, None) => remainder.len(),
+    };
     &remainder[..end]
 }
 
@@ -420,15 +425,7 @@ fn ui_preference_setter_returns_the_shared_contract_shape() {
 #[test]
 fn connection_library_never_returns_profile_secrets() {
     let source = commands_source();
-    let start = source
-        .find("pub async fn app_get_connection_library")
-        .expect("connection library command must exist");
-    let remainder = &source[start..];
-    let end = remainder[1..]
-        .find("#[tauri::command]")
-        .map(|index| index + 1)
-        .expect("another command should follow the connection library");
-    let command = &remainder[..end];
+    let command = command_body(source, "app_get_connection_library");
     assert!(
         command.contains("strip_secret_fields_public"),
         "standalone connection windows must receive the same scrubbed profiles as workspace snapshots"
@@ -616,19 +613,27 @@ fn tauri_bridge_forwards_file_editor_tab_id_in_camel_case() {
 
 #[test]
 fn tauri_bridge_is_structurally_checked_without_runtime_proxy_fallback() {
-    let bridge = include_str!("../../src/bridge/tauri-api.ts");
+    let shared_bridge = include_str!("../../src/bridge/shared-api.ts");
+    let tauri_bridge = include_str!("../../src/bridge/tauri-api.ts");
+    let web_bridge = include_str!("../../src/bridge/web-api.ts");
     assert!(
-        bridge.contains("satisfies FileTermDesktopApi"),
-        "bridge object must be checked against the shared API at compile time"
+        shared_bridge.contains("satisfies FileTermDesktopApi"),
+        "shared bridge object must be checked against FileTermDesktopApi at compile time"
     );
-    assert!(
-        !bridge.contains("as unknown as FileTermDesktopApi"),
-        "bridge must not bypass the shared API type"
-    );
-    assert!(
-        !bridge.contains("new Proxy("),
-        "missing bridge methods must fail typecheck instead of becoming runtime stubs"
-    );
+    for (name, source) in [
+        ("shared-api.ts", shared_bridge),
+        ("tauri-api.ts", tauri_bridge),
+        ("web-api.ts", web_bridge),
+    ] {
+        assert!(
+            !source.contains("as unknown as FileTermDesktopApi"),
+            "{name} must not bypass the shared API type"
+        );
+        assert!(
+            !source.contains("new Proxy("),
+            "{name}: missing bridge methods must fail typecheck instead of becoming runtime stubs"
+        );
+    }
 }
 
 #[test]
