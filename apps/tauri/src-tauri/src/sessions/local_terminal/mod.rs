@@ -1,3 +1,4 @@
+use crate::runtime::AppHandle;
 use crate::{
     services::{workspace::LocalTerminalRuntimeGate, WorkspaceState, WorkspaceTabStatus},
     sessions::{
@@ -17,7 +18,6 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::{AppHandle, Manager};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 

@@ -62,7 +62,6 @@ fn summarize_ssh_interaction_response(response: &serde_json::Value) -> String {
     fields.join(" ")
 }
 
-#[tauri::command]
 pub async fn app_resolve_ssh_interaction(
     app: AppHandle,
     request_id: String,
@@ -128,7 +127,6 @@ pub async fn app_resolve_ssh_interaction(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn app_resolve_backup_password(
     app: AppHandle,
     request_id: String,
@@ -173,7 +171,6 @@ pub async fn app_resolve_backup_password(
 /// Resolve a one-time sudo/su password prompt. The value is accepted only by
 /// the main renderer and is forwarded to the waiting exec task through a
 /// single-use channel; it never enters terminal input, chat history, or logs.
-#[tauri::command]
 pub async fn app_resolve_sudo_password_prompt(
     app: AppHandle,
     request_id: String,
@@ -227,14 +224,13 @@ pub async fn app_resolve_sudo_password_prompt(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn app_set_sudo_password_renderer_ready(
     app: AppHandle,
-    window: WebviewWindow,
+    window_label: String,
     registration_id: String,
     ready: bool,
 ) -> Result<(), AppError> {
-    if window.label() != "main" {
+    if window_label != "main" {
         return Err(AppError::Window(
             "Only the FileTerm main window may receive privileged password input".to_string(),
         ));
@@ -251,14 +247,13 @@ pub async fn app_set_sudo_password_renderer_ready(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn app_set_backup_password_renderer_ready(
     app: AppHandle,
-    window: WebviewWindow,
+    window_label: String,
     registration_id: String,
     ready: bool,
 ) -> Result<(), AppError> {
-    if window.label() != "main" {
+    if window_label != "main" {
         return Err(AppError::Window(
             "Only the FileTerm main window may receive backup password input".to_string(),
         ));
@@ -275,7 +270,6 @@ pub async fn app_set_backup_password_renderer_ready(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn app_resolve_mcp_approval(
     app: AppHandle,
     request_id: String,
@@ -284,7 +278,6 @@ pub async fn app_resolve_mcp_approval(
     crate::services::action_review::resolve_action_approval(&app, &request_id, approved).await
 }
 
-#[tauri::command]
 pub async fn app_resolve_action_approval(
     app: AppHandle,
     request_id: String,
@@ -293,7 +286,6 @@ pub async fn app_resolve_action_approval(
     crate::services::action_review::resolve_action_approval(&app, &request_id, approved).await
 }
 
-#[tauri::command]
 pub async fn app_execute_ai_terminal_handoff(
     app: AppHandle,
     request_id: String,

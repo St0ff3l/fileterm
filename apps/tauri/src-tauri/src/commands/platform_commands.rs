@@ -1,5 +1,4 @@
 // Platform, local CLI discovery, architecture, clipboard, and update commands.
-#[tauri::command]
 pub fn app_get_platform() -> String {
     std::env::consts::OS.to_string()
 }
@@ -26,7 +25,6 @@ fn resolve_linux_window_corner_style(desktop: &str, session_type: &str) -> &'sta
     }
 }
 
-#[tauri::command]
 pub fn app_get_linux_window_corner_style() -> &'static str {
     if !cfg!(target_os = "linux") {
         return "square";
@@ -419,7 +417,6 @@ fn dsh_mcp_config(path: &std::path::Path) -> String {
 /// Discover locally installed Agent CLIs without launching them. This keeps
 /// setup responsive and avoids invoking arbitrary shell startup files on all
 /// three desktop platforms.
-#[tauri::command]
 pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
     let fileterm_path = resolve_fileterm_executable_path()?;
     let fileterm_command = shell_quote_path(&fileterm_path);
@@ -509,7 +506,6 @@ fn macos_arm64_capable() -> bool {
     false
 }
 
-#[tauri::command]
 pub fn app_get_arch() -> String {
     resolve_native_arch(
         std::env::consts::OS,
@@ -518,30 +514,48 @@ pub fn app_get_arch() -> String {
     )
 }
 
-#[tauri::command]
 pub fn app_get_runtime_version() -> String {
-    tauri::VERSION.to_string()
+    #[cfg(feature = "desktop")]
+    {
+        tauri::VERSION.to_string()
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        format!("web-{}", env!("CARGO_PKG_VERSION"))
+    }
 }
 
-#[tauri::command]
 pub fn app_read_clipboard_text() -> Result<String, AppError> {
-    let mut clipboard =
-        arboard::Clipboard::new().map_err(|error| AppError::Clipboard(error.to_string()))?;
-    clipboard
-        .get_text()
-        .map_err(|error| AppError::Clipboard(error.to_string()))
+    #[cfg(feature = "desktop")]
+    {
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|error| AppError::Clipboard(error.to_string()))?;
+        clipboard
+            .get_text()
+            .map_err(|error| AppError::Clipboard(error.to_string()))
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        Err(AppError::Clipboard("网页模式请使用浏览器剪贴板".to_string()))
+    }
 }
 
-#[tauri::command]
 pub fn app_write_clipboard_text(text: String) -> Result<(), AppError> {
-    let mut clipboard =
-        arboard::Clipboard::new().map_err(|error| AppError::Clipboard(error.to_string()))?;
-    clipboard
-        .set_text(text)
-        .map_err(|error| AppError::Clipboard(error.to_string()))
+    #[cfg(feature = "desktop")]
+    {
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|error| AppError::Clipboard(error.to_string()))?;
+        clipboard
+            .set_text(text)
+            .map_err(|error| AppError::Clipboard(error.to_string()))
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        let _ = text;
+        Err(AppError::Clipboard("网页模式请使用浏览器剪贴板".to_string()))
+    }
 }
 
-#[tauri::command]
 pub async fn app_open_external_url(app: AppHandle, url: String) -> Result<(), AppError> {
     let parsed = validate_external_url(&url)?;
     crate::services::external_links::open_url(&app, parsed.as_str()).await
@@ -551,32 +565,41 @@ fn validate_external_url(url: &str) -> Result<url::Url, AppError> {
     crate::services::external_links::validate_url(url)
 }
 
-#[tauri::command]
 pub async fn app_get_update_status(app: AppHandle) -> Result<serde_json::Value, AppError> {
     Ok(crate::services::updates::get_status(&app).await)
 }
 
-#[tauri::command]
 pub async fn app_check_for_updates(app: AppHandle) -> Result<serde_json::Value, AppError> {
     crate::services::updates::check(&app).await
 }
 
-#[tauri::command]
 pub async fn app_download_update(app: AppHandle) -> Result<(), AppError> {
     crate::services::updates::download(&app).await
 }
 
-#[tauri::command]
 pub async fn app_install_update(app: AppHandle) -> Result<(), AppError> {
     crate::services::updates::install(&app).await
 }
 
-#[tauri::command]
 pub fn app_open_logs_directory(app: AppHandle) -> Result<(), AppError> {
+    if app.is_web() {
+        return Err(AppError::Command(
+            "网页模式请通过日志下载接口获取日志文件".to_string(),
+        ));
+    }
     let log_directory = crate::storage::state_path(&app)?.with_file_name("logs");
     std::fs::create_dir_all(&log_directory)
         .map_err(|error| AppError::Storage(error.to_string()))?;
-    open::that(log_directory).map_err(|error| AppError::Command(error.to_string()))
+    #[cfg(feature = "desktop")]
+    {
+        open::that(log_directory).map_err(|error| AppError::Command(error.to_string()))
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        Err(AppError::Command(
+            "当前构建不支持打开本地日志目录".to_string(),
+        ))
+    }
 }
 
 /// Write a bounded renderer-side diagnostic into the same local app log as
@@ -584,7 +607,6 @@ pub fn app_open_logs_directory(app: AppHandle) -> Result<(), AppError> {
 /// understood by the structured logger so a stale or malformed WebView cannot
 /// create an unparseable log stream. The logger performs the final secret
 /// redaction and one-line/size bounding.
-#[tauri::command]
 pub fn app_write_diagnostic_log(
     app: AppHandle,
     level: String,
@@ -612,7 +634,6 @@ pub fn app_write_diagnostic_log(
 
 pub use crate::services::serial_ports::SerialPortSnapshot as SerialPortListItem;
 
-#[tauri::command]
 pub async fn app_list_serial_ports() -> Result<Vec<SerialPortListItem>, AppError> {
     crate::services::serial_ports::list()
         .await

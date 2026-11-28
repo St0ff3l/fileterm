@@ -37,7 +37,7 @@ struct SshTagRule {
 
 #[derive(Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct SshRoutePolicy {
+pub struct SshRoutePolicy {
     #[serde(default)]
     servers: HashMap<String, SshRouteRule>,
     #[serde(default)]

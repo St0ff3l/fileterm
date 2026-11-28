@@ -1,4 +1,3 @@
-#[tauri::command]
 pub fn app_read_local_file(
     file_path: String,
     encoding: Option<String>,
@@ -24,7 +23,6 @@ pub fn app_read_local_file(
     );
     Ok(decode_bytes(&bytes, &enc))
 }
-#[tauri::command]
 pub fn app_write_local_file(
     file_path: String,
     content: String,
@@ -41,7 +39,6 @@ pub fn app_write_local_file(
     result
 }
 
-#[tauri::command]
 pub fn app_create_local_directory(dir_path: String, name: String) -> Result<(), AppError> {
     validate_local_name(&name)?;
     let target = Path::new(&dir_path).join(&name);
@@ -50,7 +47,6 @@ pub fn app_create_local_directory(dir_path: String, name: String) -> Result<(), 
     result
 }
 
-#[tauri::command]
 pub fn app_create_local_file(dir_path: String, name: String) -> Result<(), AppError> {
     validate_local_name(&name)?;
     let target = Path::new(&dir_path).join(&name);
@@ -67,7 +63,6 @@ pub fn app_create_local_file(dir_path: String, name: String) -> Result<(), AppEr
     result
 }
 
-#[tauri::command]
 pub fn app_copy_local_path(source_path: String, destination_path: String) -> Result<(), AppError> {
     if source_path == destination_path {
         return Ok(());
@@ -134,7 +129,6 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
-#[tauri::command]
 pub fn app_move_local_path(source_path: String, destination_path: String) -> Result<(), AppError> {
     if source_path == destination_path {
         return Ok(());
@@ -167,7 +161,6 @@ pub fn app_move_local_path(source_path: String, destination_path: String) -> Res
     result
 }
 
-#[tauri::command]
 pub fn app_rename_local_path(target_path: String, new_name: String) -> Result<(), AppError> {
     validate_local_name(&new_name)?;
     let parent = Path::new(&target_path)
@@ -179,7 +172,6 @@ pub fn app_rename_local_path(target_path: String, new_name: String) -> Result<()
     result
 }
 
-#[tauri::command]
 pub fn app_delete_local_path(target_path: String) -> Result<(), AppError> {
     let result = remove_path(Path::new(&target_path));
     log_local_result("delete path", &result, None);
@@ -219,7 +211,6 @@ fn remove_path(p: &Path) -> Result<(), AppError> {
     }
 }
 
-#[tauri::command]
 pub fn app_change_local_permissions(
     target_path: String,
     options: PermissionChangeOptions,

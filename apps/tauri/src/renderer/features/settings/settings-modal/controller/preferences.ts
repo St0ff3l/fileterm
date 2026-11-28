@@ -131,6 +131,9 @@ export function useSettingsPreferencesController({ state }: { state: SettingsMod
     if (platform === 'linux') {
       return `Linux (${arch})`
     }
+    if (platform === 'web') {
+      return `Web (${arch})`
+    }
     return `${platform} / ${arch}`
   })()
 

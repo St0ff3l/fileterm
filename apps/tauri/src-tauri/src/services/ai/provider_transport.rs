@@ -10,7 +10,7 @@ async fn stream_openai_compatible_chat(
     context: Option<&AiPromptContext>,
     response_mode: AiChatResponseMode,
     reasoning_effort: Option<AiReasoningEffort>,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<ChatStreamResult, AppError> {
     stream_openai_compatible_chat_with_tools(
@@ -41,7 +41,7 @@ async fn stream_openai_compatible_chat_with_tools(
     reasoning_effort: Option<AiReasoningEffort>,
     tool_turns: &[ToolLoopTurn],
     tools_enabled: bool,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<ChatStreamResult, AppError> {
     let client = chat_client(provider)?;
@@ -82,7 +82,7 @@ async fn stream_openai_responses(
     context: Option<&AiPromptContext>,
     response_mode: AiChatResponseMode,
     reasoning_effort: Option<AiReasoningEffort>,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<ChatStreamResult, AppError> {
     stream_openai_responses_with_tools(
@@ -110,7 +110,7 @@ async fn stream_openai_responses_with_tools(
     reasoning_effort: Option<AiReasoningEffort>,
     tool_turns: &[ToolLoopTurn],
     tools_enabled: bool,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<ChatStreamResult, AppError> {
     let client = chat_client(provider)?;
@@ -159,7 +159,7 @@ async fn stream_anthropic_messages(
     context: Option<&AiPromptContext>,
     response_mode: AiChatResponseMode,
     reasoning_effort: Option<AiReasoningEffort>,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<ChatStreamResult, AppError> {
     stream_anthropic_messages_with_tools(
@@ -187,7 +187,7 @@ async fn stream_anthropic_messages_with_tools(
     reasoning_effort: Option<AiReasoningEffort>,
     tool_turns: &[ToolLoopTurn],
     tools_enabled: bool,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     cancellation: &CancellationToken,
 ) -> Result<ChatStreamResult, AppError> {
     let client = chat_client(provider)?;

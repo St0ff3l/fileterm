@@ -54,6 +54,10 @@ Windows、macOS 与受支持的 Linux AppImage/DEB/RPM 使用签名的应用内�
 
 需要从源码运行或参与开发？请继续阅读 [从源码开始](#从源码开始)。
 
+## Docker 原生网页版
+
+将 FileTerm 作为原生 Web 应用（`fileterm-web` + React 前端，无需 Xvfb/noVNC）部署到服务器，即可在浏览器中使用完整工作台。见 [Docker 部署指南](apps/tauri/web/README.md)。
+
 ## FileTerm 是什么
 
 FileTerm 面向开发者和运维人员的日常远程工作：将远程终端、文件管理、传输任务和连接配置集中到同一个桌面工作区。

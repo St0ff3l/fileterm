@@ -15,7 +15,7 @@ pub(crate) struct Preference {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AdapterInfo {
+pub struct AdapterInfo {
     id: Uuid,
     name: String,
     online: bool,

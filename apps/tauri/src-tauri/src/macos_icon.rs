@@ -23,7 +23,7 @@ pub fn set_app_icon(app: &AppHandle, variant: &str) -> Result<(), String> {
         let main_thread = unsafe { MainThreadMarker::new_unchecked() };
         let Some(icon) = dock_icon(&variant) else {
             crate::services::logging::warn(
-                &logging_app,
+                &crate::runtime_app(&logging_app),
                 "app-icon",
                 "unable to decode embedded Dock icon",
             );
@@ -48,7 +48,7 @@ pub fn set_app_icon(app: &AppHandle, variant: &str) -> Result<(), String> {
             // Clear Finder metadata left by earlier versions; keep this signed app bundle's icon unchanged.
             if !workspace.setIcon_forFile_options(None, &bundle_path, options) {
                 crate::services::logging::warn(
-                    &logging_app,
+                    &crate::runtime_app(&logging_app),
                     "app-icon",
                     "failed to clear a previous Finder icon override",
                 );

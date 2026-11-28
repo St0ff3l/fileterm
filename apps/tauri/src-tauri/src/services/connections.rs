@@ -3,11 +3,11 @@
 //! receives non-secret preview metadata; the selected plan stays local until
 //! the user commits it.
 
+use crate::runtime::AppHandle;
 use serde_json::Value;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use tauri::{AppHandle, Emitter, Manager};
 
 use crate::services::profile_ops;
 use crate::services::workspace::ConnectionImportPlanEntry;

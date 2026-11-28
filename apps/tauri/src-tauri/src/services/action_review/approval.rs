@@ -87,7 +87,7 @@ pub async fn request_action_approval_with_id_and_target(
         // hidden or unfocused desktop window cannot leave the caller waiting
         // invisibly. Keep the original source in the event payload for the
         // renderer and audit log.
-        crate::show_main_window(app);
+        app.show_main_window();
     }
 
     let payload = ActionApprovalRequest {

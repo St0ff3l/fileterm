@@ -2,8 +2,7 @@
 
 use std::{os::unix::fs::DirBuilderExt, path::Path};
 
-use tauri::{AppHandle, Manager};
-
+use crate::runtime::AppHandle;
 use crate::AppError;
 
 fn validate_app_path(app: &Path) -> Result<(), String> {
@@ -78,7 +77,10 @@ pub(super) async fn install(app: &AppHandle) -> Result<(), AppError> {
     {
         return super::open_release_page(app).await;
     }
-    if !crate::request_file_editors_for_quit(app).await? {
+    let Some(tauri_app) = app.tauri().cloned() else {
+        return super::open_release_page(app).await;
+    };
+    if !crate::request_file_editors_for_quit(&tauri_app).await? {
         return Ok(());
     }
     let pending = state.downloaded_update.lock().await.take();
@@ -95,7 +97,7 @@ pub(super) async fn install(app: &AppHandle) -> Result<(), AppError> {
         .await;
         return Ok(());
     };
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    let result = crate::runtime::spawn_blocking(move || {
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         let bundle = tauri_plugin_updater::extract_path_from_executable(&executable)
             .map_err(|error| error.to_string())?;
@@ -123,7 +125,7 @@ pub(super) async fn install(app: &AppHandle) -> Result<(), AppError> {
         return Ok(());
     }
     crate::commands::shutdown_session_workers(app).await;
-    app.request_restart();
+    tauri_app.request_restart();
     Ok(())
 }
 

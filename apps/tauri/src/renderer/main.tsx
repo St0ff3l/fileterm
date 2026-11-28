@@ -3,8 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_UI_FONT_SCALE_PERCENT, DEFAULT_UI_ZOOM_PERCENT } from '@fileterm/core'
 import { App } from './app'
 import { ErrorBoundary } from './features/common/error-boundary'
-import { createTauriApi } from '../bridge/tauri-api'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { createRuntimeApi, isDesktopRuntime } from '../bridge/runtime-api'
 import { getLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
 import { applyThemeVariables, type ThemeMode } from './app/theme-config'
@@ -27,10 +26,10 @@ const initialWindowMode = new URLSearchParams(window.location.search).get('windo
 // Keep renderer-only chrome adjustments scoped to the Tauri window model.
 // macOS Overlay uses a different native title-bar baseline than Electron's
 // hiddenInset, even when both apps render the same React title bar.
-document.documentElement.dataset.runtime = 'tauri'
-document.documentElement.classList.toggle('tauri-standalone-window', initialWindowMode !== 'main')
+const isDesktop = isDesktopRuntime()
+document.documentElement.dataset.runtime = isDesktop ? 'tauri' : 'web'
+document.documentElement.classList.toggle('tauri-standalone-window', isDesktop && initialWindowMode !== 'main')
 
-const currentWindow = getCurrentWindow()
 const syncWindowFocusState = (focused: boolean) => {
   document.documentElement.dataset.windowFocused = focused ? 'true' : 'false'
 }
@@ -38,11 +37,6 @@ const syncWindowFocusState = (focused: boolean) => {
 // DOM focus is not the same as native NSWindow focus. Keep the native state on
 // <html> so platform theme skins can turn off glass when the window is idle.
 document.documentElement.dataset.windowFocused = 'true'
-void currentWindow
-  .isFocused()
-  .then(syncWindowFocusState)
-  .catch(() => undefined)
-void currentWindow.onFocusChanged(({ payload }) => syncWindowFocusState(payload)).catch(() => undefined)
 
 const interactiveWindowSelector = [
   'button',
@@ -61,31 +55,45 @@ const interactiveWindowSelector = [
   '.window-controls-decorator'
 ].join(',')
 
-// Start a native drag only from an explicitly marked, non-interactive area.
-// The old ancestor walk treated large standalone containers as deep drag
-// regions on Windows and could consume clicks meant for form controls.
-const handleWindowMouseDown = (e: MouseEvent) => {
-  if (e.button !== 0) return
-  const target = e.target instanceof Element ? e.target : null
-  if (!target || target.closest(interactiveWindowSelector)) return
-  if (!target.closest('[data-tauri-drag-region]')) return
+if (isDesktop) {
+  void import('@tauri-apps/api/window')
+    .then(({ getCurrentWindow }) => {
+      const currentWindow = getCurrentWindow()
+      void currentWindow
+        .isFocused()
+        .then(syncWindowFocusState)
+        .catch(() => undefined)
+      void currentWindow.onFocusChanged(({ payload }) => syncWindowFocusState(payload)).catch(() => undefined)
 
-  void currentWindow.startDragging().catch((err) => console.error('Failed to start window dragging:', err))
+      // Start a native drag only from an explicitly marked, non-interactive area.
+      const handleWindowMouseDown = (e: MouseEvent) => {
+        if (e.button !== 0) return
+        const target = e.target instanceof Element ? e.target : null
+        if (!target || target.closest(interactiveWindowSelector)) return
+        if (!target.closest('[data-tauri-drag-region]')) return
+
+        void currentWindow.startDragging().catch((err) => console.error('Failed to start window dragging:', err))
+      }
+
+      window.addEventListener('mousedown', handleWindowMouseDown, true)
+    })
+    .catch(() => undefined)
+} else {
+  window.addEventListener('focus', () => syncWindowFocusState(true))
+  window.addEventListener('blur', () => syncWindowFocusState(false))
 }
-
-window.addEventListener('mousedown', handleWindowMouseDown, true)
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)
 const renderRoot = (content: React.ReactNode) => {
   root.render(
     <React.StrictMode>
-      {initialWindowMode === 'main' && <MainWindowReveal />}
+      {isDesktop && initialWindowMode === 'main' && <MainWindowReveal />}
       {content}
     </React.StrictMode>
   )
 }
 
-void createTauriApi()
+void createRuntimeApi()
   .then((api) => {
     // Runtime metadata is synchronous in the shared desktop contract. Mount
     // only after native metadata resolves so first-read consumers never see

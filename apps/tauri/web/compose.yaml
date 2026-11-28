@@ -1,0 +1,21 @@
+services:
+  fileterm:
+    build:
+      context: ../../..
+      dockerfile: apps/tauri/web/Dockerfile
+    container_name: fileterm-web
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${FILETERM_WEB_PORT:-8080}:8080'
+    environment:
+      FILETERM_WEB_PORT: '8080'
+      FILETERM_WEB_USERNAME: '${FILETERM_WEB_USERNAME:-fileterm}'
+      FILETERM_WEB_PASSWORD: '${FILETERM_WEB_PASSWORD:-}'
+      FILETERM_WEB_PASSWORD_HASH: '${FILETERM_WEB_PASSWORD_HASH:-}'
+      FILETERM_WEB_TLS: '${FILETERM_WEB_TLS:-off}'
+      TZ: '${TZ:-Asia/Shanghai}'
+    volumes:
+      - fileterm-data:/data
+
+volumes:
+  fileterm-data:

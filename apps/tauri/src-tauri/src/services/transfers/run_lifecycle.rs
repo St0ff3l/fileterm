@@ -87,7 +87,7 @@ async fn start(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
         );
     }
 
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         let cancel_for_error = cancel.clone();
         if let Err(error) = run(app.clone(), transfer_id.clone(), cancel).await {
             if !cancel_for_error.is_cancelled() {

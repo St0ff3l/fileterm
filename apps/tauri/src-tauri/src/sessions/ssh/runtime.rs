@@ -249,7 +249,7 @@ async fn emit_ssh_interaction(
     app: &AppHandle,
     interaction_window_label: Option<&str>,
     payload: &Value,
-) -> Result<(), tauri::Error> {
+) -> Result<(), crate::AppError> {
     let request_id = payload
         .get("requestId")
         .and_then(Value::as_str)
@@ -286,16 +286,14 @@ async fn emit_ssh_interaction(
         .connection_operations
         .request_interaction(tab_id, request_id, kind)
         .await;
-    let (result, route) = match interaction_window_label
-        .and_then(|label| app.get_webview_window(label))
-    {
-        Some(window) => (
+    let (result, route) = match interaction_window_label.filter(|label| app.has_window(label)) {
+        Some(label) => (
             app.emit_to(
-                EventTarget::webview_window(window.label()),
+                EventTarget::webview_window(label),
                 "ssh:interaction",
                 payload,
             ),
-            format!("window:{}", window.label()),
+            format!("window:{label}"),
         ),
         None => (app.emit("ssh:interaction", payload), "broadcast".to_string()),
     };

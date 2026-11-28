@@ -1,10 +1,10 @@
+use crate::runtime::AppHandle;
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
-use tauri::AppHandle;
 
 #[cfg(target_os = "macos")]
 use std::sync::{Mutex, OnceLock};

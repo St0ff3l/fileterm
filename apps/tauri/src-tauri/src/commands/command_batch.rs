@@ -106,17 +106,15 @@ fn render_batch_command(template: &str, args: &BTreeMap<usize, String>) -> Resul
     Ok(command)
 }
 
-#[tauri::command]
 pub fn app_list_command_batches(app: AppHandle) -> Result<Vec<Value>, AppError> {
     let mut history = read_json_array(&app, COMMAND_BATCH_HISTORY)?;
     history.truncate(COMMAND_BATCH_HISTORY_LIMIT);
     Ok(history)
 }
 
-#[tauri::command]
 pub async fn app_run_command_batch(
     app: AppHandle,
-    window: WebviewWindow,
+    window_label: String,
     command_id: String,
     expected_template: String,
     args: BTreeMap<usize, String>,
@@ -126,7 +124,7 @@ pub async fn app_run_command_batch(
     use crate::services::workspace::WorkspaceState;
     use crate::storage::write_json_array;
 
-    if window.label() != "main" {
+    if window_label != "main" {
         return Err(AppError::Command("Command batches require the main window".to_string()));
     }
     if targets.is_empty() || targets.len() > COMMAND_BATCH_TARGET_LIMIT {

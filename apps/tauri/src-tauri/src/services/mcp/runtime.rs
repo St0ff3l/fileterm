@@ -33,7 +33,7 @@ pub fn start_runtime(app: &AppHandle) -> Result<(), AppError> {
     let app_handle = app.clone();
     let connection_limiter = Arc::new(Semaphore::new(MCP_MAX_CONCURRENT_CLIENTS));
     let request_limiter = Arc::new(Semaphore::new(MCP_MAX_CONCURRENT_CLIENTS));
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         let listener = match TcpListener::from_std(listener) {
             Ok(listener) => listener,
             Err(error) => {
@@ -89,7 +89,7 @@ async fn run_runtime_listener(
         let descriptor = descriptor.clone();
         let connection_limiter = connection_limiter.clone();
         let request_limiter = request_limiter.clone();
-        tauri::async_runtime::spawn(async move {
+        crate::runtime::spawn(async move {
             let Ok(_permit) = connection_limiter.try_acquire_owned() else {
                 let _ = write_bridge_frame(
                     stream,
@@ -200,7 +200,7 @@ async fn handle_runtime_connection(
 
     let (writer_sender, mut writer_receiver) =
         mpsc::channel::<BridgeFrame>(MCP_BRIDGE_WRITER_QUEUE_SIZE);
-    let writer_task = tauri::async_runtime::spawn(async move {
+    let writer_task = crate::runtime::spawn_with_handle(async move {
         while let Some(frame) = writer_receiver.recv().await {
             let close = matches!(frame, BridgeFrame::Close);
             write_bridge_frame_to_writer(&mut writer, frame)

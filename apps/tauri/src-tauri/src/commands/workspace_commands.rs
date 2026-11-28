@@ -1,5 +1,4 @@
 // UI state, command history, snapshot, and connection-library commands.
-#[tauri::command]
 pub fn app_get_ui_state_item(app: AppHandle, key: String) -> Result<Option<String>, AppError> {
     Ok(read_ui_state(&app)?
         .get(&key)
@@ -7,21 +6,18 @@ pub fn app_get_ui_state_item(app: AppHandle, key: String) -> Result<Option<Strin
         .map(ToString::to_string))
 }
 
-#[tauri::command]
 pub fn app_set_ui_state_item(app: AppHandle, key: String, value: String) -> Result<(), AppError> {
     let mut states = read_ui_state(&app)?;
     states.insert(key, Value::String(value));
     write_ui_state(&app, states)
 }
 
-#[tauri::command]
 pub fn app_remove_ui_state_item(app: AppHandle, key: String) -> Result<(), AppError> {
     let mut states = read_ui_state(&app)?;
     states.remove(&key);
     write_ui_state(&app, states)
 }
 
-#[tauri::command]
 pub fn app_get_terminal_command_history(
     app: AppHandle,
     profile_id: String,
@@ -38,7 +34,6 @@ pub fn app_get_terminal_command_history(
         .collect())
 }
 
-#[tauri::command]
 pub fn app_set_terminal_command_history(
     app: AppHandle,
     profile_id: String,
@@ -61,7 +56,6 @@ pub fn app_set_terminal_command_history(
     write_json_object(&app, "command-history.json", &value)
 }
 
-#[tauri::command]
 pub fn app_get_command_send_preferences(
     app: AppHandle,
 ) -> Result<CommandSendPreferences, AppError> {
@@ -76,7 +70,6 @@ pub fn app_get_command_send_preferences(
     })
 }
 
-#[tauri::command]
 pub fn app_set_command_send_preferences(
     app: AppHandle,
     preferences: CommandSendPreferences,
@@ -118,12 +111,10 @@ async fn lock_library_after_transfer_hydration(
         .await)
 }
 
-#[tauri::command]
 pub async fn app_get_snapshot(app: AppHandle) -> Result<serde_json::Value, AppError> {
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_get_connection_library(app: AppHandle) -> Result<serde_json::Value, AppError> {
     let library_mutation = app
         .state::<crate::services::workspace::WorkspaceState>()

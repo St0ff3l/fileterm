@@ -45,17 +45,17 @@ fn public_mode_state(state: &StoredAiModeState) -> AiCopilotModeState {
     }
 }
 
-pub fn get_copilot_mode_state(window: &WebviewWindow) -> Result<AiCopilotModeState, AppError> {
-    Ok(public_mode_state(&mode_state_for_window(window.label())?))
+pub fn get_copilot_mode_state(window_label: &str) -> Result<AiCopilotModeState, AppError> {
+    Ok(public_mode_state(&mode_state_for_window(window_label)?))
 }
 
 pub fn set_copilot_mode(
-    window: &WebviewWindow,
+    window_label: &str,
     input: SetAiCopilotModeInput,
 ) -> Result<AiCopilotModeState, AppError> {
     let mut registry = mode_registry_lock()?;
     let state = registry
-        .entry(window.label().to_string())
+        .entry(window_label.to_string())
         .or_insert_with(default_ai_mode_state);
     if input.mode == AiCopilotMode::FullyAutomatic
         && state.mode != AiCopilotMode::FullyAutomatic
@@ -77,12 +77,12 @@ pub fn set_copilot_mode(
 }
 
 pub fn set_context_attach(
-    window: &WebviewWindow,
+    window_label: &str,
     input: SetAiContextAttachInput,
 ) -> Result<AiCopilotModeState, AppError> {
     let mut registry = mode_registry_lock()?;
     let state = registry
-        .entry(window.label().to_string())
+        .entry(window_label.to_string())
         .or_insert_with(default_ai_mode_state);
     if state.mode.requires_l2() && !input.attach_terminal_context {
         return Err(ai_error(
@@ -95,12 +95,12 @@ pub fn set_context_attach(
 }
 
 pub fn set_dangerous_command_restrictions(
-    window: &WebviewWindow,
+    window_label: &str,
     input: SetAiDangerousCommandRestrictionsInput,
 ) -> Result<AiCopilotModeState, AppError> {
     let mut registry = mode_registry_lock()?;
     let state = registry
-        .entry(window.label().to_string())
+        .entry(window_label.to_string())
         .or_insert_with(default_ai_mode_state);
     state.dangerous_command_restrictions_enabled = input.enabled;
     Ok(public_mode_state(state))

@@ -107,12 +107,12 @@ pub(super) fn refresh_shortcut_icons(app: &AppHandle, variant: &str) {
         // A user can change the selection more than once while a refresh is
         // queued. Resolve the persisted value after serializing the workers so
         // the most recent choice wins.
-        let variant = crate::commands::app_get_ui_preferences(app.clone())
+        let variant = crate::commands::app_get_ui_preferences(crate::runtime_app(&app))
             .map(|preferences| preferences.app_icon)
             .unwrap_or(requested_variant);
         if let Err(error) = refresh_shortcut_icons_now(&app, &variant) {
             crate::services::logging::warn(
-                &app,
+                &crate::runtime_app(&app),
                 "app-icon",
                 format!("failed to refresh Windows shortcut icons: {error}"),
             );
@@ -153,7 +153,7 @@ fn refresh_shortcut_icons_now(app: &AppHandle, variant: &str) -> Result<(), Stri
     )?;
     if updated > 0 {
         crate::services::logging::info(
-            app,
+            &crate::runtime_app(app),
             "app-icon",
             format!("refreshed {updated} Windows FileTerm shortcut icon(s)"),
         );
@@ -221,7 +221,7 @@ fn refresh_shortcuts_in_directories(
                         .is_some_and(|name| name.eq_ignore_ascii_case("FileTerm")) =>
                 {
                     crate::services::logging::warn(
-                        app,
+                        &crate::runtime_app(app),
                         "app-icon",
                         format!("failed to refresh shortcut {}: {error}", path.display()),
                     );
@@ -350,7 +350,7 @@ pub(super) fn set_window_icon(window: &WebviewWindow, variant: &str) -> Result<(
                 .and_then(|hwnd| apply_window_icon(HWND(hwnd.0), &variant));
             if let Err(error) = result {
                 crate::services::logging::warn(
-                    target.app_handle(),
+                    &crate::runtime_app(target.app_handle()),
                     "app-icon",
                     format!("failed to update Windows window/taskbar icon: {error}"),
                 );

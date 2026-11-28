@@ -1,3 +1,4 @@
+use crate::runtime::{AppHandle, StreamChannel};
 use crate::sessions::WorkerCmd;
 use crate::storage::read_json_array;
 use crate::AppError;
@@ -10,7 +11,6 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
@@ -54,7 +54,11 @@ const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Let a child-window close command resolve its IPC callback before destroying
 /// the calling WebView. Destroying synchronously makes WebView2 report a
 /// missing callback id and can leave renderer cleanup half-finished.
+#[cfg(feature = "desktop")]
 const CHILD_WINDOW_DESTROY_DELAY: Duration = Duration::from_millis(25);
+
+#[cfg(feature = "desktop")]
+pub mod tauri_ipc;
 include!("terminal_input.rs");
 include!("connection_preferences.rs");
 include!("ui_preferences.rs");

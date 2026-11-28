@@ -23,7 +23,8 @@ fn macos_native_theme(variant: &str) -> tauri::Theme {
 }
 
 fn refresh_macos_titlebar_zoom(app: &AppHandle<Wry>) {
-    let preferences = crate::commands::app_get_ui_preferences(app.clone()).ok();
+    let runtime = crate::runtime_app(app);
+    let preferences = crate::commands::app_get_ui_preferences(runtime.clone()).ok();
     let percent = preferences
         .as_ref()
         .map_or(100, |value| value.ui_zoom_percent);
@@ -37,7 +38,7 @@ fn refresh_macos_titlebar_zoom(app: &AppHandle<Wry>) {
             window.set_theme(Some(macos_native_theme(&preferences.theme_config.variant)))
         {
             crate::services::logging::warn(
-                app,
+                &runtime,
                 "window",
                 format!("failed to sync macOS appearance: {error}"),
             );

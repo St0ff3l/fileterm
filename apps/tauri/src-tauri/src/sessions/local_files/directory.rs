@@ -145,7 +145,6 @@ fn list_windows_drive_roots() -> Vec<LocalFileItem> {
     }
     items
 }
-#[tauri::command]
 pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySnapshot, AppError> {
     #[cfg(target_os = "windows")]
     if dir_path.as_deref() == Some(WINDOWS_DRIVES_PATH) {

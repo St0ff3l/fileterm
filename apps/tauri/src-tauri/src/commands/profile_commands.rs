@@ -7,13 +7,11 @@
 // Electron `FileProfileRepository` semantics (group/parentId self-healing,
 // secrets stripping, cascade rename / delete, ordering).
 
-#[tauri::command]
 pub(crate) fn app_list_ssh_network_interfaces(
 ) -> Result<Vec<crate::services::ssh_network_interface::AdapterInfo>, AppError> {
     crate::services::ssh_network_interface::list().map_err(AppError::Command)
 }
 
-#[tauri::command]
 pub async fn app_create_profile(
     app: AppHandle,
     input: serde_json::Value,
@@ -23,7 +21,6 @@ pub async fn app_create_profile(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_update_profile(
     app: AppHandle,
     profile_id: String,
@@ -45,7 +42,6 @@ pub async fn app_update_profile(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub(crate) async fn app_assign_ssh_proxy(
     app: AppHandle,
     input: crate::services::profile_ops::SshProxyAssignmentInput,
@@ -68,7 +64,6 @@ pub(crate) async fn app_assign_ssh_proxy(
     }
 }
 
-#[tauri::command]
 pub async fn app_set_profile_file_pane_mode(
     app: AppHandle,
     profile_id: String,
@@ -79,7 +74,6 @@ pub async fn app_set_profile_file_pane_mode(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_set_profile_default_directory(
     app: AppHandle,
     profile_id: String,
@@ -91,7 +85,6 @@ pub async fn app_set_profile_default_directory(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_clear_trusted_host_fingerprint(
     app: AppHandle,
     profile_id: String,
@@ -101,10 +94,9 @@ pub async fn app_clear_trusted_host_fingerprint(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_test_connection(
     app: AppHandle,
-    window: WebviewWindow,
+    window_label: String,
     profile_id: Option<String>,
     input: serde_json::Value,
 ) -> Result<(), AppError> {
@@ -184,7 +176,7 @@ pub async fn app_test_connection(
         .get("type")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("ssh");
-    let interaction_window_label = window.label().to_string();
+    let interaction_window_label = window_label;
     let result = match profile_type {
         "ssh" => {
             crate::sessions::ssh::test_connection(
@@ -231,7 +223,6 @@ pub async fn app_test_connection(
     result.map_err(AppError::Command)
 }
 
-#[tauri::command]
 pub async fn app_delete_profile(
     app: AppHandle,
     profile_id: String,
@@ -270,7 +261,6 @@ fn clear_deleted_profile_from_mcp_policy(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn app_update_folder(
     app: AppHandle,
     folder_id: String,
@@ -281,7 +271,6 @@ pub async fn app_update_folder(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_delete_folder(
     app: AppHandle,
     folder_id: String,
@@ -291,7 +280,6 @@ pub async fn app_delete_folder(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_update_entity_order(
     app: AppHandle,
     id: String,
@@ -303,7 +291,6 @@ pub async fn app_update_entity_order(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_update_command_folder(
     app: AppHandle,
     folder_id: String,
@@ -314,7 +301,6 @@ pub async fn app_update_command_folder(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_delete_command_folder(
     app: AppHandle,
     folder_id: String,
@@ -324,7 +310,6 @@ pub async fn app_delete_command_folder(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_update_command_order(
     app: AppHandle,
     id: String,
@@ -336,7 +321,6 @@ pub async fn app_update_command_order(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_update_command_template(
     app: AppHandle,
     command_id: String,
@@ -347,7 +331,6 @@ pub async fn app_update_command_template(
     get_workspace_snapshot_and_emit(&app).await
 }
 
-#[tauri::command]
 pub async fn app_delete_command_template(
     app: AppHandle,
     command_id: String,
@@ -364,7 +347,6 @@ pub async fn app_delete_command_template(
 /// arguments and whether the final carriage return is desired. It mirrors the
 /// Electron workspace service and keeps arbitrary command text out of the IPC
 /// surface.
-#[tauri::command]
 pub async fn app_execute_command_template(
     app: AppHandle,
     tab_id: String,

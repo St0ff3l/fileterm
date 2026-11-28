@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::AppHandle;
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::runtime::AppHandle;
 use crate::AppError;
 
 mod backup;
@@ -106,14 +106,34 @@ pub fn list(app: &AppHandle) -> Result<Vec<serde_json::Value>, AppError> {
 }
 
 pub async fn select_file(app: &AppHandle) -> Result<Option<serde_json::Value>, AppError> {
-    let Some(file) = rfd::AsyncFileDialog::new()
-        .set_title("导入 SSH 私钥")
-        .pick_file()
-        .await
-    else {
-        return Ok(None);
-    };
-    let source_path = file.path().to_path_buf();
+    if app.is_web() {
+        return Err(AppError::Command(
+            "Web runtime selects SSH keys via HTTP upload".to_string(),
+        ));
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        return Err(AppError::Command(
+            "Desktop file dialog is unavailable in web-only build".to_string(),
+        ));
+    }
+    #[cfg(feature = "desktop")]
+    {
+        let Some(file) = rfd::AsyncFileDialog::new()
+            .set_title("导入 SSH 私钥")
+            .pick_file()
+            .await
+        else {
+            return Ok(None);
+        };
+        inspect_file_for_selection(app, file.path().to_path_buf()).map(Some)
+    }
+}
+
+pub fn inspect_file_for_selection(
+    app: &AppHandle,
+    source_path: PathBuf,
+) -> Result<serde_json::Value, AppError> {
     let inspected = inspect_private_key(&source_path)?;
     let _guard = lock_store()?;
     let paths = ensure_store(app)?;
@@ -123,11 +143,11 @@ pub async fn select_file(app: &AppHandle) -> Result<Option<serde_json::Value>, A
         .iter()
         .find(|key| key.fingerprint == inspected.fingerprint);
     let usage = key_usage_counts(app)?;
-    Ok(Some(serde_json::json!({
+    Ok(serde_json::json!({
         "sourcePath": source_path.to_string_lossy(),
         "fileName": inspected.name.clone(),
         "existingKey": existing.map(|key| metadata_value(key, *usage.get(&key.id).unwrap_or(&0))),
-    })))
+    }))
 }
 
 pub fn import(

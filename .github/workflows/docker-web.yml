@@ -1,0 +1,82 @@
+name: FileTerm Docker Web
+
+'on':
+  pull_request:
+    paths:
+      - 'apps/tauri/**'
+      - 'packages/**'
+      - '.github/workflows/docker-web.yml'
+  workflow_dispatch:
+    inputs:
+      preview_tag:
+        description: Optional versioned GHCR tag (example web-preview-0.1.0)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install browser fixture dependencies
+        run: |
+          python -m pip install playwright==1.65.2
+          python -m playwright install --with-deps chromium
+      - name: Build and test image
+        run: |
+          docker build -f apps/tauri/web/Dockerfile -t fileterm-web:ci .
+          FILETERM_TEST_TLS=1 bash apps/tauri/web/tests/run.sh fileterm-web:ci
+      - name: Export tested image
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.preview_tag != ''
+        run: docker save fileterm-web:ci | gzip > fileterm-web-${{ matrix.arch }}.tar.gz
+      - uses: actions/upload-artifact@v6
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.preview_tag != ''
+        with:
+          name: fileterm-web-${{ matrix.arch }}
+          path: fileterm-web-${{ matrix.arch }}.tar.gz
+          retention-days: 2
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.preview_tag != ''
+    needs: smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: fileterm-web-*
+          merge-multiple: true
+      - name: Publish the tested images and multi-platform tag
+        env:
+          PREVIEW_TAG: ${{ inputs.preview_tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_TAG" =~ ^web-preview-[0-9]+\.[0-9]+\.[0-9]+([.-][a-z0-9.-]+)?$ ]]
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          refs=()
+          for arch in amd64 arm64; do
+            gzip -dc "fileterm-web-$arch.tar.gz" | docker load
+            ref="$image:$PREVIEW_TAG-$arch"
+            docker tag fileterm-web:ci "$ref"
+            docker push "$ref"
+            refs+=("$ref")
+          done
+          docker buildx imagetools create -t "$image:$PREVIEW_TAG" "${refs[@]}"

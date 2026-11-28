@@ -156,7 +156,7 @@ pub fn start_local_terminal_worker(
     let pump_tab_id = tab_id.clone();
     let pump_runtime_id = runtime_id.clone();
     let pump_gate = runtime_gate.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         let mut cwd_tracker = LocalOsc7CwdTracker::default();
         let mut pending_chunk = None;
         while let Some(first_chunk) = match pending_chunk.take() {
@@ -230,7 +230,7 @@ pub fn start_local_terminal_worker(
     });
 
     let relay_tx = control_tx.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         forward_terminal_commands(worker_rx, terminal_input_rx, cancellation, relay_tx).await;
     });
 
@@ -421,7 +421,7 @@ pub fn start_local_terminal_worker(
                     worker_tab_id, worker_runtime_id
                 ),
             );
-            tauri::async_runtime::block_on(async move {
+            crate::runtime::block_on(async move {
                 if tokio::time::timeout(LOCAL_OUTPUT_DRAIN_TIMEOUT, output_done_rx)
                     .await
                     .is_err()

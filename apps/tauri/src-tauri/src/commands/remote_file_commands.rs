@@ -84,7 +84,6 @@ fn apply_remote_mutation_listing(
     }
 }
 
-#[tauri::command]
 pub async fn app_list_remote_directory(
     app: AppHandle,
     tab_id: String,
@@ -114,7 +113,6 @@ pub async fn app_list_remote_directory(
     .await
 }
 
-#[tauri::command]
 pub async fn app_open_remote_path(
     app: AppHandle,
     tab_id: String,
@@ -141,7 +139,6 @@ pub async fn app_open_remote_path(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_set_follow_shell_cwd(
     app: AppHandle,
     tab_id: String,
@@ -225,7 +222,6 @@ pub async fn app_set_follow_shell_cwd(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_read_remote_file(
     app: AppHandle,
     tab_id: String,
@@ -260,7 +256,6 @@ pub(crate) async fn read_remote_file_bounded(
     .await
 }
 
-#[tauri::command]
 pub async fn app_write_remote_file(
     app: AppHandle,
     tab_id: String,
@@ -285,7 +280,6 @@ pub async fn app_write_remote_file(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_create_remote_directory(
     app: AppHandle,
     tab_id: String,
@@ -307,7 +301,6 @@ pub async fn app_create_remote_directory(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_create_remote_file(
     app: AppHandle,
     tab_id: String,
@@ -329,7 +322,6 @@ pub async fn app_create_remote_file(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_copy_remote_path(
     app: AppHandle,
     tab_id: String,
@@ -353,7 +345,6 @@ pub async fn app_copy_remote_path(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_move_remote_path(
     app: AppHandle,
     tab_id: String,
@@ -380,7 +371,6 @@ pub async fn app_move_remote_path(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_rename_remote_path(
     app: AppHandle,
     tab_id: String,
@@ -403,7 +393,6 @@ pub async fn app_rename_remote_path(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_delete_remote_path(
     app: AppHandle,
     tab_id: String,
@@ -469,7 +458,6 @@ fn parse_remote_permission_mode(mode: &str) -> Result<u32, AppError> {
     u32::from_str_radix(trimmed, 8).map_err(|error| AppError::Command(error.to_string()))
 }
 
-#[tauri::command]
 pub async fn app_change_remote_permissions(
     app: AppHandle,
     tab_id: String,
@@ -500,7 +488,6 @@ pub async fn app_change_remote_permissions(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_set_remote_file_access_mode(
     app: AppHandle,
     tab_id: String,

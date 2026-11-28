@@ -54,6 +54,10 @@ Windows, macOS, and supported Linux AppImage/DEB/RPM builds use signed in-app up
 
 Want to run from source or contribute? Continue to [Getting Started from Source](#getting-started-from-source).
 
+## Docker Web Edition
+
+Run FileTerm directly as a native Web app (`fileterm-web` + React renderer, no Xvfb/noVNC) on your server and use it from a browser. See the [Docker Web setup guide](apps/tauri/web/README.md).
+
 ## What Is FileTerm?
 
 FileTerm is built for daily remote work by developers and operations teams. It brings remote terminals, file management, transfer tasks, and connection profiles into one desktop workspace.

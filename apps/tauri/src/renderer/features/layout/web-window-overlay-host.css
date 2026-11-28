@@ -1,0 +1,33 @@
+.web-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--surface-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 100;
+}
+
+.web-overlay-frame {
+  width: min(900px, 92vw);
+  height: min(680px, 88vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-modal);
+  border: 1px solid var(--border-default);
+  border-radius: var(--window-corner-radius, 16px);
+  box-shadow: var(--modal-card-shadow);
+  overflow: hidden;
+}
+
+.web-overlay-frame--editor {
+  width: min(1220px, 94vw);
+  height: min(780px, 90vh);
+}
+
+.web-overlay-frame > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}

@@ -1,5 +1,5 @@
+use crate::runtime::AppHandle;
 use crate::AppError;
-use tauri::AppHandle;
 
 pub fn validate_url(value: &str) -> Result<url::Url, AppError> {
     let parsed = url::Url::parse(value)
@@ -15,22 +15,36 @@ pub fn validate_url(value: &str) -> Result<url::Url, AppError> {
 
 pub async fn open_url(app: &AppHandle, value: &str) -> Result<(), AppError> {
     let url = validate_url(value)?;
-    // Desktop launchers can wait for the browser. Never block Tauri's UI thread.
-    let result = tokio::task::spawn_blocking(move || launch_url(url.as_str()))
-        .await
-        .map_err(|error| AppError::Command(format!("Browser launcher task failed: {error}")))?;
-    if let Err(error) = &result {
-        super::logging::error(app, "external-link", error.to_string());
+    if app.is_web() {
+        return Err(AppError::Command(format!(
+            "Web runtime opens external links in the browser: {url}"
+        )));
     }
-    result
+    #[cfg(not(feature = "desktop"))]
+    {
+        Err(AppError::Command(format!(
+            "Desktop launcher unavailable in web-only build: {url}"
+        )))
+    }
+    #[cfg(feature = "desktop")]
+    {
+        // Desktop launchers can wait for the browser. Never block Tauri's UI thread.
+        let result = tokio::task::spawn_blocking(move || launch_url(url.as_str()))
+            .await
+            .map_err(|error| AppError::Command(format!("Browser launcher task failed: {error}")))?;
+        if let Err(error) = &result {
+            super::logging::error(app, "external-link", error.to_string());
+        }
+        result
+    }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(feature = "desktop", not(target_os = "linux")))]
 fn launch_url(url: &str) -> Result<(), AppError> {
     open::that(url).map_err(|error| AppError::Command(error.to_string()))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(feature = "desktop", target_os = "linux"))]
 fn launch_url(url: &str) -> Result<(), AppError> {
     // open::that stops when an installed launcher exits with a nonzero status.
     // On LXQt, xdg-open can exist but fail because its desktop helper is absent.

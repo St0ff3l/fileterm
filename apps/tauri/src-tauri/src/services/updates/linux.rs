@@ -259,18 +259,20 @@ fn install_appimage_with_backup(
 }
 
 #[cfg(target_os = "linux")]
-pub(super) async fn install(app: &tauri::AppHandle) -> Result<(), crate::AppError> {
-    use tauri::Manager;
+pub(super) async fn install(app: &crate::runtime::AppHandle) -> Result<(), crate::AppError> {
+    let Some(tauri_app) = app.tauri() else {
+        return super::open_release_page(app).await;
+    };
 
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _operation = state.update_operation.lock().await;
-    if update_target(app).is_none()
+    if update_target(tauri_app).is_none()
         || super::current_update_mode(&super::get_status(app).await)
             == super::RELEASE_PAGE_UPDATE_MODE
     {
         return super::open_release_page(app).await;
     }
-    if !crate::request_file_editors_for_quit(app).await? {
+    if !crate::request_file_editors_for_quit(tauri_app).await? {
         return Ok(());
     }
     let Some(pending) = state.downloaded_update.lock().await.take() else {
@@ -290,12 +292,12 @@ pub(super) async fn install(app: &tauri::AppHandle) -> Result<(), crate::AppErro
         tauri::utils::platform::bundle_type(),
         Some(BundleType::AppImage)
     ) {
-        app.env().appimage.map(std::path::PathBuf::from)
+        tauri_app.env().appimage.map(std::path::PathBuf::from)
     } else {
         None
     };
     let restart_path =
-        tauri::process::current_binary(&app.env()).map_err(|error| error.to_string());
+        tauri::process::current_binary(&tauri_app.env()).map_err(|error| error.to_string());
     let result = tauri::async_runtime::spawn_blocking(move || {
         let restart_path = restart_path?;
         // Refuse an inherited AppImage environment that would restart another application.
@@ -345,7 +347,7 @@ pub(super) async fn install(app: &tauri::AppHandle) -> Result<(), crate::AppErro
         return Ok(());
     }
     crate::commands::shutdown_session_workers(app).await;
-    app.request_restart();
+    tauri_app.request_restart();
     Ok(())
 }
 

@@ -6,7 +6,7 @@ pub fn start_serial_worker(
     cancellation: CancellationToken,
 ) {
     crate::services::logging::session(&app, "INFO", "serial", &tab_id, "worker starting");
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         let worker_cancellation = cancellation.clone();
         let should_schedule_reconnect =
             match run_serial_worker(&tab_id, &profile, command_rx, &app, worker_cancellation).await

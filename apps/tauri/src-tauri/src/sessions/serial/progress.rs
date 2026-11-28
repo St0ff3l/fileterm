@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter};
+use crate::runtime::AppHandle;
 
 use super::super::{SerialTransferDirection, SerialTransferMode, SerialTransferProgress};
 

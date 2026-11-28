@@ -16,6 +16,17 @@ export default defineConfig({
   },
   server: {
     port: 5188,
-    strictPort: true
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: process.env.FILETERM_WEB_ORIGIN || 'http://127.0.0.1:18420',
+        changeOrigin: true,
+        ws: true
+      },
+      '/healthz': {
+        target: process.env.FILETERM_WEB_ORIGIN || 'http://127.0.0.1:18420',
+        changeOrigin: true
+      }
+    }
   }
 })

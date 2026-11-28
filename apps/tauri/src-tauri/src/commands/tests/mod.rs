@@ -584,7 +584,7 @@ mod architecture_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "desktop"))]
 mod window_lifecycle_tests {
     use super::renderer_approved_close_should_destroy;
 

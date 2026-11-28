@@ -1,5 +1,4 @@
 // UI preferences, security, and terminal zoom commands.
-#[tauri::command]
 pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError> {
     let path = crate::storage::state_path(&app)?;
     if path.exists() {
@@ -51,13 +50,11 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
     }
 }
 
-#[tauri::command]
 pub fn app_list_local_terminal_shells(
 ) -> Vec<crate::sessions::local_terminal::LocalTerminalShellOption> {
     crate::sessions::local_terminal::available_shells()
 }
 
-#[tauri::command]
 pub fn app_set_ui_preferences(
     app: AppHandle,
     input: UiPreferencesInput,
@@ -67,16 +64,16 @@ pub fn app_set_ui_preferences(
     let previous_locale = preferences.locale.clone();
     let previous_terminal_zoom_locked = preferences.terminal_zoom_locked;
     let previous_ui_zoom_locked = preferences.ui_zoom_locked;
-    #[cfg(target_os = "macos")]
+    #[cfg(all(feature = "desktop", target_os = "macos"))]
     let previous_show_macos_menu_bar_icon = preferences.show_macos_menu_bar_icon;
     let previous_app_icon = preferences.app_icon.clone();
-    #[cfg(target_os = "macos")]
+    #[cfg(all(feature = "desktop", target_os = "macos"))]
     let previous_ui_zoom_percent = preferences.ui_zoom_percent;
-    #[cfg(target_os = "macos")]
+    #[cfg(all(feature = "desktop", target_os = "macos"))]
     let previous_ui_font_scale_percent = preferences.ui_font_scale_percent;
-    #[cfg(target_os = "macos")]
+    #[cfg(all(feature = "desktop", target_os = "macos"))]
     let previous_compact_tab_bar = preferences.compact_tab_bar;
-    #[cfg(target_os = "macos")]
+    #[cfg(all(feature = "desktop", target_os = "macos"))]
     let theme_changed = input.theme.is_some() || input.theme_config.is_some();
     let theme_was_provided = input.theme.is_some();
     if let Some(theme) = input.theme {
@@ -248,87 +245,111 @@ pub fn app_set_ui_preferences(
     let content = serde_json::to_string_pretty(&preferences)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
-    crate::services::logging::set_preferences(preferences.basic_logging_enabled, preferences.diagnostic_log_categories.clone());
-    if previous_app_icon != preferences.app_icon {
-        if let Err(error) = crate::app_icon::set_app_icon(&app, &preferences.app_icon) {
-            crate::services::logging::warn(
-                &app,
-                "ui-preferences",
-                format!("failed to update app icon: {error}"),
-            );
-        }
-    }
-    #[cfg(target_os = "macos")]
-    if previous_show_macos_menu_bar_icon != preferences.show_macos_menu_bar_icon {
-        let result = app
-            .tray_by_id("main")
-            .ok_or_else(|| AppError::Window("main tray icon is unavailable".to_string()))
-            .and_then(|tray| {
-                tray.set_visible(preferences.show_macos_menu_bar_icon)
-                    .map_err(|error| AppError::Window(error.to_string()))
-            });
-        if let Err(error) = result {
-            crate::services::logging::warn(
-                &app,
-                "ui-preferences",
-                format!("failed to update macOS menu bar icon visibility: {error}"),
-            );
-        }
-    }
-    if previous_locale != preferences.locale
-        || previous_terminal_zoom_locked != preferences.terminal_zoom_locked
-        || previous_ui_zoom_locked != preferences.ui_zoom_locked
-    {
-        if let Err(error) =
-            crate::install_localized_application_menu(&app, preferences.locale == "enUS")
-        {
-            // Preferences are already durable at this point. Do not report the
-            // whole save as failed (and invite a duplicate retry) merely because
-            // native menu refresh failed on the current platform.
-            crate::services::logging::warn(
-                &app,
-                "ui-preferences",
-                format!("failed to refresh native menu: {error}"),
-            );
-        }
-        if previous_locale != preferences.locale {
-            if let Err(error) =
-                crate::install_localized_tray_menu(&app, preferences.locale == "enUS")
-            {
+    crate::services::logging::set_preferences(
+        preferences.basic_logging_enabled,
+        preferences.diagnostic_log_categories.clone(),
+    );
+    #[cfg(feature = "desktop")]
+    if let Some(tauri_app) = app.tauri() {
+        if previous_app_icon != preferences.app_icon {
+            if let Err(error) = crate::app_icon::set_app_icon(tauri_app, &preferences.app_icon) {
                 crate::services::logging::warn(
                     &app,
                     "ui-preferences",
-                    format!("failed to refresh tray menu: {error}"),
+                    format!("failed to update app icon: {error}"),
                 );
             }
         }
+        #[cfg(target_os = "macos")]
+        if previous_show_macos_menu_bar_icon != preferences.show_macos_menu_bar_icon {
+            let result = tauri_app
+                .tray_by_id("main")
+                .ok_or_else(|| AppError::Window("main tray icon is unavailable".to_string()))
+                .and_then(|tray| {
+                    tray.set_visible(preferences.show_macos_menu_bar_icon)
+                        .map_err(|error| AppError::Window(error.to_string()))
+                });
+            if let Err(error) = result {
+                crate::services::logging::warn(
+                    &app,
+                    "ui-preferences",
+                    format!("failed to update macOS menu bar icon visibility: {error}"),
+                );
+            }
+        }
+        if previous_locale != preferences.locale
+            || previous_terminal_zoom_locked != preferences.terminal_zoom_locked
+            || previous_ui_zoom_locked != preferences.ui_zoom_locked
+        {
+            if let Err(error) =
+                crate::install_localized_application_menu(tauri_app, preferences.locale == "enUS")
+            {
+                // Preferences are already durable at this point. Do not report the
+                // whole save as failed (and invite a duplicate retry) merely because
+                // native menu refresh failed on the current platform.
+                crate::services::logging::warn(
+                    &app,
+                    "ui-preferences",
+                    format!("failed to refresh native menu: {error}"),
+                );
+            }
+            if previous_locale != preferences.locale {
+                if let Err(error) =
+                    crate::install_localized_tray_menu(tauri_app, preferences.locale == "enUS")
+                {
+                    crate::services::logging::warn(
+                        &app,
+                        "ui-preferences",
+                        format!("failed to refresh tray menu: {error}"),
+                    );
+                }
+            }
+        }
+        if monitoring_defaults_changed {
+            schedule_disabled_monitoring_cleanup(&app, &preferences.connection_defaults);
+        }
+        let _ = app.emit("app:ui-preferences-changed", &preferences);
+        // Page zoom, font size and the tab bar height change renderer layout without a native
+        // window resize. Sync AppKit appearance and control geometry after theme or
+        // layout preference changes.
+        #[cfg(target_os = "macos")]
+        if previous_ui_zoom_percent != preferences.ui_zoom_percent
+            || previous_ui_font_scale_percent != preferences.ui_font_scale_percent
+            || previous_compact_tab_bar != preferences.compact_tab_bar
+            || theme_changed
+        {
+            crate::schedule_macos_traffic_light_recalibration(tauri_app);
+        }
     }
-    if monitoring_defaults_changed {
-        schedule_disabled_monitoring_cleanup(&app, &preferences.connection_defaults);
-    }
-    let _ = app.emit("app:ui-preferences-changed", &preferences);
-    // Page zoom, font size and the tab bar height change renderer layout without a native
-    // window resize. Sync AppKit appearance and control geometry after theme or
-    // layout preference changes.
-    #[cfg(target_os = "macos")]
-    if previous_ui_zoom_percent != preferences.ui_zoom_percent
-        || previous_ui_font_scale_percent != preferences.ui_font_scale_percent
-        || previous_compact_tab_bar != preferences.compact_tab_bar
-        || theme_changed
+    #[cfg(not(feature = "desktop"))]
     {
-        crate::schedule_macos_traffic_light_recalibration(&app);
+        let _ = (
+            previous_app_icon,
+            previous_locale,
+            previous_terminal_zoom_locked,
+            previous_ui_zoom_locked,
+        );
+        if monitoring_defaults_changed {
+            schedule_disabled_monitoring_cleanup(&app, &preferences.connection_defaults);
+        }
+        let _ = app.emit("app:ui-preferences-changed", &preferences);
+    }
+    #[cfg(feature = "desktop")]
+    if app.is_web() {
+        if monitoring_defaults_changed {
+            schedule_disabled_monitoring_cleanup(&app, &preferences.connection_defaults);
+        }
+        let _ = app.emit("app:ui-preferences-changed", &preferences);
     }
     Ok(preferences)
 }
 
-#[tauri::command]
 pub fn app_get_security_settings(
     app: AppHandle,
 ) -> Result<crate::services::security::SecuritySettings, AppError> {
     crate::services::security::get_settings(&app)
 }
 
-#[tauri::command]
 pub fn app_set_security_settings(
     app: AppHandle,
     input: crate::services::security::SecuritySettingsInput,
@@ -336,14 +357,12 @@ pub fn app_set_security_settings(
     crate::services::security::save_settings(&app, input)
 }
 
-#[tauri::command]
 pub fn app_reset_security_backup_password(
     app: AppHandle,
 ) -> Result<crate::services::security::SecuritySettings, AppError> {
     crate::services::security::reset_backup_password(&app)
 }
 
-#[tauri::command]
 pub fn app_verify_security_password(
     app: AppHandle,
     mut password: String,

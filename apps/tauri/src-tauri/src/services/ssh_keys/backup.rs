@@ -3,8 +3,9 @@ use std::fs;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::AppHandle;
 use zeroize::{Zeroize, Zeroizing};
+
+use crate::runtime::AppHandle;
 
 use super::{
     ensure_store, inspect_private_key, inspect_private_key_bytes, lock_down_file, read_index,

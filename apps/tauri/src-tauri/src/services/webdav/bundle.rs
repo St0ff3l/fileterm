@@ -32,7 +32,6 @@ pub fn export_timestamp() -> String {
 async fn local_backup_snapshot(
     app: &AppHandle,
 ) -> Result<(Vec<Value>, Vec<Value>, backup_crypto::BackupDependencies), AppError> {
-    use tauri::Manager;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _guard = state.library_mutation.lock().await;
     let (profiles, _) = profile_ops::read_and_heal_profiles(app)?;
@@ -286,7 +285,6 @@ pub(crate) async fn import_bundle(
     password: Option<&str>,
     mode: DownloadMode,
 ) -> Result<ProfileImportSummary, AppError> {
-    use tauri::Manager;
     let decoded = parse_bundle(bytes, password)?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _guard = state.library_mutation.lock().await;

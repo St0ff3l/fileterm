@@ -278,7 +278,7 @@ async fn activate_session(app: &AppHandle, params: &Value) -> Result<Value, Stri
             .await
             .map_err(public_app_error)?;
     }
-    crate::show_main_window(app);
+    app.show_main_window();
     Ok(compact_snapshot(
         &snapshot,
         Some(&tab_id),

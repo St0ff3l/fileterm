@@ -1,7 +1,7 @@
+use crate::runtime::AppHandle;
 use crate::{storage, AppError};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::AppHandle;
 
 static BOOKMARK_LOCK: Mutex<()> = Mutex::new(());
 const STORE: &str = "path-bookmarks.json";
@@ -98,7 +98,6 @@ fn apply(
     Ok(())
 }
 
-#[tauri::command]
 pub fn app_get_path_bookmarks(
     app: AppHandle,
     scope: String,
@@ -112,7 +111,6 @@ pub fn app_get_path_bookmarks(
         .collect())
 }
 
-#[tauri::command]
 pub fn app_update_path_bookmark(
     app: AppHandle,
     scope: String,

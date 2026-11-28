@@ -10,12 +10,12 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::runtime::{AppHandle, StreamChannel};
 use regex::Regex;
 use reqwest::redirect::Policy;
 use reqwest::Client;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
-use tauri::{ipc::Channel, AppHandle, Manager, WebviewWindow};
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use url::{Host, Url};

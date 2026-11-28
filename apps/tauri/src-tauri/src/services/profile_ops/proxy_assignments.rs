@@ -4,7 +4,7 @@ use super::*;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SshProxyAssignmentInput {
+pub struct SshProxyAssignmentInput {
     proxy_id: String,
     changes: Vec<ProxyAssignment>,
 }

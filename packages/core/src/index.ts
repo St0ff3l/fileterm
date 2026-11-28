@@ -2922,7 +2922,7 @@ export interface FileTermDesktopApi {
   arch: string
   appVersion: string
   appName: string
-  runtimeName: 'Electron' | 'Tauri'
+  runtimeName: 'Electron' | 'Tauri' | 'Web'
   runtimeVersion: string
   isDesktop: boolean
   getUpdateStatus(): Promise<AppUpdateStatus>

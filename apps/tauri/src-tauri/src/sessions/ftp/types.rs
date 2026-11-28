@@ -13,7 +13,7 @@ use suppaftp::tokio::{
 };
 use suppaftp::types::Mode;
 use suppaftp::{FtpError, Status};
-use tauri::{AppHandle, Emitter, Manager};
+use crate::runtime::AppHandle;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;

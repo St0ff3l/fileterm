@@ -68,7 +68,7 @@ fn apply_anthropic_usage(payload: &Value, stream: &mut ChatStreamResult) {
 fn append_stream_text(
     stream: &mut ChatStreamResult,
     text: String,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
 ) -> Result<(), AppError> {
     if text.is_empty() {
         return Ok(());
@@ -142,7 +142,7 @@ fn set_tool_call_item_id(stream: &mut ChatStreamResult, key: &str, item_id: Opti
 fn process_openai_payload(
     payload: Value,
     stream: &mut ChatStreamResult,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
 ) -> Result<(), AppError> {
     if payload.get("error").is_some_and(|error| !error.is_null()) {
         return Err(ai_error(
@@ -246,7 +246,7 @@ fn anthropic_content_text(message: &Value) -> Option<String> {
 fn process_openai_responses_payload(
     payload: Value,
     stream: &mut ChatStreamResult,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
 ) -> Result<(), AppError> {
     if payload.get("type").and_then(Value::as_str) == Some("error")
         || payload.get("error").is_some_and(|error| !error.is_null())
@@ -379,7 +379,7 @@ fn process_openai_responses_payload(
 fn process_anthropic_payload(
     payload: Value,
     stream: &mut ChatStreamResult,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
 ) -> Result<(), AppError> {
     if payload.get("type").and_then(Value::as_str) == Some("error")
         || payload.get("error").is_some_and(|error| !error.is_null())
@@ -569,7 +569,7 @@ impl SseDecoder {
 }
 
 type StreamPayloadProcessor =
-    fn(Value, &mut ChatStreamResult, &Channel<AiStreamEvent>) -> Result<(), AppError>;
+    fn(Value, &mut ChatStreamResult, &StreamChannel<AiStreamEvent>) -> Result<(), AppError>;
 
 fn chat_request_error(error: reqwest::Error, stage: &str) -> AppError {
     if error.is_timeout() {
@@ -658,7 +658,7 @@ fn parse_stream_payload(event: &str) -> Result<Value, AppError> {
 async fn consume_streaming_response(
     mut response: reqwest::Response,
     cancellation: &CancellationToken,
-    channel: &Channel<AiStreamEvent>,
+    channel: &StreamChannel<AiStreamEvent>,
     process_payload: StreamPayloadProcessor,
 ) -> Result<ChatStreamResult, AppError> {
     let is_json_response = response

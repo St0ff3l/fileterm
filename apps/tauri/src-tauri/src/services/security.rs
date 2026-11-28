@@ -9,8 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
+use crate::runtime::AppHandle;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::AppError;

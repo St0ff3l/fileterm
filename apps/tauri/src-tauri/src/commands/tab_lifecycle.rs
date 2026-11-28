@@ -1,5 +1,4 @@
 // Reconnect, disconnect, close, and local terminal commands.
-#[tauri::command]
 pub async fn app_reconnect_tab(
     app: AppHandle,
     tab_id: String,
@@ -60,7 +59,7 @@ pub async fn app_reconnect_tab(
                 Ok(startup) => {
                     let startup_app = app.clone();
                     let startup_tab_id = tab_id.clone();
-                    tauri::async_runtime::spawn(async move {
+                    crate::runtime::spawn(async move {
                         finish_local_terminal_startup(&startup_app, &startup_tab_id, startup, true)
                             .await;
                     });
@@ -232,7 +231,6 @@ fn claim_reconnect_tab(tabs: &mut [crate::services::WorkspaceTab], tab_id: &str)
     true
 }
 
-#[tauri::command]
 pub async fn app_disconnect_tab(
     app: AppHandle,
     tab_id: String,
@@ -309,7 +307,6 @@ pub async fn app_disconnect_tab(
     get_workspace_snapshot(app).await
 }
 
-#[tauri::command]
 pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
 

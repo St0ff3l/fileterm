@@ -40,14 +40,14 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
             center_child_window_on_main(app, &window);
             // The new renderer reveals the window after its form is ready.
             crate::services::logging::debug(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("navigated existing label={label} kind={}", input.kind),
             );
             return Ok(());
         } else {
             crate::services::logging::debug(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("focus existing label={label} kind={}", input.kind),
             );
@@ -109,7 +109,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         .build()
         .map_err(|error| {
             crate::services::logging::error(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!(
                     "create failed label={label} kind={} error={error}",
@@ -122,7 +122,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
     watch_window_display_changes(&window, LogicalSize::new(min_width, min_height));
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
-        let variant = crate::commands::app_get_ui_preferences(app.clone())?.app_icon;
+        let variant = crate::commands::app_get_ui_preferences(crate::runtime_app(app))?.app_icon;
         crate::app_icon::set_window_icon(&window, &variant).map_err(AppError::Window)?;
     }
     #[cfg(target_os = "windows")]
@@ -131,7 +131,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         crate::services::logging::track_webview_processes(&window);
     }
     crate::services::logging::info(
-        app,
+        &crate::runtime_app(app),
         "window",
         format!("created label={label} kind={}", input.kind),
     );
@@ -158,7 +158,7 @@ fn open_child_window_from_native_event(app: &AppHandle, input: OpenWindowInput) 
         let kind = input.kind.clone();
         if let Err(error) = open_child_window(&app, input) {
             crate::services::logging::error(
-                &app,
+                &crate::runtime_app(&app),
                 "window",
                 format!("native request failed kind={kind} error={error}"),
             );
@@ -185,7 +185,7 @@ fn restore_linux_gtk_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, f
             }
         }
         Err(error) => crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("native GTK restore failed label={label}: {error}"),
         ),
@@ -199,14 +199,14 @@ fn restore_window_on_main_thread(app: &AppHandle<Wry>, window: &WebviewWindow<Wr
 
     if let Err(error) = window.unminimize() {
         crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("unminimize failed label={label}: {error}"),
         );
     }
     if let Err(error) = window.show() {
         crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("show failed label={label}: {error}"),
         );
@@ -215,7 +215,7 @@ fn restore_window_on_main_thread(app: &AppHandle<Wry>, window: &WebviewWindow<Wr
     if focus {
         if let Err(error) = window.set_focus() {
             crate::services::logging::warn(
-                app,
+                &crate::runtime_app(app),
                 "window",
                 format!("focus failed label={label}: {error}"),
             );
@@ -234,7 +234,7 @@ fn restore_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool
         restore_window_on_main_thread(&restore_app, &restore_window, focus);
     }) {
         crate::services::logging::warn(
-            app,
+            &crate::runtime_app(app),
             "window",
             format!("schedule restore failed label={label}: {error}"),
         );
@@ -254,7 +254,11 @@ pub(crate) fn show_main_window(app: &AppHandle<Wry>) {
     if let Some(window) = app.get_webview_window("main") {
         restore_window(app, &window, true);
     } else {
-        crate::services::logging::warn(app, "tray", "show requested without a main window");
+        crate::services::logging::warn(
+            &crate::runtime_app(app),
+            "tray",
+            "show requested without a main window",
+        );
     }
 
     for label in hidden_labels {
@@ -275,7 +279,7 @@ pub(crate) fn hide_main_window_and_children(app: &AppHandle<Wry>) {
                     hidden_labels.insert(label);
                 }
                 Err(error) => crate::services::logging::warn(
-                    app,
+                    &crate::runtime_app(app),
                     "tray",
                     format!("hide failed label={label}: {error}"),
                 ),
@@ -330,12 +334,16 @@ pub(crate) fn request_main_window_close(app: &AppHandle<Wry>, is_quit: bool) {
             serde_json::json!({ "isQuit": is_quit }),
         ) {
             crate::services::logging::error(
-                app,
+                &crate::runtime_app(app),
                 "tray",
                 format!("close request delivery failed is_quit={is_quit}: {error}"),
             );
         }
     } else {
-        crate::services::logging::error(app, "tray", "close requested without a main window");
+        crate::services::logging::error(
+            &crate::runtime_app(app),
+            "tray",
+            "close requested without a main window",
+        );
     }
 }

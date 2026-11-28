@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::StreamChannel;
 
 fn full_frame(tab: usize, sequence: usize) -> String {
     let prefix = format!("\x1b[32m{tab}:{sequence}中🔒\x1b[0m\r\n");
@@ -228,8 +229,8 @@ async fn concurrent_tabs_recover_small_output_bursts_without_skipping_or_reorder
     let state = WorkspaceState::default();
     let messages = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
     let received = Arc::clone(&messages);
-    let channel = Channel::new(move |body| {
-        received.lock().unwrap().push(body.deserialize().unwrap());
+    let channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
+        received.lock().unwrap().push(payload);
         Ok(())
     });
     let channel_id = channel.id();
@@ -342,7 +343,7 @@ async fn concurrent_tabs_recover_small_output_bursts_without_skipping_or_reorder
 #[test]
 fn synchronous_window_command_can_register_without_tokio_context() {
     let state = WorkspaceState::default();
-    state.register_terminal_output_channel("main", Channel::new(|_| Ok(())));
+    state.register_terminal_output_channel("main", StreamChannel::from_test_callback(|_| Ok(())));
     for subscription in state.terminal_output_channels.lock().unwrap().values() {
         subscription.close();
     }
@@ -351,7 +352,7 @@ fn synchronous_window_command_can_register_without_tokio_context() {
 #[test]
 fn health_sampling_never_waits_on_output_queue() {
     let state = WorkspaceState::default();
-    state.register_terminal_output_channel("main", Channel::new(|_| Ok(())));
+    state.register_terminal_output_channel("main", StreamChannel::from_test_callback(|_| Ok(())));
     let subscription = state
         .terminal_output_channels
         .lock()
@@ -374,7 +375,10 @@ fn health_sampling_never_waits_on_output_queue() {
 fn forgetting_a_tab_clears_its_output_and_gap_in_every_window() {
     let state = WorkspaceState::default();
     for window in ["main", "secondary"] {
-        state.register_terminal_output_channel(window, Channel::new(|_| Ok(())));
+        state.register_terminal_output_channel(
+            window,
+            StreamChannel::from_test_callback(|_| Ok(())),
+        );
     }
     let subscriptions = state
         .terminal_output_channels
@@ -413,7 +417,7 @@ async fn slow_window_does_not_block_other_window() {
     let slow_receiver = Arc::clone(&slow_count);
     state.register_terminal_output_channel(
         "slow",
-        Channel::new(move |_| {
+        StreamChannel::from_test_callback(move |_| {
             slow_receiver.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }),
@@ -423,8 +427,7 @@ async fn slow_window_does_not_block_other_window() {
     let receiver_state = Arc::clone(&state);
     let channel_id = Arc::new(std::sync::atomic::AtomicU32::new(0));
     let receiver_id = Arc::clone(&channel_id);
-    let channel = Channel::new(move |body| {
-        let payload: serde_json::Value = body.deserialize().unwrap();
+    let channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
         receiver_state.ack_terminal_output(
             "main",
             receiver_id.load(Ordering::Relaxed),
@@ -471,8 +474,8 @@ async fn shared_device_workers_do_not_wait_for_display_credit() {
         let state = WorkspaceState::default();
         let messages = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
         let received = Arc::clone(&messages);
-        let channel = Channel::new(move |body| {
-            received.lock().unwrap().push(body.deserialize().unwrap());
+        let channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
+            received.lock().unwrap().push(payload);
             Ok(())
         });
         let channel_id = channel.id();
@@ -545,8 +548,8 @@ async fn slow_renderer_limits_in_flight_utf8_output_and_rejects_foreign_ack() {
     let state = Arc::new(WorkspaceState::default());
     let messages = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
     let received = Arc::clone(&messages);
-    let channel = Channel::new(move |body| {
-        received.lock().unwrap().push(body.deserialize().unwrap());
+    let channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
+        received.lock().unwrap().push(payload);
         Ok(())
     });
     let channel_id = channel.id();
@@ -595,7 +598,7 @@ async fn slow_renderer_limits_in_flight_utf8_output_and_rejects_foreign_ack() {
 #[tokio::test]
 async fn only_matching_acknowledgements_record_renderer_progress() {
     let state = WorkspaceState::default();
-    let channel = Channel::new(|_| Ok(()));
+    let channel = StreamChannel::from_test_callback(|_| Ok(()));
     let channel_id = channel.id();
     state.register_terminal_output_channel("main", channel);
     let subscription = state
@@ -643,7 +646,7 @@ async fn only_matching_acknowledgements_record_renderer_progress() {
 #[tokio::test]
 async fn reload_releases_waiters_and_replaces_old_subscription() {
     let state = WorkspaceState::default();
-    let channel = Channel::new(|_| Ok(()));
+    let channel = StreamChannel::from_test_callback(|_| Ok(()));
     let id = channel.id();
     state.register_terminal_output_channel("main", channel);
     let previous = Arc::downgrade(
@@ -662,7 +665,7 @@ async fn reload_releases_waiters_and_replaces_old_subscription() {
         }
         tokio::task::yield_now().await;
     }
-    state.register_terminal_output_channel("main", Channel::new(|_| Ok(())));
+    state.register_terminal_output_channel("main", StreamChannel::from_test_callback(|_| Ok(())));
     tokio::time::timeout(Duration::from_secs(1), async {
         while previous.upgrade().is_some() {
             tokio::task::yield_now().await;
@@ -678,7 +681,7 @@ async fn reload_discards_old_output_and_rejects_old_acknowledgements() {
     let state = WorkspaceState::default();
     let old_messages = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let received = Arc::clone(&old_messages);
-    let old_channel = Channel::new(move |_| {
+    let old_channel = StreamChannel::from_test_callback(move |_| {
         received.fetch_add(1, Ordering::Relaxed);
         Ok(())
     });
@@ -704,8 +707,8 @@ async fn reload_discards_old_output_and_rejects_old_acknowledgements() {
 
     let messages = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
     let received = Arc::clone(&messages);
-    let channel = Channel::new(move |body| {
-        received.lock().unwrap().push(body.deserialize().unwrap());
+    let channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
+        received.lock().unwrap().push(payload);
         Ok(())
     });
     let channel_id = channel.id();
@@ -773,8 +776,7 @@ async fn reload_while_old_send_is_running_keeps_new_credit_isolated() {
     let old_id = Arc::new(std::sync::atomic::AtomicU32::new(0));
     let receiver_id = Arc::clone(&old_id);
     let receiver_state = Arc::clone(&state);
-    let old_channel = Channel::new(move |body| {
-        let payload: serde_json::Value = body.deserialize().unwrap();
+    let old_channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
         sending.notify_one();
         paused
             .lock()
@@ -806,8 +808,8 @@ async fn reload_while_old_send_is_running_keeps_new_credit_isolated() {
 
     let messages = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
     let received = Arc::clone(&messages);
-    let channel = Channel::new(move |body| {
-        received.lock().unwrap().push(body.deserialize().unwrap());
+    let channel = StreamChannel::from_test_callback(move |payload: serde_json::Value| {
+        received.lock().unwrap().push(payload);
         Ok(())
     });
     let channel_id = channel.id();
