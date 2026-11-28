@@ -124,6 +124,10 @@ EOF
     cat <<EOF
 		reverse_proxy unix/$FILETERM_WEB_SOCKET {
 			header_up -Authorization
+			# Early authorization failures can close an upstream connection before reading the request body.
+			transport http {
+				keepalive off
+			}
 		}
 	}
 }
